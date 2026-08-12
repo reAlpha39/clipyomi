@@ -341,6 +341,30 @@ mod tests {
     }
 
     #[test]
+    fn resolution_trims_the_target_remove_suffix_from_the_linked_conjugation() {
+        // Hermetic fixture mirroring a real chain (v5s/Potential せる + v1
+        // remove-suffix る → せ). Pins both effects of a Next Type link: if
+        // `suffix = trimmed;` were dropped and only `next_verb_type` kept,
+        // `next_verb_type` would still be `Some` but `suffix` would stay
+        // "せる" — this test would then fail on the suffix assertion.
+        let json = r#"[
+          {"Name":"target","Part of Speech":"Verb","Tenses":[
+            {"Formal":false,"Negative":false,"Suffix":"る","Tense":"Non-past"}
+          ]},
+          {"Name":"source","Part of Speech":"Verb","Tenses":[
+            {"Formal":false,"Negative":false,"Suffix":"せる","Tense":"Potential",
+             "Next Type":"target"}
+          ]}
+        ]"#;
+        let t = ConjugationTable::from_json(json).expect("fixture must load");
+        let target_id = t.types_named("target")[0];
+        let source_id = t.types_named("source")[0];
+        let c = &t.types()[source_id].conjugations[0];
+        assert_eq!(c.suffix, "せ");
+        assert_eq!(c.next_verb_type, Some(target_id));
+    }
+
+    #[test]
     fn every_link_target_has_a_remove_tense_conjugation() {
         let t = table();
         for ty in t.types() {
