@@ -206,7 +206,9 @@ impl ConjugationTable {
                         if c2.tense != remove_tense || c2.form.0 != 0 {
                             continue;
                         }
-                        if let Some(trimmed) = strip_unified_suffix(&suffix, &c2.suffix) {
+                        if let Some(trimmed) =
+                            crate::kana::strip_suffix_unified(&suffix, &c2.suffix)
+                        {
                             link = Some((tj, trimmed));
                             break 'outer;
                         }
@@ -245,22 +247,6 @@ impl ConjugationTable {
             .map(|(i, _)| i)
             .collect()
     }
-}
-
-/// If `target` is a kana-insensitive suffix of `suffix`, return `suffix` with it
-/// removed. Comparison uses `unify` so hiragana and katakana forms match.
-fn strip_unified_suffix(suffix: &str, target: &str) -> Option<String> {
-    let s: Vec<char> = suffix.chars().collect();
-    let t: Vec<char> = target.chars().collect();
-    if t.len() > s.len() {
-        return None;
-    }
-    let split = s.len() - t.len();
-    let matches = s[split..]
-        .iter()
-        .zip(t.iter())
-        .all(|(a, b)| crate::kana::unify(*a) == crate::kana::unify(*b));
-    matches.then(|| s[..split].iter().collect())
 }
 
 #[cfg(test)]

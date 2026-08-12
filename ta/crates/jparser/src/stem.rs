@@ -27,7 +27,7 @@
 //! `StemStats` so its real cost and benefit can be measured.
 
 use crate::conjugation::ConjugationTable;
-use crate::kana::unify;
+use crate::kana::strip_suffix_unified;
 use crate::record::HeadwordRecord;
 
 /// Name prefix that qualifies a type for the mis-annotation fallback.
@@ -62,21 +62,6 @@ fn v5_fallback_applies(annotated: &str, candidate: &str) -> bool {
     annotated.starts_with(V5_PREFIX)
         && candidate.starts_with(V5_PREFIX)
         && annotated.len() == candidate.len()
-}
-
-/// If `suffix` is a kana-insensitive suffix of `surface`, return the stem.
-fn strip_suffix_unified(surface: &str, suffix: &str) -> Option<String> {
-    let s: Vec<char> = surface.chars().collect();
-    let t: Vec<char> = suffix.chars().collect();
-    if t.len() > s.len() {
-        return None;
-    }
-    let split = s.len() - t.len();
-    let matches = s[split..]
-        .iter()
-        .zip(t.iter())
-        .all(|(a, b)| unify(*a) == unify(*b));
-    matches.then(|| s[..split].iter().collect())
 }
 
 /// Generate every stem record for one headword.

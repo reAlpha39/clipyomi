@@ -109,6 +109,29 @@ pub fn is_digit(c: char) -> bool {
     c.is_ascii_digit() || ('０'..='９').contains(&c) || KANJI_DIGITS.contains(&c)
 }
 
+/// Strip `suffix` from the end of `surface`, comparing kana-insensitively
+/// under `unify`. Returns `None` when `suffix` is longer than `surface`, or
+/// when the tail does not match once both are folded.
+///
+/// Shared by conjugation-chain resolution (trimming a linked type's
+/// remove-suffix off a Next Type conjugation, `conjugation.rs`) and stem
+/// generation (stripping a verb's dictionary-form ending, `stem.rs`). Both
+/// callers must agree on this exact behavior, or generated stems stop
+/// lining up with the conjugation chains that are supposed to match them.
+pub fn strip_suffix_unified(surface: &str, suffix: &str) -> Option<String> {
+    let s: Vec<char> = surface.chars().collect();
+    let t: Vec<char> = suffix.chars().collect();
+    if t.len() > s.len() {
+        return None;
+    }
+    let split = s.len() - t.len();
+    let matches = s[split..]
+        .iter()
+        .zip(t.iter())
+        .all(|(a, b)| unify(*a) == unify(*b));
+    matches.then(|| s[..split].iter().collect())
+}
+
 /// Convert hiragana in a reading to katakana for display, per ta-old's
 /// `FuriganaWindow::GetFurigana` katakana branch. Non-hiragana passes through.
 /// Returns `None` only if a converted code point is not a valid `char`.
@@ -235,6 +258,30 @@ mod tests {
         assert!(is_digit('三'));
         assert!(is_digit('万'));
         assert!(!is_digit('あ'));
+    }
+
+    #[test]
+    fn strip_suffix_unified_strips_a_kana_insensitive_tail() {
+        // Hiragana surface, katakana suffix: unify folds both before comparing.
+        assert_eq!(
+            strip_suffix_unified("たべる", "ル").as_deref(),
+            Some("たべ")
+        );
+    }
+
+    #[test]
+    fn strip_suffix_unified_returns_none_when_the_suffix_is_longer() {
+        assert_eq!(strip_suffix_unified("る", "たべる"), None);
+    }
+
+    #[test]
+    fn strip_suffix_unified_returns_none_when_the_tail_does_not_match() {
+        assert_eq!(strip_suffix_unified("たべる", "く"), None);
+    }
+
+    #[test]
+    fn strip_suffix_unified_allows_an_empty_result() {
+        assert_eq!(strip_suffix_unified("する", "する").as_deref(), Some(""));
     }
 
     #[test]
