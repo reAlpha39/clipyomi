@@ -117,7 +117,7 @@ fn chunk_to_romaji(chars: &[char]) -> (String, usize) {
     if x1 == LONG_VOWEL_MARK {
         return (COMBINING_MACRON.to_string(), 1);
     }
-    if x1 < KATAKANA_LOW || x1 > KATAKANA_HIGH || x1 == MIDDLE_DOT {
+    if !(KATAKANA_LOW..=KATAKANA_HIGH).contains(&x1) || x1 == MIDDLE_DOT {
         return (String::new(), 0);
     }
 

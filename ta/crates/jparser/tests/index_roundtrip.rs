@@ -5,7 +5,7 @@
 // under the terms of the GNU General Public License version 2 as published
 // by the Free Software Foundation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use jparser::conjugation::ConjugationTable;
 use jparser::index::build::build_from_reader;
@@ -23,7 +23,7 @@ fn tmpdir(name: &str) -> PathBuf {
     dir
 }
 
-fn build(dir: &PathBuf) -> BuildReport {
+fn build(dir: &Path) -> BuildReport {
     let table = ConjugationTable::load_embedded().unwrap();
     build_from_reader(
         std::io::Cursor::new(FIXTURE),

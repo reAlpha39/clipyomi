@@ -38,7 +38,10 @@ pub fn build_from_reader<R: BufRead>(
     let mut record_count = 0usize;
 
     let mut reader = parse_entries(xml);
-    while let Some(result) = reader.next() {
+    // `by_ref()` rather than `while let Some(..) = reader.next()`: the loop
+    // only needs a temporary borrow, and `reader.skipped_count()` below
+    // needs the iterator itself back afterward.
+    for result in reader.by_ref() {
         let raw = result?;
         entries.push(EntryData {
             id: raw.id,

@@ -80,7 +80,7 @@ pub struct HeadwordRecord {
 /// `(wcsstr(eng, "(ctr)") || wcsstr(eng, "(suf)")) && !wcsstr(eng, "(arch)")`.
 fn counter_flag(pos: &[&str], misc: &[&str]) -> bool {
     let has_counter = pos.iter().any(|p| COUNTER_POS.contains(p));
-    let archaic = misc.iter().any(|m| *m == ARCHAIC_MISC);
+    let archaic = misc.contains(&ARCHAIC_MISC);
     has_counter && !archaic
 }
 

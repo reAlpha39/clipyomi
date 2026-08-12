@@ -212,6 +212,12 @@ impl ConjugationTable {
         // suffix is a suffix of this one, trim it off, and store the link.
         // This is what allows conjugations to stack (て + いる + ない), and it
         // is ta-old's four nested loops in LoadConjugationTable.
+        //
+        // Index-based iteration (ti/ci/tj) is required: the body reads
+        // pending[ti][ci] and types[tj] while later mutating
+        // types[ti].conjugations[ci], so an iterator borrow over `types`
+        // cannot be held live across that mutation.
+        #[allow(clippy::needless_range_loop)]
         for ti in 0..types.len() {
             for ci in 0..types[ti].conjugations.len() {
                 let Some(target_name) = pending[ti][ci].clone() else { continue };
