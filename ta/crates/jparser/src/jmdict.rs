@@ -38,16 +38,13 @@
 use std::io::BufRead;
 
 use quick_xml::errors::IllFormedError;
+use quick_xml::escape::EscapeError;
 use quick_xml::events::{BytesText, Event};
 use quick_xml::{Error, Reader};
 
 /// Priority markers that mean "common word", per JMdict's documentation.
 /// Replaces ta-old's `(P)` substring search.
 const PRIORITY_MARKERS: &[&str] = &["news1", "ichi1", "spec1", "gai1"];
-
-/// Minimum byte length of a bare entity reference `&x;`: `&`, one name byte,
-/// `;`.
-const MIN_ENTITY_REF_LEN: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KanjiForm {
@@ -87,18 +84,21 @@ pub enum JmdictError {
     BadEntry { id: String, reason: String },
 }
 
-/// Decodes the text of a JMdict element. A whole element consisting of a
-/// single bare entity reference (`&v5r;`, `&uk;`) is JMdict's encoding of a
-/// POS/misc/dialect/field *code*; we take the name verbatim rather than
-/// resolving it, since resolving it would require the DTD's expansion (the
-/// prose description), and it is the code that matches conjugation type
-/// names. Anything else is ordinary text and goes through `unescape()`.
+/// Decodes the text of a JMdict element. `unescape()` already resolves every
+/// standard XML escape (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, numeric
+/// refs) correctly, and fails with `EscapeError::UnrecognizedEntity` only for
+/// a name it does not know how to expand — exactly JMdict's DTD-only codes
+/// (`v5r`, `uk`, ...). On that specific error the crate hands back the
+/// unmatched name itself, which is the code we want; we take it verbatim
+/// rather than resolving it, since resolving it would require the DTD's
+/// expansion (the prose description), and it is the code that matches
+/// conjugation type names. Any other error propagates.
 fn decode_text(t: &BytesText) -> Result<String, JmdictError> {
-    let raw: &[u8] = t;
-    if raw.len() >= MIN_ENTITY_REF_LEN && raw.first() == Some(&b'&') && raw.last() == Some(&b';') {
-        return Ok(String::from_utf8_lossy(&raw[1..raw.len() - 1]).into_owned());
+    match t.unescape() {
+        Ok(s) => Ok(s.into_owned()),
+        Err(Error::EscapeError(EscapeError::UnrecognizedEntity(_, name))) => Ok(name),
+        Err(e) => Err(JmdictError::Xml(e)),
     }
-    Ok(t.unescape()?.into_owned())
 }
 
 pub fn parse_entries<R: BufRead>(reader: R) -> JmdictReader<R> {
@@ -352,5 +352,55 @@ mod tests {
         let ok = all.iter().filter(|r| r.is_ok()).count();
         assert_eq!(ok, 1, "the good entry must still be returned");
         assert_eq!(reader.skipped_count(), 1);
+    }
+
+    /// Parses a single inline entry, for regression tests that don't belong
+    /// in the shared fixture (`jmdict_mini.xml` is asserted on exactly by
+    /// later tasks and must not change).
+    fn parse_one(xml: &str) -> RawEntry {
+        parse_entries(std::io::Cursor::new(xml))
+            .next()
+            .expect("must produce one entry")
+            .expect("entry must parse")
+    }
+
+    #[test]
+    fn decodes_a_standalone_amp_escape_to_the_literal_ampersand() {
+        let xml = "<JMdict><entry><ent_seq>1</ent_seq>\
+                    <sense><gloss>&amp;</gloss></sense></entry></JMdict>";
+        assert_eq!(parse_one(xml).senses[0].glosses, vec!["&"]);
+    }
+
+    #[test]
+    fn decodes_a_standalone_lt_escape_to_the_literal_less_than_sign() {
+        let xml = "<JMdict><entry><ent_seq>1</ent_seq>\
+                    <sense><gloss>&lt;</gloss></sense></entry></JMdict>";
+        assert_eq!(parse_one(xml).senses[0].glosses, vec!["<"]);
+    }
+
+    #[test]
+    fn decodes_a_numeric_character_reference() {
+        let xml = "<JMdict><entry><ent_seq>1</ent_seq>\
+                    <k_ele><keb>&#x9AD8;</keb></k_ele></entry></JMdict>";
+        assert_eq!(parse_one(xml).kanji[0].text, "高");
+    }
+
+    #[test]
+    fn decodes_a_standard_escape_embedded_mid_string() {
+        // Regression guard: this case already worked before the fix, because
+        // the whole element wasn't a bare `&name;` span. It must keep working.
+        let xml = "<JMdict><entry><ent_seq>1</ent_seq>\
+                    <sense><gloss>AT&amp;T Corp</gloss></sense></entry></JMdict>";
+        assert_eq!(parse_one(xml).senses[0].glosses, vec!["AT&T Corp"]);
+    }
+
+    #[test]
+    fn resolves_a_bare_dtd_only_entity_to_its_code() {
+        // The original intended case, pinned again here as an isolated,
+        // fixture-independent regression guard alongside the escape tests
+        // above: a name `unescape()` cannot recognize is the code itself.
+        let xml = "<JMdict><entry><ent_seq>1</ent_seq>\
+                    <sense><pos>&v5r;</pos></sense></entry></JMdict>";
+        assert_eq!(parse_one(xml).senses[0].pos, vec!["v5r"]);
     }
 }
