@@ -127,6 +127,7 @@ pub fn build_from_reader<R: BufRead>(
         keys: by_key.len() as u32,
         records: record_count as u32,
         entries: entries.len() as u32,
+        conjugation_fingerprint: crate::conjugation::embedded_asset_fingerprint(),
     };
     std::fs::write(out_dir.join(HEADER_FILE), bincode::serialize(&header)?)?;
 

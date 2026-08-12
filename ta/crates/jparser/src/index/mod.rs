@@ -24,7 +24,7 @@ use crate::stem::StemStats;
 
 /// Bumped whenever the on-disk layout changes. A mismatch forces a rebuild; the
 /// loader must never try to read an index it does not recognize.
-pub const INDEX_FORMAT_VERSION: u32 = 1;
+pub const INDEX_FORMAT_VERSION: u32 = 2;
 
 pub const HEADER_FILE: &str = "header.bin";
 pub const FST_FILE: &str = "keys.fst";
@@ -43,6 +43,13 @@ pub struct IndexHeader {
     pub keys: u32,
     pub records: u32,
     pub entries: u32,
+    /// FNV-1a fingerprint of the conjugation asset this index's `verb_type`
+    /// ids were assigned from (`conjugation::embedded_asset_fingerprint`).
+    /// `Index::open` rejects a mismatch: reordering or adding a type in the
+    /// asset changes every id downstream of the change, so an index built
+    /// against a different asset would otherwise silently resolve
+    /// `verb_type` to the wrong verb.
+    pub conjugation_fingerprint: u64,
 }
 
 /// One headword or stem as stored in the payload.
@@ -94,4 +101,9 @@ pub enum IndexError {
     Jmdict(#[from] crate::jmdict::JmdictError),
     #[error("index format version mismatch: found {found}, expected {expected}")]
     VersionMismatch { found: u32, expected: u32 },
+    #[error(
+        "index conjugation asset mismatch: found fingerprint {found:#x}, \
+         expected {expected:#x}"
+    )]
+    ConjugationMismatch { found: u64, expected: u64 },
 }

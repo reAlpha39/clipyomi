@@ -132,6 +132,27 @@ struct RawConjugation {
 
 const EMBEDDED_ASSET: &str = include_str!("../assets/conjugations.json");
 
+// FNV-1a: http://www.isthe.com/chongo/tech/comp/fnv/. Hand-rolled rather than
+// pulling in a hashing crate for one call site; the 64-bit offset basis and
+// prime are the published constants, not tunable.
+const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+/// Cheap fingerprint of the embedded conjugation asset's raw bytes. An index
+/// stamps this in its header (`IndexHeader::conjugation_fingerprint`) at
+/// build time, so `Index::open` can refuse to load an index whose stored
+/// `verb_type` ids were assigned against a different asset — reordering or
+/// adding a type changes every id downstream of the change, and without this
+/// check a stale index would silently resolve `verb_type` to the wrong verb.
+pub fn embedded_asset_fingerprint() -> u64 {
+    let mut hash = FNV_OFFSET_BASIS;
+    for &byte in EMBEDDED_ASSET.as_bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    hash
+}
+
 impl ConjugationTable {
     pub fn load_embedded() -> Result<Self, ConjugationError> {
         Self::from_json(EMBEDDED_ASSET)
@@ -394,6 +415,19 @@ mod tests {
     #[test]
     fn max_conj_depth_matches_ta_old() {
         assert_eq!(MAX_CONJ_DEPTH, 5);
+    }
+
+    #[test]
+    fn embedded_asset_fingerprint_is_deterministic_and_content_sensitive() {
+        assert_eq!(embedded_asset_fingerprint(), embedded_asset_fingerprint());
+        // A different byte sequence must hash differently for the fingerprint
+        // to be useful as an index-vs-asset binding check.
+        let mut hash = FNV_OFFSET_BASIS;
+        for &byte in b"not the embedded asset" {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        assert_ne!(embedded_asset_fingerprint(), hash);
     }
 
     #[test]

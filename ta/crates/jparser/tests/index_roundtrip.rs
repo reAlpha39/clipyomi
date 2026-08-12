@@ -229,6 +229,23 @@ fn rejects_a_header_with_the_wrong_format_version() {
 }
 
 #[test]
+fn rejects_a_header_with_the_wrong_conjugation_fingerprint() {
+    let dir = tmpdir("fingerprint");
+    build(&dir);
+    // conjugation_fingerprint is the header's last field (u32, u32, u32, u32,
+    // then u64), so flipping the encoded blob's last byte corrupts only it
+    // and leaves version and the counts intact. Load must refuse rather than
+    // silently resolve verb_type ids against a different conjugation asset.
+    let path = dir.join("header.bin");
+    let mut bytes = std::fs::read(&path).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] = bytes[last].wrapping_add(1);
+    std::fs::write(&path, bytes).unwrap();
+    let msg = Index::open(&dir).unwrap_err().to_string();
+    assert!(msg.contains("fingerprint"), "got {msg}");
+}
+
+#[test]
 fn stems_carry_the_producing_verb_type_and_headwords_carry_none() {
     let dir = tmpdir("verb-type");
     build(&dir);

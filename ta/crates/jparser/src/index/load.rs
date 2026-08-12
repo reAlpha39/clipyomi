@@ -79,6 +79,13 @@ impl Index {
                 expected: INDEX_FORMAT_VERSION,
             });
         }
+        let expected_fingerprint = crate::conjugation::embedded_asset_fingerprint();
+        if header.conjugation_fingerprint != expected_fingerprint {
+            return Err(IndexError::ConjugationMismatch {
+                found: header.conjugation_fingerprint,
+                expected: expected_fingerprint,
+            });
+        }
         let entry_offsets: Vec<(u32, u64)> =
             bincode::deserialize(&std::fs::read(dir.join(ENTRIES_INDEX_FILE))?)?;
         Ok(Self {
