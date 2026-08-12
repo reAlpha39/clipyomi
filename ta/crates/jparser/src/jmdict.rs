@@ -85,8 +85,27 @@ pub enum JmdictError {
 }
 
 /// Byte length of each of the `&` and `;` delimiters around an entity name,
-/// used to test whether an unrecognized reference spans a whole text node.
+/// used to locate the bytes surrounding an unrecognized reference.
 const ENTITY_DELIMITER_LEN: usize = 1;
+
+/// True when every byte in `bytes` is ASCII whitespace (vacuously true for
+/// an empty slice).
+fn is_all_ascii_whitespace(bytes: &[u8]) -> bool {
+    bytes.iter().all(u8::is_ascii_whitespace)
+}
+
+/// True when `range` (an unrecognized entity's name span, excluding its
+/// `&`/`;` delimiters) is the only non-whitespace content of `t`'s text —
+/// i.e. the text is nothing but optional whitespace, the entity reference,
+/// and optional whitespace. The `End` handler that consumes this value
+/// already does `text.trim()`, so `decode_text` must not be stricter about
+/// padding than the code that reads its result.
+fn is_padded_bare_entity(t: &BytesText, range: &std::ops::Range<usize>) -> bool {
+    let bytes: &[u8] = t;
+    let before = &bytes[..range.start - ENTITY_DELIMITER_LEN];
+    let after = &bytes[range.end + ENTITY_DELIMITER_LEN..];
+    is_all_ascii_whitespace(before) && is_all_ascii_whitespace(after)
+}
 
 /// Decodes the text of a JMdict element. `unescape()` already resolves every
 /// standard XML escape (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, numeric
@@ -96,21 +115,19 @@ const ENTITY_DELIMITER_LEN: usize = 1;
 /// preceded it and never looking at what follows — so the error alone cannot
 /// tell us whether the reference was the *entire* text or just part of it.
 ///
-/// We only accept the bare name as JMdict's DTD-only code (`v5r`, `uk`, ...)
-/// when the unmatched range covers the whole element text: nothing before
-/// the `&`, nothing after the `;`. `UnrecognizedEntity`'s range is the name's
-/// byte span within the decoded text, excluding both delimiters (see
-/// `quick-xml-0.36.2/src/escape.rs:279`), so that whole-span condition is
-/// `range.start == 1` and `range.end + 1 == t.len()`. An unrecognized entity
-/// anywhere else — e.g. embedded mid-string — is genuinely malformed input
-/// and must still propagate as a loud error rather than silently discarding
-/// the surrounding text.
+/// We accept the bare name as JMdict's DTD-only code (`v5r`, `uk`, ...) when
+/// nothing but whitespace surrounds it (`is_padded_bare_entity`).
+/// `UnrecognizedEntity`'s range is the name's byte span within the decoded
+/// text, excluding both delimiters (see `quick-xml-0.36.2/src/escape.rs:279`).
+/// An unrecognized entity anywhere else — e.g. embedded mid-string among
+/// non-whitespace text — is genuinely malformed input and must still
+/// propagate as a loud error rather than silently discarding the
+/// surrounding text.
 fn decode_text(t: &BytesText) -> Result<String, JmdictError> {
     match t.unescape() {
         Ok(s) => Ok(s.into_owned()),
         Err(Error::EscapeError(EscapeError::UnrecognizedEntity(range, name)))
-            if range.start == ENTITY_DELIMITER_LEN
-                && range.end + ENTITY_DELIMITER_LEN == t.len() =>
+            if is_padded_bare_entity(t, &range) =>
         {
             Ok(name)
         }
@@ -437,5 +454,28 @@ mod tests {
                     <sense><gloss>foo &someunknown; bar</gloss></sense></entry></JMdict>";
         let result: Result<Vec<_>, _> = parse_entries(std::io::Cursor::new(xml)).collect();
         assert!(result.is_err(), "expected an error, got {result:?}");
+    }
+
+    #[test]
+    fn decodes_a_whitespace_padded_bare_entity_to_its_code() {
+        // The `End` handler already trims field text, so decode_text must
+        // not be stricter than that: padding around a bare entity is not
+        // "other content" mixed in with it.
+        let xml =
+            "<JMdict><entry><ent_seq>1</ent_seq><sense><pos> &v5r; </pos></sense></entry></JMdict>";
+        assert_eq!(parse_one(xml).senses[0].pos, vec!["v5r"]);
+    }
+
+    #[test]
+    fn decodes_a_newline_padded_bare_entity_to_its_code() {
+        let xml = "<JMdict><entry><ent_seq>1</ent_seq><sense><pos>\n&v5r;\n</pos></sense></entry></JMdict>";
+        assert_eq!(parse_one(xml).senses[0].pos, vec!["v5r"]);
+    }
+
+    #[test]
+    fn decodes_a_one_sided_padded_bare_entity_to_its_code() {
+        let xml =
+            "<JMdict><entry><ent_seq>1</ent_seq><sense><pos>&v5r; </pos></sense></entry></JMdict>";
+        assert_eq!(parse_one(xml).senses[0].pos, vec!["v5r"]);
     }
 }
