@@ -44,7 +44,15 @@ use quick_xml::{Error, Reader};
 
 /// Priority markers that mean "common word", per JMdict's documentation.
 /// Replaces ta-old's `(P)` substring search.
-const PRIORITY_MARKERS: &[&str] = &["news1", "ichi1", "spec1", "gai1"];
+///
+/// UNVERIFIED against a real `JMdict_e.xml`: none exists in this repo, and
+/// ta-old read EDICT2, where `(P)` was already baked in, so it cannot settle
+/// this either. `spec2` is included on the strength of the documented EDICT
+/// `(P)` rule (fires on `ichi1`, `news1`, `spec1`, `spec2`, and `gai1`) — it
+/// is the hand-curated common-word list, so omitting it would drop `COMMON`
+/// from real entries. Confirm this against the JMdict DTD's `ke_pri`/`re_pri`
+/// documentation once a real `JMdict_e.xml` is available.
+const PRIORITY_MARKERS: &[&str] = &["news1", "ichi1", "spec1", "spec2", "gai1"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KanjiForm {
