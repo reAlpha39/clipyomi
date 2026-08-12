@@ -17,3 +17,7 @@ thiserror = "1"
 
 [dev-dependencies]
 insta = "1"
+
+[[bin]]
+name = "jparser-cli"
+path = "src/bin/jparser-cli.rs"
