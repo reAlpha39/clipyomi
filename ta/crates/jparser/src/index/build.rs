@@ -15,7 +15,8 @@ use std::path::Path;
 use crate::conjugation::ConjugationTable;
 use crate::index::{
     BuildReport, EntryData, IndexError, IndexHeader, SenseData, StoredRecord, ENTRIES_FILE,
-    ENTRIES_INDEX_FILE, FST_FILE, HEADER_FILE, INDEX_FORMAT_VERSION, RECORDS_FILE,
+    ENTRIES_INDEX_FILE, FST_FILE, HEADER_FILE, INDEX_FORMAT_VERSION, LEN_PREFIX_BYTES,
+    RECORDS_FILE,
 };
 use crate::jmdict::parse_entries;
 use crate::kana::unify_str;
@@ -95,7 +96,8 @@ pub fn build_from_reader<R: BufRead>(
     for (key, records) in &by_key {
         let offset = records_blob.len() as u64;
         let encoded = bincode::serialize(records)?;
-        records_blob.extend_from_slice(&(encoded.len() as u32).to_le_bytes());
+        let len_prefix: [u8; LEN_PREFIX_BYTES] = (encoded.len() as u32).to_le_bytes();
+        records_blob.extend_from_slice(&len_prefix);
         records_blob.extend_from_slice(&encoded);
         fst_builder.insert(key.as_bytes(), offset)?;
     }
@@ -108,7 +110,8 @@ pub fn build_from_reader<R: BufRead>(
     for entry in &entries {
         let offset = entries_blob.len() as u64;
         let encoded = bincode::serialize(entry)?;
-        entries_blob.extend_from_slice(&(encoded.len() as u32).to_le_bytes());
+        let len_prefix: [u8; LEN_PREFIX_BYTES] = (encoded.len() as u32).to_le_bytes();
+        entries_blob.extend_from_slice(&len_prefix);
         entries_blob.extend_from_slice(&encoded);
         entry_offsets.push((entry.id, offset));
     }

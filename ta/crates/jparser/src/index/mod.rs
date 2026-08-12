@@ -32,6 +32,11 @@ pub const RECORDS_FILE: &str = "records.bin";
 pub const ENTRIES_FILE: &str = "entries.bin";
 pub const ENTRIES_INDEX_FILE: &str = "entries.idx";
 
+/// Byte width of the little-endian length prefix `build` writes ahead of
+/// each bincode blob in `records.bin`/`entries.bin`, and `load` reads back.
+/// Shared so the two sides cannot drift apart independently.
+pub const LEN_PREFIX_BYTES: usize = std::mem::size_of::<u32>();
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct IndexHeader {
     pub version: u32,

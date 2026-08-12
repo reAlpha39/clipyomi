@@ -15,7 +15,7 @@ use memmap2::Mmap;
 
 use crate::index::{
     EntryData, IndexError, IndexHeader, StoredRecord, ENTRIES_FILE, ENTRIES_INDEX_FILE, FST_FILE,
-    HEADER_FILE, INDEX_FORMAT_VERSION, RECORDS_FILE,
+    HEADER_FILE, INDEX_FORMAT_VERSION, LEN_PREFIX_BYTES, RECORDS_FILE,
 };
 use crate::kana::unify;
 
@@ -47,13 +47,30 @@ impl std::fmt::Debug for Index {
 
 fn map(path: &Path) -> Result<Mmap, IndexError> {
     let file = File::open(path)?;
-    // Safety: index files are immutable for the process lifetime. The app
-    // rebuilds to a temp directory and renames rather than mutating a live
-    // index in place, so no writer can shrink these files underneath us.
+    // SAFETY: memmap2 requires that the mapped file is not mutated or
+    // truncated while the mapping is alive, or the mapping is undefined
+    // behavior (a SIGBUS on truncation, or this type handing out a `&[u8]`
+    // that is presented as immutable but is actually being rewritten
+    // underneath the reader). This crate does not enforce that on its own:
+    // `build::build_from_reader` writes every index file in place via
+    // `File::create`/`std::fs::write` (there is no build-to-temp-and-rename),
+    // so nothing stops a rebuild from racing an `Index` that already has this
+    // directory mapped. Soundness rests entirely on the caller obligation
+    // documented on `Index::open`: no process may write to an index
+    // directory while an `Index` for it is open.
     Ok(unsafe { Mmap::map(&file)? })
 }
 
 impl Index {
+    /// Opens the index `build::build_from_reader` wrote to `dir`.
+    ///
+    /// # Caller obligation
+    ///
+    /// No process may write to `dir` for as long as the returned `Index`
+    /// stays alive. The index files are memory-mapped, and the builder
+    /// writes in place rather than building to a temp directory and
+    /// renaming, so rebuilding into a directory with an open `Index` is
+    /// undefined behavior, not just a race that yields stale reads.
     pub fn open(dir: &Path) -> Result<Self, IndexError> {
         let header: IndexHeader = bincode::deserialize(&std::fs::read(dir.join(HEADER_FILE))?)?;
         if header.version != INDEX_FORMAT_VERSION {
@@ -128,12 +145,13 @@ impl Index {
 fn slice_at(blob: &[u8], offset: u64) -> Result<&[u8], IndexError> {
     let start = usize::try_from(offset).map_err(|_| corrupt("offset out of range"))?;
     let len_end = start
-        .checked_add(4)
+        .checked_add(LEN_PREFIX_BYTES)
         .ok_or_else(|| corrupt("offset overflows"))?;
     let prefix = blob
         .get(start..len_end)
         .ok_or_else(|| corrupt("length prefix past end of payload"))?;
-    let len = u32::from_le_bytes(prefix.try_into().expect("checked 4 bytes")) as usize;
+    let len =
+        u32::from_le_bytes(prefix.try_into().expect("checked LEN_PREFIX_BYTES bytes")) as usize;
     let end = len_end
         .checked_add(len)
         .ok_or_else(|| corrupt("length overflows"))?;
