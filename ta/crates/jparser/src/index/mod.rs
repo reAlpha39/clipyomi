@@ -59,7 +59,12 @@ pub struct StoredRecord {
     /// the inexact-match flag in Phase 1B.
     pub surface: String,
     pub flags: u16,
-    /// `Some` for generated verb stems, `None` for plain headwords.
+    /// `Some` for generated verb stems, `None` for plain headwords. ta-old
+    /// stored `verbType` as `vt + 1`, with `0` meaning "not a verb"
+    /// (`ConjInfo::verbType`, `Dictionary.h`); this port uses a 0-based id
+    /// inside an `Option` instead, so the Phase 1B differential run must
+    /// account for that offset (add 1, map `None` to `0`) when comparing
+    /// against the old encoding.
     pub verb_type: Option<VerbTypeId>,
     pub entry_id: u32,
 }

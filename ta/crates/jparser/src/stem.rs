@@ -47,6 +47,17 @@ impl Default for StemOptions {
     }
 }
 
+/// Counts of stems generated per fallback-vs-exact origin. Attribution can be
+/// wrong for a headword carrying both a correct and a same-length
+/// mis-annotated `v5*` tag: `record::headwords` attaches every id a POS code
+/// names in source order, `generate_stems` iterates `record.verb_types` in
+/// that same order, and the per-(surface, type) dedup silently drops the
+/// second candidate before its counter ever fires — so whichever tag comes
+/// first in the entry's POS list wins the count, not necessarily the
+/// genuinely exact one. These counters are a rough signal, not a precise
+/// measurement; the authoritative measurement of the v5 fallback's real
+/// value is the `--no-v5-fallback` A/B comparison (build once with it on,
+/// once with it off, and diff the resulting indexes), not these counters.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StemStats {
     /// Stems generated from a type whose name matched the POS code exactly.

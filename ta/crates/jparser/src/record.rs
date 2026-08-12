@@ -66,8 +66,11 @@ impl WordFlags {
 pub struct HeadwordRecord {
     pub surface: String,
     pub flags: WordFlags,
-    /// Every conjugation type this word can take. More than one when the POS
-    /// code is duplicated in the table (`vk`, `vs`, `v5r-i`, `v5uru`).
+    /// Every conjugation type this word can take. More than one when a single
+    /// POS code is duplicated in the table (`vk`, `vs`, `v5r-i`, `v5uru`), or
+    /// — the more common cause — when `headwords` collects POS codes across
+    /// ALL of an entry's senses: an entry tagged `v5r` in one sense and `v1`
+    /// in another also yields two.
     pub verb_types: Vec<VerbTypeId>,
     pub entry_id: u32,
 }
@@ -75,7 +78,7 @@ pub struct HeadwordRecord {
 /// True when the sense set makes this a counter: a counter POS present and no
 /// archaic marker anywhere. Matches ta-old's
 /// `(wcsstr(eng, "(ctr)") || wcsstr(eng, "(suf)")) && !wcsstr(eng, "(arch)")`.
-pub(crate) fn counter_flag(pos: &[&str], misc: &[&str]) -> bool {
+fn counter_flag(pos: &[&str], misc: &[&str]) -> bool {
     let has_counter = pos.iter().any(|p| COUNTER_POS.contains(p));
     let archaic = misc.iter().any(|m| *m == ARCHAIC_MISC);
     has_counter && !archaic
