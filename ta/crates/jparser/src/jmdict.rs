@@ -102,7 +102,12 @@ fn decode_text(t: &BytesText) -> Result<String, JmdictError> {
 }
 
 pub fn parse_entries<R: BufRead>(reader: R) -> JmdictReader<R> {
-    JmdictReader { reader: Reader::from_reader(reader), buf: Vec::new(), skipped: 0, done: false }
+    JmdictReader {
+        reader: Reader::from_reader(reader),
+        buf: Vec::new(),
+        skipped: 0,
+        done: false,
+    }
 }
 
 pub struct JmdictReader<R: BufRead> {
@@ -176,11 +181,14 @@ impl<R: BufRead> Iterator for JmdictReader<R> {
                         readings.clear();
                         senses.clear();
                     }
-                    b"k_ele" => {
-                        kanji.push(KanjiForm { text: String::new(), has_priority: false })
-                    }
-                    b"r_ele" => readings
-                        .push(ReadingForm { text: String::new(), has_priority: false }),
+                    b"k_ele" => kanji.push(KanjiForm {
+                        text: String::new(),
+                        has_priority: false,
+                    }),
+                    b"r_ele" => readings.push(ReadingForm {
+                        text: String::new(),
+                        has_priority: false,
+                    }),
                     b"sense" => senses.push(RawSense::default()),
                     _ => {
                         field = Field::Other;
@@ -336,8 +344,7 @@ mod tests {
     #[test]
     fn reports_malformed_xml_as_an_error() {
         let bad = "<JMdict><entry><ent_seq>1</ent_seq>";
-        let result: Result<Vec<_>, _> =
-            parse_entries(std::io::Cursor::new(bad)).collect();
+        let result: Result<Vec<_>, _> = parse_entries(std::io::Cursor::new(bad)).collect();
         assert!(result.is_err());
     }
 
