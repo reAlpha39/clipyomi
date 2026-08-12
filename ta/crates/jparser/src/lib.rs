@@ -10,3 +10,4 @@ pub mod jmdict;
 pub mod kana;
 pub mod record;
 pub mod romaji;
+pub mod stem;
