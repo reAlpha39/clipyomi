@@ -8,4 +8,5 @@
 pub mod conjugation;
 pub mod jmdict;
 pub mod kana;
+pub mod record;
 pub mod romaji;
