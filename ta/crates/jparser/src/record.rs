@@ -9,8 +9,11 @@
 //!
 //! Mirrors the per-headword bookkeeping in ta-old's `CreateDict`
 //! (`ta-old/exe/util/Dictionary.cpp:246`). Flag values match ta-old's
-//! `JAP_WORD_*` constants (`Dictionary.h:25-43`) so records can be compared
-//! against the original during the Phase 1B differential run.
+//! `JAP_WORD_*` constants (`Dictionary.h:25-43`) for the six active flags
+//! plus `TOP`, so those seven can be compared against the original during
+//! the Phase 1B differential run. `IS_NAME` is this port's own addition: it
+//! has no `JAP_WORD_*` counterpart and lives on a bit ta-old leaves free
+//! (`0x0080`).
 
 use crate::conjugation::{ConjugationTable, VerbTypeId};
 use crate::jmdict::RawEntry;
@@ -37,8 +40,16 @@ impl WordFlags {
     pub const COMMON: WordFlags = WordFlags(0x0008);
     pub const PARTICLE: WordFlags = WordFlags(0x0010);
     pub const COUNTER: WordFlags = WordFlags(0x0020);
-    /// Reserved for JMnedict. Nothing sets this in v1.
-    pub const IS_NAME: WordFlags = WordFlags(0x0040);
+    /// ta-old's `JAP_WORD_TOP` (`Dictionary.h:38`): a custom top-priority tag
+    /// read by the match scorer (`Dictionary.cpp:1010`, `:1239`). Reserved
+    /// for the Phase 1B `FindBestMatches` scorer port. Nothing sets this in
+    /// Phase 1A.
+    pub const TOP: WordFlags = WordFlags(0x0040);
+    /// Reserved for JMnedict. Nothing sets this in v1. Unlike the other
+    /// flags this bit has no `JAP_WORD_*` counterpart in ta-old; `0x0040` is
+    /// already ta-old's `JAP_WORD_TOP`, so this port's own addition lives on
+    /// the next free bit instead.
+    pub const IS_NAME: WordFlags = WordFlags(0x0080);
 
     pub fn contains(self, other: WordFlags) -> bool {
         self.0 & other.0 == other.0
@@ -304,12 +315,15 @@ mod tests {
     #[test]
     fn flag_values_match_ta_old_constants() {
         // Kept identical to JAP_WORD_* so the Phase 1B differential run can
-        // compare flags directly.
+        // compare flags directly. IS_NAME is the exception: it has no
+        // JAP_WORD_* counterpart and sits on a bit ta-old leaves free.
         assert_eq!(WordFlags::PRIMARY.0, 0x0001);
         assert_eq!(WordFlags::PRONOUNCE.0, 0x0002);
         assert_eq!(WordFlags::COMMON_LINE.0, 0x0004);
         assert_eq!(WordFlags::COMMON.0, 0x0008);
         assert_eq!(WordFlags::PARTICLE.0, 0x0010);
         assert_eq!(WordFlags::COUNTER.0, 0x0020);
+        assert_eq!(WordFlags::TOP.0, 0x0040);
+        assert_eq!(WordFlags::IS_NAME.0, 0x0080);
     }
 }
