@@ -405,4 +405,57 @@ mod tests {
         assert_eq!(fallback_only.exact_stems, 0);
         assert!(fallback_only.v5_fallback_stems > 0);
     }
+
+    #[test]
+    fn reaches_the_non_annotated_twin_of_a_duplicate_named_type() {
+        // "vk" (来る, "kuru") is one of the four duplicate-named types: one
+        // table entry's remove/form-0 suffix is the kanji form 来る, the
+        // other is the kana form くる. A record's `verb_types` normally
+        // carries both ids (record::headwords attaches every id
+        // `types_named` returns), but this test pins the mechanism inside
+        // `generate_stems` directly: a record annotated with only ONE
+        // twin's id must still reach the OTHER twin, because the candidate
+        // loop scans every type in the table by name, not by id. If the
+        // loop were narrowed to just the annotated id(s), this candidate
+        // would never be tried and the stem would be silently lost.
+        let t = table();
+        let ids = t.types_named("vk");
+        assert_eq!(ids.len(), 2, "vk must be duplicated in the embedded table");
+
+        let remove_suffix = |id: VerbTypeId| -> String {
+            let ty = &t.types()[id];
+            ty.conjugations
+                .iter()
+                .find(|c| c.tense == ty.remove_tense && c.form.0 == 0)
+                .expect("vk must declare a remove/form-0 conjugation")
+                .suffix
+                .clone()
+        };
+
+        let (kanji_id, kana_id) = if remove_suffix(ids[0]) == "来る" {
+            (ids[0], ids[1])
+        } else {
+            (ids[1], ids[0])
+        };
+        assert_eq!(remove_suffix(kanji_id), "来る");
+        assert_eq!(remove_suffix(kana_id), "くる");
+
+        // Annotate with only the kanji twin's id, but give a kana-only
+        // surface that only the kana twin's suffix can strip.
+        let rec = HeadwordRecord {
+            surface: "くる".to_string(),
+            flags: WordFlags::PRIMARY,
+            verb_types: vec![kanji_id],
+            entry_id: 1,
+        };
+        let mut stats = StemStats::default();
+        let out = generate_stems(&rec, &t, &StemOptions::default(), &mut stats);
+
+        assert_eq!(out.len(), 1, "got {:?}", out);
+        assert!(
+            out[0].surface.is_empty() && out[0].verb_types == vec![kana_id],
+            "the non-annotated kana twin must still be reachable: got {:?}",
+            out
+        );
+    }
 }
