@@ -6,5 +6,6 @@
 // by the Free Software Foundation.
 
 pub mod conjugation;
+pub mod jmdict;
 pub mod kana;
 pub mod romaji;

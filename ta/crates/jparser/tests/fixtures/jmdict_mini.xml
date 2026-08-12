@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+<!ENTITY prt "particle">
+<!ENTITY v1 "Ichidan verb">
+<!ENTITY v5r "Godan verb with `ru' ending">
+<!ENTITY adj-i "adjective (keiyoushi)">
+<!ENTITY uk "word usually written using kana alone">
+]>
+<JMdict>
+<entry>
+<ent_seq>1000010</ent_seq>
+<k_ele><keb>言う</keb><ke_pri>ichi1</ke_pri><ke_pri>news1</ke_pri></k_ele>
+<r_ele><reb>いう</reb><re_pri>ichi1</re_pri></r_ele>
+<r_ele><reb>ゆう</reb></r_ele>
+<sense>
+<pos>&v5r;</pos>
+<gloss>to say</gloss>
+<gloss>to utter</gloss>
+<xref>言われる</xref>
+<misc>&uk;</misc>
+<s_inf>usually written in kana</s_inf>
+</sense>
+</entry>
+<entry>
+<ent_seq>1000020</ent_seq>
+<r_ele><reb>は</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>topic marker</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000030</ent_seq>
+<k_ele><keb>高い</keb></k_ele>
+<r_ele><reb>たかい</reb></r_ele>
+<sense><pos>&adj-i;</pos><gloss>high</gloss><gloss>tall</gloss></sense>
+</entry>
+</JMdict>
