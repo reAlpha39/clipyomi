@@ -26,7 +26,7 @@
 //! behind `StemOptions::v5_misannotation_fallback` and instrumented via
 //! `StemStats` so its real cost and benefit can be measured.
 
-use crate::conjugation::{ConjugationTable, VerbTypeId};
+use crate::conjugation::ConjugationTable;
 use crate::kana::unify;
 use crate::record::HeadwordRecord;
 
@@ -147,7 +147,7 @@ pub fn generate_stems(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::conjugation::ConjugationTable;
+    use crate::conjugation::{ConjugationTable, VerbTypeId};
     use crate::record::WordFlags;
 
     fn table() -> ConjugationTable {
