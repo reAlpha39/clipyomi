@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/jparser"]
+members = ["crates/jparser", "xtask"]
 resolver = "2"
 
 [workspace.package]

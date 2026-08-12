@@ -1,0 +1,4821 @@
+[
+  {
+    "Name": "copula",
+    "Part of Speech": "Adj",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "である",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "です",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "であります",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でございます",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "では",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではございません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃございません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "であった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でありました",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でございました",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではなかったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなかったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではございませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃございませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "で",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "だったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなかったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ならば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "であれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ならばです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ならです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "であればです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃねば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃないなら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなければです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃねばです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃないならです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なれ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "で",
+        "Tense": "Continuative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なら",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でなさそう",
+        "Tense": "(Seems)"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではなさそう",
+        "Tense": "(Seems)"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなさそう",
+        "Tense": "(Seems)"
+      }
+    ]
+  },
+  {
+    "Name": "adj-na",
+    "Part of Speech": "Adj",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "な",
+        "Tense": "Prenominal"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "である",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "です",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "であります",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でございます",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではございません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃございません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "であった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でありました",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でございました",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではなかったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなかったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではございませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃございませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "で",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "だったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなかったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ならば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "であれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ならばです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ならです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "であればです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃねば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃないなら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなければです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃねばです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃないならです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "に",
+        "Tense": "Adverbal"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なれ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "で",
+        "Tense": "Continuative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なら",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "じゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "じまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "adj-ta",
+    "Part of Speech": "Adj",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "たる",
+        "Tense": "Prenominal"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "である",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "です",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "であります",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でございます",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではございません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃございません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "であった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でありました",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でございました",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "でありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではなかったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなかったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ではございませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃございませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "で",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "でなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ではなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "だったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなかったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "たらば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "であれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ならばです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "たらです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "であればです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃねば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "じゃないなら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃなければです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃねばです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "じゃないならです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "に",
+        "Tense": "Adverbal"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "たれ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "で",
+        "Tense": "Continuative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "たら",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "じゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "じまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "adj-i",
+    "Part of Speech": "Adj",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "い",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "し",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "いです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くはない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くありません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くないです",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "かった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "かったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くはなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くありませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くなかったです",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "くて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くはなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "かったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "かったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くなかったらです",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "なら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ければです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ならです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くねば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くないなら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くなければです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くねばです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "くないならです",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "かろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "く",
+        "Tense": "Adverbal"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Adj Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "かろう",
+        "Tense": "Conjectural"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "かったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くなかったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "かれ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "く",
+        "Tense": "Continuative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "けれ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "くちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "くちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v-i-stem",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ます",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ません",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ました",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ませんでした",
+        "Tense": "Past"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "まして",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ませんで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ましたら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ませんでしたら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ますなら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ませんなら",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ますならば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ませんならば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ますまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ましたり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ませんでしたり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ましたろう",
+        "Tense": "Past Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ませんでしたろう",
+        "Tense": "Past Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "なさい",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "なさるな",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "-Masu Stem/Continuative/Nominalizer"
+      }
+    ]
+  },
+  {
+    "Name": "v-a-stem",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ぬ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ず",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ないで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なかったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なかったろう",
+        "Tense": "Past Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ないだろう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ぬだろう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ずだろう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ないでしょう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ぬでしょう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ずでしょう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "なかっただろう",
+        "Tense": "Past Conjectural/Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なかったでしょう",
+        "Tense": "Past Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ないようにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "ないことにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ないようにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ないことにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なさそう",
+        "Tense": "(Seems)"
+      }
+    ]
+  },
+  {
+    "Name": "v-ta-stem",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "り",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だろう",
+        "Tense": "Past Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でしょう",
+        "Tense": "Past Conjectural/Presumptive"
+      }
+    ]
+  },
+  {
+    "Name": "v-u-stem",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ようにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ことにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ようにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ことにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ろう",
+        "Tense": "Past Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "だろう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "でしょう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "な",
+        "Tense": "Imperative"
+      }
+    ]
+  },
+  {
+    "Name": "v5s",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "す",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "して",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "せば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "せる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "される",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "させる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "さす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "そう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "すまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "せ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "そ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "す",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "し",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "さ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "した",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "vz",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "る",
+        "Tense": "Non-past"
+      }
+    ]
+  },
+  {
+    "Name": "v5u",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "う",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "って",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "えば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "える",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "われる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "わせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "わす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "おう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "うまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "え",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "う",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "い",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "わ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "った",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5u-s",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "う",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "うて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "えば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "える",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "われる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "わせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "わす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "おう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "うまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "え",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "う",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "い",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "わ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "うた",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "うちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "うちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5b",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ぶ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "んで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "べば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "べる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "ばれる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "ばせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "ばす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ぼう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ぶまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "べ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "ぶ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "び",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "ば",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "んだ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "んじゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "んじまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5g",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ぐ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "いで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "げば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "げる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "がれる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "がせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "がす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ごう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ぐまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "げ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "ぐ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "ぎ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "が",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "いだ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "いじゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "いじまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5k",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "く",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "いて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "けば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "ける",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "かれる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "かせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "かす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "こう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "け",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "く",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "き",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "か",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "いた",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "いちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "いちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5k-s",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "く",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "って",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "けば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "ける",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "かれる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "かせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "かす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "こう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "くまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "け",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "く",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "き",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "か",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "った",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5m",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "む",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "んで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "めば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "める",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "まれる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "ませる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "ます",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "もう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "むまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "め",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "む",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "み",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "ま",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "んだ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "んじゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "んじまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5n",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ぬ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "んで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ねば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "ねる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "なれる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "なせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "なす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "のう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ぬまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ね",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "ぬ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "に",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "な",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "んだ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "んじゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "んじまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5r",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "る",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "って",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "れる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "られる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "らせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "らす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "るまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "る",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "り",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "ら",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "った",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5r-i",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ある",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "ない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらぬ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらず",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "なかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "あって",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらないで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "あれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "あれる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "あられる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "あらせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "らす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "あろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あるまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらないようにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらないことにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "あらないようにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "あらないことにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらないだろう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "あらないでしょう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "あらなかったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "ありませんでしたり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "あれ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "ある",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "あり",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "あった",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "あっちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "あっちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5r-i",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "る",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らぬ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らず",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "って",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らないで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "れる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "られる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "らせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "らす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "るまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らないようにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らないことにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "らないようにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "らないことにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らないだろう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "らないでしょう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "らなかったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "る",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "り",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "った",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5t",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "つ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "って",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "てば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "てる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "たれる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "たせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "たす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "とう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "つまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "て",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "つ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "ち",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "た",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "った",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5uru",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "うる",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "える",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "えて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "うれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "えられる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "えさせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "えさす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "えよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "えまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "えろ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "えよ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "うる",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "える",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "え",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "え",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "えた",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "えちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "えちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5uru",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "る",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "て",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "られる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "させる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "さす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "よう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "まい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ろ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "よ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "る",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "た",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "ちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "ちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "vk",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "来る",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "来て",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "来れば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "来られる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "来られる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "来させる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "来さす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "来よう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "来まい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "来い",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "来",
+        "Tense": "Imperfective"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "来れ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "来る",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "来",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "来",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "来た",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "来ちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "来ちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "vk",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "くる",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "きて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "くれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "こられる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "こられる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "こさせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "こさす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "こよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "きまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "こい",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "くれ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "くる",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "き",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "こ",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "きた",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "きちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "きちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v5aru",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "る",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "って",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "れる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "られる",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "らせる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "らす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ろう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "るまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "いませ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": true,
+        "Negative": false,
+        "Suffix": "い",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れ",
+        "Tense": "Imperative/Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "る",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "い",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "ら",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "った",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "っちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "v1",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "る",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "て",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "られる",
+        "Tense": "Potential/Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "れる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "させる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "さす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "よう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "まい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "ろ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "よ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "れ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "る",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-a-stem",
+        "Suffix": "",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "た",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "ちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "ちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "vs-s",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "する",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "せぬ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "せず",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "して",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さないで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "すれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "しえる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "しうる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "される",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "させる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "さす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "しよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "するまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さないようにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さないことにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "さないようにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "さないことにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなかったろう",
+        "Tense": "Past Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなかっただろう",
+        "Tense": "Past Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "さなかったしょう",
+        "Tense": "Past Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さないだろう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "さないでしょう",
+        "Tense": "Conjectural/Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなかったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "しろ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "せよ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "すれ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "する",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "し",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "した",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "vs-i",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "する",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しない",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "せぬ",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "せず",
+        "Tense": "Non-past"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなかった",
+        "Tense": "Past"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "して",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなくて",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しないで",
+        "Tense": "Te-form"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "すれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "できる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "される",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "させる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "さす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "しよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "するまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しないようにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しないことにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しないようにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しないことにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなかったろう",
+        "Tense": "Past Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなかっただろう",
+        "Tense": "Past Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しなかったしょう",
+        "Tense": "Past Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しないだろう",
+        "Tense": "Conjectural"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しないでしょう",
+        "Tense": "Conjectural"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなかったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "しろ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "せよ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "すれ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "する",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "し",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "した",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "vs",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "vs-i",
+        "Suffix": "する",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなかったら",
+        "Tense": "Conditional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "すれば",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなければ",
+        "Tense": "Provisional"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "できる",
+        "Tense": "Potential"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "される",
+        "Tense": "Passive"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v1",
+        "Suffix": "させる",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5s",
+        "Suffix": "さす",
+        "Tense": "Causative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "しよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "するまい",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しないようにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しないことにしよう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しないようにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しないことにしましょう",
+        "Tense": "Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "さなかったろう",
+        "Tense": "Past Volitional"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなかっただろう",
+        "Tense": "Past Presumptive"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しなかったしょう",
+        "Tense": "Past Presumptive"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しないだろう",
+        "Tense": "Conjectural"
+      },
+      {
+        "Formal": true,
+        "Negative": true,
+        "Suffix": "しないでしょう",
+        "Tense": "Conjectural"
+      },
+      {
+        "Formal": false,
+        "Negative": true,
+        "Suffix": "しなかったり",
+        "Tense": "Alternative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "しろ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "せよ",
+        "Tense": "Imperative"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "すれ",
+        "Tense": "Hypothetical"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-u-stem",
+        "Suffix": "する",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-i-stem",
+        "Suffix": "し",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v-ta-stem",
+        "Suffix": "した",
+        "Tense": "Stem"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちゃう",
+        "Tense": "(Accidentally/Finish Completely)"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "v5u",
+        "Suffix": "しちまう",
+        "Tense": "(Accidentally/Finish Completely)"
+      }
+    ]
+  },
+  {
+    "Name": "vs",
+    "Part of Speech": "Verb",
+    "Tenses": [
+      {
+        "Formal": false,
+        "Negative": false,
+        "Suffix": "",
+        "Tense": "Remove"
+      },
+      {
+        "Formal": false,
+        "Negative": false,
+        "Next Type": "vs-i",
+        "Suffix": "する",
+        "Tense": "Stem"
+      }
+    ]
+  }
+]
