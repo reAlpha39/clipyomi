@@ -6,3 +6,4 @@
 // by the Free Software Foundation.
 
 pub mod kana;
+pub mod romaji;
