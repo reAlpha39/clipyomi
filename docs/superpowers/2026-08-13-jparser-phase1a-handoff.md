@@ -50,15 +50,9 @@ empty-key record vector. On a real corpus that vector holds one record per verb
 whose whole surface is its own remove-suffix. If it is large, load it once
 rather than per call; Phase 1B's parse loop calls this per character position.
 
-**The index build is not atomic.** `build_from_reader` writes all five files
-directly into the target directory with `File::create`, which truncates in
-place, while `load.rs` mmaps them. Rebuilding into a directory that has a live
-`Index` open against it is undefined behaviour. Soundness currently rests on an
-unenforced caller obligation, documented on `Index::open`. This becomes live the
-moment a long-lived process holds an `Index` — i.e. Phase 1B and the Tauri app.
-The fix is ~10 lines: build into a sibling directory and `fs::rename` the
-*directory* (renaming five files individually is not atomic). That still does
-not stop a third process, so the caller obligation survives regardless.
+**The index build is neither atomic nor crash-safe.** See the dedicated section
+below — this is the largest open item, and the fix is not the one an earlier
+draft of this document sketched.
 
 **`PRIORITY_MARKERS` includes `spec2` on documentation, not evidence.** The
 EDICT `(P)` rule is documented as firing on `ichi1`, `news1`, `spec1`, `spec2`,
@@ -94,6 +88,141 @@ consumer to want a different signature from at least one — `to_katakana`'s
 
 ---
 
+## The index build: hazards, verified facts, and the recommended fix
+
+This section supersedes an earlier draft of this document, which claimed the fix
+was "~10 lines: build into a sibling directory and `fs::rename` the *directory*."
+**That is wrong** — see verified fact 2. The sketch below is what the evidence
+actually supports.
+
+### Two distinct hazards
+
+**1. Rebuild-into-a-live-directory is undefined behaviour.** `build_from_reader`
+writes all five files directly into the target directory with `File::create`,
+which truncates in place, while `load.rs` mmaps three of them. Soundness rests on
+an unenforced caller obligation documented on `Index::open`. This goes live the
+moment one process holds an `Index` across a rebuild.
+
+**2. An interrupted rebuild can serve silently wrong data.** Independent of any
+concurrency. `build.rs` writes `keys.fst`, `records.bin`, `entries.bin`,
+`entries.idx`, then `header.bin` **last**; `Index::open` validates only
+`version` and `conjugation_fingerprint`. After a torn rebuild both match — the
+header is the old one, and a new build from the same binary has the same version
+and fingerprint anyway — so `open` always succeeds. Reproduced across 11
+reconstructed crash points: some yield a clean `IndexError` (bincode EOF, or
+`slice_at`'s bounds checks), and some return well-formed wrong answers with no
+error at all — `entry(2000010)` returning `EntryData { id: 1000010, .. }`, and
+`prefixes_of` returning a `StoredRecord` belonging to a different key. No panics
+in any scenario. Because the index is built on the user's machine from a
+downloaded JMdict, a power cut mid-update is a field scenario, not a lab one.
+
+### Verified empirically (Darwin 25.3.0 / APFS / arm64, Rust 1.97.1)
+
+1. **An established mmap survives everything except in-place truncation.**
+   `unlink`, `rename` over the mapped path, renaming the parent directory, and
+   `remove_dir_all` on the parent all leave a live mapping intact and readable
+   with its original bytes — no `SIGBUS` — because the mapping holds its own
+   reference to the inode. The one thing that *does* break it is `File::create`
+   (`O_TRUNC`) on the same inode: reads past the new EOF raise a real `SIGBUS`
+   (signal 10, confirmed). That is precisely what the current builder does.
+2. **You cannot atomically replace a non-empty directory.**
+   `fs::rename` onto a non-empty directory fails with `DirectoryNotEmpty`
+   (`ENOTEMPTY`, OS error 66); onto an empty directory or an absent path it
+   succeeds; onto a file it fails with `NotADirectory` (`ENOTDIR`, 20);
+   across filesystems it fails with `CrossesDevices` (`EXDEV`, 18) and never
+   falls back to copying. Directory rename is O(1) metadata — 103–120µs for a
+   directory holding 100MB across 10 files.
+3. **Symlink-over-symlink rename is atomic and does work** — but see below for
+   why that is not enough here.
+
+### Why generation directories, and why not any swap
+
+`Index::open` is a five-step sequence against a directory *name*: read
+`header.bin`, read `entries.idx`, then mmap three files. Any scheme where readers
+resolve a **mutable** name — rename-over-the-directory, symlink flip, or a
+`CURRENT` pointer file — can splice generation N's `entries.idx` onto generation
+N+1's `entries.bin` if a reader opens mid-swap. That produces exactly hazard 2's
+silent-wrong-answer class. Atomicity of the pointer swap does not help, because
+the *open* is not atomic.
+
+Generation directories are immune by construction: a `gen-N` path's contents
+never change after creation, so a straddling open either succeeds wholly or gets
+`ENOENT`.
+
+### Recommended shape
+
+```
+<root>/.build-<pid>-<nanos>/   build here (fs::create_dir, NOT create_dir_all)
+<root>/gen-<N>/                fs::rename into place when complete
+```
+
+Readers scan `read_dir(root)`, take the highest `gen-N`, and `Index::open` that
+immutable path. `Ok(None)` from the scan is the first-run "no dictionary yet"
+signal. A crash leaves a `.build-*` orphan no reader will ever resolve. A
+concurrent builder that loses the race gets `ENOTEMPTY` and its temp directory
+survives, so it can retry — loud, not silent, and no lost update. Sweep old
+generations and orphans at app startup only, before any mapping exists.
+
+This deliberately does **not** solve: cross-process writers (a second instance
+can still add generations — it just cannot corrupt one), power-loss durability
+(no `fsync`; see judgment calls), or payload bit rot.
+
+`build_from_reader` itself needs **no change** — it just always receives a fresh
+nonce directory.
+
+### Timing
+
+**Write no code for this in Phase 1B.** The only Phase 1B deliverable is ~12
+lines of corrected comment in `load.rs`: rewrite the `map()` SAFETY block and
+`Index::open`'s doc to record that the fix is a fresh directory per build, never
+a swap onto a live path, **and why** — because `open` reads five files in
+sequence. Without the "why", the next implementer will build the rename-over
+swap this document previously sketched, which is the broken one.
+
+**Trigger for implementing it:** the first commit where a single process keeps an
+`Index` alive across a rebuild — concretely, when `ensure_dictionary` is written
+in the Tauri layer. That is Phase 2, not Phase 1B. Phase 1B's parser takes an
+`&Index` and never learns a directory path, so it cannot make this harder later.
+
+Estimated cost when it lands: a new `index/generations.rs` (~60 LOC plus ~60 LOC
+of tests) exposing `latest(root)`, `build_new(root, ..)`, and `sweep(root, keep)`;
+one line in `index/mod.rs`; comments only in `load.rs`; and ~15 LOC on the Tauri
+side for an `RwLock<Arc<Index>>` plus a mutex held across the whole rebuild so
+two update clicks cannot overlap.
+
+### Open judgment calls
+
+- **`fsync` before the rename** (+~12 LOC in `build.rs`). Without it a power cut
+  can make the `gen-N` directory entry durable before its contents are, producing
+  hazard 2's silent-wrong-data class inside a directory readers *will* trust.
+  Adding it means a `write_and_sync` helper, building the FST to a `Vec<u8>`
+  rather than a `File`, and `#[cfg(unix)]` for the directory-entry sync (no std
+  equivalent on Windows). Suggested default: skip it, add it if a user ever
+  reports garbage lookups after a hard reboot. No power-loss experiment was run
+  either way.
+- **True hot-swap versus a brief "reloading dictionary…" pause.** If a
+  teardown-and-reopen of the `Index` after an update is acceptable, the Phase 2
+  in-memory piece collapses to about five lines and the `RwLock`/`Arc` design
+  disappears — the disk layout alone satisfies the design spec's requirement that
+  the previous index stay live through a failed rebuild. Product decision.
+- **Whether the CLI adopts the layout.** It does not need to;
+  `build-index <out>` / `lookup <index>` keep working against a bare generation
+  directory. Leaving the CLI alone is also why `generations.rs` should not be
+  written until Phase 2 — it would have no caller.
+
+### Platform note
+
+Windows is a first-class target (Windows + macOS via Tauri; Linux deferred), so
+POSIX-only behaviour cannot be relied on. The layout above was chosen so Windows
+only ever needs four uncontroversial operations: `create_dir` on a fresh name,
+`rename` to an absent target, `read_dir`, and `remove_dir_all` at startup when
+nothing is mapped. It never renames or deletes a populated or mapped directory,
+and it never depends on fact 1's unlink-survival behaviour. **None of this was
+exercised on Windows** — budget an afternoon on a Windows box running those four
+operations before Phase 2 ships.
+
+---
+
 ## Invariants Phase 1B must not break
 
 - **`kana::unify` is character-wise and therefore prefix-stable.** The entire
@@ -118,6 +247,9 @@ consumer to want a different signature from at least one — `to_katakana`'s
 - **ta-old stored `verbType` as `vt + 1`** with `0` meaning "not a verb". This
   port uses a 0-based id in an `Option`. The differential run compares against
   the old encoding.
+- **No Phase 1B type stores the index directory path.** Pass `&Index` or
+  `Arc<Index>`. The parser has no need for a path, and keeping it that way is
+  what lets the generation layout land in Phase 2 without touching Phase 1B code.
 
 ---
 

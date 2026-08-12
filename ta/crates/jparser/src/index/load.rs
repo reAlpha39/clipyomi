@@ -58,6 +58,19 @@ fn map(path: &Path) -> Result<Mmap, IndexError> {
     // directory mapped. Soundness rests entirely on the caller obligation
     // documented on `Index::open`: no process may write to an index
     // directory while an `Index` for it is open.
+    //
+    // When a caller finally needs that obligation lifted, the fix is a fresh
+    // directory per build — `<root>/.build-<nonce>` renamed to `<root>/gen-<N>`,
+    // with readers taking the highest `gen-N` — and NOT a swap onto a live
+    // path. Renaming over `dir`, flipping a symlink, and updating a `CURRENT`
+    // pointer all look atomic and are all insufficient, because `Index::open`
+    // is not atomic: it reads five files in sequence, so a reader that starts
+    // mid-swap can splice one generation's `entries.idx` onto another's
+    // `entries.bin` and then return well-formed wrong answers with no error.
+    // A `gen-N` directory's contents never change after creation, so an open
+    // that straddles a publish either succeeds wholly or fails with ENOENT.
+    // Note also that `fs::rename` cannot replace a non-empty directory at all
+    // (ENOTEMPTY), so the swap is not even expressible as a single operation.
     Ok(unsafe { Mmap::map(&file)? })
 }
 
@@ -71,6 +84,14 @@ impl Index {
     /// writes in place rather than building to a temp directory and
     /// renaming, so rebuilding into a directory with an open `Index` is
     /// undefined behavior, not just a race that yields stale reads.
+    ///
+    /// A rebuild interrupted partway is not detected either. The header is
+    /// written last and only its version and conjugation fingerprint are
+    /// validated here, and both still match after a torn rebuild, so the
+    /// index opens cleanly and can then return wrong data with no error.
+    /// Build into a fresh directory and point readers at it only once the
+    /// build has completed; see the note on `map` above for why swapping a
+    /// live path is not a substitute.
     pub fn open(dir: &Path) -> Result<Self, IndexError> {
         let header: IndexHeader = bincode::deserialize(&std::fs::read(dir.join(HEADER_FILE))?)?;
         if header.version != INDEX_FORMAT_VERSION {
