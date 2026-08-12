@@ -126,6 +126,16 @@ fn is_padded_bare_entity(t: &BytesText, range: &std::ops::Range<usize>) -> bool 
 fn decode_text(t: &BytesText) -> Result<String, JmdictError> {
     match t.unescape() {
         Ok(s) => Ok(s.into_owned()),
+        // `range`'s exact byte semantics (the name span, excluding the `&`/
+        // `;` delimiters) are an unversioned, undocumented implementation
+        // detail read from quick-xml 0.36.2's source
+        // (`quick-xml-0.36.2/src/escape.rs:279`), not a contract in its
+        // public docs. `ta/Cargo.lock` pins the exact version this was
+        // verified against; a patch bump that shifts this would show up as
+        // a failure in the escape/entity tests below (in particular the
+        // `decodes_a_*_padded_bare_entity_to_its_code` and
+        // `propagates_an_error_for_an_unknown_entity_embedded_mid_string`
+        // cases), which are the canary if it ever changes.
         Err(Error::EscapeError(EscapeError::UnrecognizedEntity(range, name)))
             if is_padded_bare_entity(t, &range) =>
         {
