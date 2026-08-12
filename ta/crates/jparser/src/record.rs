@@ -149,7 +149,7 @@ pub fn headwords(entry: &RawEntry, table: &ConjugationTable) -> Vec<HeadwordReco
 mod tests {
     use super::*;
     use crate::conjugation::ConjugationTable;
-    use crate::jmdict::{parse_entries, RawEntry};
+    use crate::jmdict::{parse_entries, RawEntry, RawSense, ReadingForm};
 
     fn table() -> ConjugationTable {
         ConjugationTable::load_embedded().unwrap()
@@ -238,6 +238,44 @@ mod tests {
         let t = table();
         let recs = headwords(&fixture()[2], &t);
         assert_eq!(recs[0].verb_types, t.types_named("adj-i"));
+    }
+
+    #[test]
+    fn attaches_every_id_for_a_pos_code_naming_two_types_in_order() {
+        // The fixture is synthetic rather than the embedded asset so this test
+        // does not depend on which real POS codes currently happen to be
+        // duplicated. "dup" is deliberately declared at non-adjacent indices
+        // (0 and 2, with "other" in between at index 1): a `.first()`-only
+        // "simplification" of the attachment loop, or one that assumes the
+        // matching ids are contiguous, both fail this assertion.
+        let json = r#"[
+          {"Name":"dup","Part of Speech":"Verb","Tenses":[]},
+          {"Name":"other","Part of Speech":"Verb","Tenses":[]},
+          {"Name":"dup","Part of Speech":"Verb","Tenses":[]}
+        ]"#;
+        let t = ConjugationTable::from_json(json).expect("fixture must load");
+        let expected = t.types_named("dup");
+        assert_eq!(
+            expected,
+            vec![0, 2],
+            "fixture must define dup at ids 0 and 2"
+        );
+
+        let entry = RawEntry {
+            id: 1,
+            kanji: vec![],
+            readings: vec![ReadingForm {
+                text: "てすと".to_string(),
+                has_priority: false,
+            }],
+            senses: vec![RawSense {
+                pos: vec!["dup".to_string()],
+                ..Default::default()
+            }],
+        };
+
+        let recs = headwords(&entry, &t);
+        assert_eq!(recs[0].verb_types, expected);
     }
 
     #[test]
