@@ -84,19 +84,36 @@ pub enum JmdictError {
     BadEntry { id: String, reason: String },
 }
 
+/// Byte length of each of the `&` and `;` delimiters around an entity name,
+/// used to test whether an unrecognized reference spans a whole text node.
+const ENTITY_DELIMITER_LEN: usize = 1;
+
 /// Decodes the text of a JMdict element. `unescape()` already resolves every
 /// standard XML escape (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, numeric
 /// refs) correctly, and fails with `EscapeError::UnrecognizedEntity` only for
-/// a name it does not know how to expand — exactly JMdict's DTD-only codes
-/// (`v5r`, `uk`, ...). On that specific error the crate hands back the
-/// unmatched name itself, which is the code we want; we take it verbatim
-/// rather than resolving it, since resolving it would require the DTD's
-/// expansion (the prose description), and it is the code that matches
-/// conjugation type names. Any other error propagates.
+/// a name it does not know how to expand. quick-xml reports that error the
+/// moment it hits the bad reference, discarding whatever text (if any)
+/// preceded it and never looking at what follows — so the error alone cannot
+/// tell us whether the reference was the *entire* text or just part of it.
+///
+/// We only accept the bare name as JMdict's DTD-only code (`v5r`, `uk`, ...)
+/// when the unmatched range covers the whole element text: nothing before
+/// the `&`, nothing after the `;`. `UnrecognizedEntity`'s range is the name's
+/// byte span within the decoded text, excluding both delimiters (see
+/// `quick-xml-0.36.2/src/escape.rs:279`), so that whole-span condition is
+/// `range.start == 1` and `range.end + 1 == t.len()`. An unrecognized entity
+/// anywhere else — e.g. embedded mid-string — is genuinely malformed input
+/// and must still propagate as a loud error rather than silently discarding
+/// the surrounding text.
 fn decode_text(t: &BytesText) -> Result<String, JmdictError> {
     match t.unescape() {
         Ok(s) => Ok(s.into_owned()),
-        Err(Error::EscapeError(EscapeError::UnrecognizedEntity(_, name))) => Ok(name),
+        Err(Error::EscapeError(EscapeError::UnrecognizedEntity(range, name)))
+            if range.start == ENTITY_DELIMITER_LEN
+                && range.end + ENTITY_DELIMITER_LEN == t.len() =>
+        {
+            Ok(name)
+        }
         Err(e) => Err(JmdictError::Xml(e)),
     }
 }
@@ -409,5 +426,16 @@ mod tests {
         let xml = "<JMdict><entry><ent_seq>1</ent_seq>\
                     <sense><pos>&v5r;</pos></sense></entry></JMdict>";
         assert_eq!(parse_one(xml).senses[0].pos, vec!["v5r"]);
+    }
+
+    #[test]
+    fn propagates_an_error_for_an_unknown_entity_embedded_mid_string() {
+        // Regression: an unrecognized entity that is NOT the whole element
+        // text is genuinely malformed input, not a JMdict DTD code. It must
+        // be a loud error, not a silent `Ok` that drops "foo " and " bar".
+        let xml = "<JMdict><entry><ent_seq>1</ent_seq>\
+                    <sense><gloss>foo &someunknown; bar</gloss></sense></entry></JMdict>";
+        let result: Result<Vec<_>, _> = parse_entries(std::io::Cursor::new(xml)).collect();
+        assert!(result.is_err(), "expected an error, got {result:?}");
     }
 }
