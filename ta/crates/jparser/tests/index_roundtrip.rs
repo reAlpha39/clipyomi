@@ -158,3 +158,92 @@ fn rejects_a_header_with_the_wrong_format_version() {
     let msg = Index::open(&dir).unwrap_err().to_string();
     assert!(msg.contains("version"), "got {msg}");
 }
+
+#[test]
+fn stems_carry_the_producing_verb_type_and_headwords_carry_none() {
+    let dir = tmpdir("verb-type");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+    let table = ConjugationTable::load_embedded().unwrap();
+    // v5u is not one of the four duplicate-named types, so it has exactly
+    // one id in the table.
+    let v5u_id = table.types_named("v5u")[0];
+
+    let records: Vec<_> = index
+        .prefixes_of("言う")
+        .unwrap()
+        .iter()
+        .flat_map(|h| h.records.clone())
+        .collect();
+
+    // 言 is the v5-fallback stem generated from 言う via sibling type v5u
+    // (see the module docs on the mis-annotation fallback), so its stored
+    // verb_type must survive the build -> mmap -> bincode round trip.
+    let stem = records
+        .iter()
+        .find(|r| r.surface == "言")
+        .expect("言 stem must be indexed");
+    assert_eq!(stem.verb_type, Some(v5u_id));
+
+    // The plain headword carries no verb type of its own; Task 9 uses this
+    // distinction to tell a stem from a headword.
+    let headword = records
+        .iter()
+        .find(|r| r.surface == "言う")
+        .expect("言う headword must be indexed");
+    assert_eq!(headword.verb_type, None);
+}
+
+#[test]
+fn a_shared_normalized_key_collects_records_from_distinct_entries() {
+    let dir = tmpdir("multi-record");
+    // とる (hiragana) and トル (katakana) normalize to the same FST key via
+    // kana::unify_str, so these two otherwise-unrelated entries must land in
+    // the same bucket. tests/fixtures/jmdict_mini.xml is untouched; every
+    // fixture key maps to exactly one record and can't exercise this.
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+]>
+<JMdict>
+<entry>
+<ent_seq>2000001</ent_seq>
+<r_ele><reb>とる</reb></r_ele>
+<sense><pos>&n;</pos><gloss>to take</gloss></sense>
+</entry>
+<entry>
+<ent_seq>2000002</ent_seq>
+<r_ele><reb>トル</reb></r_ele>
+<sense><pos>&n;</pos><gloss>a different noun</gloss></sense>
+</entry>
+</JMdict>"#;
+    let table = ConjugationTable::load_embedded().unwrap();
+    build_from_reader(
+        std::io::Cursor::new(xml),
+        &table,
+        &StemOptions::default(),
+        &dir,
+    )
+    .expect("build must succeed");
+    let index = Index::open(&dir).unwrap();
+
+    let records: Vec<_> = index
+        .prefixes_of("とる")
+        .unwrap()
+        .iter()
+        .flat_map(|h| h.records.clone())
+        .collect();
+
+    assert!(
+        records
+            .iter()
+            .any(|r| r.surface == "とる" && r.entry_id == 2000001),
+        "got {records:?}"
+    );
+    assert!(
+        records
+            .iter()
+            .any(|r| r.surface == "トル" && r.entry_id == 2000002),
+        "got {records:?}"
+    );
+}
