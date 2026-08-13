@@ -15,6 +15,7 @@
 //! matches can still be detected and penalized in Phase 1B.
 
 pub mod build;
+pub mod generations;
 pub mod load;
 
 use serde::{Deserialize, Serialize};
