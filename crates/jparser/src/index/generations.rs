@@ -220,6 +220,17 @@ pub fn build_new(
     Ok((published?, report))
 }
 
+/// Remove `path`, treating an already-absent directory as success. Another
+/// sweeper reaching it first produces the same end state this function exists
+/// to produce.
+fn remove_if_present(path: &Path) -> Result<bool, IndexError> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Remove `.build-*` orphans and all but the `keep` highest generations.
 /// Returns the number of directories removed.
 ///
@@ -261,12 +272,8 @@ pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
         .iter()
         .chain(generations.iter().skip(keep).map(|(_, path)| path))
     {
-        match std::fs::remove_dir_all(path) {
-            Ok(()) => removed += 1,
-            // Another sweeper got there first. The directory is gone either
-            // way, which is the outcome this function exists to produce.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.into()),
+        if remove_if_present(path)? {
+            removed += 1;
         }
     }
     Ok(removed)
@@ -572,33 +579,30 @@ mod tests {
         assert!(root.join("unrelated").exists());
     }
 
+    /// The arm `sweep`'s racing-sweeper tolerance depends on, covered
+    /// directly and deterministically rather than through two racing
+    /// `sweep` calls: that race was measured to hit the `NotFound` arm only
+    /// ~1 run in 20 (3/60), which made the fix it exists to cover
+    /// effectively untested. There is nothing probabilistic about "call this
+    /// on a directory that is already gone," so drive it as that.
+    #[test]
+    fn remove_if_present_removes_an_existing_directory() {
+        let root = scratch("gen-remove-if-present-existing");
+        mkdir(&root, "victim");
+        let path = root.join("victim");
+        assert!(remove_if_present(&path).expect("remove_if_present"));
+        assert!(!path.exists());
+    }
+
     /// Two sweepers racing on one root — two `ensure_dictionary` calls, or one
     /// plus `gen-sweep` — must not treat "the other one already removed this
-    /// directory" as an error; that is the exact outcome `sweep` exists to
+    /// directory" as an error; that is the exact outcome this arm exists to
     /// produce, not a failure of it.
     #[test]
-    fn concurrent_sweeps_tolerate_a_generation_removed_by_the_other() {
-        let root = scratch("gen-sweep-concurrent");
-        for n in 1..=5 {
-            mkdir(&root, &format!("gen-{n}"));
-        }
-
-        let results = std::thread::scope(|s| {
-            let handles: Vec<_> = (0..2).map(|_| s.spawn(|| sweep(&root, 2))).collect();
-            handles
-                .into_iter()
-                .map(|h| h.join().expect("join"))
-                .collect::<Vec<_>>()
-        });
-
-        for result in &results {
-            assert!(
-                result.is_ok(),
-                "a NotFound from a concurrent sweeper must not surface as an error: {result:?}"
-            );
-        }
-        assert!(root.join("gen-4").exists());
-        assert!(root.join("gen-5").exists());
+    fn remove_if_present_tolerates_an_absent_directory() {
+        let root = scratch("gen-remove-if-present-absent");
+        let path = root.join("never-existed");
+        assert!(!remove_if_present(&path).expect("remove_if_present"));
     }
 
     #[test]
