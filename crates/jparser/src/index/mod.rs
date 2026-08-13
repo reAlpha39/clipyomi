@@ -194,7 +194,40 @@ where
         Ok(_removed) => {}
         Err(_e) => {}
     }
-    Index::open(&published)
+    open_published_or_newest(root, &published)
+}
+
+/// Open `published` — the generation this call just built — falling back to
+/// whatever is newest in `root` if `published` is already gone.
+///
+/// `build_new`'s retry loop lets multiple concurrent builders all succeed
+/// from the same `root`, so by the time execution reaches here a *different*
+/// call may already have published a later generation and swept `published`
+/// away — at `keep = 1` with two concurrent builders, or the default
+/// `keep = 2` with three. That is a successful supersession, not a failure:
+/// the caller asked for the newest usable index, not specifically for the
+/// generation this call happened to build. Only when nothing survives at
+/// all — `latest` also returns `None` — is the original `NotFound` a real
+/// error.
+fn open_published_or_newest(root: &Path, published: &Path) -> Result<Index, IndexError> {
+    match Index::open(published) {
+        Ok(index) => Ok(index),
+        Err(IndexError::Io(io_err)) if io_err.kind() == std::io::ErrorKind::NotFound => {
+            match generations::latest(root)? {
+                Some(fallback) => Index::open(&fallback),
+                None => Err(IndexError::Io(io_err)),
+            }
+        }
+        // Listed exhaustively, matching the discipline above: a new
+        // IndexError variant must force a decision here too.
+        Err(e @ IndexError::Io(_))
+        | Err(e @ IndexError::Fst(_))
+        | Err(e @ IndexError::Encoding(_))
+        | Err(e @ IndexError::Jmdict(_))
+        | Err(e @ IndexError::VersionMismatch { .. })
+        | Err(e @ IndexError::ConjugationMismatch { .. })
+        | Err(e @ IndexError::GenerationExists { .. }) => Err(e),
+    }
 }
 
 #[cfg(test)]
@@ -438,6 +471,52 @@ mod tests {
             index.entry(1000010).expect("entry").expect("present").id,
             1000010
         );
+    }
+
+    /// Covers the interaction `open_published_or_newest` exists to survive:
+    /// `build_new`'s retry loop lets concurrent builders all succeed, so the
+    /// generation `ensure_dictionary` "published" can be swept away by a
+    /// different, later-publishing call before this call's own `Index::open`
+    /// ever runs. Reachable at `keep = 1` with two concurrent builders, or
+    /// the default `keep = 2` with three — see R1.
+    ///
+    /// Driven directly against the helper rather than through a real race:
+    /// nothing can deterministically force two live `ensure_dictionary`
+    /// calls to interleave between "this call's publish returns" and "this
+    /// call's own open runs," so instead publish two generations for real,
+    /// delete the one this call would have "published," and confirm the
+    /// fallback opens the survivor.
+    #[test]
+    fn open_published_or_newest_falls_back_when_its_own_generation_is_swept() {
+        let root = scratch("ensure-superseded");
+        let (table, opts) = table_and_opts();
+
+        let (gen1, _) =
+            generations::build_new(&root, XML.as_bytes(), &table, &opts).expect("gen-1");
+        let (gen2, _) =
+            generations::build_new(&root, XML.as_bytes(), &table, &opts).expect("gen-2");
+
+        // Simulate a different call's sweep removing gen1 — the generation
+        // this call "published" — before this call's own open ran.
+        std::fs::remove_dir_all(&gen1).expect("simulate a concurrent sweep");
+
+        let index = open_published_or_newest(&root, &gen1)
+            .expect("a superseding generation must open, not error");
+        assert_eq!(
+            index.entry(1000010).expect("entry").expect("present").id,
+            1000010
+        );
+        assert_eq!(gen2, root.join("gen-2"));
+    }
+
+    /// The other half of the fallback: when nothing survives at all, the
+    /// original `NotFound` must still surface rather than being swallowed.
+    #[test]
+    fn open_published_or_newest_errors_when_nothing_survives() {
+        let root = scratch("ensure-superseded-none");
+        let err = open_published_or_newest(&root, &root.join("gen-1"))
+            .expect_err("an absent root has nothing to fall back to");
+        assert!(matches!(err, IndexError::Io(_)), "expected Io, got {err:?}");
     }
 
     /// A sweep that fails outright — not merely a benign race with another
