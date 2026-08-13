@@ -117,4 +117,12 @@ pub enum IndexError {
          expected {expected:#x}"
     )]
     ConjugationMismatch { found: u64, expected: u64 },
+    #[error(
+        "index generation {generation} already exists; another builder \
+         published first — retry (partial build kept at {build_dir})"
+    )]
+    GenerationExists {
+        generation: u64,
+        build_dir: std::path::PathBuf,
+    },
 }
