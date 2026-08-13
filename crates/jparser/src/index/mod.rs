@@ -18,9 +18,14 @@ pub mod build;
 pub mod generations;
 pub mod load;
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
+use crate::conjugation::ConjugationTable;
 use crate::conjugation::VerbTypeId;
+use crate::index::load::Index;
+use crate::stem::StemOptions;
 use crate::stem::StemStats;
 
 /// Bumped whenever the on-disk layout changes. A mismatch forces a rebuild; the
@@ -125,4 +130,235 @@ pub enum IndexError {
         generation: u64,
         build_dir: std::path::PathBuf,
     },
+}
+
+/// Open the newest usable index in `root`, building one first if necessary.
+///
+/// `source` is a *lazy* producer of JMdict XML: it is invoked only when a
+/// build is actually required, because the real source is a ~60 MB download
+/// and the steady-state path must not pay for it.
+///
+/// A version or conjugation-fingerprint mismatch triggers a rebuild — both are
+/// expected after an application upgrade or a changed `conjugations.json`. Any
+/// **other** open failure is returned rather than rebuilt: a generation that
+/// was published as complete but does not read back is a bug or a failing
+/// disk, and silently rebuilding would hide it.
+pub fn ensure_dictionary<R, F>(
+    root: &Path,
+    table: &ConjugationTable,
+    opts: &StemOptions,
+    keep: usize,
+    source: F,
+) -> Result<Index, IndexError>
+where
+    F: FnOnce() -> std::io::Result<R>,
+    R: std::io::BufRead,
+{
+    if let Some(current) = generations::latest(root)? {
+        match Index::open(&current) {
+            Ok(index) => return Ok(index),
+            // Expected after an upgrade or an asset change: rebuild.
+            Err(IndexError::VersionMismatch { .. })
+            | Err(IndexError::ConjugationMismatch { .. }) => {}
+            // Listed exhaustively rather than with a catch-all so that a new
+            // IndexError variant forces a decision here instead of silently
+            // landing in one arm or the other.
+            Err(e @ IndexError::Io(_))
+            | Err(e @ IndexError::Fst(_))
+            | Err(e @ IndexError::Encoding(_))
+            | Err(e @ IndexError::Jmdict(_))
+            | Err(e @ IndexError::GenerationExists { .. }) => return Err(e),
+        }
+    }
+
+    let xml = source()?;
+    let (published, _report) = generations::build_new(root, xml, table, opts)?;
+    // Sweep after the publish, never before: sweeping first could delete the
+    // generation the caller would have fallen back to had the build failed.
+    let _swept = generations::sweep(root, keep)?;
+    Index::open(&published)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::conjugation::ConjugationTable;
+    use crate::stem::StemOptions;
+
+    const XML: &str = concat!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+        "<JMdict>",
+        "<entry><ent_seq>1000010</ent_seq><k_ele><keb>本</keb></k_ele>",
+        "<r_ele><reb>ほん</reb></r_ele>",
+        "<sense><pos>&n;</pos><gloss>book</gloss></sense></entry>",
+        "</JMdict>",
+    );
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    fn table_and_opts() -> (ConjugationTable, StemOptions) {
+        (
+            ConjugationTable::load_embedded().expect("table"),
+            StemOptions::default(),
+        )
+    }
+
+    /// Rewrite `gen-N`'s header so the next open rejects it.
+    fn corrupt_header(dir: &std::path::Path, f: impl FnOnce(&mut IndexHeader)) {
+        let path = dir.join(HEADER_FILE);
+        let mut header: IndexHeader =
+            bincode::deserialize(&std::fs::read(&path).expect("read")).expect("decode");
+        f(&mut header);
+        std::fs::write(&path, bincode::serialize(&header).expect("encode")).expect("write");
+    }
+
+    #[test]
+    fn an_empty_root_builds_the_first_generation() {
+        let root = scratch("ensure-first");
+        let (table, opts) = table_and_opts();
+        let calls = Cell::new(0usize);
+
+        let index = ensure_dictionary(&root, &table, &opts, 2, || {
+            calls.set(calls.get() + 1);
+            Ok(XML.as_bytes())
+        })
+        .expect("ensure_dictionary");
+
+        assert_eq!(calls.get(), 1);
+        assert!(root.join("gen-1").exists());
+        assert_eq!(
+            index.entry(1000010).expect("entry").expect("present").id,
+            1000010
+        );
+    }
+
+    /// The steady-state path. A ~60 MB download must not happen just because
+    /// the application started.
+    #[test]
+    fn a_valid_generation_is_reused_without_consulting_the_source() {
+        let root = scratch("ensure-reuse");
+        let (table, opts) = table_and_opts();
+
+        let first = Cell::new(0usize);
+        ensure_dictionary(&root, &table, &opts, 2, || {
+            first.set(first.get() + 1);
+            Ok(XML.as_bytes())
+        })
+        .expect("first");
+        assert_eq!(first.get(), 1);
+
+        let second = Cell::new(0usize);
+        ensure_dictionary(&root, &table, &opts, 2, || {
+            second.set(second.get() + 1);
+            Ok(XML.as_bytes())
+        })
+        .expect("second");
+        assert_eq!(second.get(), 0, "the source was consulted on a valid index");
+        assert!(
+            !root.join("gen-2").exists(),
+            "a redundant generation was built"
+        );
+    }
+
+    #[test]
+    fn a_version_mismatch_rebuilds() {
+        let root = scratch("ensure-version");
+        let (table, opts) = table_and_opts();
+        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+
+        corrupt_header(&root.join("gen-1"), |h| {
+            h.version = INDEX_FORMAT_VERSION - 1;
+        });
+
+        let calls = Cell::new(0usize);
+        ensure_dictionary(&root, &table, &opts, 2, || {
+            calls.set(calls.get() + 1);
+            Ok(XML.as_bytes())
+        })
+        .expect("rebuild");
+        assert_eq!(calls.get(), 1, "a stale version must rebuild");
+        assert!(root.join("gen-2").exists());
+    }
+
+    #[test]
+    fn a_fingerprint_mismatch_rebuilds() {
+        let root = scratch("ensure-fingerprint");
+        let (table, opts) = table_and_opts();
+        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+
+        corrupt_header(&root.join("gen-1"), |h| {
+            h.conjugation_fingerprint ^= 1;
+        });
+
+        let calls = Cell::new(0usize);
+        ensure_dictionary(&root, &table, &opts, 2, || {
+            calls.set(calls.get() + 1);
+            Ok(XML.as_bytes())
+        })
+        .expect("rebuild");
+        assert_eq!(calls.get(), 1);
+        assert!(root.join("gen-2").exists());
+    }
+
+    /// A published-then-corrupt generation is a bug or a failing disk.
+    /// Rebuilding would re-download ~60 MB and hide it.
+    #[test]
+    fn a_corrupt_generation_errors_rather_than_rebuilding() {
+        let root = scratch("ensure-corrupt");
+        let (table, opts) = table_and_opts();
+        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+
+        // Truncate a file `open` reads eagerly, leaving the header intact so
+        // version and fingerprint both still validate.
+        std::fs::write(root.join("gen-1").join(ENTRIES_INDEX_FILE), b"\x00\x00").expect("truncate");
+
+        let calls = Cell::new(0usize);
+        let err = ensure_dictionary(&root, &table, &opts, 2, || {
+            calls.set(calls.get() + 1);
+            Ok(XML.as_bytes())
+        })
+        .expect_err("corruption must surface");
+
+        assert!(
+            matches!(err, IndexError::Encoding(_) | IndexError::Io(_)),
+            "expected a decode or io error, got {err:?}"
+        );
+        assert_eq!(calls.get(), 0, "a corrupt index must not trigger a rebuild");
+        assert!(!root.join("gen-2").exists());
+    }
+
+    #[test]
+    fn a_rebuild_sweeps_to_the_retention_limit() {
+        let root = scratch("ensure-sweep");
+        let (table, opts) = table_and_opts();
+
+        // Four rounds, invalidating the head each time so every round rebuilds.
+        for _ in 0..4 {
+            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            let head = generations::latest(&root).expect("latest").expect("head");
+            corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
+        }
+
+        let remaining = std::fs::read_dir(&root)
+            .expect("read_dir")
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with(generations::GENERATION_PREFIX)
+            })
+            .count();
+        assert!(
+            remaining <= 2,
+            "retention was not applied: {remaining} generations"
+        );
+    }
 }
