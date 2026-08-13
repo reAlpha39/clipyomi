@@ -79,8 +79,13 @@ fn gen_sweep_reports_what_it_removed() {
     assert!(!root.join(".build-1-1").exists());
 }
 
-/// `--keep 0` would make `sweep` delete the generation it just published, so it
-/// is rejected at the boundary rather than clamped.
+/// `--keep 0` would make `sweep` delete the generation it just published.
+/// The library boundary (`ensure_dictionary`, `mod.rs`) clamps this to 1
+/// instead of rejecting it, because `sweep` itself may legitimately be
+/// called with `keep = 0` and Phase 2B calls `ensure_dictionary` directly
+/// without going through this CLI. The CLI still rejects it here rather than
+/// clamping: an interactive operator is better served by a clear usage error
+/// than by a silent clamp they might never notice.
 #[test]
 fn gen_sweep_rejects_a_zero_keep() {
     let dir = scratch("cli-keep-zero");
