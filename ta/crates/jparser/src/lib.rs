@@ -9,6 +9,21 @@ pub mod conjugation;
 pub mod index;
 pub mod jmdict;
 pub mod kana;
+// Dead until `parse` lands: nothing outside the module's own tests calls the
+// matcher yet. Task 7 removes this attribute. It covers the child module
+// `matcher::verb` that Task 2 adds, too.
+#[allow(dead_code)]
+mod matcher;
 pub mod record;
 pub mod romaji;
 pub mod stem;
+
+/// Everything `parse` can fail at. Reading the memory-mapped index payload is
+/// the only fallible step in Phase 1B; the enum exists so `parse` does not
+/// leak `IndexError` into its public signature, and so variants can be added
+/// without a breaking change.
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error("reading the index failed: {0}")]
+    Index(#[from] crate::index::IndexError),
+}

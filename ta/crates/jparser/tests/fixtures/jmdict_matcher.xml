@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+<!ENTITY prt "particle">
+<!ENTITY v1 "Ichidan verb">
+<!ENTITY vs-i "suru verb - irregular">
+]>
+<JMdict>
+<!-- 2000010/2000020: the same word spelled hiragana in one entry and katakana
+     in another. Both land in the FST bucket "ネコ", so a hiragana query gets
+     one exact and one inexact record at the same length. -->
+<entry>
+<ent_seq>2000010</ent_seq>
+<k_ele><keb>猫</keb></k_ele>
+<r_ele><reb>ねこ</reb></r_ele>
+<sense><pos>&n;</pos><gloss>cat</gloss></sense>
+</entry>
+<entry>
+<ent_seq>2000020</ent_seq>
+<r_ele><reb>ネコ</reb></r_ele>
+<sense><pos>&n;</pos><gloss>cat (zoological)</gloss></sense>
+</entry>
+<!-- 2000030: a one-character particle, for the flag round trip. -->
+<entry>
+<ent_seq>2000030</ent_seq>
+<r_ele><reb>は</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>topic marker</gloss></sense>
+</entry>
+<!-- 2000040/2000050: two distinct entries spelled identically. They must never
+     be collapsed into one match. -->
+<entry>
+<ent_seq>2000040</ent_seq>
+<k_ele><keb>二</keb></k_ele>
+<r_ele><reb>に</reb></r_ele>
+<sense><pos>&n;</pos><gloss>two</gloss></sense>
+</entry>
+<entry>
+<ent_seq>2000050</ent_seq>
+<k_ele><keb>二</keb></k_ele>
+<r_ele><reb>ふた</reb></r_ele>
+<sense><pos>&n;</pos><gloss>two (prefixed to counters)</gloss></sense>
+</entry>
+<!-- 2000060: a longer headword starting with 2000010's, so one position yields
+     two prefix lengths. -->
+<entry>
+<ent_seq>2000060</ent_seq>
+<k_ele><keb>猫舌</keb></k_ele>
+<r_ele><reb>ねこじた</reb></r_ele>
+<sense><pos>&n;</pos><gloss>tongue that cannot handle hot food</gloss></sense>
+</entry>
+<!-- 2000070: a v1 verb, for the conjugation recursion in Task 2. Its stem 食べ
+     is indexed under the key 食ベ. -->
+<entry>
+<ent_seq>2000070</ent_seq>
+<k_ele><keb>食べる</keb></k_ele>
+<r_ele><reb>たべる</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to eat</gloss></sense>
+</entry>
+<!-- 2000080: vs-i, whose remove-suffix is the whole word, so its stem is the
+     empty string. Every prefixes_of() call on this index therefore returns a
+     key_chars == 0 hit; the matcher must survive it. -->
+<entry>
+<ent_seq>2000080</ent_seq>
+<r_ele><reb>する</reb></r_ele>
+<sense><pos>&vs-i;</pos><gloss>to do</gloss></sense>
+</entry>
+</JMdict>
