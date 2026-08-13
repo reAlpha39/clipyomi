@@ -10,6 +10,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use jmdict_source::SOURCE_FILE;
+
 const XML: &str = concat!(
     r#"<?xml version="1.0" encoding="UTF-8"?>"#,
     "<JMdict>",
@@ -213,6 +215,11 @@ fn ensure_dictionary_still_accepts_a_positional_xml() {
 }
 
 /// The ArgGroup is what makes "exactly one source" true rather than intended.
+/// Asserts on stderr content, not just a non-zero exit: a bare exit-code
+/// check would also pass against the pre-wiring binary, which rejected
+/// `--source-dir` for the wrong reason (`unexpected argument`, clap not
+/// yet knowing the flag). The `ArgGroup` conflict message is what proves
+/// the mechanism is actually the group, not a missing flag.
 #[test]
 fn ensure_dictionary_rejects_both_sources_at_once() {
     let dir = scratch("cli-bothsources");
@@ -231,8 +238,20 @@ fn ensure_dictionary_rejects_both_sources_at_once() {
         .expect("run jparser-cli");
 
     assert!(!out.status.success(), "both sources must be rejected");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "expected an ArgGroup conflict, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("source-dir"),
+        "the conflict must name --source-dir, got: {stderr}"
+    );
 }
 
+/// Same reasoning as the test above: the pre-wiring binary already rejected
+/// this (missing required `xml` positional), so only the message proves the
+/// `ArgGroup`, not just the old positional, is what is enforcing it now.
 #[test]
 fn ensure_dictionary_rejects_no_source_at_all() {
     let dir = scratch("cli-nosource");
@@ -244,4 +263,37 @@ fn ensure_dictionary_rejects_no_source_at_all() {
         .expect("run jparser-cli");
 
     assert!(!out.status.success(), "a missing source must be rejected");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("required arguments were not provided"),
+        "got: {stderr}"
+    );
+    assert!(
+        stderr.contains("source-dir"),
+        "the required-source message must name --source-dir, got: {stderr}"
+    );
+}
+
+/// The headline capability of this phase: `ensure_dictionary` actually built
+/// through `jmdict_source::resolve`, not merely that clap accepted the flag.
+/// Both rejection tests above stop at the `ArgGroup` before `main`'s `match`
+/// ever runs, and `jmdict-source`'s own `seam.rs` calls `resolve` and
+/// `ensure_dictionary` directly as library functions, bypassing clap
+/// entirely — so nothing else in the suite drives this arm end to end.
+///
+/// The fixture is placed uncompressed: `jparser` has no `flate2`
+/// dev-dependency, and `open_local`'s byte-sniff already passes a non-gzip
+/// file straight through (covered by `jmdict-source`'s own tests and by
+/// `seam.rs`'s gzip case), so a plain-XML archive still exercises the full
+/// `--source-dir` route without adding a dependency.
+#[test]
+fn ensure_dictionary_builds_through_the_source_dir_route() {
+    let dir = scratch("cli-source-dir");
+    let source_dir = dir.join("src");
+    std::fs::create_dir_all(&source_dir).expect("mkdir");
+    std::fs::write(source_dir.join(SOURCE_FILE), XML).expect("write archive");
+
+    let out = cli(&["ensure-dictionary", "dict", "--source-dir", "src"], &dir);
+
+    assert!(out.contains("generation: gen-1"), "got: {out}");
 }
