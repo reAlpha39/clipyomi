@@ -374,9 +374,46 @@ mod tests {
                     .starts_with(generations::GENERATION_PREFIX)
             })
             .count();
-        assert!(
-            remaining <= 2,
+        assert_eq!(
+            remaining, 2,
             "retention was not applied: {remaining} generations"
+        );
+    }
+
+    /// `keep` must actually reach `sweep`. Every other test in this module
+    /// passes `keep = 2`, which equals `DEFAULT_KEEP_GENERATIONS` — so
+    /// replacing `sweep(root, keep)` with `sweep(root, DEFAULT_KEEP_GENERATIONS)`
+    /// inside `ensure_dictionary` would leave every one of them green. This is
+    /// the test that fails if that substitution is made.
+    #[test]
+    fn ensure_dictionary_honors_a_keep_of_one() {
+        let root = scratch("ensure-keep-one");
+        let (table, opts) = table_and_opts();
+
+        // Three rounds at keep=2, so all three generations would survive
+        // under the default — the point below is the fourth round's keep=1.
+        for _ in 0..3 {
+            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            let head = generations::latest(&root).expect("latest").expect("head");
+            corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
+        }
+
+        let index = ensure_dictionary(&root, &table, &opts, 1, || Ok(XML.as_bytes()))
+            .expect("ensure with keep=1");
+
+        let remaining = std::fs::read_dir(&root)
+            .expect("read_dir")
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with(generations::GENERATION_PREFIX)
+            })
+            .count();
+        assert_eq!(remaining, 1, "keep=1 must leave exactly one generation");
+        assert_eq!(
+            index.entry(1000010).expect("entry").expect("present").id,
+            1000010
         );
     }
 
