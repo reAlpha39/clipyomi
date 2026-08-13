@@ -30,8 +30,13 @@ pub const SOURCE_DIR: &str = "source";
 /// a claim: [`open_local`] decides compression from the bytes.
 pub const SOURCE_FILE: &str = "JMdict_e.gz";
 
-/// Suffix for a download that is in progress or not yet verified. Never
-/// resolved, so a killed download cannot be mistaken for a hand-placed file.
+/// Suffix marking a download that is in progress or not yet verified.
+/// `fetch_from` appends the writing process's PID after it, so the staging
+/// name is actually `<SOURCE_FILE><PARTIAL_SUFFIX>.<pid>` rather than this
+/// suffix trailing the name directly — that is what lets two concurrent
+/// invocations stage into different files instead of one truncating the
+/// other's write. Either shape is never resolved, so a killed or still-
+/// running download cannot be mistaken for a hand-placed file.
 pub const PARTIAL_SUFFIX: &str = ".partial";
 
 /// Download attempts before [`fetch::fetch`] gives up.
@@ -49,8 +54,22 @@ pub enum SourceError {
     Io(#[from] std::io::Error),
     #[error("downloading the dictionary failed: {0}")]
     Transport(String),
-    #[error("the dictionary server returned HTTP {status}")]
-    Http { status: u16 },
+    #[error(
+        "the dictionary server returned HTTP {status} for {url}; place a {file} \
+         in {source_dir} manually to bypass the download",
+        file = SOURCE_FILE,
+    )]
+    Http {
+        status: u16,
+        /// The URL that was requested. A 4xx is most often EDRDG renaming or
+        /// moving the archive — this project has already been bitten by a
+        /// wrong filename once — and a report with no URL leaves nothing to
+        /// check by hand.
+        url: String,
+        /// Named for the same reason [`SourceError::TooManyAttempts`] carries
+        /// it: the escape-hatch clause needs to say where to place the file.
+        source_dir: PathBuf,
+    },
     /// The downloaded bytes did not decode as a valid gzip archive. Distinct
     /// from [`SourceError::Io`]: opening or writing a local file failed for
     /// [`SourceError::Io`], but here the file opened and wrote fine — its

@@ -80,8 +80,21 @@ fn serve_reset() -> (String, std::thread::JoinHandle<usize>) {
     (format!("http://{addr}/{SOURCE_FILE}"), handle)
 }
 
-fn partial(dir: &Path) -> PathBuf {
-    dir.join(format!("{SOURCE_FILE}{PARTIAL_SUFFIX}"))
+/// True if `dir` contains any leftover staging file.
+///
+/// Before Fix 1, the staging name was fixed (`{SOURCE_FILE}{PARTIAL_SUFFIX}`)
+/// and a test could check that one exact path. It now embeds the writing
+/// process's PID, so there is no single fixed name left to check — this
+/// scans for any entry whose name contains `PARTIAL_SUFFIX` instead.
+fn any_staging_file_exists(dir: &Path) -> bool {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .any(|entry| entry.file_name().to_string_lossy().contains(PARTIAL_SUFFIX))
+        })
+        // An absent directory has no staging file in it, by construction.
+        .unwrap_or(false)
 }
 
 const XML: &[u8] = b"<?xml version=\"1.0\"?><JMdict></JMdict>";
@@ -95,10 +108,17 @@ fn a_good_download_lands_at_the_resolved_name() {
 
     assert_eq!(path, dir.join(SOURCE_FILE));
     assert!(path.exists(), "archive missing");
-    assert!(!partial(&dir).exists(), "the .partial survived a success");
+    assert!(
+        !any_staging_file_exists(&dir),
+        "no staging file remains after success"
+    );
     assert_eq!(server.join().expect("join"), 1);
 }
 
+/// Also the home for Fix 3's message check: a 4xx is the most likely
+/// permanent real-world failure (EDRDG renaming or moving the archive), so
+/// the rendered message must name the URL it tried and the escape hatch
+/// (the source directory and [`SOURCE_FILE`]), not just the status code.
 #[test]
 fn a_404_fails_and_leaves_nothing_behind() {
     let dir = scratch("dl-404");
@@ -107,11 +127,27 @@ fn a_404_fails_and_leaves_nothing_behind() {
     let err = jmdict_source::fetch::fetch_from(&url, &dir).expect_err("must fail");
 
     assert!(
-        matches!(err, SourceError::Http { status: 404 }),
+        matches!(err, SourceError::Http { status: 404, .. }),
         "got {err:?}"
     );
+    let rendered = err.to_string();
+    assert!(
+        rendered.contains(&url),
+        "the message must name the URL it tried: {rendered}"
+    );
+    assert!(
+        rendered.contains(SOURCE_FILE),
+        "the message must name the escape-hatch filename: {rendered}"
+    );
+    assert!(
+        rendered.contains(&dir.display().to_string()),
+        "the message must name the source directory: {rendered}"
+    );
     assert!(!dir.join(SOURCE_FILE).exists(), "a 404 body was published");
-    assert!(!partial(&dir).exists(), "the .partial survived a failure");
+    assert!(
+        !any_staging_file_exists(&dir),
+        "no staging file remains after failure"
+    );
     assert_eq!(server.join().expect("join"), 1);
 }
 
@@ -130,7 +166,10 @@ fn an_html_200_never_reaches_the_resolved_name() {
         !dir.join(SOURCE_FILE).exists(),
         "an HTML login page was published as the dictionary"
     );
-    assert!(!partial(&dir).exists(), "the .partial survived a failure");
+    assert!(
+        !any_staging_file_exists(&dir),
+        "no staging file remains after failure"
+    );
     assert_eq!(server.join().expect("join"), 1);
 }
 
@@ -143,7 +182,10 @@ fn a_truncated_archive_never_reaches_the_resolved_name() {
     jmdict_source::fetch::fetch_from(&url, &dir).expect_err("must fail");
 
     assert!(!dir.join(SOURCE_FILE).exists());
-    assert!(!partial(&dir).exists());
+    assert!(
+        !any_staging_file_exists(&dir),
+        "no staging file remains after failure"
+    );
     assert_eq!(server.join().expect("join"), 1);
 }
 
@@ -168,6 +210,48 @@ fn the_source_directory_is_created_if_absent() {
     let path = jmdict_source::fetch::fetch_from(&url, &nested).expect("fetch");
 
     assert!(path.exists());
+    assert_eq!(server.join().expect("join"), 1);
+}
+
+/// Fix 1's mechanism, demonstrated rather than raced. A genuine two-process
+/// race is timing-dependent and not exercised here — building a harness for
+/// it would be disproportionate to what needs proving. What this test does
+/// prove, deterministically: (1) two different PIDs compute two different
+/// staging paths for the same `source_dir`, which is the property the fix
+/// depends on; and (2) a real download from *this* process leaves a staging
+/// file bearing a *different* PID completely untouched, because `fetch_from`
+/// only ever creates or removes the one path it computed for itself.
+///
+/// What this does NOT prove: that a real concurrent race between two live
+/// processes resolves to "last verified writer wins" rather than some other
+/// interleaving. That would require two processes actually racing on the
+/// same clock, which is exactly the kind of flaky, hard-to-reproduce test
+/// this fix wave was asked to avoid building.
+#[test]
+fn a_stray_staging_file_from_another_pid_is_never_touched() {
+    let dir = scratch("dl-pid-unique");
+    let real_pid = std::process::id();
+    let other_pid = real_pid.wrapping_add(1).max(1); // some PID that is not ours
+    let mine = dir.join(format!("{SOURCE_FILE}{PARTIAL_SUFFIX}.{real_pid}"));
+    let foreign = dir.join(format!("{SOURCE_FILE}{PARTIAL_SUFFIX}.{other_pid}"));
+    assert_ne!(
+        mine, foreign,
+        "two processes' staging paths must not collide"
+    );
+    std::fs::write(&foreign, b"leftover from a different process").expect("write");
+
+    let (url, server) = serve(vec![http("200 OK", &gz(XML))]);
+    let path = jmdict_source::fetch::fetch_from(&url, &dir).expect("fetch");
+
+    assert_eq!(path, dir.join(SOURCE_FILE));
+    assert!(
+        foreign.exists(),
+        "a staging file left by a different PID must survive our own fetch"
+    );
+    assert!(
+        any_staging_file_exists(&dir),
+        "the foreign leftover must still be detected as a staging file"
+    );
     assert_eq!(server.join().expect("join"), 1);
 }
 
@@ -199,7 +283,7 @@ fn a_404_is_not_retried() {
         jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect_err("must fail");
 
     assert!(
-        matches!(err, SourceError::Http { status: 404 }),
+        matches!(err, SourceError::Http { status: 404, .. }),
         "got {err:?}"
     );
     assert!(!dir.join(SOURCE_FILE).exists());
@@ -276,7 +360,11 @@ fn the_default_attempt_count_is_three() {
 #[test]
 fn a_partial_alone_does_not_satisfy_resolve() {
     let dir = scratch("resolve-partial");
-    std::fs::write(partial(&dir), gz(XML)).expect("write");
+    // Any name containing `PARTIAL_SUFFIX` proves the point; the exact
+    // trailing PID that a real `fetch_from` would append is not the property
+    // under test here — `resolve` only ever looks for an exact `SOURCE_FILE`
+    // match, so no staging-shaped name should satisfy it.
+    std::fs::write(dir.join(format!("{SOURCE_FILE}{PARTIAL_SUFFIX}")), gz(XML)).expect("write");
     let (url, server) = serve(vec![http("404 Not Found", b"nope")]);
 
     // `expect_err` needs `Box<dyn BufRead>: Debug`, which it is not — go

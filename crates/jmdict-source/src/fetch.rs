@@ -38,16 +38,54 @@ pub(crate) fn verify_archive(path: &Path) -> Result<(), SourceError> {
     Ok(())
 }
 
+/// Global timeout for one download attempt, via `ureq`'s own
+/// `timeout_global` — "end-to-end, from DNS lookup to finishing reading the
+/// response body. Thus it covers all other timeouts" (`ureq`'s doc for it).
+/// Every field of `ureq` 3.2.1's `Timeouts` defaults to `None` except
+/// `await_100`, so without this a server that completes the handshake and
+/// then stalls mid-body hangs the call forever — and with it, `fetch` and
+/// therefore `ensure_dictionary`'s source closure, with no error and no
+/// retry.
+///
+/// 120 seconds: the measured archive is 10,545,887 bytes (spec's resolved
+/// facts). Even a slow ~1 Mbit/s link finishes that in well under a minute,
+/// so two minutes is generous headroom for a genuinely slow connection
+/// without letting one stalled attempt occupy most of a retry cycle. A stall
+/// surfaces as `ureq::Error::Timeout`, which the existing `Err(e) =>
+/// Transport(...)` fallthrough below already retries — this composes with
+/// [`fetch_with_retry`] rather than needing its own handling.
+const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Upper bound on the response body a download will accept, enforced via
+/// `ureq`'s `BodyWithConfig::limit`. The transport is plain HTTP with no
+/// authenticity guarantee (spec §10 — EDRDG's certificate fails
+/// subject-name validation), so nothing else bounds how much a misbehaving
+/// or malicious response could stream to disk before `verify_archive` ever
+/// runs.
+///
+/// 32 MiB: a little over 3x the measured 10,545,887-byte archive. Generous
+/// headroom for the dictionary to grow across future EDRDG releases, while
+/// still bounding a runaway body to tens of megabytes rather than an
+/// unbounded amount.
+const MAX_ARCHIVE_BYTES: u64 = 32 * 1024 * 1024;
+
 /// Download `url` into `source_dir` and publish it as [`crate::SOURCE_FILE`].
 ///
 /// One attempt. [`fetch`] adds the retry policy.
 ///
-/// Stages into `<SOURCE_FILE><PARTIAL_SUFFIX>`, verifies it, and only then
-/// renames — so a file at the resolved name is always a complete, valid
+/// Stages into `<SOURCE_FILE><PARTIAL_SUFFIX>.<pid>`, verifies it, and only
+/// then renames — so a file at the resolved name is always a complete, valid
 /// archive. Two failures make that necessary: a killed process leaves a
 /// truncation, and a proxy can answer 200 with an HTML page of the right
 /// length. Either one, published, is indistinguishable from a hand-placed file
 /// and fails identically on every subsequent run.
+///
+/// The PID is what makes this safe when two processes race against the same
+/// `source_dir` — `fetch-source` against `ensure-dictionary --source-dir`, or
+/// two of either. Each stages into its own file, so neither can truncate the
+/// other's write mid-flight, and a successful `fs::rename` can never publish
+/// a second process's still-partial bytes under the first process's name.
+/// The remaining worst case is last-verified-writer-wins, not corruption.
 ///
 /// The staging file is always in `source_dir`, so the rename never crosses a
 /// filesystem — `fs::rename` returns `EXDEV` across devices and never falls
@@ -58,17 +96,31 @@ pub(crate) fn verify_archive(path: &Path) -> Result<(), SourceError> {
 pub fn fetch_from(url: &str, source_dir: &Path) -> Result<PathBuf, SourceError> {
     std::fs::create_dir_all(source_dir)?;
     let target = source_dir.join(SOURCE_FILE);
-    let staging = source_dir.join(format!("{SOURCE_FILE}{PARTIAL_SUFFIX}"));
+    // The PID makes the staging name unique per process. Without it, two
+    // concurrent invocations against the same `source_dir` share one inode:
+    // `File::create` truncates whichever one runs second, and a `rename`
+    // from either side can publish the other's still-partial bytes. Do not
+    // simplify this back to a fixed name.
+    let staging = source_dir.join(format!(
+        "{SOURCE_FILE}{PARTIAL_SUFFIX}.{}",
+        std::process::id()
+    ));
 
-    match download_and_verify(url, &staging) {
+    match download_and_verify(
+        url,
+        source_dir,
+        &staging,
+        DOWNLOAD_TIMEOUT,
+        MAX_ARCHIVE_BYTES,
+    ) {
         Ok(()) => {
             std::fs::rename(&staging, &target)?;
             Ok(target)
         }
         Err(e) => {
             // Best-effort cleanup: the download already failed, and a leftover
-            // `.partial` is never resolved, so a failure here changes nothing
-            // a caller can act on.
+            // `.partial.<pid>` is never resolved, so a failure here changes
+            // nothing a caller can act on.
             let _ = std::fs::remove_file(&staging);
             Err(e)
         }
@@ -76,18 +128,44 @@ pub fn fetch_from(url: &str, source_dir: &Path) -> Result<PathBuf, SourceError> 
 }
 
 /// Write `url`'s body to `staging`, then prove it is a valid archive.
-fn download_and_verify(url: &str, staging: &Path) -> Result<(), SourceError> {
-    let mut response = match ureq::get(url).call() {
+///
+/// `timeout` and `max_bytes` are parameters (rather than reading
+/// [`DOWNLOAD_TIMEOUT`] and [`MAX_ARCHIVE_BYTES`] directly) purely so unit
+/// tests can exercise the real timeout and limiting mechanisms against a
+/// tiny stall and a tiny body instead of the production values.
+fn download_and_verify(
+    url: &str,
+    source_dir: &Path,
+    staging: &Path,
+    timeout: std::time::Duration,
+    max_bytes: u64,
+) -> Result<(), SourceError> {
+    let mut response = match ureq::get(url)
+        .config()
+        .timeout_global(Some(timeout))
+        .build()
+        .call()
+    {
         Ok(response) => response,
-        Err(ureq::Error::StatusCode(status)) => return Err(SourceError::Http { status }),
+        Err(ureq::Error::StatusCode(status)) => {
+            return Err(SourceError::Http {
+                status,
+                url: url.to_string(),
+                source_dir: source_dir.to_path_buf(),
+            })
+        }
         Err(e) => return Err(SourceError::Transport(e.to_string())),
     };
     {
-        let mut body = response.body_mut().as_reader();
+        let mut body = response.body_mut().with_config().limit(max_bytes).reader();
         let mut file = std::io::BufWriter::new(std::fs::File::create(staging)?);
-        // A mid-transfer disconnect surfaces here, and it is a transport
-        // failure rather than a corrupt archive — the retry policy in Task 4
-        // treats the two the same way, but the message should not lie.
+        // A mid-transfer disconnect, a stall past `DOWNLOAD_TIMEOUT`, and a
+        // body over `max_bytes` all surface here as an `io::Error` (the last
+        // one via `ureq::Error::BodyExceedsLimit`, wrapped by `Error::into_io`
+        // since `LimitReader` has no other way to signal it through `Read`).
+        // All three are transport failures rather than a corrupt archive —
+        // the retry policy in `fetch_with_retry` treats them the same way,
+        // but the message should not lie about which layer failed.
         std::io::copy(&mut body, &mut file).map_err(|e| SourceError::Transport(e.to_string()))?;
         std::io::Write::flush(&mut file)?;
     }
@@ -125,7 +203,11 @@ pub fn fetch_with_retry(
             Ok(path) => return Ok(path),
             // A 4xx will not change on a retry, and neither will a local write
             // failure. Surface both immediately rather than sleeping first.
-            Err(e @ SourceError::Http { status: 400..=499 }) => return Err(e),
+            Err(
+                e @ SourceError::Http {
+                    status: 400..=499, ..
+                },
+            ) => return Err(e),
             Err(e @ SourceError::Io(_)) => return Err(e),
             Err(e) => {
                 last = e.to_string();
@@ -147,7 +229,7 @@ pub fn fetch_with_retry(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Read, Write};
 
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("jmdict-source-test-{name}"));
@@ -231,5 +313,78 @@ mod tests {
         let dir = scratch("verify-empty");
         let path = write(&dir, b"");
         assert!(verify_archive(&path).is_err());
+    }
+
+    /// Exercises the real `ureq` limiting mechanism — not a mock — against a
+    /// tiny body and a tiny limit, rather than transferring `MAX_ARCHIVE_BYTES`
+    /// worth of data just to prove the same code path. `download_and_verify`
+    /// takes the limit as a parameter for exactly this reason.
+    #[test]
+    fn a_body_over_the_limit_is_rejected_not_silently_truncated() {
+        let dir = scratch("download-bodylimit");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let body = b"this response body is longer than the tiny limit below";
+        let handle = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(head.as_bytes());
+                let _ = stream.write_all(body);
+                let _ = stream.flush();
+            }
+        });
+
+        let url = format!("http://{addr}/archive");
+        let staging = dir.join("staging");
+        // A limit far below `body`'s length: enough to prove rejection without
+        // needing to move `MAX_ARCHIVE_BYTES` of data through a test socket.
+        let err = download_and_verify(&url, &dir, &staging, DOWNLOAD_TIMEOUT, 8)
+            .expect_err("a body over the limit must not verify as Ok");
+        // Whichever message it renders as, it must be a real `Err` — the
+        // failure mode this guards against is a truncated body silently
+        // reported as a successful download.
+        assert!(!matches!(err, SourceError::Http { .. }), "got {err:?}");
+        handle.join().expect("server thread");
+    }
+
+    /// Exercises the real `ureq` timeout mechanism against a tiny injected
+    /// value and a short stall, rather than trusting the doc comment alone
+    /// (or, worse, waiting out `DOWNLOAD_TIMEOUT`'s real 120s). Before Fix 2,
+    /// `ureq`'s defaults leave every timeout unset except `await_100`, so a
+    /// server that accepts the connection and then never answers hung this
+    /// call forever; this proves it now returns a real error instead.
+    #[test]
+    fn a_stalled_server_is_rejected_by_the_timeout_not_left_hanging() {
+        let dir = scratch("download-timeout");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let handle = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                // Stall well past the tiny timeout given to `download_and_verify`
+                // below before sending anything back.
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+            }
+        });
+
+        let url = format!("http://{addr}/archive");
+        let staging = dir.join("staging");
+        let err = download_and_verify(
+            &url,
+            &dir,
+            &staging,
+            std::time::Duration::from_millis(50),
+            MAX_ARCHIVE_BYTES,
+        )
+        .expect_err("a stalled server must not hang forever");
+        assert!(!matches!(err, SourceError::Http { .. }), "got {err:?}");
+        handle.join().expect("server thread");
     }
 }
