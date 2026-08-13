@@ -7,6 +7,18 @@ index, verifiable through `jparser-cli`. 113 tests, 93.85% line coverage,
 This document records what Phase 1B needs and what Phase 1A deliberately left
 undone. It exists because these decisions are not recoverable from the diff.
 
+**Phase 1B is now complete;** its handoff continues this one at
+`docs/superpowers/2026-08-13-jparser-phase1b-handoff.md`. Read that for the
+public `parse()` surface and the invariants Phase 1B added. **This document is
+not superseded:** the index-build section below is still live and still
+unimplemented, and its stated trigger — the first process holding an `Index`
+across a rebuild, i.e. `ensure_dictionary` — lands in Phase 2. Phase 1B's only
+deliverable there was the corrected guidance now in `load.rs`.
+
+Note also that the Rust workspace moved from `ta/` to the repo root after
+Phase 1B merged. Every path in this document was already root-relative, so all
+of them still resolve; the Phase 1A *plan* still says `ta/crates/jparser/…`.
+
 **Plan:** `docs/superpowers/plans/2026-08-12-jparser-phase1a-index.md`.
 Note the plan is a historical artifact and is now contradicted by the code in
 two places — it specifies `IS_NAME = 0x0040` and `INDEX_FORMAT_VERSION = 1`,
