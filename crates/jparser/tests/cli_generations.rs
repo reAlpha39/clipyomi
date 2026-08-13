@@ -98,3 +98,45 @@ fn gen_sweep_rejects_a_zero_keep() {
         "a rejected sweep must not have deleted anything"
     );
 }
+
+/// The same guard on the other subcommand. The two `#[arg]` blocks are
+/// separate copies, so each needs its own test or one can silently lose the
+/// validation.
+#[test]
+fn ensure_dictionary_rejects_a_zero_keep() {
+    let dir = scratch("cli-keep-zero-ensure");
+    std::fs::write(dir.join("mini.xml"), XML).expect("write xml");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_jparser-cli"))
+        .args(["ensure-dictionary", "dict", "mini.xml", "--keep", "0"])
+        .current_dir(&dir)
+        .output()
+        .expect("run jparser-cli");
+
+    assert!(!out.status.success(), "--keep 0 must be rejected");
+    assert!(
+        !dir.join("dict").exists(),
+        "a rejected run must not have built anything"
+    );
+}
+
+/// An absent root is a usage error for `gen-list`, not an empty listing —
+/// `latest` and `sweep` may treat it as "no dictionary yet", but this command
+/// exists to tell a human what is actually on disk.
+#[test]
+fn gen_list_reports_an_absent_root() {
+    let dir = scratch("cli-gen-list-absent");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_jparser-cli"))
+        .args(["gen-list", "no-such-root"])
+        .current_dir(&dir)
+        .output()
+        .expect("run jparser-cli");
+
+    assert!(!out.status.success(), "an absent root must not exit 0");
+    assert!(
+        out.stdout.is_empty(),
+        "nothing should be listed: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}

@@ -150,12 +150,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("entries:    {}", index.entry_count());
         }
         Command::GenList { root } => {
-            let mut paths: Vec<PathBuf> = std::fs::read_dir(&root)
-                .into_iter()
-                .flatten()
-                .flatten()
-                .map(|e| e.path())
-                .collect();
+            let mut paths: Vec<PathBuf> = Vec::new();
+            for entry in std::fs::read_dir(&root)? {
+                paths.push(entry?.path());
+            }
             paths.sort();
             paths.reverse();
             for path in paths {
