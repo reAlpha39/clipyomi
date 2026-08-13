@@ -16,6 +16,7 @@ use jparser::index::build::build_from_reader;
 use jparser::index::load::Index;
 use jparser::record::WordFlags;
 use jparser::stem::StemOptions;
+use jparser::ParseOptions;
 
 /// Flags rendered by `lookup`, paired with their display labels.
 const FLAG_LABELS: &[(WordFlags, &str)] = &[
@@ -27,8 +28,12 @@ const FLAG_LABELS: &[(WordFlags, &str)] = &[
     (WordFlags::COUNTER, "counter"),
 ];
 
+/// Rendered wherever a `reading` or `conjugation` is `None`. Named because it
+/// is part of the frozen output format, not incidental formatting.
+const NONE_LABEL: &str = "-";
+
 #[derive(Parser)]
-#[command(name = "jparser-cli", about = "JParser Phase 1A harness")]
+#[command(name = "jparser-cli", about = "JParser Phase 1 harness")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -51,6 +56,13 @@ enum Command {
         /// Index directory.
         index: PathBuf,
         /// Text to walk.
+        text: String,
+    },
+    /// Segment TEXT against an index and print the result.
+    Parse {
+        /// Index directory.
+        index: PathBuf,
+        /// Text to parse.
         text: String,
     },
     /// Convert kana to romaji.
@@ -114,6 +126,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "    {:8} type={verb:8} [{}] {glosses}",
                         r.surface,
                         labels.join(",")
+                    );
+                }
+            }
+        }
+        Command::Parse { index, text } => {
+            let table = ConjugationTable::load_embedded()?;
+            let index = Index::open(&index)?;
+            // `None` hints: BoundaryHints has no implementation until Phase 5,
+            // and `None` must behave exactly like one that always returns false.
+            let result = jparser::parse(&index, &table, &text, &ParseOptions::default(), None)?;
+            for seg in &result.segments {
+                if !seg.matched {
+                    println!(
+                        "start={} len={} {} unmatched",
+                        seg.start, seg.len, seg.surface
+                    );
+                    continue;
+                }
+                println!(
+                    "start={} len={} {} matched reading={}",
+                    seg.start,
+                    seg.len,
+                    seg.surface,
+                    seg.reading.as_deref().unwrap_or(NONE_LABEL)
+                );
+                for entry in &seg.entries {
+                    let glosses = entry
+                        .senses
+                        .first()
+                        .map(|s| s.glosses.join("; "))
+                        .unwrap_or_default();
+                    println!(
+                        "    {} ({}) [{}] {glosses}",
+                        entry.headword,
+                        entry.conjugation.as_deref().unwrap_or(NONE_LABEL),
+                        entry.reading.as_deref().unwrap_or(NONE_LABEL),
                     );
                 }
             }
