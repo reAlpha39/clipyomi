@@ -30,3 +30,8 @@ insta = "1"
 name = "jparser-cli"
 path = "src/bin/jparser-cli.rs"
 required-features = ["cli"]
+
+[[test]]
+name = "cli_generations"
+path = "tests/cli_generations.rs"
+required-features = ["cli"]
