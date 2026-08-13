@@ -123,8 +123,8 @@ pub enum IndexError {
     )]
     ConjugationMismatch { found: u64, expected: u64 },
     #[error(
-        "index generation {generation} already exists; another builder \
-         published first — retry (partial build kept at {build_dir})"
+        "index generation {generation} already exists after repeated publish \
+         attempts; contention did not clear (partial build kept at {build_dir})"
     )]
     GenerationExists {
         generation: u64,

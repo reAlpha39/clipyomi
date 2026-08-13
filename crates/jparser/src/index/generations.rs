@@ -41,6 +41,11 @@ pub const BUILD_PREFIX: &str = ".build-";
 /// See the design spec §7.
 pub const DEFAULT_KEEP_GENERATIONS: usize = 2;
 
+/// Publish attempts before `build_new` reports sustained contention. Each
+/// attempt recomputes the target generation, so a builder that loses a race
+/// simply takes the next number rather than failing.
+const PUBLISH_ATTEMPTS: usize = 8;
+
 /// Parse `gen-<N>` into `N`, rejecting everything else.
 ///
 /// Deliberately strict. `gen-01` is rejected rather than read as 1: a
@@ -140,12 +145,25 @@ fn publish(build_dir: &Path, root: &Path, generation: u64) -> Result<PathBuf, In
     }
 }
 
+/// Next generation number to try publishing as. Recomputed fresh on every
+/// call so a builder that lost a race simply advances past whoever won,
+/// rather than retrying the same doomed target.
+fn next_generation(root: &Path) -> Result<u64, IndexError> {
+    Ok(latest_number(root)?.map_or(1, |(n, _)| n + 1))
+}
+
 /// Build an index from `xml` and publish it as the next generation.
 ///
 /// Builds into `<root>/.build-<pid>-<nanos>/` first, so `root` never contains a
 /// partially-written generation. `root` and the build directory are therefore
 /// always on one filesystem — `fs::rename` returns `EXDEV` across devices and
 /// never falls back to copying.
+///
+/// Publishing is retried up to [`PUBLISH_ATTEMPTS`] times: two builders
+/// starting from the same `root` both compute the same target, so the loser
+/// of a single attempt would otherwise fail even though a valid generation
+/// now exists. Each retry recomputes the target rather than reusing the one
+/// that just lost.
 pub fn build_new(
     root: &Path,
     xml: impl BufRead,
@@ -167,9 +185,15 @@ pub fn build_new(
     std::fs::create_dir(&build_dir)?;
 
     let report = build_from_reader(xml, table, opts, &build_dir)?;
-    let generation = latest_number(root)?.map_or(1, |(n, _)| n + 1);
-    let path = publish(&build_dir, root, generation)?;
-    Ok((path, report))
+
+    let mut published = publish(&build_dir, root, next_generation(root)?);
+    for _ in 1..PUBLISH_ATTEMPTS {
+        if !matches!(published, Err(IndexError::GenerationExists { .. })) {
+            break;
+        }
+        published = publish(&build_dir, root, next_generation(root)?);
+    }
+    Ok((published?, report))
 }
 
 /// Remove `.build-*` orphans and all but the `keep` highest generations.
@@ -380,8 +404,12 @@ mod tests {
     /// Two builders running at once must not collide on the nonce. Both
     /// threads create their build directory before either renames, so a
     /// constant temp name would make one `create_dir` fail with
-    /// `AlreadyExists`. Losing the publish race is legitimate; colliding on
-    /// the build directory is not.
+    /// `AlreadyExists`.
+    ///
+    /// With the bounded retry in place, both must also *publish* — as gen-1
+    /// and gen-2 — rather than one of them failing outright. That is the
+    /// whole point of the retry: a double-launched application must not fail
+    /// to start just because it lost a race with itself.
     #[test]
     fn two_concurrent_builds_use_distinct_temp_names() {
         let root = scratch("gen-nonce");
@@ -399,15 +427,49 @@ mod tests {
         });
 
         for result in &results {
-            match result {
-                Ok(_) => {}
-                // The loser of the publish race is an expected outcome.
-                Err(IndexError::GenerationExists { .. }) => {}
-                Err(e) => panic!("nonce collision or build failure: {e:?}"),
-            }
+            assert!(
+                result.is_ok(),
+                "the retry must absorb a lost race: {result:?}"
+            );
         }
-        assert!(results.iter().any(|r| r.is_ok()), "neither build published");
-        assert!(latest(&root).expect("latest").is_some());
+        assert_eq!(latest(&root).expect("latest"), Some(root.join("gen-2")));
+    }
+
+    /// The retry design spec §9 asked for, never previously possible because
+    /// `build_new` had no way to retry: after `publish` loses the race, a
+    /// second attempt against the freshly recomputed generation succeeds.
+    ///
+    /// Driven directly against `publish`/`next_generation` rather than by
+    /// racing two real threads, because nothing can deterministically force
+    /// two live builders to collide on their first attempt — that is
+    /// inherently a race. This exercises the exact two calls `build_new`'s
+    /// retry loop makes.
+    #[test]
+    fn a_retry_after_a_lost_race_succeeds() {
+        let root = scratch("gen-retry");
+        mkdir(&root, "gen-1");
+        std::fs::write(root.join("gen-1").join("occupied"), b"x").expect("write");
+
+        let build_dir = root.join(format!("{BUILD_PREFIX}test-retry"));
+        std::fs::create_dir(&build_dir).expect("create build dir");
+
+        // First attempt loses the race: gen-1 already exists.
+        let lost = publish(&build_dir, &root, 1);
+        assert!(matches!(lost, Err(IndexError::GenerationExists { .. })));
+        assert!(
+            build_dir.exists(),
+            "the loser's build must survive for a retry"
+        );
+
+        // The retry recomputes the target and succeeds against the next number.
+        let retried = next_generation(&root)
+            .and_then(|next| publish(&build_dir, &root, next))
+            .expect("the retry must succeed");
+        assert_eq!(retried, root.join("gen-2"));
+        assert!(
+            !build_dir.exists(),
+            "a successful publish consumes the build dir"
+        );
     }
 
     /// The lost-race branch, driven directly because `build_new` alone can
