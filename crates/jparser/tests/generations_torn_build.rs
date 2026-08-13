@@ -137,8 +137,9 @@ fn a_rebuild_into_a_live_directory_can_serve_data_from_neither_build() {
 }
 
 /// Copy a completed build into an orphaned `.build-*` directory, damaged at
-/// `state`, and leave it in `root` the way a killed process would.
-fn strand_interrupted_build(root: &Path, state: usize) {
+/// `state`, and leave it in `root` the way a killed process would. Returns the
+/// orphan's path so the caller never has to reconstruct the name itself.
+fn strand_interrupted_build(root: &Path, state: usize) -> PathBuf {
     let staging = scratch(&format!("torn-staging-{state}"));
     build_directly(&staging, XML_B);
 
@@ -154,8 +155,19 @@ fn strand_interrupted_build(root: &Path, state: usize) {
     if state < 10 {
         damage(&orphan, FILES[state / 2], state % 2 == 0);
     }
+    orphan
 }
 
+/// No assertion below depends on *which* of the eleven states ran — and that
+/// invariance is the property under test, not a gap in it. An interrupted
+/// build is excluded by its `.build-` directory *name* before any byte of its
+/// contents is ever read (`generations::latest_number` filters on
+/// `generation_number(name)` alone), so it does not matter whether the orphan
+/// is missing a file, truncated, or — state 10 — a complete, undamaged build
+/// of a different dictionary: the outcome is identical either way. State 10
+/// is the sharpest witness to that: it shows the guarantee is not "corrupt
+/// builds get rejected" but "an unpublished build is never served, corrupt or
+/// not," which is asserted directly below via state 10's own orphan.
 #[test]
 fn no_interrupted_build_is_ever_served() {
     let (table, opts) = table_and_opts();
@@ -167,7 +179,7 @@ fn no_interrupted_build_is_ever_served() {
         let (good, _) = build_new(&root, XML_A.as_bytes(), &table, &opts).expect("build_new");
         assert_eq!(good, root.join("gen-1"));
 
-        strand_interrupted_build(&root, state);
+        let orphan = strand_interrupted_build(&root, state);
 
         // 1. The interrupted build is never what a reader resolves.
         let resolved = latest(&root).expect("latest").expect("a generation");
@@ -193,6 +205,25 @@ fn no_interrupted_build_is_ever_served() {
             index.entry(2000010).expect("entry").is_none(),
             "state {state}: data from the interrupted build leaked in"
         );
+
+        // State 10's orphan is a WHOLE, undamaged build of XML_B — the
+        // "died just before the rename" case. Assert that directly, so the
+        // matrix carries at least one state-sensitive claim: what keeps an
+        // interrupted build from being served is its *name*, not any defect
+        // in its contents. Checked here, before assertion 4's rebuild moves
+        // `latest` on to `gen-2`, because the claim is that `good` (`gen-1`)
+        // is still what resolves even while state 10's intact orphan sits
+        // right there in `root`.
+        if state == 10 {
+            let whole = Index::open(&orphan).expect("state 10's orphan is an intact index");
+            assert_eq!(
+                whole.entry(2000010).expect("entry").expect("present").id,
+                2000010,
+                "state 10's orphan should be a complete build of XML_B"
+            );
+            // ...and it is still not what any reader resolves.
+            assert_eq!(latest(&root).expect("latest"), Some(good.clone()));
+        }
 
         // 4. A later build still succeeds despite the orphan.
         let (next, _) =
