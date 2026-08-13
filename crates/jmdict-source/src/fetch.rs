@@ -76,11 +76,6 @@ fn download_and_verify(url: &str, staging: &Path) -> Result<(), SourceError> {
         Err(ureq::Error::StatusCode(status)) => return Err(SourceError::Http { status }),
         Err(e) => return Err(SourceError::Transport(e.to_string())),
     };
-    let status = response.status().as_u16();
-    if !(200..300).contains(&status) {
-        return Err(SourceError::Http { status });
-    }
-
     {
         let mut body = response.body_mut().as_reader();
         let mut file = std::io::BufWriter::new(std::fs::File::create(staging)?);
