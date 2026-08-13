@@ -26,7 +26,7 @@ JMdict and is not a reference for this phase.
 | Wiring both into `jparser-cli` so the path is exercisable by hand | Settings persistence, window, `RwLock<Arc<Index>>` |
 
 **Deferred deliberately:** resume-on-retry. A failed download restarts from the
-beginning. The archive is ~35 MB compressed; a full retry is cheap, and resume
+beginning. The archive is ~10 MB compressed; a full retry is cheap, and resume
 requires either server `Range` support or a persistent partial artifact with its
 own staleness and cleanup rules. Neither earns its place until someone reports
 the retry hurting.
@@ -70,8 +70,8 @@ The source directory is a **sibling** of 2A's generation root, not a child of it
     gen-1/
     gen-2/
   source/                        # input — never swept, may be hand-placed
-    JMdict_e.xml.gz              # the resolved source
-    JMdict_e.xml.gz.partial      # transient; ignored by `resolve`
+    JMdict_e.gz                  # the resolved source (~10 MB)
+    JMdict_e.gz.partial          # transient; ignored by `resolve`
 ```
 
 Two reasons, the second load-bearing.
@@ -109,7 +109,7 @@ does not depend on it. The caller wires them.
 pub const SOURCE_DIR: &str = "source";
 
 /// Resolved source file within the source directory.
-pub const SOURCE_FILE: &str = "JMdict_e.xml.gz";
+pub const SOURCE_FILE: &str = "JMdict_e.gz";
 
 /// Suffix for an in-progress or unverified download. Never resolved.
 pub const PARTIAL_SUFFIX: &str = ".partial";
@@ -125,7 +125,7 @@ pub const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_secs(2)
 /// Returns decompressed XML regardless of whether the file on disk is gzipped.
 pub fn resolve(source_dir: &Path) -> std::io::Result<Box<dyn BufRead>>;
 
-/// Download only, to `<source_dir>/JMdict_e.xml.gz`. Public so the CLI can
+/// Download only, to `<source_dir>/JMdict_e.gz`. Public so the CLI can
 /// pre-fetch without building an index.
 pub fn fetch(source_dir: &Path) -> Result<PathBuf, SourceError>;
 
@@ -170,7 +170,7 @@ tests (`ensure_dictionary_builds_once_and_then_reuses` and
 would make a phase about downloading edit tests about generations as collateral.
 Both forms also earn their keep — `--source-dir` is the product behavior, and an
 explicit `xml` is what you want when pointing at a two-entry fixture instead of a
-~35 MB download.
+~10 MB download.
 
 `fetch-source` downloads without building, so the download path is exercisable on
 its own.
@@ -181,9 +181,9 @@ its own.
 
 `resolve(source_dir)`:
 
-1. If `<source_dir>/JMdict_e.xml.gz` exists, open it.
-2. Otherwise download to `<source_dir>/JMdict_e.xml.gz.partial`, verify it
-   (§6), rename it to `JMdict_e.xml.gz`, and open that.
+1. If `<source_dir>/JMdict_e.gz` exists, open it.
+2. Otherwise download to `<source_dir>/JMdict_e.gz.partial`, verify it
+   (§6), rename it to `JMdict_e.gz`, and open that.
 
 A `.partial` file is **never** resolved and never verified in place. Its presence
 does not satisfy step 1, and step 2 overwrites it.
@@ -246,7 +246,7 @@ gzip carries a CRC32 and an uncompressed length in its trailer, which
 `flate2::read::GzDecoder` checks at end of stream. A mismatch or a truncation
 surfaces as an `io::Error` here, the `.partial` is removed, and the attempt counts
 as a failure — turning a permanent wedge into a retry. The cost is one extra
-inflate pass over ~35 MB, well under a second, once per rebuild.
+inflate pass over ~10 MB, well under a second, once per rebuild.
 
 Verification runs only on a **downloaded** archive. A hand-placed file is not
 pre-verified: doing so would double the read on every rebuild to guard against a
@@ -282,7 +282,7 @@ pub enum SourceError {
     Http { status: u16 },
     #[error(
         "could not obtain the dictionary after {attempts} attempts ({last}); \
-         place a JMdict_e.xml.gz in {source_dir} manually to bypass the download"
+         place a JMdict_e.gz in {source_dir} manually to bypass the download"
     )]
     TooManyAttempts {
         attempts: usize,
@@ -353,10 +353,14 @@ a tiny XML fixture, gzipped in-test, never the real 60 MB file.
 From the Phase 1B and 2A handoffs and the crate's standing rules:
 
 - **GPL v2.** Every new source file carries the standard header, verbatim from
-  `crates/jparser/src/index/mod.rs:1-6`. **This constrains the dependency tree:**
-  OpenSSL is Apache-2.0, which the FSF holds GPLv2-incompatible, so no dependency
-  may link `native-tls`/OpenSSL. `ureq` with `rustls` is the choice for this
-  reason, not only for size.
+  `crates/jparser/src/index/mod.rs:1-6`. **This constrains the dependency tree as
+  a standing rule:** OpenSSL is Apache-2.0, which the FSF holds
+  GPLv2-incompatible, so no dependency may link `native-tls`/OpenSSL — now or in
+  any later phase. `ureq` uses `rustls` (MIT/Apache-2.0/ISC) for this reason.
+  Note the rule is *not* load-bearing for the current URL, which is plain HTTP
+  (§10); rustls is kept anyway so that an EDRDG certificate fix, an HTTPS mirror,
+  or an HTTP→HTTPS redirect does not become a dependency decision under time
+  pressure. Verify `cargo tree` shows no `openssl-sys`.
 - **MSRV 1.75.** The installed toolchain is 1.97.1 and will accept newer APIs, so
   only review catches violations. `io::Error::other` (1.74) is in bounds.
 - **`crates/jparser` stays pure.** No Tauri, no UI crate, no HTTP client, no
@@ -378,26 +382,68 @@ touches none of them — it produces a reader and knows nothing about generation
 
 ---
 
-## 10. Unknowns the plan must settle, not guess
+## 10. Resolved facts
 
-Three facts could not be checked while writing this document, because the
-authoring environment had no network access. Each is a plan-time gate, and none
-may be assumed:
+The three items this section originally listed as unknowns were measured on
+2026-08-13, against the live registry and the live EDRDG host. They are recorded
+here as facts, not assumptions.
 
-1. **`ureq`'s MSRV against 1.75.** Recent majors have raised it. If the current
-   release requires more, **pin an older major — do not raise the workspace
-   MSRV.** MSRV 1.75 is a constraint Phase 1 and 2A both paid real costs for:
-   `latest_number`'s `map_or(true, …)` accumulator and `publish`'s `exists()`
-   probe exist solely to honor it, each carrying a comment forbidding the
-   "obvious" simplification. Raising it may well be right eventually, but it
-   should be its own decision with its own justification, not a side effect of
-   choosing an HTTP client. Also verify the resolved dependency tree contains no
-   `openssl-sys`.
-2. **`flate2`'s exact behavior on a CRC mismatch and on a truncated stream.** §6
-   asserts both surface as `io::Error` at end of stream. §8 requires tests for
-   both, which is the point: the claim is verified by execution, not by this
-   document.
-3. **The EDRDG URL, scheme, and filename.** Whether the published archive is
-   `JMdict_e.gz` or `JMdict_e.xml.gz` fixes `SOURCE_FILE`, and whether the host
-   serves HTTPS decides whether TLS is on the critical path at all. Confirm
-   against EDRDG's current publication before writing the constant.
+**1. Dependency versions and MSRV — no pinning needed.**
+
+| Crate | Version | `rust-version` | License |
+|---|---|---|---|
+| `ureq` | 3.2.1 | 1.71.1 | MIT OR Apache-2.0 |
+| `flate2` | 1.1.9 | 1.67.0 | MIT OR Apache-2.0 |
+
+Both are under the workspace's 1.75 floor, so MSRV 1.75 stands untouched. Note
+that `cargo` selected `ureq` 3.2.1 over the newer 3.4.0 on its own —
+MSRV-aware resolution is doing this, so the plan must **not** pin a version by
+hand and must **not** raise the floor. Confirm `cargo tree` shows no
+`openssl-sys`.
+
+**2. `flate2` rejects every corruption mode §6 depends on** — measured, not
+asserted:
+
+| Input | Result |
+|---|---|
+| intact archive | `Ok` |
+| corrupt CRC32 trailer | `Err(InvalidInput)` — "corrupt gzip stream does not have a matching checksum" |
+| corrupt ISIZE length | `Err(InvalidInput)` — same message |
+| truncated, trailer removed | `Err(UnexpectedEof)` |
+| truncated mid-deflate-stream | `Err(UnexpectedEof)` |
+| HTML body, not gzip at all | `Err(InvalidInput)` — "invalid gzip header" |
+
+The last row matters twice: it is the captive-portal case §6 exists for, and it
+fails at the *header*, so verification costs almost nothing when it rejects.
+§8's tests still assert all of this — a measurement in a document is evidence for
+a decision, not a regression guard.
+
+**3. The URL, filename, and scheme.**
+
+```
+http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz
+```
+
+- The archive is **`JMdict_e.gz`**, not `JMdict_e.xml.gz`. `SOURCE_FILE` is
+  `"JMdict_e.gz"`.
+- **10,545,887 bytes** compressed, decompressing to gzipped XML that begins
+  `<?xml version="1.0" encoding="UTF-8"?>`. An earlier draft of this document
+  said ~35 MB; that was wrong by 3.5×, and the corrected figure makes both a
+  full-restart retry (§1) and the verification pass (§6) cheaper than argued.
+- **There is no usable HTTPS.** `https://ftp.edrdg.org/...` fails certificate
+  validation with a subject-name mismatch. The URL is plain HTTP.
+- The server sends `Accept-Ranges: bytes`, so resume *would* be implementable.
+  §1 still declines it: a 10 MB restart is cheaper than the partial-artifact
+  lifecycle resume requires.
+
+**The plain-HTTP transport is why §6 is a requirement rather than insurance.**
+There is no authenticity guarantee on the wire at all, so a transparent proxy or
+an on-path substitution is indistinguishable from a real response until the
+archive is decoded. Verifying before the rename is the only thing standing
+between that and a poisoned file at the resolved name.
+
+**Known limitation, accepted:** this phase verifies *integrity* (the bytes are a
+well-formed gzip stream) but not *authenticity* (the bytes came from EDRDG).
+Pinning a digest was considered and rejected — EDRDG publishes no checksum and
+the file changes daily, so any pin would need a second trusted source or manual
+maintenance. Recorded so a later phase can revisit it deliberately.
