@@ -158,6 +158,61 @@ pub fn build_new(
     Ok((path, report))
 }
 
+/// Remove `.build-*` orphans and all but the `keep` highest generations.
+/// Returns the number of directories removed.
+///
+/// # Precondition
+///
+/// **Call only before any `Index` has been opened from `root`** — at
+/// application startup, never during a session. Phase 1A verified on Darwin
+/// that an established mmap survives `remove_dir_all` on its parent, but
+/// Windows does not generally permit deleting a mapped file.
+/// [`DEFAULT_KEEP_GENERATIONS`] exists so that a sweep which fails anyway is
+/// never load-bearing.
+///
+/// Directories that are neither a valid generation nor a build orphan are left
+/// alone: this function did not create them.
+///
+/// When `build_from_reader` itself fails — malformed XML, a full disk — `build_new`
+/// leaves its `.build-<pid>-<nanos>` directory behind with no cleanup. `sweep`
+/// is what reclaims those.
+pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
+    let read = match std::fs::read_dir(root) {
+        Ok(read) => read,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(e.into()),
+    };
+
+    let mut generations: Vec<(u64, PathBuf)> = Vec::new();
+    let mut orphans: Vec<PathBuf> = Vec::new();
+    for entry in read {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if let Some(number) = generation_number(name) {
+            generations.push((number, entry.path()));
+        } else if name.starts_with(BUILD_PREFIX) {
+            orphans.push(entry.path());
+        }
+    }
+
+    // Highest first, so the tail past `keep` is exactly what to drop.
+    generations.sort_by_key(|b| std::cmp::Reverse(b.0));
+
+    let mut removed = 0usize;
+    for path in orphans
+        .iter()
+        .chain(generations.iter().skip(keep).map(|(_, path)| path))
+    {
+        std::fs::remove_dir_all(path)?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,5 +429,61 @@ mod tests {
             root.join("gen-1").join("occupied").exists(),
             "winner untouched"
         );
+    }
+
+    #[test]
+    fn sweep_keeps_the_highest_generations() {
+        let root = scratch("gen-sweep-keep");
+        for n in 1..=5 {
+            mkdir(&root, &format!("gen-{n}"));
+        }
+        assert_eq!(sweep(&root, 2).expect("sweep"), 3);
+        assert!(!root.join("gen-3").exists());
+        assert!(root.join("gen-4").exists());
+        assert!(root.join("gen-5").exists());
+    }
+
+    #[test]
+    fn sweep_removes_orphaned_builds() {
+        let root = scratch("gen-sweep-orphan");
+        mkdir(&root, "gen-1");
+        mkdir(&root, ".build-1-2");
+        mkdir(&root, ".build-3-4");
+        assert_eq!(sweep(&root, 2).expect("sweep"), 2);
+        assert!(root.join("gen-1").exists());
+        assert!(!root.join(".build-1-2").exists());
+    }
+
+    #[test]
+    fn sweep_keeps_everything_when_keep_exceeds_the_count() {
+        let root = scratch("gen-sweep-few");
+        mkdir(&root, "gen-1");
+        assert_eq!(sweep(&root, 2).expect("sweep"), 0);
+        assert!(root.join("gen-1").exists());
+    }
+
+    /// Malformed names are not generations, so `sweep` must not count them
+    /// toward `keep` — nor delete them, since it did not create them.
+    #[test]
+    fn sweep_ignores_malformed_names() {
+        let root = scratch("gen-sweep-malformed");
+        mkdir(&root, "gen-1");
+        mkdir(&root, "gen-01");
+        mkdir(&root, "unrelated");
+        assert_eq!(sweep(&root, 1).expect("sweep"), 0);
+        assert!(root.join("gen-01").exists());
+        assert!(root.join("unrelated").exists());
+    }
+
+    #[test]
+    fn sweep_on_an_absent_root_is_not_an_error() {
+        let root = std::env::temp_dir().join("jparser-test-gen-sweep-absent");
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(sweep(&root, 2).expect("sweep"), 0);
+    }
+
+    #[test]
+    fn the_default_retention_is_two() {
+        assert_eq!(DEFAULT_KEEP_GENERATIONS, 2);
     }
 }
