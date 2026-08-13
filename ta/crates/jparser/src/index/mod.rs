@@ -24,7 +24,7 @@ use crate::stem::StemStats;
 
 /// Bumped whenever the on-disk layout changes. A mismatch forces a rebuild; the
 /// loader must never try to read an index it does not recognize.
-pub const INDEX_FORMAT_VERSION: u32 = 2;
+pub const INDEX_FORMAT_VERSION: u32 = 3;
 
 pub const HEADER_FILE: &str = "header.bin";
 pub const FST_FILE: &str = "keys.fst";
@@ -81,6 +81,11 @@ pub struct SenseData {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EntryData {
     pub id: u32,
+    /// The entry's `<reb>` forms in document order, stored **only when the
+    /// entry also has kanji forms** — exactly the set ta-old flags
+    /// `JAP_WORD_PRONOUNCE`. Empty for kana-only entries, where the surface
+    /// already is the reading and ta-old renders no furigana.
+    pub readings: Vec<String>,
     pub senses: Vec<SenseData>,
 }
 

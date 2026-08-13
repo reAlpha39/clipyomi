@@ -45,6 +45,11 @@ pub fn build_from_reader<R: BufRead>(
         let raw = result?;
         entries.push(EntryData {
             id: raw.id,
+            readings: if raw.kanji.is_empty() {
+                Vec::new()
+            } else {
+                raw.readings.iter().map(|r| r.text.clone()).collect()
+            },
             senses: raw
                 .senses
                 .iter()
