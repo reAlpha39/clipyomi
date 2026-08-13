@@ -110,6 +110,8 @@ property required, so it is expressed as a closure rather than a trait:
 ```rust
 pub fn ensure_dictionary<R, F>(
     root: &Path,
+    table: &ConjugationTable,
+    opts: &StemOptions,
     keep: usize,
     source: F,
 ) -> Result<Index, IndexError>
@@ -117,6 +119,9 @@ where
     F: FnOnce() -> std::io::Result<R>,
     R: std::io::BufRead;
 ```
+
+`table` and `opts` are threaded through because `build_from_reader` requires
+them; an earlier draft of this section omitted both.
 
 2A's callers pass `|| File::open(path).map(BufReader::new)`. 2B passes
 `|| Ok(BufReader::new(GzDecoder::new(response)))`. The closure is not invoked on
@@ -142,8 +147,13 @@ of the download, and belongs with the code that performs it.
 pub fn latest(root: &Path) -> Result<Option<PathBuf>, IndexError>;
 
 /// Build into a fresh nonce directory, then publish by rename.
-/// Returns the published `<root>/gen-<N>` path.
-pub fn build_new(root: &Path, xml: impl BufRead) -> Result<PathBuf, IndexError>;
+/// Returns the published `<root>/gen-<N>` path and the build's report.
+pub fn build_new(
+    root: &Path,
+    xml: impl BufRead,
+    table: &ConjugationTable,
+    opts: &StemOptions,
+) -> Result<(PathBuf, BuildReport), IndexError>;
 
 /// Remove `.build-*` orphans and all but the `keep` highest generations.
 /// Returns the number of directories removed.
