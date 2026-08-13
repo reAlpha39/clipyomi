@@ -13,6 +13,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use jparser::conjugation::ConjugationTable;
 use jparser::index::build::build_from_reader;
+use jparser::index::ensure_dictionary;
+use jparser::index::generations::{latest, sweep, DEFAULT_KEEP_GENERATIONS, GENERATION_PREFIX};
 use jparser::index::load::Index;
 use jparser::record::WordFlags;
 use jparser::stem::StemOptions;
@@ -50,6 +52,37 @@ enum Command {
         /// Disable the v5 mis-annotation fallback, to measure its effect.
         #[arg(long)]
         no_v5_fallback: bool,
+    },
+    /// Open the newest usable index in ROOT, building from XML if needed.
+    EnsureDictionary {
+        /// Generation root directory.
+        root: PathBuf,
+        /// Path to JMdict_e.xml (uncompressed), read only if a build is needed.
+        xml: PathBuf,
+        /// Generations to retain after a rebuild. Must be at least 1.
+        #[arg(
+            long,
+            default_value_t = DEFAULT_KEEP_GENERATIONS,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        keep: usize,
+    },
+    /// List the generations in ROOT, newest first.
+    GenList {
+        /// Generation root directory.
+        root: PathBuf,
+    },
+    /// Remove build orphans and all but the newest generations.
+    GenSweep {
+        /// Generation root directory.
+        root: PathBuf,
+        /// Generations to retain. Must be at least 1.
+        #[arg(
+            long,
+            default_value_t = DEFAULT_KEEP_GENERATIONS,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        keep: usize,
     },
     /// Print every dictionary record that is a prefix of TEXT.
     Lookup {
@@ -100,6 +133,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     report.skipped_entries
                 );
             }
+        }
+        Command::EnsureDictionary { root, xml, keep } => {
+            let table = ConjugationTable::load_embedded()?;
+            let opts = StemOptions::default();
+            let index = ensure_dictionary(&root, &table, &opts, keep, || {
+                std::fs::File::open(&xml).map(BufReader::new)
+            })?;
+            let current = latest(&root)?;
+            let name = current
+                .as_deref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| NONE_LABEL.to_string());
+            println!("generation: {name}");
+            println!("entries:    {}", index.entry_count());
+        }
+        Command::GenList { root } => {
+            let mut paths: Vec<PathBuf> = std::fs::read_dir(&root)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+                .collect();
+            paths.sort();
+            paths.reverse();
+            for path in paths {
+                let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+                    continue;
+                };
+                if !name.starts_with(GENERATION_PREFIX) {
+                    continue;
+                }
+                match Index::open(&path) {
+                    Ok(index) => println!("{name} ok entries={}", index.entry_count()),
+                    Err(e) => println!("{name} unusable {e}"),
+                }
+            }
+        }
+        Command::GenSweep { root, keep } => {
+            println!("removed: {}", sweep(&root, keep)?);
         }
         Command::Lookup { index, text } => {
             let table = ConjugationTable::load_embedded()?;
