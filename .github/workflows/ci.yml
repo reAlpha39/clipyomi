@@ -1,0 +1,105 @@
+name: CI
+
+# The gates this repo relies on, all of which were previously run by hand.
+#
+# Deliberately NO `cargo fmt --check`. `crates/jparser/src/conjugation.rs` is
+# intentionally not rustfmt-clean, and reformatting it is a defect — the port
+# keeps its table layout readable against the C++ original. Formatting is done
+# per-file with `rustfmt --edition 2021 <file>`, never `cargo fmt`. Please do
+# not "helpfully" add a formatting job here.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo test --workspace
+
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  msrv:
+    name: MSRV ${{ matrix.rust }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Must match `rust-version` in the root Cargo.toml. This job is the only
+        # thing that makes the declared floor real: `resolver = "2"` ignores
+        # `rust-version` when selecting versions, so a dependency that raises its
+        # own MSRV compiles fine on a newer toolchain and the violation is
+        # invisible until someone actually builds with the floor. That is exactly
+        # how `clap` drifted onto `clap_lex 1.1` (edition2024, Rust 1.85) and went
+        # unnoticed for three phases.
+        rust: ["1.75"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+
+      # Library and binary targets only — deliberately not `--all-targets`.
+      # MSRV is a promise to whoever compiles this workspace's crates, and
+      # dev-dependencies never reach them. `insta` pulls `tempfile`, which pulls
+      # `getrandom 0.4.3` (edition2024, Rust 1.85), so `--all-targets` fails at
+      # 1.75 for a chain that exists only when running our own tests.
+      - run: cargo check --workspace
+
+  purity:
+    name: jparser stays pure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # The parser library must build with no HTTP client and no decompressor.
+      # `jmdict-source` is optional behind a default-on `cli` feature, so with
+      # default features off none of it may appear in the tree.
+      - name: library builds without the cli feature
+        run: cargo check -p jparser --no-default-features --all-targets
+
+      - name: no http client or decompressor in the library
+        run: |
+          if cargo tree -p jparser --no-default-features \
+             | grep -E "jmdict-source|ureq|flate2"; then
+            echo "::error::jparser's library pulled in a cli-only dependency"
+            exit 1
+          fi
+
+      # GPL v2: OpenSSL is Apache-2.0, which the FSF holds GPLv2-incompatible,
+      # so no dependency may link native-tls/OpenSSL — now or in any later phase.
+      - name: no GPL-incompatible TLS backend
+        run: |
+          if cargo tree --workspace | grep -iE "openssl|native-tls"; then
+            echo "::error::a GPLv2-incompatible TLS dependency entered the tree"
+            exit 1
+          fi
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo llvm-cov -p jmdict-source --summary-only --fail-under-lines 80
+      - run: cargo llvm-cov -p jparser --summary-only --fail-under-lines 80
