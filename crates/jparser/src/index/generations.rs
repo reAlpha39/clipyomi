@@ -311,13 +311,37 @@ mod tests {
         assert_eq!(entry.id, 1000001);
     }
 
-    /// Two builds inside one process must not collide on the nonce.
+    /// Two builders running at once must not collide on the nonce. Both
+    /// threads create their build directory before either renames, so a
+    /// constant temp name would make one `create_dir` fail with
+    /// `AlreadyExists`. Losing the publish race is legitimate; colliding on
+    /// the build directory is not.
     #[test]
-    fn two_builds_in_one_process_use_distinct_temp_names() {
+    fn two_concurrent_builds_use_distinct_temp_names() {
         let root = scratch("gen-nonce");
-        build_into(&root);
-        build_into(&root);
-        assert_eq!(latest(&root).expect("latest"), Some(root.join("gen-2")));
+        let table = ConjugationTable::load_embedded().expect("table");
+        let opts = StemOptions::default();
+
+        let results = std::thread::scope(|s| {
+            let handles: Vec<_> = (0..2)
+                .map(|_| s.spawn(|| build_new(&root, MINI_XML.as_bytes(), &table, &opts)))
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("join"))
+                .collect::<Vec<_>>()
+        });
+
+        for result in &results {
+            match result {
+                Ok(_) => {}
+                // The loser of the publish race is an expected outcome.
+                Err(IndexError::GenerationExists { .. }) => {}
+                Err(e) => panic!("nonce collision or build failure: {e:?}"),
+            }
+        }
+        assert!(results.iter().any(|r| r.is_ok()), "neither build published");
+        assert!(latest(&root).expect("latest").is_some());
     }
 
     /// The lost-race branch, driven directly because `build_new` alone can
