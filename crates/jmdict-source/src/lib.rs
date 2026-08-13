@@ -127,8 +127,8 @@ pub fn open_local(path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
 /// 2A guarantees the closure runs only when a rebuild is actually needed, so a
 /// steady-state start never touches the network or the ~10 MB archive.
 ///
-/// A `<SOURCE_FILE><PARTIAL_SUFFIX>` file is never resolved: it is either a
-/// download in progress or one that failed verification, and treating it as a
+/// A `<SOURCE_FILE><PARTIAL_SUFFIX>.<pid>` file is never resolved: it is either
+/// a download in progress or one that failed verification, and treating it as a
 /// hand-placed archive is how a truncation reaches the parser.
 pub fn resolve(source_dir: &Path) -> std::io::Result<Box<dyn BufRead>> {
     resolve_from(fetch::JMDICT_URL, source_dir, RETRY_BACKOFF)
