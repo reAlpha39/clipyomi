@@ -14,6 +14,7 @@ pub mod kana;
 // `matcher::verb` that Task 2 adds, too.
 #[allow(dead_code)]
 mod matcher;
+mod rank;
 pub mod record;
 pub mod romaji;
 mod segment;

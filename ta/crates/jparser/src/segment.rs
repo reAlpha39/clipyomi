@@ -18,6 +18,7 @@
 
 use crate::kana;
 use crate::matcher::Match;
+use crate::rank::sort_matches;
 use crate::record::WordFlags;
 
 /// Cost of leaving one character unmatched. ta-old `Dictionary.cpp:1164`.
@@ -137,7 +138,7 @@ pub(crate) fn segment(
 
     Segmentation {
         total_cost: best[n].cost,
-        spans: backtrack(&best, n),
+        spans: backtrack(text, matches, &best, n),
     }
 }
 
@@ -251,8 +252,22 @@ fn isolated_katakana_run(text: &[char], start: usize, len: usize) -> bool {
     true
 }
 
+/// For every match carrying `COUNTER` whose `counter_after_number` test fails,
+/// clear the flag, so a counter reading that was not actually preceded by a
+/// number cannot be promoted by `sort_matches`. ta-old mutated the shared
+/// `Match` in place (`Dictionary.cpp:1206`); `segment` must not mutate its
+/// input, so the predicate is recomputed here on the span's clones. It is a
+/// pure function of `(text, start)`, so the answer is the one the DP used.
+fn clear_stale_counter_flags(text: &[char], group: &mut [Match]) {
+    for m in group.iter_mut() {
+        if m.flags.contains(WordFlags::COUNTER) && !counter_after_number(text, m.start) {
+            m.flags.remove(WordFlags::COUNTER);
+        }
+    }
+}
+
 /// Walk the backpointers from the end, ta-old `Dictionary.cpp:1280-1305`.
-fn backtrack(best: &[Cell], n: usize) -> Vec<Span> {
+fn backtrack(text: &[char], matches: &[Vec<Match>], best: &[Cell], n: usize) -> Vec<Span> {
     let mut spans: Vec<Span> = Vec::new();
     let mut pos = n;
     while pos > 0 {
@@ -274,11 +289,21 @@ fn backtrack(best: &[Cell], n: usize) -> Vec<Span> {
         }
         let len = best[pos].back_len;
         let start = pos - len;
+        // Collect EVERY match aligning to the chosen span, not only the DP
+        // winner (`Dictionary.cpp:1280-1299`). This is what populates the
+        // alternative readings.
+        let mut group: Vec<Match> = matches[start]
+            .iter()
+            .filter(|m| m.len == len)
+            .cloned()
+            .collect();
+        clear_stale_counter_flags(text, &mut group);
+        sort_matches(&mut group);
         spans.push(Span {
             start,
             len,
             matched: true,
-            matches: Vec::new(),
+            matches: group,
         });
         pos = start;
     }
@@ -701,5 +726,53 @@ mod tests {
         let mut m = plain(&text, 1, 3, flags);
         m.inexact = true;
         assert_eq!(score_match(&text, &m, Some(&marked(&[1], &[3])), 0), 135);
+    }
+
+    // ---- the backtrack's collection pass --------------------------------
+
+    #[test]
+    fn the_backtrack_collects_every_match_on_the_chosen_span() {
+        // Two entries share (0, 2); a third match at the same start but a
+        // different length must not be collected.
+        let text = chars("ねこだ");
+        let mut a = plain(&text, 0, 2, WordFlags::default());
+        a.entry_id = 7;
+        let mut b = plain(&text, 0, 2, WordFlags::default());
+        b.entry_id = 9;
+        let mut c = plain(&text, 0, 1, WordFlags::default());
+        c.entry_id = 11;
+        let seg = segment(&text, &buckets(&text, vec![a, b, c]), None);
+        assert_eq!(shape(&seg), vec![(0, 2, true), (2, 1, false)]);
+        let ids: Vec<u32> = seg.spans[0].matches.iter().map(|m| m.entry_id).collect();
+        assert_eq!(ids, vec![7, 9]);
+    }
+
+    #[test]
+    fn a_stale_counter_flag_is_cleared_on_the_emitted_match() {
+        // The counter is not preceded by a number, so COUNTER is cleared and
+        // the COMMON candidate outranks it.
+        let text = chars("日");
+        let mut counter = plain(&text, 0, 1, WordFlags::COUNTER);
+        counter.entry_id = 2;
+        let mut common = plain(&text, 0, 1, WordFlags::COMMON);
+        common.entry_id = 3;
+        let seg = segment(&text, &buckets(&text, vec![counter, common]), None);
+        let got = &seg.spans[0].matches;
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].entry_id, 3, "COMMON must outrank a stale COUNTER");
+        assert!(!got[1].flags.contains(WordFlags::COUNTER));
+    }
+
+    #[test]
+    fn a_live_counter_flag_survives_and_outranks() {
+        let text = chars("3日");
+        let mut counter = plain(&text, 1, 1, WordFlags::COUNTER);
+        counter.entry_id = 2;
+        let mut common = plain(&text, 1, 1, WordFlags::COMMON);
+        common.entry_id = 3;
+        let seg = segment(&text, &buckets(&text, vec![counter, common]), None);
+        let got = &seg.spans[1].matches;
+        assert_eq!(got[0].entry_id, 2);
+        assert!(got[0].flags.contains(WordFlags::COUNTER));
     }
 }
