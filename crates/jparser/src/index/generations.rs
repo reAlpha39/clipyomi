@@ -441,6 +441,14 @@ mod tests {
     /// and gen-2 — rather than one of them failing outright. That is the
     /// whole point of the retry: a double-launched application must not fail
     /// to start just because it lost a race with itself.
+    ///
+    /// This is also `build_new`'s retry loop's *only* coverage — see
+    /// `retrying_publish_after_a_lost_race_lands_on_the_next_number` below,
+    /// which cannot reach the loop at all. That coverage is inherently
+    /// probabilistic: this test detects the loop being removed only when the
+    /// two threads actually contend for the same generation number, which
+    /// depends on how the scheduler interleaves them, not on anything this
+    /// test controls.
     #[test]
     fn two_concurrent_builds_use_distinct_temp_names() {
         let root = scratch("gen-nonce");
@@ -466,17 +474,17 @@ mod tests {
         assert_eq!(latest(&root).expect("latest"), Some(root.join("gen-2")));
     }
 
-    /// The retry design spec §9 asked for, never previously possible because
-    /// `build_new` had no way to retry: after `publish` loses the race, a
-    /// second attempt against the freshly recomputed generation succeeds.
-    ///
-    /// Driven directly against `publish`/`next_generation` rather than by
-    /// racing two real threads, because nothing can deterministically force
-    /// two live builders to collide on their first attempt — that is
-    /// inherently a race. This exercises the exact two calls `build_new`'s
-    /// retry loop makes.
+    /// Confirms that publishing again after a lost race lands on the next
+    /// generation number — i.e. that `publish` and `next_generation` compose
+    /// correctly for a retry. **Not** a test of `build_new`'s retry loop
+    /// itself: it drives `publish`/`next_generation` directly rather than
+    /// calling `build_new`, and would still pass even if that loop were
+    /// deleted entirely. Nothing can deterministically force two live
+    /// builders to collide on their first attempt — that is inherently a
+    /// race — so the loop's own coverage is `two_concurrent_builds_use_distinct_temp_names`
+    /// above, and it is only probabilistic there.
     #[test]
-    fn a_retry_after_a_lost_race_succeeds() {
+    fn retrying_publish_after_a_lost_race_lands_on_the_next_number() {
         let root = scratch("gen-retry");
         mkdir(&root, "gen-1");
         std::fs::write(root.join("gen-1").join("occupied"), b"x").expect("write");
