@@ -47,11 +47,16 @@ pub(crate) fn verify_archive(path: &Path) -> Result<(), SourceError> {
 /// therefore `ensure_dictionary`'s source closure, with no error and no
 /// retry.
 ///
-/// 120 seconds: the measured archive is 10,545,887 bytes (spec's resolved
-/// facts). Even a slow ~1 Mbit/s link finishes that in well under a minute,
-/// so two minutes is generous headroom for a genuinely slow connection
-/// without letting one stalled attempt occupy most of a retry cycle. A stall
-/// surfaces as `ureq::Error::Timeout`, which the existing `Err(e) =>
+/// 120 seconds, and note this bounds the **whole call**, not idle time:
+/// `timeout_global` starts counting at the request, so it caps total download
+/// duration rather than only detecting a stall. The measured archive is
+/// 10,545,887 bytes (spec's resolved facts) = ~84 Mbit, so this sets an
+/// effective sustained-throughput floor of ~0.70 Mbit/s, below which every
+/// attempt times out and the user gets `TooManyAttempts`. A 1 Mbit/s link
+/// needs ~84 s of the 120 s budget — real headroom, but far less than it
+/// looks. Raise this before assuming a slow connection is at fault.
+///
+/// A stall surfaces as `ureq::Error::Timeout`, which the existing `Err(e) =>
 /// Transport(...)` fallthrough below already retries — this composes with
 /// [`fetch_with_retry`] rather than needing its own handling.
 const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
@@ -210,7 +215,16 @@ pub fn fetch_with_retry(
             ) => return Err(e),
             Err(e @ SourceError::Io(_)) => return Err(e),
             Err(e) => {
-                last = e.to_string();
+                // `Http`'s own message carries the URL and the hand-placement
+                // escape hatch, because an immediate 4xx never reaches
+                // `TooManyAttempts`. Here it does reach it, and
+                // `TooManyAttempts` appends that same clause itself — so keep
+                // only the status, or the user reads the instruction twice in
+                // one sentence.
+                last = match &e {
+                    SourceError::Http { status, .. } => format!("HTTP {status}"),
+                    other => other.to_string(),
+                };
                 if attempt < crate::DOWNLOAD_ATTEMPTS {
                     std::thread::sleep(delay);
                     delay = delay.saturating_mul(2);
@@ -345,10 +359,14 @@ mod tests {
         // needing to move `MAX_ARCHIVE_BYTES` of data through a test socket.
         let err = download_and_verify(&url, &dir, &staging, DOWNLOAD_TIMEOUT, 8)
             .expect_err("a body over the limit must not verify as Ok");
-        // Whichever message it renders as, it must be a real `Err` — the
-        // failure mode this guards against is a truncated body silently
-        // reported as a successful download.
-        assert!(!matches!(err, SourceError::Http { .. }), "got {err:?}");
+        // `Transport`, specifically. `ureq`'s `LimitReader` errors on the read
+        // that would exceed the cap, *before* touching the inner reader, so the
+        // failure arrives through `io::copy` and never reaches
+        // `verify_archive`. Asserting only `is_err()` would not distinguish
+        // that from the failure this test exists to catch: a silently truncated
+        // body that `verify_archive` then rejects as `Corrupt` — which looks
+        // identical from outside while meaning the limit did nothing.
+        assert!(matches!(err, SourceError::Transport(_)), "got {err:?}");
         handle.join().expect("server thread");
     }
 

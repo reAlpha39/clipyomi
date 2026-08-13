@@ -37,6 +37,15 @@ pub const SOURCE_FILE: &str = "JMdict_e.gz";
 /// invocations stage into different files instead of one truncating the
 /// other's write. Either shape is never resolved, so a killed or still-
 /// running download cannot be mistaken for a hand-placed file.
+///
+/// **These accumulate.** A download that fails or is killed leaves its staging
+/// file behind under a name no later run reuses, so an interrupted transfer
+/// costs up to `MAX_ARCHIVE_BYTES` of disk permanently. Nothing sweeps them,
+/// deliberately: a process cannot tell another's live staging file from a dead
+/// one's leftovers, so deleting by pattern would reintroduce exactly the race
+/// the PID exists to prevent. They are inert — never resolved, never verified
+/// — so the cost is disk, not correctness. Users who care can delete
+/// `JMdict_e.gz.partial.*` while no download is running.
 pub const PARTIAL_SUFFIX: &str = ".partial";
 
 /// Download attempts before [`fetch::fetch`] gives up.

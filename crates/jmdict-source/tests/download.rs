@@ -135,9 +135,13 @@ fn a_404_fails_and_leaves_nothing_behind() {
         rendered.contains(&url),
         "the message must name the URL it tried: {rendered}"
     );
+    // `serve` builds its URL as `http://{addr}/{SOURCE_FILE}`, so a bare
+    // `contains(SOURCE_FILE)` would be satisfied by the URL clause alone and
+    // would prove nothing about the escape-hatch instruction. Check what is
+    // left once the URL is removed.
     assert!(
-        rendered.contains(SOURCE_FILE),
-        "the message must name the escape-hatch filename: {rendered}"
+        rendered.replace(&url, "").contains(SOURCE_FILE),
+        "the message must name the escape-hatch filename outside the URL: {rendered}"
     );
     assert!(
         rendered.contains(&dir.display().to_string()),
@@ -314,9 +318,23 @@ fn exhausting_the_attempts_reports_the_last_failure_and_the_escape_hatch() {
             assert_eq!(attempts, jmdict_source::DOWNLOAD_ATTEMPTS);
             assert_eq!(source_dir, dir);
             assert!(!last.is_empty(), "the last failure was not recorded");
+            // `Http`'s own message carries the escape-hatch clause, because an
+            // immediate 4xx never reaches this variant. Here it does, and this
+            // variant appends the clause itself — so `last` must hold the
+            // status alone, or the user reads the instruction twice.
+            assert!(
+                !last.contains(SOURCE_FILE),
+                "the last failure duplicated the escape hatch: {last}"
+            );
         }
         other => panic!("expected TooManyAttempts, got {other:?}"),
     }
+    // Exactly once, for the same reason.
+    assert_eq!(
+        rendered.matches("manually to bypass the download").count(),
+        1,
+        "the escape hatch must appear once: {rendered}"
+    );
     assert!(rendered.contains(SOURCE_FILE), "got: {rendered}");
     assert!(
         rendered.contains(&dir.display().to_string()),
