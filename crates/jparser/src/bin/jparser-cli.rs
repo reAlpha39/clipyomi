@@ -84,6 +84,18 @@ enum Command {
         )]
         keep: usize,
     },
+    /// Remove exactly `gen-GENERATION` from ROOT, whether or not it exists.
+    ///
+    /// The repair path for an unopenable newest generation: `sweep` never
+    /// removes the newest, `ensure-dictionary` returns the error rather than
+    /// rebuilding over it, and `--keep 0` is rejected. This removes it
+    /// directly so a later `ensure-dictionary` call can build a fresh one.
+    GenRemove {
+        /// Generation root directory.
+        root: PathBuf,
+        /// Generation number to remove.
+        generation: u64,
+    },
     /// Print every dictionary record that is a prefix of TEXT.
     Lookup {
         /// Index directory.
@@ -171,6 +183,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::GenSweep { root, keep } => {
             println!("removed: {}", sweep(&root, keep)?);
+        }
+        Command::GenRemove { root, generation } => {
+            let target = root.join(format!("{GENERATION_PREFIX}{generation}"));
+            match std::fs::remove_dir_all(&target) {
+                Ok(()) => println!("removed: {}", target.display()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    println!("absent: {}", target.display());
+                }
+                Err(e) => return Err(e.into()),
+            }
         }
         Command::Lookup { index, text } => {
             let table = ConjugationTable::load_embedded()?;

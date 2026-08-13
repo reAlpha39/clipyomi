@@ -140,3 +140,37 @@ fn gen_list_reports_an_absent_root() {
         String::from_utf8_lossy(&out.stdout)
     );
 }
+
+/// `gen-remove` is the only thing that can act on an unopenable *newest*
+/// generation, since `sweep` never touches it. It must remove exactly the
+/// named directory and nothing else.
+#[test]
+fn gen_remove_deletes_exactly_the_named_generation() {
+    let dir = scratch("cli-gen-remove");
+    let root = dir.join("dict");
+    for name in ["gen-1", "gen-2"] {
+        std::fs::create_dir_all(root.join(name)).expect("mkdir");
+    }
+
+    let out = cli(&["gen-remove", "dict", "2"], &dir);
+    assert!(out.contains("removed"), "got: {out}");
+    assert!(!root.join("gen-2").exists());
+    assert!(
+        root.join("gen-1").exists(),
+        "only the named generation must be removed"
+    );
+}
+
+/// Removing an absent generation is not a usage error — the operator may not
+/// know whether it was already cleaned up, and `gen-remove` must not fail
+/// merely because there was nothing to do.
+#[test]
+fn gen_remove_of_an_absent_generation_is_not_an_error() {
+    let dir = scratch("cli-gen-remove-absent");
+    let root = dir.join("dict");
+    std::fs::create_dir_all(root.join("gen-1")).expect("mkdir");
+
+    let out = cli(&["gen-remove", "dict", "9"], &dir);
+    assert!(out.contains("absent"), "got: {out}");
+    assert!(root.join("gen-1").exists());
+}
