@@ -180,6 +180,12 @@ impl Index {
             offset,
         )?)?))
     }
+
+    /// Number of entries in the payload. Cheap: the offset table is already
+    /// resident after `open`, so this touches no mmap page.
+    pub fn entry_count(&self) -> usize {
+        self.entry_offsets.len()
+    }
 }
 
 /// Read a `u32`-length-prefixed blob at `offset`.

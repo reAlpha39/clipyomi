@@ -13,6 +13,10 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use jparser::conjugation::ConjugationTable;
 use jparser::index::build::build_from_reader;
+use jparser::index::ensure_dictionary;
+use jparser::index::generations::{
+    generation_number, latest, sweep, DEFAULT_KEEP_GENERATIONS, GENERATION_PREFIX,
+};
 use jparser::index::load::Index;
 use jparser::record::WordFlags;
 use jparser::stem::StemOptions;
@@ -28,7 +32,8 @@ const FLAG_LABELS: &[(WordFlags, &str)] = &[
     (WordFlags::COUNTER, "counter"),
 ];
 
-/// Rendered wherever a `reading` or `conjugation` is `None`. Named because it
+/// Rendered wherever a `reading` or `conjugation` is `None`, and by
+/// `ensure-dictionary` when there is no generation to name. Named because it
 /// is part of the frozen output format, not incidental formatting.
 const NONE_LABEL: &str = "-";
 
@@ -50,6 +55,49 @@ enum Command {
         /// Disable the v5 mis-annotation fallback, to measure its effect.
         #[arg(long)]
         no_v5_fallback: bool,
+    },
+    /// Open the newest usable index in ROOT, building from XML if needed.
+    EnsureDictionary {
+        /// Generation root directory.
+        root: PathBuf,
+        /// Path to JMdict_e.xml (uncompressed), read only if a build is needed.
+        xml: PathBuf,
+        /// Generations to retain after a rebuild. Must be at least 1.
+        #[arg(
+            long,
+            default_value_t = DEFAULT_KEEP_GENERATIONS,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        keep: usize,
+    },
+    /// List the generations in ROOT, newest first.
+    GenList {
+        /// Generation root directory.
+        root: PathBuf,
+    },
+    /// Remove build orphans and all but the newest generations.
+    GenSweep {
+        /// Generation root directory.
+        root: PathBuf,
+        /// Generations to retain. Must be at least 1.
+        #[arg(
+            long,
+            default_value_t = DEFAULT_KEEP_GENERATIONS,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        keep: usize,
+    },
+    /// Remove exactly `gen-GENERATION` from ROOT, whether or not it exists.
+    ///
+    /// The repair path for an unopenable newest generation: `sweep` never
+    /// removes the newest, `ensure-dictionary` returns the error rather than
+    /// rebuilding over it, and `--keep 0` is rejected. This removes it
+    /// directly so a later `ensure-dictionary` call can build a fresh one.
+    GenRemove {
+        /// Generation root directory.
+        root: PathBuf,
+        /// Generation number to remove.
+        generation: u64,
     },
     /// Print every dictionary record that is a prefix of TEXT.
     Lookup {
@@ -99,6 +147,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "warning: {} malformed entries were skipped",
                     report.skipped_entries
                 );
+            }
+        }
+        Command::EnsureDictionary { root, xml, keep } => {
+            let table = ConjugationTable::load_embedded()?;
+            let opts = StemOptions::default();
+            let index = ensure_dictionary(&root, &table, &opts, keep, || {
+                std::fs::File::open(&xml).map(BufReader::new)
+            })?;
+            let current = latest(&root)?;
+            let name = current
+                .as_deref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| NONE_LABEL.to_string());
+            println!("generation: {name}");
+            println!("entries:    {}", index.entry_count());
+        }
+        Command::GenList { root } => {
+            let mut entries: Vec<(String, PathBuf)> = Vec::new();
+            for entry in std::fs::read_dir(&root)? {
+                let path = entry?.path();
+                let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+                    continue;
+                };
+                if !name.starts_with(GENERATION_PREFIX) {
+                    continue;
+                }
+                entries.push((name, path));
+            }
+            // Numeric, not lexicographic: `--help` promises "newest first",
+            // and `gen-10` must sort ahead of `gen-9`. A name that is not a
+            // valid generation number sorts last — `latest` ignores it too.
+            entries.sort_by_key(|(name, _)| std::cmp::Reverse(generation_number(name)));
+            for (name, path) in entries {
+                match Index::open(&path) {
+                    Ok(index) => println!("{name} ok entries={}", index.entry_count()),
+                    Err(e) => println!("{name} unusable {e}"),
+                }
+            }
+        }
+        Command::GenSweep { root, keep } => {
+            println!("removed: {}", sweep(&root, keep)?);
+        }
+        Command::GenRemove { root, generation } => {
+            let target = root.join(format!("{GENERATION_PREFIX}{generation}"));
+            match std::fs::remove_dir_all(&target) {
+                Ok(()) => println!("removed: {}", target.display()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    println!("absent: {}", target.display());
+                }
+                Err(e) => return Err(e.into()),
             }
         }
         Command::Lookup { index, text } => {
