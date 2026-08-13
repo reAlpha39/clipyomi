@@ -121,6 +121,9 @@ pub(crate) fn sort_matches(matches: &mut Vec<Match>) {
                     .cmp(&b.flags.contains(WordFlags::IS_NAME)),
             )
             .then((b.flags.0 & RANK_FLAG_MASK).cmp(&(a.flags.0 & RANK_FLAG_MASK)))
+            // Ascending, unlike ta-old's descending `dictIndex`/`firstJString`
+            // (Dictionary.cpp:1019-1021): lower `entry_id` (JMdict `ent_seq`)
+            // is usually the more established entry — see plan Self-Review §5.
             .then(a.entry_id.cmp(&b.entry_id))
             .then(
                 a.chain

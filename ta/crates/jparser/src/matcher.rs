@@ -160,6 +160,12 @@ fn commit(out: &mut Vec<Match>, candidate: Match) {
     // Names-inexact suppression: an inexact hit from a names source is
     // discarded outright, not merely ranked lower. Dormant in v1 — nothing sets
     // IS_NAME — but implemented so JMnedict needs no matcher change.
+    //
+    // Applied on both paths here; ta-old's non-verb branch gates this on
+    // `!(dict->header->flags & DICT_FLAG_NAMES)` (Dictionary.cpp:894) but its
+    // verb branch (:897-928) has no equivalent test, so ta-old keeps an
+    // inexact verb match from a names source. JMnedict has no verbs today, so
+    // this is dormant — see plan Self-Review §5.
     if candidate.inexact && candidate.flags.contains(WordFlags::IS_NAME) {
         return;
     }

@@ -5950,8 +5950,28 @@ run):
   (`Dictionary.cpp:784-790`), which permutes the surviving siblings. Emission order
   feeds the DP's `>=` tie-break, so this is a real if small difference. The
   contract's pseudocode mandates `retain`.
-- **`dictIndex` dropped, `firstJString` replaced by `entry_id` ascending.**
-  ta-old's key was a heap address and was never reproducible across runs.
+- **`dictIndex` dropped, `firstJString` replaced by `entry_id`, sorted
+  ascending — the direction is deliberately flipped from ta-old's
+  descending.** ta-old's `CompareMatches` (`Dictionary.cpp:1019-1021`) sorts
+  both `dictIndex` and `firstJString` descending; `CompareIdenticalMatches`
+  (`:989-990`, which the port's Pass A correctly matches) sorts ascending, so
+  ta-old itself reverses direction between the two passes and the port does
+  not. ta-old's key was stable within a run — `firstJString` points inside
+  `dict->strings`' one contiguous allocation, and the comparison only ever
+  runs after `dictIndex` has already tied, i.e. within one allocation — so
+  reproducibility was never actually the reason for the substitution. The
+  real reason: lower `entry_id` (JMdict `ent_seq`) is generally the more
+  established entry, which is a better default for `Segment::reading`
+  (`entries[0].reading`). This is systematic across every multi-alternative
+  span and is a pre-approved delta for Phase 6's differential run.
+- **Names-inexact suppression applied on both the non-verb and verb paths in
+  `matcher::commit`.** ta-old's non-verb branch gates the increment on
+  `!inexactMatch || !(dict->header->flags & DICT_FLAG_NAMES)`
+  (`Dictionary.cpp:894`); its verb branch (`:897-928`) has no equivalent test
+  at all, so ta-old keeps an inexact verb match from a names source where the
+  port drops it. Dormant today — nothing sets `WordFlags::IS_NAME` and
+  JMnedict has no verbs — and arguably the more correct behaviour; documented
+  rather than changed.
 - **`inexactMatch` narrowed from a tri-state `int` to a `bool`.** Its sign
   reflected alphabetical order, not match quality.
 - **`dictionary_form` uses the *first* remove-tense/form-0 conjugation, not the
@@ -5989,6 +6009,14 @@ run):
 - Port design §10's "assert the cost" is satisfied only by `segment.rs`'s in-module
   tests, because `Segmentation::total_cost` never reaches `ParseResult`. If cost
   regressions must be caught end to end, that is a contract change.
+- The snapshot for `昨日は宿題をしました。` renders `しま (Past) [-] conjecture`
+  three times. Traced: one entry (`ent_seq` 2854156, 揣摩/しま, POS `n`+`vs`+`vt`)
+  is reached by three distinct chains through the duplicate `vs` type pair —
+  kanji-block conj 1 (`""` Stem→vs-i), kanji-block conj 26 (`"した"`
+  Stem→v-ta-stem), and kana-block conj 1. ta-old keeps all three as well, so
+  the parser is faithful and no code changed here. Phase 3's display layer
+  needs a per-`(entry_id, label)` dedupe, or the next person to see this will
+  file it as a parser bug.
 
 ---
 
