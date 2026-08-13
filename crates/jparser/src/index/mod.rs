@@ -540,6 +540,23 @@ mod tests {
             }
         }
 
+        /// Root ignores mode bits, so `0o555` silently does nothing in a root
+        /// container. Probe whether the restriction actually bites here
+        /// rather than guessing at privileges — detecting euid would need
+        /// `libc`. Creating a directory inside the read-only parent needs the
+        /// same write permission on the parent that unlinking does, so
+        /// attempting that is a valid proxy.
+        fn read_only_parent_blocks_writes(parent: &std::path::Path) -> bool {
+            let probe = parent.join("probe");
+            match std::fs::create_dir(&probe) {
+                Ok(()) => {
+                    let _ = std::fs::remove_dir(&probe);
+                    false
+                }
+                Err(_) => true,
+            }
+        }
+
         let root = scratch("ensure-sweep-fails");
         let (table, opts) = table_and_opts();
 
@@ -562,7 +579,18 @@ mod tests {
         // unlink its contents — a real failure, not a benign race.
         let victim = root.join("gen-2");
         std::fs::set_permissions(&victim, std::fs::Permissions::from_mode(0o555)).expect("chmod");
-        let _restore = RestorePerms(victim);
+        let _restore = RestorePerms(victim.clone());
+
+        if !read_only_parent_blocks_writes(&victim) {
+            // Restoring happens via `_restore`'s Drop regardless of this
+            // early return, so the read-only mode never survives the test.
+            eprintln!(
+                "skipping a_sweep_failure_does_not_fail_ensure_dictionary: \
+                 {} ignores 0o555 (likely running as root)",
+                victim.display()
+            );
+            return;
+        }
 
         let index = ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes()))
             .expect("a failed sweep must not fail ensure_dictionary");
