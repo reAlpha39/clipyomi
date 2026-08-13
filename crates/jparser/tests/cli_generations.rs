@@ -141,6 +141,26 @@ fn gen_list_reports_an_absent_root() {
     );
 }
 
+/// `gen-list`'s `--help` says "newest first". Lexicographic order would print
+/// `gen-9` before `gen-10`; this pins the numeric order the help text
+/// promises, past the point where the two orders diverge.
+#[test]
+fn gen_list_orders_numerically_past_nine_generations() {
+    let dir = scratch("cli-gen-list-order");
+    let root = dir.join("dict");
+    for n in 1..=10 {
+        std::fs::create_dir_all(root.join(format!("gen-{n}"))).expect("mkdir");
+    }
+
+    let out = cli(&["gen-list", "dict"], &dir);
+    let names: Vec<&str> = out
+        .lines()
+        .map(|line| line.split_whitespace().next().expect("name"))
+        .collect();
+    let expected: Vec<String> = (1..=10).rev().map(|n| format!("gen-{n}")).collect();
+    assert_eq!(names, expected, "got: {out}");
+}
+
 /// `gen-remove` is the only thing that can act on an unopenable *newest*
 /// generation, since `sweep` never touches it. It must remove exactly the
 /// named directory and nothing else.

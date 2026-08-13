@@ -14,7 +14,9 @@ use clap::{Parser, Subcommand};
 use jparser::conjugation::ConjugationTable;
 use jparser::index::build::build_from_reader;
 use jparser::index::ensure_dictionary;
-use jparser::index::generations::{latest, sweep, DEFAULT_KEEP_GENERATIONS, GENERATION_PREFIX};
+use jparser::index::generations::{
+    generation_number, latest, sweep, DEFAULT_KEEP_GENERATIONS, GENERATION_PREFIX,
+};
 use jparser::index::load::Index;
 use jparser::record::WordFlags;
 use jparser::stem::StemOptions;
@@ -162,19 +164,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("entries:    {}", index.entry_count());
         }
         Command::GenList { root } => {
-            let mut paths: Vec<PathBuf> = Vec::new();
+            let mut entries: Vec<(String, PathBuf)> = Vec::new();
             for entry in std::fs::read_dir(&root)? {
-                paths.push(entry?.path());
-            }
-            paths.sort();
-            paths.reverse();
-            for path in paths {
+                let path = entry?.path();
                 let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
                     continue;
                 };
                 if !name.starts_with(GENERATION_PREFIX) {
                     continue;
                 }
+                entries.push((name, path));
+            }
+            // Numeric, not lexicographic: `--help` promises "newest first",
+            // and `gen-10` must sort ahead of `gen-9`. A name that is not a
+            // valid generation number sorts last — `latest` ignores it too.
+            entries.sort_by_key(|(name, _)| std::cmp::Reverse(generation_number(name)));
+            for (name, path) in entries {
                 match Index::open(&path) {
                     Ok(index) => println!("{name} ok entries={}", index.entry_count()),
                     Err(e) => println!("{name} unusable {e}"),

@@ -51,7 +51,11 @@ const PUBLISH_ATTEMPTS: usize = 8;
 /// Deliberately strict. `gen-01` is rejected rather than read as 1: a
 /// permissive parse would let a hand-created directory shadow a real
 /// generation, which is precisely the ambiguity immutable names remove.
-fn generation_number(name: &str) -> Option<u64> {
+///
+/// `pub` because it is already the single strict parser for the layout, and
+/// `jparser-cli`'s `gen-list` needs it to sort generations numerically
+/// rather than lexicographically.
+pub fn generation_number(name: &str) -> Option<u64> {
     let digits = name.strip_prefix(GENERATION_PREFIX)?;
     if digits.is_empty() {
         return None;
