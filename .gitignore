@@ -9,3 +9,7 @@ dist/
 
 # OS
 .DS_Store
+
+# Agent scratch
+.claude/
+.superpowers/
