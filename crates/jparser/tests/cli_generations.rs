@@ -199,3 +199,49 @@ fn gen_remove_of_an_absent_generation_is_not_an_error() {
     assert!(out.contains("absent"), "got: {out}");
     assert!(root.join("gen-1").exists());
 }
+
+/// The xml positional must keep working — 2A's other tests pass it that way,
+/// and breaking it would make this phase edit tests about generations.
+#[test]
+fn ensure_dictionary_still_accepts_a_positional_xml() {
+    let dir = scratch("cli-positional");
+    std::fs::write(dir.join("mini.xml"), XML).expect("write xml");
+
+    let out = cli(&["ensure-dictionary", "dict", "mini.xml"], &dir);
+
+    assert!(out.contains("generation: gen-1"), "got: {out}");
+}
+
+/// The ArgGroup is what makes "exactly one source" true rather than intended.
+#[test]
+fn ensure_dictionary_rejects_both_sources_at_once() {
+    let dir = scratch("cli-bothsources");
+    std::fs::write(dir.join("mini.xml"), XML).expect("write xml");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_jparser-cli"))
+        .args([
+            "ensure-dictionary",
+            "dict",
+            "mini.xml",
+            "--source-dir",
+            "src",
+        ])
+        .current_dir(&dir)
+        .output()
+        .expect("run jparser-cli");
+
+    assert!(!out.status.success(), "both sources must be rejected");
+}
+
+#[test]
+fn ensure_dictionary_rejects_no_source_at_all() {
+    let dir = scratch("cli-nosource");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_jparser-cli"))
+        .args(["ensure-dictionary", "dict"])
+        .current_dir(&dir)
+        .output()
+        .expect("run jparser-cli");
+
+    assert!(!out.status.success(), "a missing source must be rejected");
+}

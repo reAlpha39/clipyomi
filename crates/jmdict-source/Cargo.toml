@@ -16,3 +16,8 @@ rust-version.workspace = true
 ureq = { version = "~3.2", default-features = false }
 flate2 = "1"
 thiserror = "1"
+
+[dev-dependencies]
+# `default-features = false` so this does not pull `jmdict-source` back in
+# through jparser's `cli` feature, which would be a dependency cycle.
+jparser = { path = "../jparser", default-features = false }

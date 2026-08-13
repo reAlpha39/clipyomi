@@ -257,6 +257,7 @@ name = "jmdict-source"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "jparser",
  "thiserror",
  "ureq",
 ]
@@ -269,6 +270,7 @@ dependencies = [
  "clap",
  "fst",
  "insta",
+ "jmdict-source",
  "memmap2",
  "quick-xml",
  "serde",
