@@ -154,6 +154,15 @@ where
     F: FnOnce() -> std::io::Result<R>,
     R: std::io::BufRead,
 {
+    // `keep = 0` would let `sweep` delete the generation this very call just
+    // published, so the trailing `Index::open` below would fail with a bare
+    // `Io(NotFound)`. Clamped rather than rejected: `sweep` itself may still
+    // accept 0 (deleting everything is a coherent thing for a primitive to
+    // do), but this is the policy boundary that must not self-destruct. The
+    // CLI keeps its own guard too, since it can give a better usage message
+    // than a silent clamp.
+    let keep = keep.max(1);
+
     if let Some(current) = generations::latest(root)? {
         match Index::open(&current) {
             Ok(index) => return Ok(index),
@@ -368,6 +377,29 @@ mod tests {
         assert!(
             remaining <= 2,
             "retention was not applied: {remaining} generations"
+        );
+    }
+
+    /// The library boundary must not accept `keep = 0`: it would let `sweep`
+    /// delete the very generation this call just published, leaving nothing
+    /// for the trailing `Index::open` to open. Phase 2B calls
+    /// `ensure_dictionary` directly, so the CLI's own guard cannot be relied
+    /// on to catch this.
+    #[test]
+    fn a_zero_keep_is_clamped_rather_than_self_destructive() {
+        let root = scratch("ensure-keep-zero");
+        let (table, opts) = table_and_opts();
+
+        let index = ensure_dictionary(&root, &table, &opts, 0, || Ok(XML.as_bytes()))
+            .expect("ensure_dictionary must not self-destruct on keep=0");
+
+        assert!(
+            root.join("gen-1").exists(),
+            "the published generation must survive a keep=0 call"
+        );
+        assert_eq!(
+            index.entry(1000010).expect("entry").expect("present").id,
+            1000010
         );
     }
 
