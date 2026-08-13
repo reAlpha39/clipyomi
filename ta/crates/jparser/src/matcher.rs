@@ -23,7 +23,7 @@
 //!   scored, not rejected, and depends on what was typed, so it cannot be
 //!   precomputed into the index.
 
-use crate::conjugation::{ConjugationTable, Form, TenseId, VerbTypeId};
+use crate::conjugation::{ConjugationTable, Form, TenseId, VerbTypeId, TENSE_NON_PAST, TENSE_STEM};
 use crate::index::load::Index;
 use crate::record::WordFlags;
 use crate::ParseError;
@@ -221,10 +221,66 @@ pub(crate) fn matches_at(
     Ok(out)
 }
 
+/// Emitted for a layer whose form carries `Form::NEGATIVE`, before the formal
+/// prefix, per `Dictionary.cpp:1453-1454`.
+const NEGATIVE_PREFIX: &str = "Negative ";
+/// Emitted for a layer whose form carries `Form::FORMAL`.
+const FORMAL_PREFIX: &str = "Formal ";
+/// The only depth at which a `Non-past` escapes the depth > 0 suppression, and
+/// then only when depth 0 was a `Stem`.
+const STEM_NON_PAST_DEPTH: usize = 1;
+
+/// ta-old's `GetConjString` (`Dictionary.cpp:1449-1468`): render a match's
+/// conjugation chain as a label such as "Negative Formal Past".
+///
+/// Layers are visited shallowest first, so the label reads from the layer
+/// nearest the dictionary stem outward — reverse the order and every stacked
+/// form renders backwards.
+///
+/// An empty result is legitimate: an unconjugated hit has no chain, and a chain
+/// of nothing but skipped layers renders as "".
+pub(crate) fn render_conjugation_label(chain: &[ConjLink], table: &ConjugationTable) -> String {
+    let mut out = String::new();
+    for (i, link) in chain.iter().enumerate() {
+        // Both prefixes are emitted before the skip checks, so a layer whose
+        // tense word is dropped below still contributes them.
+        if link.form.is_negative() {
+            out.push_str(NEGATIVE_PREFIX);
+        }
+        if link.form.is_formal() {
+            out.push_str(FORMAL_PREFIX);
+        }
+        // Non-past is suppressed at every depth > 0 except depth 1 after a
+        // Stem — without that exception a Stem+Non-past pair would render
+        // empty, since the next clause drops the Stem too. The test inspects
+        // chain[0], never chain[i - 1].
+        if i > 0
+            && link.tense == TENSE_NON_PAST
+            && (i > STEM_NON_PAST_DEPTH || chain[0].tense != TENSE_STEM)
+        {
+            continue;
+        }
+        if link.tense == TENSE_STEM {
+            continue;
+        }
+        let Some(name) = table.tense_name(link.tense) else {
+            continue;
+        };
+        out.push_str(name);
+        out.push(' ');
+    }
+    // Every appended word carries exactly one trailing space and a skipped
+    // layer appends none, so at most one space can accumulate. This is ta-old's
+    // single conditional decrement, not a general trim.
+    if out.ends_with(' ') {
+        out.pop();
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::conjugation::TENSE_STEM;
     use crate::index::build::build_from_reader;
     use crate::index::load::Index;
     use crate::record::WordFlags;
@@ -479,5 +535,113 @@ mod tests {
         );
         assert_eq!(t.types()[m.chain[1].verb_type].name, "v-ta-stem");
         assert_eq!(t.tense_name(m.chain[1].tense), Some("Past"));
+    }
+
+    /// Highest tense id the embedded table can reach. The four fixed ids are
+    /// consts; every other tense is a position in the table's name list, so
+    /// tests resolve it by name rather than hard-coding a number.
+    const TENSE_LOOKUP_LIMIT: TenseId = 64;
+
+    /// No table names this id, so `tense_name` returns None.
+    const UNNAMED_TENSE: TenseId = 9_999;
+
+    fn tense(t: &ConjugationTable, name: &str) -> TenseId {
+        (0..TENSE_LOOKUP_LIMIT)
+            .find(|&i| t.tense_name(i) == Some(name))
+            .unwrap_or_else(|| panic!("tense {name:?} must exist in the table"))
+    }
+
+    /// The renderer reads only `tense` and `form`, so the other two fields are
+    /// held at zero.
+    fn link(tense: TenseId, form: u8) -> ConjLink {
+        ConjLink {
+            verb_type: 0,
+            tense,
+            form: Form(form),
+            conj: 0,
+        }
+    }
+
+    #[test]
+    fn renders_a_single_non_past_layer() {
+        let t = table();
+        assert_eq!(
+            render_conjugation_label(&[link(TENSE_NON_PAST, 0)], &t),
+            "Non-past"
+        );
+    }
+
+    #[test]
+    fn emits_negative_before_formal() {
+        // form 3 = FORMAL | NEGATIVE. ta-old tests bit 1 first, so "Negative"
+        // leads even though it is the higher bit.
+        let t = table();
+        let past = tense(&t, "Past");
+        assert_eq!(
+            render_conjugation_label(&[link(past, Form::FORMAL | Form::NEGATIVE)], &t),
+            "Negative Formal Past"
+        );
+    }
+
+    #[test]
+    fn a_stem_layer_is_dropped_but_still_contributes_its_prefixes() {
+        // The prefixes are appended before the skip checks run. No Stem in the
+        // shipped asset carries a form, but the code does not prevent one.
+        let t = table();
+        assert_eq!(
+            render_conjugation_label(&[link(TENSE_STEM, Form::NEGATIVE)], &t),
+            "Negative"
+        );
+    }
+
+    #[test]
+    fn depth_one_non_past_survives_when_depth_zero_was_a_stem() {
+        // The exception. Without it both layers would be skipped and a plain
+        // non-past form would render as "".
+        let t = table();
+        let chain = [link(TENSE_STEM, 0), link(TENSE_NON_PAST, 0)];
+        assert_eq!(render_conjugation_label(&chain, &t), "Non-past");
+    }
+
+    #[test]
+    fn depth_one_non_past_is_suppressed_after_a_non_stem() {
+        let t = table();
+        let chain = [link(tense(&t, "Past"), 0), link(TENSE_NON_PAST, 0)];
+        assert_eq!(render_conjugation_label(&chain, &t), "Past");
+    }
+
+    #[test]
+    fn non_past_below_depth_one_is_suppressed_even_after_a_stem() {
+        // The exception is `i == 1` exactly, and it inspects chain[0], never
+        // chain[i - 1].
+        let t = table();
+        let chain = [
+            link(TENSE_STEM, 0),
+            link(tense(&t, "Past"), 0),
+            link(TENSE_NON_PAST, 0),
+        ];
+        assert_eq!(render_conjugation_label(&chain, &t), "Past");
+    }
+
+    #[test]
+    fn renders_prefixes_from_a_deeper_layer() {
+        let t = table();
+        let chain = [link(TENSE_STEM, 0), link(tense(&t, "Past"), Form::NEGATIVE)];
+        assert_eq!(render_conjugation_label(&chain, &t), "Negative Past");
+    }
+
+    #[test]
+    fn an_empty_chain_renders_as_the_empty_string() {
+        // ta-old returned 0 with the buffer left empty for an unconjugated hit.
+        // Callers must read that as "no label applies", not as an error.
+        let t = table();
+        assert_eq!(render_conjugation_label(&[], &t), "");
+    }
+
+    #[test]
+    fn a_tense_the_table_cannot_name_contributes_nothing() {
+        let t = table();
+        let chain = [link(tense(&t, "Past"), 0), link(UNNAMED_TENSE, 0)];
+        assert_eq!(render_conjugation_label(&chain, &t), "Past");
     }
 }
