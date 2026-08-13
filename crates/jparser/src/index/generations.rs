@@ -64,18 +64,16 @@ fn generation_number(name: &str) -> Option<u64> {
     digits.parse::<u64>().ok()
 }
 
-/// Highest generation in `root`, as `(number, path)`.
-///
-/// An absent `root` yields `Ok(None)` — that is the first-run "no dictionary
-/// yet" signal, not an error.
-pub(crate) fn latest_number(root: &Path) -> Result<Option<(u64, PathBuf)>, IndexError> {
+/// Directory entries in `root` paired with their names, or `None` when `root`
+/// does not exist. Shared by `latest_number` and `sweep` so the absent-root,
+/// non-directory, and non-UTF-8 rules cannot drift apart.
+fn scan_dirs(root: &Path) -> Result<Option<Vec<(String, PathBuf)>>, IndexError> {
     let read = match std::fs::read_dir(root) {
         Ok(read) => read,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.into()),
     };
-
-    let mut best: Option<(u64, PathBuf)> = None;
+    let mut found = Vec::new();
     for entry in read {
         let entry = entry?;
         if !entry.file_type()?.is_dir() {
@@ -83,12 +81,28 @@ pub(crate) fn latest_number(root: &Path) -> Result<Option<(u64, PathBuf)>, Index
         }
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
-        let Some(number) = generation_number(name) else {
+        found.push((name.to_owned(), entry.path()));
+    }
+    Ok(Some(found))
+}
+
+/// Highest generation in `root`, as `(number, path)`.
+///
+/// An absent `root` yields `Ok(None)` — that is the first-run "no dictionary
+/// yet" signal, not an error.
+pub(crate) fn latest_number(root: &Path) -> Result<Option<(u64, PathBuf)>, IndexError> {
+    let Some(found) = scan_dirs(root)? else {
+        return Ok(None);
+    };
+
+    let mut best: Option<(u64, PathBuf)> = None;
+    for (name, path) in found {
+        let Some(number) = generation_number(&name) else {
             continue;
         };
         // MSRV 1.75: `Option::is_none_or` is 1.82. Do not "simplify" this.
         if best.as_ref().map_or(true, |(best, _)| number > *best) {
-            best = Some((number, entry.path()));
+            best = Some((number, path));
         }
     }
     Ok(best)
@@ -177,25 +191,17 @@ pub fn build_new(
 /// leaves its `.build-<pid>-<nanos>` directory behind with no cleanup. `sweep`
 /// is what reclaims those.
 pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
-    let read = match std::fs::read_dir(root) {
-        Ok(read) => read,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-        Err(e) => return Err(e.into()),
+    let Some(found) = scan_dirs(root)? else {
+        return Ok(0);
     };
 
     let mut generations: Vec<(u64, PathBuf)> = Vec::new();
     let mut orphans: Vec<PathBuf> = Vec::new();
-    for entry in read {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        if let Some(number) = generation_number(name) {
-            generations.push((number, entry.path()));
+    for (name, path) in found {
+        if let Some(number) = generation_number(&name) {
+            generations.push((number, path));
         } else if name.starts_with(BUILD_PREFIX) {
-            orphans.push(entry.path());
+            orphans.push(path);
         }
     }
 
