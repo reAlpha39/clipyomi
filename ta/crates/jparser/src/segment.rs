@@ -91,8 +91,8 @@ pub(crate) fn segment(
     debug_assert!(
         matches.iter().enumerate().all(|(p, bucket)| bucket
             .iter()
-            .all(|m| m.start == p && m.start + m.len <= text.len())),
-        "every match in bucket p must have start == p and end inside the text"
+            .all(|m| m.start == p && m.len >= 1 && m.start + m.len <= text.len())),
+        "every match in bucket p must have start == p, non-zero len, and end inside the text"
     );
     let n = text.len();
     let mut best = vec![
@@ -184,41 +184,41 @@ const COUNTER_SKIPPED_SPACES: [char; 2] = [' ', '\u{3000}'];
 fn score_match(text: &[char], m: &Match, hints: Option<&dyn BoundaryHints>, base: i32) -> i32 {
     let mut s = base.saturating_add(MATCH_BASE);
     if hints.is_some_and(|h| h.bad_start(m.start)) {
-        s += MECAB_BAD_START;
+        s = s.saturating_add(MECAB_BAD_START);
     }
     if hints.is_some_and(|h| h.bad_end(m.start + m.len - 1)) {
-        s += MECAB_BAD_END;
+        s = s.saturating_add(MECAB_BAD_END);
     }
 
     // One three-way else-if chain, not three independent tests, and the legs
     // are in ta-old's order: PARTICLE pre-empts len == 1, which pre-empts the
     // mid-number break.
     if m.flags.contains(WordFlags::PARTICLE) {
-        s += PARTICLE_BONUS;
+        s = s.saturating_add(PARTICLE_BONUS);
     } else if m.len == 1 {
-        s += SINGLE_CHAR_PENALTY;
+        s = s.saturating_add(SINGLE_CHAR_PENALTY);
     } else if m.start > 0 && kana::is_digit(text[m.start]) && kana::is_digit(text[m.start - 1]) {
-        s += MID_NUMBER_BREAK;
+        s = s.saturating_add(MID_NUMBER_BREAK);
     }
 
     // `contains` is an exact-subset test, so this must be two calls: one call
     // with both bits set would require the match to carry both.
     if m.flags.contains(WordFlags::COMMON) || m.flags.contains(WordFlags::COMMON_LINE) {
-        s += COMMON_BONUS;
+        s = s.saturating_add(COMMON_BONUS);
     }
     if m.flags.contains(WordFlags::COUNTER) && counter_after_number(text, m.start) {
-        s += COUNTER_AFTER_NUMBER;
+        s = s.saturating_add(COUNTER_AFTER_NUMBER);
     }
     if m.inexact {
-        s += INEXACT_PENALTY;
+        s = s.saturating_add(INEXACT_PENALTY);
     }
     if m.flags.contains(WordFlags::IS_NAME) {
         let bad = m.inexact || !isolated_katakana_run(text, m.start, m.len);
-        s += if bad {
+        s = s.saturating_add(if bad {
             NAME_DICT_BAD_PER_CHAR * m.len as i32
         } else {
             NAME_DICT_OK
-        };
+        });
     }
     s
 }

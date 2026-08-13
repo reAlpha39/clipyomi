@@ -5,7 +5,7 @@
 // under the terms of the GNU General Public License version 2 as published
 // by the Free Software Foundation.
 
-//! Phase 1A verification harness. No UI, no Tauri, no network.
+//! JParser Phase 1 harness. No UI, no Tauri, no network.
 
 use std::io::BufReader;
 use std::path::PathBuf;

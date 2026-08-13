@@ -7,10 +7,13 @@
 #          string, so prefixes_of returns a key_chars == 0 hit at every
 #          position. That path broke and was fixed late in Phase 1A and is the
 #          standing regression the addendum §6 asks for.
-#   11-16  stacked conjugations: passive, causative, potential, negative, past
-#   17-22  te-form chains, -tai, -teiru, -tekuru
-#   23-27  numbers and counters, katakana runs
-#   28-30  longer mixed sentences
+#   11-14  stacked conjugations: passive, causative-passive, potential, -tai
+#   15-16  そうだ (hearsay/appearance) and a plain past, unstacked
+#   17-22  te-form chains, -tai, -teiru, -te + kudasai requests
+#   23-25  counters: 三人, 二杯, 十時 (24 also has the katakana loanword コーヒー)
+#   26-27  place names and the -ながら construction; no counters or katakana
+#   28-30  longer mixed sentences (29 has the katakana loanword パソコン;
+#          -tekuru appears only in 30)
 猫が好きです。
 本を読みました。
 これは面白い映画だ。
