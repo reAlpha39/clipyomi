@@ -10,7 +10,8 @@
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
+use jmdict_source::SOURCE_DIR;
 use jparser::conjugation::ConjugationTable;
 use jparser::index::build::build_from_reader;
 use jparser::index::ensure_dictionary;
@@ -56,12 +57,19 @@ enum Command {
         #[arg(long)]
         no_v5_fallback: bool,
     },
-    /// Open the newest usable index in ROOT, building from XML if needed.
+    /// Open the newest usable index in ROOT, building from a source if needed.
+    #[command(group(
+        ArgGroup::new("source").required(true).args(["xml", "source_dir"])
+    ))]
     EnsureDictionary {
         /// Generation root directory.
         root: PathBuf,
-        /// Path to JMdict_e.xml (uncompressed), read only if a build is needed.
-        xml: PathBuf,
+        /// Path to an uncompressed JMdict XML file, read only if a build is
+        /// needed. Kept positional so existing invocations still work.
+        xml: Option<PathBuf>,
+        /// Directory holding the source archive, downloading it if absent.
+        #[arg(long)]
+        source_dir: Option<PathBuf>,
         /// Generations to retain after a rebuild. Must be at least 1.
         #[arg(
             long,
@@ -69,6 +77,11 @@ enum Command {
             value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
         )]
         keep: usize,
+    },
+    /// Download the JMdict archive into DIR without building an index.
+    FetchSource {
+        /// Directory to download into. Conventionally named `source`.
+        dir: PathBuf,
     },
     /// List the generations in ROOT, newest first.
     GenList {
@@ -149,12 +162,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
         }
-        Command::EnsureDictionary { root, xml, keep } => {
+        Command::EnsureDictionary {
+            root,
+            xml,
+            source_dir,
+            keep,
+        } => {
             let table = ConjugationTable::load_embedded()?;
             let opts = StemOptions::default();
-            let index = ensure_dictionary(&root, &table, &opts, keep, || {
-                std::fs::File::open(&xml).map(BufReader::new)
-            })?;
+            // The ArgGroup guarantees exactly one is set, so both real branches
+            // are reachable and the third exists only to satisfy the compiler.
+            let index = match (&xml, &source_dir) {
+                (Some(xml), _) => ensure_dictionary(&root, &table, &opts, keep, || {
+                    std::fs::File::open(xml).map(BufReader::new)
+                })?,
+                (None, Some(dir)) => {
+                    ensure_dictionary(&root, &table, &opts, keep, || jmdict_source::resolve(dir))?
+                }
+                (None, None) => return Err("no source given".into()),
+            };
             let current = latest(&root)?;
             let name = current
                 .as_deref()
@@ -163,6 +189,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_else(|| NONE_LABEL.to_string());
             println!("generation: {name}");
             println!("entries:    {}", index.entry_count());
+        }
+        Command::FetchSource { dir } => {
+            let path = jmdict_source::fetch::fetch(&dir)?;
+            println!("archive:    {}", path.display());
+            println!("convention: keep it in a directory named {SOURCE_DIR}");
         }
         Command::GenList { root } => {
             let mut entries: Vec<(String, PathBuf)> = Vec::new();
