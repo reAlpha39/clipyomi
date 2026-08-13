@@ -7,9 +7,9 @@
 
 //! Downloading the archive, and proving it is one before publishing it.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::SourceError;
+use crate::{SourceError, PARTIAL_SUFFIX, SOURCE_FILE};
 
 /// Prove `path` is a complete, well-formed gzip archive by decoding all of it
 /// and discarding the output.
@@ -24,15 +24,74 @@ use crate::SourceError;
 /// truncation, and a body that is not gzip at all. The measured behavior is
 /// tabulated in the plan's "Resolved facts".
 ///
-/// `allow(dead_code)`: Task 3 wires the only non-test caller into `fetch_from`;
-/// until that lands, nothing outside this module's tests calls it.
-#[allow(dead_code)]
 pub(crate) fn verify_archive(path: &Path) -> Result<(), SourceError> {
     let file = std::fs::File::open(path)?;
     let mut decoder = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
     // `io::sink` discards the output; only the error matters.
     std::io::copy(&mut decoder, &mut std::io::sink())?;
     Ok(())
+}
+
+/// Download `url` into `source_dir` and publish it as [`crate::SOURCE_FILE`].
+///
+/// One attempt. [`fetch`] adds the retry policy.
+///
+/// Stages into `<SOURCE_FILE><PARTIAL_SUFFIX>`, verifies it, and only then
+/// renames — so a file at the resolved name is always a complete, valid
+/// archive. Two failures make that necessary: a killed process leaves a
+/// truncation, and a proxy can answer 200 with an HTML page of the right
+/// length. Either one, published, is indistinguishable from a hand-placed file
+/// and fails identically on every subsequent run.
+///
+/// The staging file is always in `source_dir`, so the rename never crosses a
+/// filesystem — `fs::rename` returns `EXDEV` across devices and never falls
+/// back to copying.
+///
+/// **Not part of the supported surface.** It is separate from [`fetch`] so tests
+/// can point it at a local listener; production callers use [`fetch`].
+pub fn fetch_from(url: &str, source_dir: &Path) -> Result<PathBuf, SourceError> {
+    std::fs::create_dir_all(source_dir)?;
+    let target = source_dir.join(SOURCE_FILE);
+    let staging = source_dir.join(format!("{SOURCE_FILE}{PARTIAL_SUFFIX}"));
+
+    match download_and_verify(url, &staging) {
+        Ok(()) => {
+            std::fs::rename(&staging, &target)?;
+            Ok(target)
+        }
+        Err(e) => {
+            // Best-effort cleanup: the download already failed, and a leftover
+            // `.partial` is never resolved, so a failure here changes nothing
+            // a caller can act on.
+            let _ = std::fs::remove_file(&staging);
+            Err(e)
+        }
+    }
+}
+
+/// Write `url`'s body to `staging`, then prove it is a valid archive.
+fn download_and_verify(url: &str, staging: &Path) -> Result<(), SourceError> {
+    let mut response = match ureq::get(url).call() {
+        Ok(response) => response,
+        Err(ureq::Error::StatusCode(status)) => return Err(SourceError::Http { status }),
+        Err(e) => return Err(SourceError::Transport(e.to_string())),
+    };
+    let status = response.status().as_u16();
+    if !(200..300).contains(&status) {
+        return Err(SourceError::Http { status });
+    }
+
+    {
+        let mut body = response.body_mut().as_reader();
+        let mut file = std::io::BufWriter::new(std::fs::File::create(staging)?);
+        // A mid-transfer disconnect surfaces here, and it is a transport
+        // failure rather than a corrupt archive — the retry policy in Task 4
+        // treats the two the same way, but the message should not lie.
+        std::io::copy(&mut body, &mut file).map_err(|e| SourceError::Transport(e.to_string()))?;
+        std::io::Write::flush(&mut file)?;
+    }
+
+    verify_archive(staging)
 }
 
 #[cfg(test)]
