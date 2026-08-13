@@ -167,7 +167,22 @@ needs no modification, because it always receives a fresh empty directory. It
 then computes `N = latest + 1` and `fs::rename`s into place.
 
 A builder that loses a race gets `ENOTEMPTY` from the rename. Its temp directory
-**survives** so it can retry; the failure is loud and no update is lost.
+**survives**, and `build_new` retries the publish from it — recomputing
+`N = latest + 1` on each attempt, up to a named `PUBLISH_ATTEMPTS` bound. So two
+builders racing from the same root both succeed, as `gen-1` and `gen-2`; no
+update is lost and no source is re-read. `GenerationExists` surfaces only when
+contention persists past the bound.
+
+> **Amended after implementation (2026-08-13).** This paragraph originally ended
+> at "so it can retry," with the losing builder returning `GenerationExists`.
+> That was unimplementable as specified *and* wrong for the caller.
+> Unimplementable because `publish` is private and `build_new` always allocates a
+> fresh nonce, so no public API could perform the retry the error message
+> promised — which is also why §9's "a retry succeeds" clause had no test. Wrong
+> because two processes starting from an empty root both target `gen-1`, so the
+> loser errored even though a valid `gen-1` then existed: a double-launched
+> application failed to start for no reason. See the Phase 2A handoff,
+> "Decisions that departed from the plan and the spec," items 1-2.
 
 ### `crates/jparser/src/index/mod.rs` (modified)
 
@@ -177,9 +192,16 @@ A builder that loses a race gets `ENOTEMPTY` from the rename. Its temp directory
 
 ```
 jparser-cli ensure-dictionary <root> <xml> [--keep N]
-jparser-cli gen list <root>
-jparser-cli gen sweep <root> [--keep N]
+jparser-cli gen-list <root>
+jparser-cli gen-sweep <root> [--keep N]
+jparser-cli gen-remove <root> <generation>
 ```
+
+Kebab-case, because clap derives subcommand names from variant names. `gen-remove`
+was added during implementation: without it an unopenable newest generation could
+be diagnosed by `gen-list` but repaired by nothing (§8). `gen-list` sorts
+**numerically**, which is why `generation_number` is public — a lexicographic sort
+prints `gen-9` before `gen-10` from the tenth rebuild on.
 
 2A is headless by construction, so without these there is no way to exercise it
 by hand — every check would be a `cargo test` away from a human. Phase 1's CLI
@@ -261,22 +283,24 @@ and "another builder won, retry" and "the disk is full" are different operator
 actions:
 
 ```rust
-#[error("index generation {generation} already exists; another builder \
-         published first — retry (partial build kept at {build_dir})")]
 GenerationExists { generation: u64, build_dir: PathBuf },
 ```
 
-Naming `build_dir` in the message is what makes the retry actionable and the
-orphan findable. Every other boundary below reuses an existing variant.
+The message states that repeated publish attempts all lost the race, and names
+`build_dir` so the orphan stays findable. Every other boundary below reuses an
+existing variant.
 
 | Boundary | Policy |
 |---|---|
 | Nonce directory already exists | Error. `create_dir`, not `create_dir_all`. |
-| Rename onto an existing `gen-N` | `ENOTEMPTY`; temp directory survives; error names the retry. |
+| Rename onto an existing `gen-N` | `ENOTEMPTY`; temp directory survives; `build_new` retries from it at the next number (§5). |
+| Publish still losing after `PUBLISH_ATTEMPTS` | `GenerationExists`, naming the surviving build directory. Sustained contention, not a transient race. |
 | Rename across filesystems | `EXDEV`. `fs::rename` never falls back to copying, so `root` and its build directory must be on one filesystem. Stated as a precondition. |
 | Malformed `gen-*` directory name | Ignored by `latest`, removed by `sweep` only if it matches `.build-*`. Never guessed at. |
 | Corrupt published generation | Returned, not rebuilt (§6). |
-| Sweep failure | Non-fatal. Logged and counted; `keep = 2` makes it non-load-bearing. |
+| Sweep failure | Non-fatal, and `ensure_dictionary` must not use `?` on it — doing so discards a generation that was just published successfully. `sweep` also treats `remove_dir_all`'s `NotFound` as already-done, so two concurrent sweepers do not fail each other. `keep = 2` makes the whole path non-load-bearing. **Not** logged or counted as this row once said: the crate has no logger, and `ensure_dictionary`'s signature gives the caller no way to learn a sweep failed. See the Phase 2A handoff. |
+| `keep == 0` reaching `ensure_dictionary` | Clamped to 1, because `sweep(root, 0)` would delete the generation just published. Rejected outright at the CLI, which can give a usage error. `sweep` itself still accepts `0`. |
+| Unopenable newest generation | Not repairable by `ensure_dictionary` (§6) or `sweep`, which never deletes the newest. `gen-remove <N>` exists for exactly this. |
 
 ---
 
@@ -307,10 +331,29 @@ For every state, assert:
 Point 3 is the one that would have caught the original hazard. A suite asserting
 only "no panic" would have passed against the broken code.
 
+> **Amended after implementation (2026-08-13).** Be honest about what the eleven
+> states prove. `latest` excludes an interrupted build by its `.build-` **name**,
+> before any byte inside it is read, so states 0-9 are covered by construction:
+> all four assertions above evaluate identically for every one of them, and an
+> empty, file-less orphan would satisfy them equally. That invariance *is* the
+> property — what protects a reader is the name, not any defect in the contents —
+> but it means the correct `FILES` write-order and the per-file damage selection
+> carry no discriminating power. The one state-sensitive claim is the last:
+> assert that the **whole, undamaged** unpublished build opens as a valid index
+> and is *still* not what `latest` resolves. Without that assertion the suite is
+> ten repetitions of one check. Collapsing 0-9 to two representatives would lose
+> no signal.
+
 Additionally:
 
-- concurrent builders: the loser gets `ENOTEMPTY`, its temp directory survives,
-  and a retry succeeds;
+- concurrent builders: both succeed at distinct generations, because `build_new`
+  retries the publish (§5). Note that the retry loop's own collision window
+  cannot be forced through the public API, so its coverage is probabilistic —
+  a test asserting "both threads returned `Ok`" detects loop removal only when
+  the two threads actually contend for the same number. Say so at the test site
+  rather than implying determinism. Assert separately and deterministically that
+  publishing again after a lost race lands on the next number, and that the
+  loser's temp directory survives;
 - `sweep` keeps exactly the `keep` highest and removes `.build-*` orphans;
 - `latest` ignores `gen-`, `gen-abc`, `gen-01`;
 - version mismatch ⇒ rebuild, and corrupt ⇒ error, asserted as **distinct**
