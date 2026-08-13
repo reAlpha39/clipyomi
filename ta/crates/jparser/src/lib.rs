@@ -16,7 +16,10 @@ pub mod kana;
 mod matcher;
 pub mod record;
 pub mod romaji;
+mod segment;
 pub mod stem;
+
+pub use crate::segment::BoundaryHints;
 
 /// Everything `parse` can fail at. Reading the memory-mapped index payload is
 /// the only fallible step in Phase 1B; the enum exists so `parse` does not
