@@ -95,13 +95,15 @@ fn download_and_verify(url: &str, staging: &Path) -> Result<(), SourceError> {
     verify_archive(staging)
 }
 
-/// The published archive. Private: exposing it would invite a caller to fetch
-/// it directly and skip the staging and verification in [`fetch_from`], which
-/// are the only things standing between a proxy's error page and the resolved
-/// name. EDRDG serves no usable HTTPS — the certificate fails subject-name
-/// validation — so this is plain HTTP by necessity, which is precisely why
-/// verification is mandatory rather than defensive.
-const JMDICT_URL: &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz";
+/// The published archive. `pub(crate)` rather than private only so `lib.rs`'s
+/// `resolve` can hand it to [`crate::resolve_from`]; not `pub`, since exposing
+/// it crate-externally would invite a caller to fetch it directly and skip
+/// the staging and verification in [`fetch_from`], which are the only things
+/// standing between a proxy's error page and the resolved name. EDRDG serves
+/// no usable HTTPS — the certificate fails subject-name validation — so this
+/// is plain HTTP by necessity, which is precisely why verification is
+/// mandatory rather than defensive.
+pub(crate) const JMDICT_URL: &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz";
 
 /// Download the archive into `source_dir`, retrying transient failures.
 pub fn fetch(source_dir: &Path) -> Result<PathBuf, SourceError> {

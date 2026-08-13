@@ -268,3 +268,58 @@ fn a_corrupt_archive_is_retried() {
 fn the_default_attempt_count_is_three() {
     assert_eq!(jmdict_source::DOWNLOAD_ATTEMPTS, 3);
 }
+
+/// A killed download leaves a `.partial`. It must not satisfy `resolve`, or a
+/// truncation gets fed to the parser as though hand-placed. The listener
+/// answers 404, so the fall-through to the download ran (and failed on its
+/// own account) rather than the `.partial` being mistaken for the archive.
+#[test]
+fn a_partial_alone_does_not_satisfy_resolve() {
+    let dir = scratch("resolve-partial");
+    std::fs::write(partial(&dir), gz(XML)).expect("write");
+    let (url, server) = serve(vec![http("404 Not Found", b"nope")]);
+
+    // `expect_err` needs `Box<dyn BufRead>: Debug`, which it is not — go
+    // through `Option` instead, as `lib.rs`'s own tests do for the same
+    // reason.
+    let err = jmdict_source::resolve_from(&url, &dir, Duration::ZERO)
+        .err()
+        .expect("a .partial must not resolve");
+    assert!(
+        err.get_ref().is_some(),
+        "the SourceError was lost inside the io::Error"
+    );
+    assert_eq!(server.join().expect("join"), 1);
+}
+
+#[test]
+fn the_typed_error_survives_the_io_wrapper() {
+    let dir = scratch("resolve-typed");
+    let (url, server) = serve(vec![http("404 Not Found", b"nope")]);
+
+    let err = jmdict_source::resolve_from(&url, &dir, Duration::ZERO)
+        .err()
+        .expect("no local file and a failing download");
+    let inner = err.get_ref().and_then(|e| e.downcast_ref::<SourceError>());
+    assert!(inner.is_some(), "expected a SourceError inside: {err:?}");
+    assert_eq!(server.join().expect("join"), 1);
+}
+
+/// The coverage the injection seam was added for: nothing else in the suite
+/// proves `resolve`'s fetch branch succeeds end to end.
+#[test]
+fn a_missing_archive_is_downloaded_and_then_opened() {
+    let dir = scratch("resolve-fetch");
+    let (url, server) = serve(vec![http("200 OK", &gz(XML))]);
+
+    let mut reader = jmdict_source::resolve_from(&url, &dir, Duration::ZERO).expect("resolve");
+    let mut got = Vec::new();
+    reader.read_to_end(&mut got).expect("read");
+
+    assert_eq!(got, XML);
+    assert!(
+        dir.join(SOURCE_FILE).exists(),
+        "the download was not published"
+    );
+    assert_eq!(server.join().expect("join"), 1);
+}

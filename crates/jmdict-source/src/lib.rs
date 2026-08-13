@@ -94,6 +94,47 @@ pub fn open_local(path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
     }
 }
 
+/// Open the JMdict source in `source_dir`, downloading it first if absent.
+///
+/// Built to be the body of Phase 2A's lazy `source` closure:
+///
+/// ```ignore
+/// let index = jparser::index::ensure_dictionary(
+///     &generation_root, &table, &opts, keep,
+///     || jmdict_source::resolve(&source_dir),
+/// )?;
+/// ```
+///
+/// 2A guarantees the closure runs only when a rebuild is actually needed, so a
+/// steady-state start never touches the network or the ~10 MB archive.
+///
+/// A `<SOURCE_FILE><PARTIAL_SUFFIX>` file is never resolved: it is either a
+/// download in progress or one that failed verification, and treating it as a
+/// hand-placed archive is how a truncation reaches the parser.
+pub fn resolve(source_dir: &Path) -> std::io::Result<Box<dyn BufRead>> {
+    resolve_from(fetch::JMDICT_URL, source_dir, RETRY_BACKOFF)
+}
+
+/// [`resolve`] with the URL and backoff injected, so tests can point at a
+/// local listener without touching the real network or sleeping at the
+/// production backoff — the same reason [`fetch::fetch_with_retry`] exists
+/// for [`fetch::fetch`].
+///
+/// **Not part of the supported surface.** Production callers use [`resolve`].
+pub fn resolve_from(
+    url: &str,
+    source_dir: &Path,
+    backoff: std::time::Duration,
+) -> std::io::Result<Box<dyn BufRead>> {
+    let target = source_dir.join(SOURCE_FILE);
+    let path = if target.exists() {
+        target
+    } else {
+        fetch::fetch_with_retry(url, source_dir, backoff).map_err(std::io::Error::other)?
+    };
+    open_local(&path).map_err(std::io::Error::other)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,4 +213,25 @@ mod tests {
         // `JMdict_e.xml.gz`, which does not exist.
         assert_eq!(SOURCE_FILE, "JMdict_e.gz");
     }
+
+    #[test]
+    fn a_present_archive_is_opened_without_downloading() {
+        let dir = scratch("resolve-local");
+        std::fs::write(dir.join(SOURCE_FILE), gz(XML)).expect("write");
+        assert_eq!(read_all(resolve(&dir).expect("resolve")), XML);
+    }
+
+    #[test]
+    fn a_plain_archive_at_the_resolved_name_is_opened_too() {
+        let dir = scratch("resolve-plain");
+        std::fs::write(dir.join(SOURCE_FILE), XML).expect("write");
+        assert_eq!(read_all(resolve(&dir).expect("resolve")), XML);
+    }
+
+    // `a_partial_alone_does_not_satisfy_resolve` and
+    // `the_typed_error_survives_the_io_wrapper` live in `tests/download.rs`:
+    // proving `resolve`'s fall-through to a failing download needs a real (if
+    // local) listener, which belongs with the rest of the socket-driven tests,
+    // not here. Moved by Ruling G after the brief's originals were found to
+    // fall through to the real production URL.
 }
