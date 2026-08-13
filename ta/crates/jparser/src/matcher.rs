@@ -28,6 +28,11 @@ use crate::index::load::Index;
 use crate::record::WordFlags;
 use crate::ParseError;
 
+// The conjugation recursion and its nine rule tests. A child module, not a
+// sibling, so it keeps access to `strict_eq`; split out purely for the 800-line
+// cap — see the plan's File Structure note.
+mod verb;
+
 /// One conjugation layer of a match, ta-old's `ConjInfo`
 /// (`ta-old/exe/util/Dictionary.h:45`). The index in `Match::chain` is ta-old's
 /// `depth`: index 0 is the layer applied directly to the dictionary stem — the
@@ -113,6 +118,26 @@ fn strict_eq(a: &[char], b: &str) -> bool {
     rhs.next().is_none()
 }
 
+/// ta-old's `wcsnijcmp` (`Shared/Shrink.h:197`): kana type, width and ASCII case
+/// all folded through `kana::unify`. This is the comparison the FST key already
+/// applies to the dictionary key; conjugation suffixes are not in the FST, so
+/// they need it applied here.
+///
+/// `pub(crate)` rather than private because Task 7's `tails_match` is a caller
+/// outside this module — the kuruHack tail comparison is the same one.
+pub(crate) fn unified_eq(a: &[char], b: &str) -> bool {
+    let mut rhs = b.chars();
+    for &lhs in a {
+        let Some(other) = rhs.next() else {
+            return false;
+        };
+        if crate::kana::unify(lhs) != crate::kana::unify(other) {
+            return false;
+        }
+    }
+    rhs.next().is_none()
+}
+
 /// Commit one candidate, applying ta-old's post-match filters in its own order
 /// (`Dictionary.cpp:882-894`).
 fn commit(out: &mut Vec<Match>, candidate: Match) {
@@ -182,9 +207,13 @@ pub(crate) fn matches_at(
                     },
                 ),
                 Some(vtype) => {
-                    // The conjugation recursion lands in the next task; until
-                    // then a verb record contributes no matches.
-                    let _ = (table, vtype);
+                    for mut m in verb::recurse(table, text, i, k, vtype, &[], inexact) {
+                        m.src_len = k;
+                        m.surface = record.surface.clone();
+                        m.flags = WordFlags(record.flags);
+                        m.entry_id = record.entry_id;
+                        commit(&mut out, m);
+                    }
                 }
             }
         }
@@ -195,6 +224,7 @@ pub(crate) fn matches_at(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::conjugation::TENSE_STEM;
     use crate::index::build::build_from_reader;
     use crate::index::load::Index;
     use crate::record::WordFlags;
@@ -413,5 +443,41 @@ mod tests {
         let mut longer = plain(1, false);
         longer.len = 2;
         assert!(!same_except_inexact(&plain(1, false), &longer));
+    }
+
+    #[test]
+    fn matches_at_stamps_record_fields_onto_recursion_output() {
+        // End to end against the real embedded table: 食べる is v1, its stem 食べ
+        // is indexed, and 食べた reaches v1's Stem た, which links to v-ta-stem's
+        // terminal Past (an empty suffix). No other path off 食べ reaches three
+        // characters.
+        let t = table();
+        let idx = index("verb");
+        let text = chars("食べた");
+        let got = matches_at(&idx, &t, &text, 0).expect("matcher must not fail");
+        let three: Vec<&Match> = got.iter().filter(|m| m.len == 3).collect();
+        assert_eq!(three.len(), 1, "got {got:#?}");
+        let m = three[0];
+
+        assert_eq!(m.start, 0);
+        assert_eq!(
+            m.src_len, 2,
+            "src_len is the key alone, len is key + suffixes"
+        );
+        assert_eq!(m.surface, "食べ");
+        assert_eq!(m.entry_id, 2000070);
+        assert!(m.flags.contains(WordFlags::PRIMARY));
+        assert!(!m.inexact);
+
+        assert_eq!(m.chain.len(), 2);
+        assert_eq!(m.chain[0].verb_type, t.types_named("v1")[0]);
+        assert_eq!(m.chain[0].tense, TENSE_STEM);
+        assert_eq!(
+            t.types()[m.chain[0].verb_type].conjugations[m.chain[0].conj].suffix,
+            "た",
+            "conj must index back to the conjugation that was matched"
+        );
+        assert_eq!(t.types()[m.chain[1].verb_type].name, "v-ta-stem");
+        assert_eq!(t.tense_name(m.chain[1].tense), Some("Past"));
     }
 }
