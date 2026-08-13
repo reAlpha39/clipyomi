@@ -18,6 +18,7 @@
 
 use crate::kana;
 use crate::matcher::Match;
+use crate::record::WordFlags;
 
 /// Cost of leaving one character unmatched. ta-old `Dictionary.cpp:1164`.
 const SKIP_CHAR: i32 = 100;
@@ -92,9 +93,6 @@ pub(crate) fn segment(
             .all(|m| m.start == p && m.start + m.len <= text.len())),
         "every match in bucket p must have start == p and end inside the text"
     );
-    // Hints price matches only; the skip transition never consults them.
-    let _ = hints;
-
     let n = text.len();
     let mut best = vec![
         Cell {
@@ -120,6 +118,21 @@ pub(crate) fn segment(
         if best[pos + 1].cost > cost {
             best[pos + 1] = Cell { cost, back_len: 0 };
         }
+
+        // 2. Every match starting here, in bucket order.
+        for m in &matches[pos] {
+            let cost = score_match(text, m, hints, best[pos].cost);
+            let next = pos + m.len;
+            // `>=`: on a tie the LAST writer wins (`Dictionary.cpp:1255`).
+            // Deliberately a different comparison from the skip above; do not
+            // route both through one shared helper.
+            if best[next].cost >= cost {
+                best[next] = Cell {
+                    cost,
+                    back_len: m.len,
+                };
+            }
+        }
     }
 
     Segmentation {
@@ -128,25 +141,146 @@ pub(crate) fn segment(
     }
 }
 
+/// Base cost of using a dictionary match. ta-old `Dictionary.cpp:1179`.
+const MATCH_BASE: i32 = 10;
+/// `WordFlags::PARTICLE`. First leg of the three-way else-if chain.
+/// ta-old `Dictionary.cpp:1187`.
+const PARTICLE_BONUS: i32 = -2;
+/// Non-particle match of exactly one char. Second leg of the same chain.
+/// ta-old `Dictionary.cpp:1190`.
+const SINGLE_CHAR_PENALTY: i32 = 1;
+/// Starting a non-particle, multi-char match between two digit characters.
+/// Third leg of the same chain. ta-old `Dictionary.cpp:1193`.
+const MID_NUMBER_BREAK: i32 = 100;
+/// `COMMON` **or** `COMMON_LINE`. Independent `if`, stacks with the chain
+/// above. ta-old `Dictionary.cpp:1197`.
+const COMMON_BONUS: i32 = -3;
+/// `COUNTER` preceded (skipping ASCII and ideographic spaces) by a digit.
+/// When the test fails the flag is cleared instead, in the backtrack.
+/// ta-old `Dictionary.cpp:1204`.
+const COUNTER_AFTER_NUMBER: i32 = -2;
+/// Source text and dictionary spelling disagree in kana type/width/case.
+/// ta-old `Dictionary.cpp:1210`.
+const INEXACT_PENALTY: i32 = 10;
+/// Per char, for an `IS_NAME` match that is inexact or not an isolated
+/// katakana run. Mutually exclusive with `NAME_DICT_OK`. Dormant in v1:
+/// nothing sets `IS_NAME`. ta-old `Dictionary.cpp:1232`.
+const NAME_DICT_BAD_PER_CHAR: i32 = 500;
+/// An `IS_NAME` match that *is* an isolated exact katakana run. Dormant in v1.
+/// ta-old `Dictionary.cpp:1234`.
+const NAME_DICT_OK: i32 = 5;
+/// `BoundaryHints::bad_start(m.start)`. ta-old `Dictionary.cpp:1181`.
+const MECAB_BAD_START: i32 = 10;
+/// `BoundaryHints::bad_end(m.start + m.len - 1)`. ta-old `Dictionary.cpp:1183`.
+const MECAB_BAD_END: i32 = 10;
+
+/// ASCII space and ideographic space, skipped when looking behind a counter
+/// for its number. ta-old `Dictionary.cpp:1201`.
+const COUNTER_SKIPPED_SPACES: [char; 2] = [' ', '\u{3000}'];
+
+/// Cost of extending the path at `m.start` with `m`, ta-old
+/// `Dictionary.cpp:1179-1235`. The clause order is load-bearing.
+fn score_match(text: &[char], m: &Match, hints: Option<&dyn BoundaryHints>, base: i32) -> i32 {
+    let mut s = base.saturating_add(MATCH_BASE);
+    if hints.is_some_and(|h| h.bad_start(m.start)) {
+        s += MECAB_BAD_START;
+    }
+    if hints.is_some_and(|h| h.bad_end(m.start + m.len - 1)) {
+        s += MECAB_BAD_END;
+    }
+
+    // One three-way else-if chain, not three independent tests, and the legs
+    // are in ta-old's order: PARTICLE pre-empts len == 1, which pre-empts the
+    // mid-number break.
+    if m.flags.contains(WordFlags::PARTICLE) {
+        s += PARTICLE_BONUS;
+    } else if m.len == 1 {
+        s += SINGLE_CHAR_PENALTY;
+    } else if m.start > 0 && kana::is_digit(text[m.start]) && kana::is_digit(text[m.start - 1]) {
+        s += MID_NUMBER_BREAK;
+    }
+
+    // `contains` is an exact-subset test, so this must be two calls: one call
+    // with both bits set would require the match to carry both.
+    if m.flags.contains(WordFlags::COMMON) || m.flags.contains(WordFlags::COMMON_LINE) {
+        s += COMMON_BONUS;
+    }
+    if m.flags.contains(WordFlags::COUNTER) && counter_after_number(text, m.start) {
+        s += COUNTER_AFTER_NUMBER;
+    }
+    if m.inexact {
+        s += INEXACT_PENALTY;
+    }
+    if m.flags.contains(WordFlags::IS_NAME) {
+        let bad = m.inexact || !isolated_katakana_run(text, m.start, m.len);
+        s += if bad {
+            NAME_DICT_BAD_PER_CHAR * m.len as i32
+        } else {
+            NAME_DICT_OK
+        };
+    }
+    s
+}
+
+/// Skip spaces backwards from `start - 1`; true when the first non-space char
+/// found is in bounds and is a digit. ta-old `Dictionary.cpp:1200-1205`.
+fn counter_after_number(text: &[char], start: usize) -> bool {
+    let mut i = start;
+    while i > 0 {
+        i -= 1;
+        if !COUNTER_SKIPPED_SPACES.contains(&text[i]) {
+            return kana::is_digit(text[i]);
+        }
+    }
+    false
+}
+
+/// Every char of the span is katakana and the span is not glued to more
+/// katakana on either side. ta-old `Dictionary.cpp:1214-1231`.
+fn isolated_katakana_run(text: &[char], start: usize, len: usize) -> bool {
+    let end = start + len;
+    if !text[start..end].iter().all(|c| kana::is_katakana(*c)) {
+        return false;
+    }
+    if start > 0 && kana::is_katakana(text[start - 1]) {
+        return false;
+    }
+    if end < text.len() && kana::is_katakana(text[end]) {
+        return false;
+    }
+    true
+}
+
 /// Walk the backpointers from the end, ta-old `Dictionary.cpp:1280-1305`.
 fn backtrack(best: &[Cell], n: usize) -> Vec<Span> {
     let mut spans: Vec<Span> = Vec::new();
     let mut pos = n;
     while pos > 0 {
-        // Coalesce the whole run of skipped chars into one unmatched span.
-        // ta-old emitted nothing for these (`Dictionary.cpp:1288-1290`); the
-        // port emits them so `parse` can return unmatched `Segment`s.
-        let end = pos;
-        while pos > 0 && best[pos].back_len == 0 {
-            pos -= 1;
+        if best[pos].back_len == 0 {
+            // Coalesce the whole run of skipped chars into one unmatched span.
+            // ta-old emitted nothing for these (`Dictionary.cpp:1288-1290`);
+            // the port emits them so `parse` can return unmatched `Segment`s.
+            let end = pos;
+            while pos > 0 && best[pos].back_len == 0 {
+                pos -= 1;
+            }
+            spans.push(Span {
+                start: pos,
+                len: end - pos,
+                matched: false,
+                matches: Vec::new(),
+            });
+            continue;
         }
-        debug_assert!(pos < end, "a non-zero back_len with no match transition");
+        let len = best[pos].back_len;
+        let start = pos - len;
         spans.push(Span {
-            start: pos,
-            len: end - pos,
-            matched: false,
+            start,
+            len,
+            matched: true,
             matches: Vec::new(),
         });
+        pos = start;
     }
     spans.reverse();
     spans
@@ -166,12 +300,53 @@ mod tests {
         }
     }
 
+    struct Marked {
+        starts: Vec<usize>,
+        ends: Vec<usize>,
+    }
+    impl BoundaryHints for Marked {
+        fn bad_start(&self, pos: usize) -> bool {
+            self.starts.contains(&pos)
+        }
+        fn bad_end(&self, pos: usize) -> bool {
+            self.ends.contains(&pos)
+        }
+    }
+
+    fn marked(starts: &[usize], ends: &[usize]) -> Marked {
+        Marked {
+            starts: starts.to_vec(),
+            ends: ends.to_vec(),
+        }
+    }
+
     fn chars(s: &str) -> Vec<char> {
         s.chars().collect()
     }
 
     fn no_matches(text: &[char]) -> Vec<Vec<Match>> {
         vec![Vec::new(); text.len()]
+    }
+
+    fn plain(text: &[char], start: usize, len: usize, flags: WordFlags) -> Match {
+        Match {
+            start,
+            len,
+            src_len: len,
+            surface: text[start..start + len].iter().collect(),
+            flags,
+            entry_id: 1,
+            inexact: false,
+            chain: Vec::new(),
+        }
+    }
+
+    fn buckets(text: &[char], ms: Vec<Match>) -> Vec<Vec<Match>> {
+        let mut out = vec![Vec::new(); text.len()];
+        for m in ms {
+            out[m.start].push(m);
+        }
+        out
     }
 
     fn shape(seg: &Segmentation) -> Vec<(usize, usize, bool)> {
@@ -248,5 +423,283 @@ mod tests {
         let without = segment(&text, &no_matches(&text), None);
         assert_eq!(with.total_cost, 600);
         assert_eq!(with, without);
+    }
+
+    // ---- matches and the scoring constants ------------------------------
+
+    #[test]
+    fn a_plain_match_costs_only_the_base() {
+        // MATCH_BASE 10, versus 200 for skipping both characters.
+        let text = chars("ねこ");
+        let ms = buckets(&text, vec![plain(&text, 0, 2, WordFlags::default())]);
+        let seg = segment(&text, &ms, None);
+        assert_eq!(seg.total_cost, 10);
+        assert_eq!(shape(&seg), vec![(0, 2, true)]);
+        assert_contiguous(&seg, 2);
+    }
+
+    #[test]
+    fn a_single_char_non_particle_pays_the_penalty() {
+        // MATCH_BASE 10 + SINGLE_CHAR_PENALTY 1 = 11.
+        let text = chars("ね");
+        let ms = buckets(&text, vec![plain(&text, 0, 1, WordFlags::default())]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 11);
+    }
+
+    #[test]
+    fn a_particle_takes_the_bonus_instead_of_the_single_char_penalty() {
+        // MATCH_BASE 10 + PARTICLE_BONUS -2 = 8. Two independent `if`s would
+        // give 9; the else-if chain gives 8.
+        let text = chars("は");
+        let ms = buckets(&text, vec![plain(&text, 0, 1, WordFlags::PARTICLE)]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 8);
+    }
+
+    #[test]
+    fn a_single_char_between_two_digits_pays_the_penalty_not_the_break() {
+        // The chain's leg ORDER, not just its existence: `m.len == 1` pre-empts
+        // the mid-number leg, so 100 (skip '1') + 10 + 1 = 111, never 210.
+        // Swapping the two legs gives 210; three independent `if`s give 211.
+        let text = chars("12");
+        let ms = buckets(&text, vec![plain(&text, 1, 1, WordFlags::default())]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 111);
+    }
+
+    #[test]
+    fn common_and_common_line_each_grant_the_bonus_once() {
+        // MATCH_BASE 10 + COMMON_BONUS -3 = 7, for either flag and for both.
+        let text = chars("ねこ");
+        let mut both = WordFlags::COMMON;
+        both.insert(WordFlags::COMMON_LINE);
+        for flags in [WordFlags::COMMON, WordFlags::COMMON_LINE, both] {
+            let ms = buckets(&text, vec![plain(&text, 0, 2, flags)]);
+            assert_eq!(segment(&text, &ms, None).total_cost, 7, "flags {flags:?}");
+        }
+    }
+
+    #[test]
+    fn the_common_bonus_stacks_with_the_particle_bonus() {
+        // 10 - 2 - 3 = 5. COMMON_BONUS is its own `if`, not part of the chain.
+        let text = chars("は");
+        let mut flags = WordFlags::PARTICLE;
+        flags.insert(WordFlags::COMMON);
+        let ms = buckets(&text, vec![plain(&text, 0, 1, flags)]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 5);
+    }
+
+    #[test]
+    fn starting_a_match_between_two_digits_costs_mid_number_break() {
+        // '1' skipped = 100, then MATCH_BASE 10 + MID_NUMBER_BREAK 100 = 210.
+        let text = chars("12月");
+        let ms = buckets(&text, vec![plain(&text, 1, 2, WordFlags::default())]);
+        let seg = segment(&text, &ms, None);
+        assert_eq!(seg.total_cost, 210);
+        assert_eq!(shape(&seg), vec![(0, 1, false), (1, 2, true)]);
+
+        // Same match, non-digit predecessor: 100 + 10 = 110. The 100 delta is
+        // MID_NUMBER_BREAK and nothing else.
+        let text = chars("あ2月");
+        let ms = buckets(&text, vec![plain(&text, 1, 2, WordFlags::default())]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 110);
+    }
+
+    #[test]
+    fn a_counter_after_a_number_takes_its_bonus() {
+        // '3' skipped = 100, then 10 + SINGLE_CHAR_PENALTY 1
+        // + COUNTER_AFTER_NUMBER -2 = 109.
+        let text = chars("3日");
+        let ms = buckets(&text, vec![plain(&text, 1, 1, WordFlags::COUNTER)]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 109);
+
+        // No number in front: 100 + 10 + 1 = 111, a delta of exactly 2.
+        let text = chars("あ日");
+        let ms = buckets(&text, vec![plain(&text, 1, 1, WordFlags::COUNTER)]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 111);
+    }
+
+    #[test]
+    fn the_counter_lookbehind_skips_both_kinds_of_space() {
+        // 100 + 100 (two skipped chars) + 10 + 1 - 2 = 209 in both cases.
+        for gap in [' ', '\u{3000}'] {
+            let text: Vec<char> = vec!['3', gap, '日'];
+            let ms = buckets(&text, vec![plain(&text, 2, 1, WordFlags::COUNTER)]);
+            assert_eq!(segment(&text, &ms, None).total_cost, 209, "gap {gap:?}");
+        }
+    }
+
+    #[test]
+    fn a_counter_at_position_zero_has_no_number_behind_it() {
+        // 10 + SINGLE_CHAR_PENALTY 1 = 11; the lookbehind runs off the front.
+        let text = chars("日");
+        let ms = buckets(&text, vec![plain(&text, 0, 1, WordFlags::COUNTER)]);
+        assert_eq!(segment(&text, &ms, None).total_cost, 11);
+        assert!(!counter_after_number(&text, 0));
+    }
+
+    #[test]
+    fn an_inexact_match_pays_the_inexact_penalty() {
+        // 10 + INEXACT_PENALTY 10 = 20.
+        let text = chars("ねこ");
+        let mut m = plain(&text, 0, 2, WordFlags::default());
+        m.inexact = true;
+        assert_eq!(
+            segment(&text, &buckets(&text, vec![m]), None).total_cost,
+            20
+        );
+    }
+
+    #[test]
+    fn boundary_hints_add_ten_at_each_end() {
+        let text = chars("ねこ");
+        let ms = buckets(&text, vec![plain(&text, 0, 2, WordFlags::default())]);
+        // bad_start(0) only: 10 + 10 = 20.
+        assert_eq!(segment(&text, &ms, Some(&marked(&[0], &[]))).total_cost, 20);
+        // bad_end is tested at start + len - 1 == 1, so a flag on 2 is inert.
+        assert_eq!(
+            segment(&text, &ms, Some(&marked(&[0], &[2]))).total_cost,
+            20
+        );
+        // Both ends flagged: 10 + 10 + 10 = 30.
+        assert_eq!(
+            segment(&text, &ms, Some(&marked(&[0], &[1]))).total_cost,
+            30
+        );
+        // None must equal an implementation answering false everywhere.
+        assert_eq!(
+            segment(&text, &ms, Some(&marked(&[], &[]))),
+            segment(&text, &ms, None)
+        );
+    }
+
+    #[test]
+    fn an_isolated_katakana_name_takes_name_dict_ok() {
+        // 10 + NAME_DICT_OK 5 = 15, then 'だ' skipped: 15 + 100 = 115.
+        let text = chars("ネコだ");
+        let ms = buckets(&text, vec![plain(&text, 0, 2, WordFlags::IS_NAME)]);
+        let seg = segment(&text, &ms, None);
+        assert_eq!(seg.total_cost, 115);
+        assert_eq!(shape(&seg), vec![(0, 2, true), (2, 1, false)]);
+    }
+
+    #[test]
+    fn a_name_glued_to_more_katakana_is_priced_out() {
+        // A bad name costs at least 510 per char against a 100/500 skip, so it
+        // can never win: skipping all three characters costs 300 and the match
+        // never appears. That is what the constant is for, and it is why the
+        // per-char scaling is asserted through score_match, not total_cost.
+        let text = chars("ネコン");
+        let ms = buckets(&text, vec![plain(&text, 0, 2, WordFlags::IS_NAME)]);
+        let seg = segment(&text, &ms, None);
+        assert_eq!(seg.total_cost, 300);
+        assert_eq!(shape(&seg), vec![(0, 3, false)]);
+
+        // 10 + 500 * 2 and 10 + 500 * 3, on a run long enough that neither
+        // span reaches the end of the katakana.
+        let long = chars("ネコンド");
+        assert_eq!(
+            score_match(&long, &plain(&long, 0, 2, WordFlags::IS_NAME), None, 0),
+            1010
+        );
+        assert_eq!(
+            score_match(&long, &plain(&long, 0, 3, WordFlags::IS_NAME), None, 0),
+            1510
+        );
+    }
+
+    #[test]
+    fn an_inexact_name_is_bad_even_inside_an_isolated_run() {
+        // 10 + INEXACT_PENALTY 10 + 500 * 2 = 1020.
+        let text = chars("ネコだ");
+        let mut m = plain(&text, 0, 2, WordFlags::IS_NAME);
+        m.inexact = true;
+        assert_eq!(score_match(&text, &m, None, 0), 1020);
+    }
+
+    #[test]
+    fn isolated_katakana_run_rejects_katakana_on_either_side() {
+        let text = chars("ンネコン");
+        assert!(!isolated_katakana_run(&text, 1, 2)); // katakana before
+        assert!(!isolated_katakana_run(&text, 0, 2)); // katakana after
+        assert!(isolated_katakana_run(&text, 0, 4)); // the whole text
+        assert!(!isolated_katakana_run(&chars("ネこ"), 0, 2)); // not all katakana
+    }
+
+    #[test]
+    fn a_match_wins_a_tie_against_an_earlier_match() {
+        // Synthetic table chosen so two matches reach position 4 at the same
+        // cost. Particle matches at (0,1) and (0,2) both cost 10 - 2 = 8, so
+        // best[1] == best[2] == 8; (1,3) and (2,2) then both cost 8 + 10 = 18.
+        // The match relaxation uses `>=`, so the LAST writer — the one from the
+        // later start — keeps position 4.
+        let text = chars("あいうえ");
+        let ms = buckets(
+            &text,
+            vec![
+                plain(&text, 0, 1, WordFlags::PARTICLE),
+                plain(&text, 0, 2, WordFlags::PARTICLE),
+                plain(&text, 1, 3, WordFlags::default()),
+                plain(&text, 2, 2, WordFlags::default()),
+            ],
+        );
+        let seg = segment(&text, &ms, None);
+        assert_eq!(seg.total_cost, 18);
+        // A strict `>` here would give [(0, 1, true), (1, 3, true)] at the same
+        // total cost — the exact regression a cost-only assertion misses.
+        assert_eq!(shape(&seg), vec![(0, 2, true), (2, 2, true)]);
+    }
+
+    #[test]
+    fn a_skip_does_not_overwrite_an_equal_cost_match() {
+        // '1' skipped = 100. At pos 1 a PARTICLE match (1,1) costs
+        // 100 + 10 - 2 = 108, and a COUNTER match (1,2) costs
+        // 100 + 10 + MID_NUMBER_BREAK 100 + COUNTER_AFTER_NUMBER -2 = 208.
+        // At pos 2 the skip offers 108 + 100 = 208 — an exact tie. The skip
+        // relaxation uses a STRICT `>`, so the match keeps position 3.
+        let text = chars("12あ");
+        let ms = buckets(
+            &text,
+            vec![
+                plain(&text, 1, 1, WordFlags::PARTICLE),
+                plain(&text, 1, 2, WordFlags::COUNTER),
+            ],
+        );
+        let seg = segment(&text, &ms, None);
+        assert_eq!(seg.total_cost, 208);
+        // With `>=` the skip would take position 2 and the shape would become
+        // [(0, 1, false), (1, 1, true), (2, 1, false)] — the (1,2) match loses,
+        // at the same total cost.
+        assert_eq!(shape(&seg), vec![(0, 1, false), (1, 2, true)]);
+    }
+
+    #[test]
+    fn a_skipped_run_between_two_matches_becomes_one_unmatched_span() {
+        // The backtrack's coalesce-then-continue branch with a matched span on
+        // BOTH sides, which the leading/trailing skip tests never reach.
+        // 8 + 100 + 8 = 116.
+        let text = chars("はあは");
+        let ms = buckets(
+            &text,
+            vec![
+                plain(&text, 0, 1, WordFlags::PARTICLE),
+                plain(&text, 2, 1, WordFlags::PARTICLE),
+            ],
+        );
+        let seg = segment(&text, &ms, None);
+        assert_eq!(seg.total_cost, 116);
+        assert_eq!(shape(&seg), vec![(0, 1, true), (1, 1, false), (2, 1, true)]);
+        assert_contiguous(&seg, 3);
+    }
+
+    #[test]
+    fn every_constant_at_once() {
+        // A three-char inexact common counter starting between two digits,
+        // with both boundary hints firing:
+        // 0 + 10 + 10 + 10 + 100 - 3 - 2 + 10 = 135.
+        let text = chars("1２三日か");
+        let mut flags = WordFlags::COMMON;
+        flags.insert(WordFlags::COUNTER);
+        let mut m = plain(&text, 1, 3, flags);
+        m.inexact = true;
+        assert_eq!(score_match(&text, &m, Some(&marked(&[1], &[3])), 0), 135);
     }
 }
