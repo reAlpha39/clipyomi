@@ -32,7 +32,8 @@ const FLAG_LABELS: &[(WordFlags, &str)] = &[
     (WordFlags::COUNTER, "counter"),
 ];
 
-/// Rendered wherever a `reading` or `conjugation` is `None`. Named because it
+/// Rendered wherever a `reading` or `conjugation` is `None`, and by
+/// `ensure-dictionary` when there is no generation to name. Named because it
 /// is part of the frozen output format, not incidental formatting.
 const NONE_LABEL: &str = "-";
 

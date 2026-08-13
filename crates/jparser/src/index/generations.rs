@@ -85,6 +85,9 @@ fn scan_dirs(root: &Path) -> Result<Option<Vec<(String, PathBuf)>>, IndexError> 
     let mut found = Vec::new();
     for entry in read {
         let entry = entry?;
+        // `file_type()` does not follow symlinks — intent, not omission. A
+        // symlinked `gen-N` would be a mutable name, the exact hazard this
+        // layout exists to remove, so resolving it would reintroduce it.
         if !entry.file_type()?.is_dir() {
             continue;
         }
@@ -127,6 +130,13 @@ pub fn latest(root: &Path) -> Result<Option<PathBuf>, IndexError> {
 /// The rename is the publish: it is the single operation that makes a
 /// generation visible, and it is atomic. On failure the build directory is
 /// left in place so the caller can retry without rebuilding.
+///
+/// POSIX `rename` silently replaces an **empty** target directory rather than
+/// failing, so a hand-made empty `gen-N` would be consumed without error.
+/// Harmless here: no reader can ever hold a valid `Index` on an empty
+/// directory, and the race test below already relies on this — it writes an
+/// `occupied` file into `gen-1` before driving the collision, specifically so
+/// the target is non-empty.
 fn publish(build_dir: &Path, root: &Path, generation: u64) -> Result<PathBuf, IndexError> {
     let target = root.join(format!("{GENERATION_PREFIX}{generation}"));
     match std::fs::rename(build_dir, &target) {
