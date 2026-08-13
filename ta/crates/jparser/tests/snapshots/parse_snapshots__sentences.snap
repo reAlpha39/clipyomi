@@ -1,0 +1,552 @@
+---
+source: crates/jparser/tests/parse_snapshots.rs
+expression: out
+---
+=== 猫が好きです。
+start=0 len=1 猫 matched reading=ねこ
+    猫 (-) [ねこ] cat (esp. the domestic cat, Felis catus)
+    猫 (-) [ねこま] cat
+start=1 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] picture
+    が (-) [-] moth
+    ガ (-) [-] moth
+    ... 5 more
+start=2 len=4 好きです matched reading=すきです
+    好き (Formal Non-past) [すきです] liking
+start=6 len=1 。 unmatched
+
+=== 本を読みました。
+start=0 len=1 本 matched reading=ほん
+    本 (-) [ほん] book
+    本 (-) [もと] origin
+start=1 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=2 len=5 読みました matched reading=よみました
+    読む (Formal Past) [よみました] to read
+start=7 len=1 。 unmatched
+
+=== これは面白い映画だ。
+start=0 len=3 これは matched reading=-
+    これは (-) [-] as for this
+start=3 len=3 面白い matched reading=おもしろい
+    面白い (-) [おもしろい] interesting
+start=6 len=2 映画 matched reading=えいが
+    映画 (-) [えいが] movie
+start=8 len=1 だ matched reading=-
+    だ (-) [-] be
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
+    だ (-) [-] poor
+    だ (-) [-] did
+    だ (-) [-] hitting a ball (with a bat, golf club, etc.)
+    ... 1 more
+start=9 len=1 。 unmatched
+
+=== 新しい車を買った。
+start=0 len=3 新しい matched reading=あたらしい
+    新しい (-) [あたらしい] new
+start=3 len=1 車 matched reading=くるま
+    車 (-) [くるま] car
+    車 (-) [しゃ] car
+start=4 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=5 len=3 買った matched reading=かった
+    買う (Past) [かった] to buy
+start=8 len=1 。 unmatched
+
+=== 冷たい水を飲まない。
+start=0 len=3 冷たい matched reading=つめたい
+    冷たい (-) [つめたい] cold (to the touch)
+start=3 len=1 水 matched reading=みず
+    水 (-) [みず] water (esp. cool or cold)
+    水 (-) [すい] Wednesday
+start=4 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=5 len=4 飲まない matched reading=のまない
+    飲む (Negative Non-past) [のまない] to drink
+start=9 len=1 。 unmatched
+
+=== 彼は学校に来る。
+start=0 len=1 彼 matched reading=かれ
+    彼 (-) [かれ] he
+    彼 (-) [あれ] that
+    彼 (-) [かの] that well-known ...
+start=1 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 7 more
+start=2 len=2 学校 matched reading=がっこう
+    学校 (-) [がっこう] school
+start=4 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to resemble
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to boil
+    に (-) [-] two
+    ... 6 more
+start=5 len=2 来る matched reading=くる
+    来る (-) [くる] to come (spatially or temporally)
+    来る (-) [きたる] next (e.g. "next April")
+start=7 len=1 。 unmatched
+
+=== 明日友達が来ます。
+start=0 len=2 明日 matched reading=あした
+    明日 (-) [あした] tomorrow
+start=2 len=2 友達 matched reading=ともだち
+    友達 (-) [ともだち] friend
+start=4 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] picture
+    が (-) [-] moth
+    ガ (-) [-] moth
+    ... 5 more
+start=5 len=3 来ます matched reading=きます
+    来る (Formal Non-past) [きます] to come (spatially or temporally)
+start=8 len=1 。 unmatched
+
+=== 彼はまだ来ていない。
+start=0 len=1 彼 matched reading=かれ
+    彼 (-) [かれ] he
+    彼 (-) [あれ] that
+    彼 (-) [かの] that well-known ...
+start=1 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 7 more
+start=2 len=2 まだ matched reading=-
+    まだ (-) [-] still
+    マダ (-) [-] Japanese linden (Tilia japonica)
+start=4 len=2 来て matched reading=きて
+    来る (Te-form) [きて] to come (spatially or temporally)
+    来てる (-Masu Stem/Continuative/Nominalizer) [きて] to have come
+start=6 len=3 いない matched reading=-
+    いない (-) [-] within
+    いる (Negative Non-past) [-] to shoot (arrow, bolt, dart)
+    いる (Negative Non-past) [-] to be (of animate objects)
+    いる (Negative Non-past) [-] to cast
+    いる (Negative Non-past) [-] to calm down
+    ... 2 more
+start=9 len=1 。 unmatched
+
+=== 勉強をする時間がない。
+start=0 len=2 勉強 matched reading=べんきょう
+    勉強 (-) [べんきょう] study
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=2 する matched reading=-
+    する (-) [-] to do
+    する (-) [-] to print
+    する (-) [-] to rub
+    する (-) [-] to shave
+    する (-) [-] to pickpocket
+    ... 3 more
+start=5 len=1 時 matched reading=とき
+    時 (-) [とき] time
+    時 (-) [じ] hour
+    時 (-) [どき] time for ...
+start=6 len=4 間がない matched reading=まがない
+    間がない (-) [まがない] not long has passed since ...
+start=10 len=1 。 unmatched
+
+=== 昨日は宿題をしました。
+start=0 len=2 昨日 matched reading=きのう
+    昨日 (-) [きのう] yesterday
+start=2 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 7 more
+start=3 len=2 宿題 matched reading=しゅくだい
+    宿題 (-) [しゅくだい] homework
+start=5 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=6 len=4 しました matched reading=-
+    する (Formal Past) [-] to do
+    しむ (Causative Past) [-] to occupy
+    しま (Past) [-] conjecture
+    しま (Past) [-] conjecture
+    しま (Past) [-] conjecture
+start=10 len=1 。 unmatched
+
+=== 彼に何も言われなかった。
+start=0 len=1 彼 matched reading=かれ
+    彼 (-) [かれ] he
+    彼 (-) [あれ] that
+    彼 (-) [かの] that well-known ...
+start=1 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to resemble
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to boil
+    に (-) [-] two
+    ... 6 more
+start=2 len=2 何も matched reading=なにも
+    何も (-) [なにも] (not) anything
+start=4 len=7 言われなかった matched reading=いわれなかった
+    言う (Passive Negative Past) [いわれなかった] to say
+start=11 len=1 。 unmatched
+
+=== 手紙を書かせられた。
+start=0 len=2 手紙 matched reading=てがみ
+    手紙 (-) [てがみ] letter
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=6 書かせられた matched reading=かかせられた
+    書く (Causative Potential/Passive Past) [かかせられた] to write
+    書く (Causative Potential Potential/Passive Past) [かかせられた] to write
+start=9 len=1 。 unmatched
+
+=== 日本語を話せますか。
+start=0 len=3 日本語 matched reading=にほんご
+    日本語 (-) [にほんご] Japanese (language)
+start=3 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=4 len=4 話せます matched reading=はなせます
+    話す (Potential Formal) [はなせます] to talk
+    話せる (Formal Non-past) [はなせます] to be able to speak
+start=8 len=1 か matched reading=-
+    か (-) [-] indicates a question
+    か (-) [-] addition
+    か (-) [-] acceptable
+    か (-) [-] department (of a university or hospital)
+    か (-) [-] lesson
+    ... 24 more
+start=9 len=1 。 unmatched
+
+=== 早く帰りたかった。
+start=0 len=2 早く matched reading=はやく
+    早く (-) [はやく] early
+    早い (Adverbal) [はやく] fast
+    早い (Continuative) [はやく] fast
+start=2 len=2 帰り matched reading=かえり
+    帰り (-) [かえり] return
+    帰る (-Masu Stem/Continuative/Nominalizer) [かえり] to return
+start=4 len=4 たかった matched reading=-
+    たい (Past) [-] want to do ...
+    たかる (Past) [-] to gather
+start=8 len=1 。 unmatched
+
+=== 雨が降りそうだ。
+start=0 len=4 雨が降り matched reading=あめがふり
+    雨が降る (-Masu Stem/Continuative/Nominalizer) [あめがふり] to rain
+start=4 len=3 そうだ matched reading=-
+    そう (Non-past) [-] appearing that
+    そうだ (-) [-] that is so
+    そうだ (-) [-] steering (of a boat)
+    そう (Non-past) [-] vibrancy
+start=7 len=1 。 unmatched
+
+=== 高い山に登った。
+start=0 len=2 高い matched reading=たかい
+    高い (-) [たかい] high
+start=2 len=1 山 matched reading=やま
+    山 (-) [やま] mountain
+    山 (-) [さん] Mt.
+    山 (-) [むれ] mountain
+start=3 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to resemble
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to boil
+    に (-) [-] two
+    ... 6 more
+start=4 len=3 登った matched reading=のぼった
+    登る (Past) [のぼった] to ascend
+start=7 len=1 。 unmatched
+
+=== 水が飲みたい。
+start=0 len=1 水 matched reading=みず
+    水 (-) [みず] water (esp. cool or cold)
+    水 (-) [すい] Wednesday
+start=1 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] picture
+    が (-) [-] moth
+    ガ (-) [-] moth
+    ... 5 more
+start=2 len=2 飲み matched reading=のみ
+    飲む (-Masu Stem/Continuative/Nominalizer) [のみ] to drink
+    飲み (-) [のみ] drink
+start=4 len=2 たい matched reading=-
+    たい (-) [-] want to do ...
+    たい (-) [-] versus
+    たい (-) [-] band (e.g. conduction, valence)
+    タイ (-) [-] sea bream (esp. Pagrus major)
+    たい (-) [-] sea bream (esp. Pagrus major)
+    ... 14 more
+start=6 len=1 。 unmatched
+
+=== 毎日走っている。
+start=0 len=2 毎日 matched reading=まいにち
+    毎日 (-) [まいにち] every day
+start=2 len=3 走って matched reading=はしって
+    走る (Te-form) [はしって] to run
+start=5 len=2 いる matched reading=-
+    いる (-) [-] to shoot (arrow, bolt, dart)
+    いる (-) [-] to roast
+    いる (-) [-] to enter
+    いる (-) [-] to be needed
+    いる (-) [-] to be (of animate objects)
+    ... 5 more
+start=7 len=1 。 unmatched
+
+=== 電車が遅れています。
+start=0 len=2 電車 matched reading=でんしゃ
+    電車 (-) [でんしゃ] train
+start=2 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] picture
+    が (-) [-] moth
+    ガ (-) [-] moth
+    ... 5 more
+start=3 len=3 遅れて matched reading=おくれて
+    遅れる (Te-form) [おくれて] to be late
+start=6 len=3 います matched reading=-
+    いる (Formal Non-past) [-] to shoot (arrow, bolt, dart)
+    いる (Formal Non-past) [-] to be (of animate objects)
+    いる (Formal Non-past) [-] to cast
+    いむ (Causative) [-] to avoid
+    いる (Formal Non-past) [-] to calm down
+    ... 3 more
+start=9 len=1 。 unmatched
+
+=== ドアを開けてください。
+start=0 len=2 ドア matched reading=-
+    ドア (-) [-] door
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=3 開けて matched reading=ひらけて
+    開く (Potential Te-form) [ひらけて] to open
+    開ける (Te-form) [あけて] to open (a door, etc.)
+    開ける (Te-form) [ひらけて] to open out (of a view, scenery, etc.)
+    開く (Potential Te-form) [あけて] to open (e.g. doors)
+    開ける (Te-form) [はだけて] to open (e.g. one's robe)
+start=6 len=4 ください matched reading=-
+    ください (-) [-] please (give me)
+    くださる (-Masu Stem/Continuative/Nominalizer) [-] to give
+    くださる (Formal Imperative) [-] to give
+start=10 len=1 。 unmatched
+
+=== 子供が公園で遊んでいる。
+start=0 len=2 子供 matched reading=こども
+    子供 (-) [こども] child
+start=2 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] picture
+    が (-) [-] moth
+    ガ (-) [-] moth
+    ... 5 more
+start=3 len=2 公園 matched reading=こうえん
+    公園 (-) [こうえん] (public) park
+start=5 len=1 で matched reading=-
+    で (-) [-] at
+    で (-) [-] without doing ...
+    で (-) [-] and
+    でる (-Masu Stem/Continuative/Nominalizer) [-] to leave
+    で (-) [-] coming out
+    ... 3 more
+start=6 len=3 遊んで matched reading=あそんで
+    遊ぶ (Te-form) [あそんで] to play (games, sports)
+    遊む (Te-form) [すさんで] to grow wild
+    遊ぶ (Te-form) [すさんで] to grow wild
+start=9 len=2 いる matched reading=-
+    いる (-) [-] to shoot (arrow, bolt, dart)
+    いる (-) [-] to roast
+    いる (-) [-] to enter
+    いる (-) [-] to be needed
+    いる (-) [-] to be (of animate objects)
+    ... 5 more
+start=11 len=1 。 unmatched
+
+=== もう一度説明してください。
+start=0 len=4 もう一度 matched reading=もういちど
+    もう一度 (-) [もういちど] once more
+start=4 len=4 説明して matched reading=せつめいして
+    説明 (Te-form) [せつめいして] explanation
+    説明 (Te-form) [せつめいして] explanation
+start=8 len=4 ください matched reading=-
+    ください (-) [-] please (give me)
+    くださる (-Masu Stem/Continuative/Nominalizer) [-] to give
+    くださる (Formal Imperative) [-] to give
+start=12 len=1 。 unmatched
+
+=== 三人の学生が待っている。
+start=0 len=2 三人 matched reading=さんにん
+    三人 (-) [さんにん] three people
+start=2 len=1 の matched reading=-
+    の (-) [-] indicates possessive
+    の (-) [-] field
+    の (-) [-] shaft (of an arrow; made of bamboo)
+    の (-) [-] unit of measurement for cloth breadth (30-38 cm)
+start=3 len=2 学生 matched reading=がくせい
+    学生 (-) [がくせい] student (esp. a university student)
+    学生 (-) [がくしょう] Heian-period student of government administration
+start=5 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] picture
+    が (-) [-] moth
+    ガ (-) [-] moth
+    ... 5 more
+start=6 len=3 待って matched reading=まって
+    待つ (Te-form) [まって] to wait
+start=9 len=2 いる matched reading=-
+    いる (-) [-] to shoot (arrow, bolt, dart)
+    いる (-) [-] to roast
+    いる (-) [-] to enter
+    いる (-) [-] to be needed
+    いる (-) [-] to be (of animate objects)
+    ... 5 more
+start=11 len=1 。 unmatched
+
+=== コーヒーを二杯ください。
+start=0 len=4 コーヒー matched reading=-
+    コーヒー (-) [-] coffee
+start=4 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=5 len=1 二 matched reading=に
+    二 (-) [に] two
+    二 (-) [アル] two
+    二 (-) [リャン] two
+start=6 len=1 杯 matched reading=はい
+    杯 (-) [はい] sake cup
+    杯 (-) [さかずき] sake cup
+    杯 (-) [はた] counter for cupfuls, bowlfuls, spoonfuls, etc.
+    杯 (-) [つき] shallow bowl
+start=7 len=4 ください matched reading=-
+    ください (-) [-] please (give me)
+    くださる (-Masu Stem/Continuative/Nominalizer) [-] to give
+    くださる (Formal Imperative) [-] to give
+start=11 len=1 。 unmatched
+
+=== 会議は十時に始まる。
+start=0 len=2 会議 matched reading=かいぎ
+    会議 (-) [かいぎ] meeting
+start=2 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 7 more
+start=3 len=2 十時 matched reading=じゅうじ
+    十時 (-) [じゅうじ] ten o'clock
+start=5 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to resemble
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to boil
+    に (-) [-] two
+    ... 6 more
+start=6 len=3 始まる matched reading=はじまる
+    始まる (-) [はじまる] to begin
+start=9 len=1 。 unmatched
+
+=== 東京から大阪まで行く。
+start=0 len=2 東京 matched reading=とうきょう
+    東京 (-) [とうきょう] Tokyo
+start=2 len=2 から matched reading=-
+    から (-) [-] from
+    から (-) [-] shell
+    から (-) [-] emptiness
+    からい (Adj Stem) [-] spicy
+    カラ (-) [-] emptiness
+    ... 6 more
+start=4 len=2 大阪 matched reading=おおさか
+    大阪 (-) [おおさか] Osaka (city, prefecture)
+start=6 len=2 まで matched reading=-
+    まで (-) [-] until (a time)
+start=8 len=2 行く matched reading=いく
+    行く (-) [いく] to go
+start=10 len=1 。 unmatched
+
+=== 音楽を聞きながら歩く。
+start=0 len=2 音楽 matched reading=おんがく
+    音楽 (-) [おんがく] music
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=2 聞き matched reading=きき
+    聞く (-Masu Stem/Continuative/Nominalizer) [きき] to hear
+    聞き (-) [きき] hearing
+start=5 len=3 ながら matched reading=-
+    ながら (-) [-] while
+start=8 len=2 歩く matched reading=あるく
+    歩く (-) [あるく] to walk
+start=10 len=1 。 unmatched
+
+=== 先生になりたいです。
+start=0 len=2 先生 matched reading=せんせい
+    先生 (-) [せんせい] teacher
+    先生 (-) [シーサン] man
+    先生 (-) [せんじょう] teacher
+start=2 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to resemble
+    にる (-Masu Stem/Continuative/Nominalizer) [-] to boil
+    に (-) [-] two
+    ... 6 more
+start=3 len=2 なり matched reading=-
+    なり (-) [-] or something
+    なる (-Masu Stem/Continuative/Nominalizer) [-] to become
+    なる (-Masu Stem/Continuative/Nominalizer) [-] to sound
+    なる (-Masu Stem/Continuative/Nominalizer) [-] to bear fruit
+    なり (-) [-] ringing
+    ... 4 more
+start=5 len=4 たいです matched reading=-
+    たい (Formal Non-past) [-] want to do ...
+start=9 len=1 。 unmatched
+
+=== パソコンが壊れてしまった。
+start=0 len=4 パソコン matched reading=-
+    パソコン (-) [-] personal computer
+    パソこん (-) [-] marriage between two people who met over the Internet
+start=4 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] picture
+    が (-) [-] moth
+    ガ (-) [-] moth
+    ... 5 more
+start=5 len=3 壊れて matched reading=こわれて
+    壊れる (Te-form) [こわれて] to be broken
+start=8 len=4 しまった matched reading=-
+    しまった (-) [-] darn it!
+    しまう (Past) [-] to finish
+    しまる (Past) [-] to be shut
+    しまる (Past) [-] to be strangled
+start=12 len=1 。 unmatched
+
+=== 出て来るのを待っていた。
+start=0 len=4 出て来る matched reading=でてくる
+    出て来る (-) [でてくる] to come out
+start=4 len=1 の matched reading=-
+    の (-) [-] indicates possessive
+    の (-) [-] field
+    の (-) [-] shaft (of an arrow; made of bamboo)
+    の (-) [-] unit of measurement for cloth breadth (30-38 cm)
+start=5 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=6 len=3 待って matched reading=まって
+    待つ (Te-form) [まって] to wait
+start=9 len=2 いた matched reading=-
+    いる (Past) [-] to shoot (arrow, bolt, dart)
+    いたい (Adj Stem) [-] painful
+    いた (-) [-] board
+    いる (Past) [-] to be (of animate objects)
+    いる (Past) [-] to cast
+    ... 5 more
+start=11 len=1 。 unmatched

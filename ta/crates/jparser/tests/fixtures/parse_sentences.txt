@@ -1,0 +1,43 @@
+# Snapshot corpus for tests/parse_snapshots.rs and tools/extract_jmdict_subset.py.
+# One sentence per line. Blank lines and lines starting with '#' are ignored.
+#
+# Coverage intent, per sentence group:
+#   1-5    plain nouns, particles, i- and na-adjectives
+#   6-10   する and 来る: the two irregulars whose generated stem is the EMPTY
+#          string, so prefixes_of returns a key_chars == 0 hit at every
+#          position. That path broke and was fixed late in Phase 1A and is the
+#          standing regression the addendum §6 asks for.
+#   11-16  stacked conjugations: passive, causative, potential, negative, past
+#   17-22  te-form chains, -tai, -teiru, -tekuru
+#   23-27  numbers and counters, katakana runs
+#   28-30  longer mixed sentences
+猫が好きです。
+本を読みました。
+これは面白い映画だ。
+新しい車を買った。
+冷たい水を飲まない。
+彼は学校に来る。
+明日友達が来ます。
+彼はまだ来ていない。
+勉強をする時間がない。
+昨日は宿題をしました。
+彼に何も言われなかった。
+手紙を書かせられた。
+日本語を話せますか。
+早く帰りたかった。
+雨が降りそうだ。
+高い山に登った。
+水が飲みたい。
+毎日走っている。
+電車が遅れています。
+ドアを開けてください。
+子供が公園で遊んでいる。
+もう一度説明してください。
+三人の学生が待っている。
+コーヒーを二杯ください。
+会議は十時に始まる。
+東京から大阪まで行く。
+音楽を聞きながら歩く。
+先生になりたいです。
+パソコンが壊れてしまった。
+出て来るのを待っていた。
