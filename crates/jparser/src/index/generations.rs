@@ -8,7 +8,7 @@
 //! Immutable generation directories.
 //!
 //! An index is published as `<root>/gen-<N>/`, built first into
-//! `<root>/.build-<pid>-<nanos>/` and moved into place with a single
+//! `<root>/.build-<pid>-<nanos>-<seq>/` and moved into place with a single
 //! `fs::rename`. Readers resolve the highest `N`.
 //!
 //! The layout exists because `Index::open` is a five-file sequence against a
@@ -166,14 +166,20 @@ fn next_generation(root: &Path) -> Result<u64, IndexError> {
     Ok(latest_number(root)?.map_or(1, |(n, _)| n + 1))
 }
 
+/// Distinguishes concurrent builders *within* one process. The pid separates
+/// processes and the clock separates sequential builds, but two threads share
+/// a pid and can read the same coarse clock value, so neither is sufficient
+/// alone.
+static BUILD_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Build an index from `xml` and publish it as the next generation.
 ///
-/// Builds into `<root>/.build-<pid>-<nanos>/` first, so `root` never contains a
-/// partially-written generation. `root` and the build directory are therefore
-/// always on one filesystem — `fs::rename` returns `EXDEV` across devices and
-/// never falls back to copying.
+/// Builds into `<root>/.build-<pid>-<nanos>-<seq>/` first, so `root` never
+/// contains a partially-written generation. `root` and the build directory
+/// are therefore always on one filesystem — `fs::rename` returns `EXDEV`
+/// across devices and never falls back to copying.
 ///
-/// Publishing is retried up to [`PUBLISH_ATTEMPTS`] times: two builders
+/// Publishing is retried up to `PUBLISH_ATTEMPTS` times: two builders
 /// starting from the same `root` both compute the same target, so the loser
 /// of a single attempt would otherwise fail even though a valid generation
 /// now exists. Each retry recomputes the target rather than reusing the one
@@ -192,7 +198,11 @@ pub fn build_new(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let build_dir = root.join(format!("{}{}-{}", BUILD_PREFIX, std::process::id(), nanos));
+    let pid = std::process::id();
+    // Two threads in this process share `pid` and can read the same coarse
+    // `nanos` value, which would otherwise collide on `create_dir` below.
+    let sequence = BUILD_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let build_dir = root.join(format!("{BUILD_PREFIX}{pid}-{nanos}-{sequence}"));
 
     // `create_dir`, never `create_dir_all`: the nonce must not already exist,
     // and a collision is a signal worth surfacing rather than absorbing.
@@ -226,8 +236,8 @@ pub fn build_new(
 /// alone: this function did not create them.
 ///
 /// When `build_from_reader` itself fails — malformed XML, a full disk — `build_new`
-/// leaves its `.build-<pid>-<nanos>` directory behind with no cleanup. `sweep`
-/// is what reclaims those.
+/// leaves its `.build-<pid>-<nanos>-<seq>` directory behind with no cleanup.
+/// `sweep` is what reclaims those.
 pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
     let Some(found) = scan_dirs(root)? else {
         return Ok(0);
