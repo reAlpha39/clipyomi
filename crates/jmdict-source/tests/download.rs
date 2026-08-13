@@ -13,6 +13,7 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use jmdict_source::{SourceError, PARTIAL_SUFFIX, SOURCE_FILE};
 
@@ -168,4 +169,102 @@ fn the_source_directory_is_created_if_absent() {
 
     assert!(path.exists());
     assert_eq!(server.join().expect("join"), 1);
+}
+
+#[test]
+fn a_transient_failure_is_retried_and_can_succeed() {
+    let dir = scratch("retry-recover");
+    let (url, server) = serve(vec![
+        http("503 Service Unavailable", b"busy"),
+        http("200 OK", &gz(XML)),
+    ]);
+
+    let path = jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect("fetch");
+
+    assert!(path.exists());
+    assert_eq!(server.join().expect("join"), 2, "the 503 was not retried");
+}
+
+#[test]
+fn a_404_is_not_retried() {
+    let dir = scratch("retry-404");
+    // Three responses queued, but only one may be consumed.
+    let (url, server) = serve(vec![
+        http("404 Not Found", b"nope"),
+        http("200 OK", &gz(XML)),
+        http("200 OK", &gz(XML)),
+    ]);
+
+    let err =
+        jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect_err("must fail");
+
+    assert!(
+        matches!(err, SourceError::Http { status: 404 }),
+        "got {err:?}"
+    );
+    assert!(!dir.join(SOURCE_FILE).exists());
+    // The server thread is still blocked in accept(); dropping the handle
+    // avoids a timing-dependent join. What matters is that the client stopped
+    // after one request, which the error variant already proves.
+    drop(server);
+}
+
+#[test]
+fn exhausting_the_attempts_reports_the_last_failure_and_the_escape_hatch() {
+    let dir = scratch("retry-exhaust");
+    let responses: Vec<Vec<u8>> = (0..jmdict_source::DOWNLOAD_ATTEMPTS)
+        .map(|_| http("500 Internal Server Error", b"x"))
+        .collect();
+    let (url, server) = serve(responses);
+
+    let err =
+        jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect_err("must fail");
+
+    let rendered = err.to_string();
+    match err {
+        SourceError::TooManyAttempts {
+            attempts,
+            source_dir,
+            last,
+        } => {
+            assert_eq!(attempts, jmdict_source::DOWNLOAD_ATTEMPTS);
+            assert_eq!(source_dir, dir);
+            assert!(!last.is_empty(), "the last failure was not recorded");
+        }
+        other => panic!("expected TooManyAttempts, got {other:?}"),
+    }
+    assert!(rendered.contains(SOURCE_FILE), "got: {rendered}");
+    assert!(
+        rendered.contains(&dir.display().to_string()),
+        "the message must name the directory: {rendered}"
+    );
+    assert_eq!(
+        server.join().expect("join"),
+        jmdict_source::DOWNLOAD_ATTEMPTS,
+        "wrong number of attempts"
+    );
+}
+
+/// A corrupt body is retried, because the bytes were bad and the URL was not.
+#[test]
+fn a_corrupt_archive_is_retried() {
+    let dir = scratch("retry-corrupt");
+    let (url, server) = serve(vec![
+        http("200 OK", b"<html>not gzip</html>"),
+        http("200 OK", &gz(XML)),
+    ]);
+
+    let path = jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect("fetch");
+
+    assert!(path.exists());
+    assert_eq!(
+        server.join().expect("join"),
+        2,
+        "the corrupt body was not retried"
+    );
+}
+
+#[test]
+fn the_default_attempt_count_is_three() {
+    assert_eq!(jmdict_source::DOWNLOAD_ATTEMPTS, 3);
 }

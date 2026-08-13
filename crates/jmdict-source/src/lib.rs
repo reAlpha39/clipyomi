@@ -34,6 +34,12 @@ pub const SOURCE_FILE: &str = "JMdict_e.gz";
 /// resolved, so a killed download cannot be mistaken for a hand-placed file.
 pub const PARTIAL_SUFFIX: &str = ".partial";
 
+/// Download attempts before [`fetch::fetch`] gives up.
+pub const DOWNLOAD_ATTEMPTS: usize = 3;
+
+/// Delay before the second attempt; doubles for each attempt after it.
+pub const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// The two-byte gzip magic, `1f 8b`.
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
 
@@ -45,6 +51,14 @@ pub enum SourceError {
     Transport(String),
     #[error("the dictionary server returned HTTP {status}")]
     Http { status: u16 },
+    /// The downloaded bytes did not decode as a valid gzip archive. Distinct
+    /// from [`SourceError::Io`]: opening or writing a local file failed for
+    /// [`SourceError::Io`], but here the file opened and wrote fine — its
+    /// *content* was bad. The retry policy treats the two oppositely: a
+    /// corrupt body is worth retrying (the URL was not at fault), a local
+    /// I/O failure is not (retrying will not free disk or fix permissions).
+    #[error("the downloaded archive is corrupt: {0}")]
+    Corrupt(String),
     #[error(
         "could not obtain the dictionary after {attempts} attempts ({last}); \
          place a {file} in {source_dir} manually to bypass the download",

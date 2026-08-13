@@ -27,8 +27,14 @@ use crate::{SourceError, PARTIAL_SUFFIX, SOURCE_FILE};
 pub(crate) fn verify_archive(path: &Path) -> Result<(), SourceError> {
     let file = std::fs::File::open(path)?;
     let mut decoder = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
-    // `io::sink` discards the output; only the error matters.
-    std::io::copy(&mut decoder, &mut std::io::sink())?;
+    // `io::sink` discards the output; only the error matters. This is a
+    // decode failure, not a local I/O failure, even though flate2 reports it
+    // as `std::io::Error` — the file opened and is readable, but its content
+    // is not a valid gzip stream. Mapped to `Corrupt` rather than left to
+    // `#[from]`'s `Io`, so the retry policy in `fetch_with_retry` can tell a
+    // bad body (retry) apart from a local write failure (do not retry).
+    std::io::copy(&mut decoder, &mut std::io::sink())
+        .map_err(|e| SourceError::Corrupt(e.to_string()))?;
     Ok(())
 }
 
@@ -87,6 +93,53 @@ fn download_and_verify(url: &str, staging: &Path) -> Result<(), SourceError> {
     }
 
     verify_archive(staging)
+}
+
+/// The published archive. Private: exposing it would invite a caller to fetch
+/// it directly and skip the staging and verification in [`fetch_from`], which
+/// are the only things standing between a proxy's error page and the resolved
+/// name. EDRDG serves no usable HTTPS — the certificate fails subject-name
+/// validation — so this is plain HTTP by necessity, which is precisely why
+/// verification is mandatory rather than defensive.
+const JMDICT_URL: &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz";
+
+/// Download the archive into `source_dir`, retrying transient failures.
+pub fn fetch(source_dir: &Path) -> Result<PathBuf, SourceError> {
+    fetch_with_retry(JMDICT_URL, source_dir, crate::RETRY_BACKOFF)
+}
+
+/// [`fetch`] with the URL and backoff injected, so tests can point at a local
+/// listener without sleeping.
+pub fn fetch_with_retry(
+    url: &str,
+    source_dir: &Path,
+    backoff: std::time::Duration,
+) -> Result<PathBuf, SourceError> {
+    let mut delay = backoff;
+    let mut last = String::new();
+
+    for attempt in 1..=crate::DOWNLOAD_ATTEMPTS {
+        match fetch_from(url, source_dir) {
+            Ok(path) => return Ok(path),
+            // A 4xx will not change on a retry, and neither will a local write
+            // failure. Surface both immediately rather than sleeping first.
+            Err(e @ SourceError::Http { status: 400..=499 }) => return Err(e),
+            Err(e @ SourceError::Io(_)) => return Err(e),
+            Err(e) => {
+                last = e.to_string();
+                if attempt < crate::DOWNLOAD_ATTEMPTS {
+                    std::thread::sleep(delay);
+                    delay = delay.saturating_mul(2);
+                }
+            }
+        }
+    }
+
+    Err(SourceError::TooManyAttempts {
+        attempts: crate::DOWNLOAD_ATTEMPTS,
+        source_dir: source_dir.to_path_buf(),
+        last,
+    })
 }
 
 #[cfg(test)]
