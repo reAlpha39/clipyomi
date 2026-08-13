@@ -156,13 +156,22 @@ holds. One dynamic dispatch against a ~60 MB parse is not measurable.
 ### `crates/jparser/src/bin/jparser-cli.rs` (modified)
 
 ```
-jparser-cli ensure-dictionary <root> --source-dir <dir> [--keep N]
+jparser-cli ensure-dictionary <root> [xml] [--source-dir <dir>] [--keep N]
 jparser-cli fetch-source <dir>
 ```
 
-`ensure-dictionary`'s existing `<xml>` positional argument is **replaced** by
-`--source-dir`, because a caller that names an explicit XML file no longer needs
-this crate — that is 2A's behavior and it still works through the seam.
+**Both source forms stay, and `<xml>` keeps its existing position.** It becomes
+optional, `--source-dir` is added beside it, and a clap `ArgGroup` requires
+exactly one — so every invocation 2A accepts still works unchanged.
+
+An earlier draft replaced the positional. That was wrong: 2A's two committed CLI
+tests (`ensure_dictionary_builds_once_and_then_reuses` and
+`ensure_dictionary_rejects_a_zero_keep`) pass it positionally, so replacing it
+would make a phase about downloading edit tests about generations as collateral.
+Both forms also earn their keep — `--source-dir` is the product behavior, and an
+explicit `xml` is what you want when pointing at a two-entry fixture instead of a
+~35 MB download.
+
 `fetch-source` downloads without building, so the download path is exercisable on
 its own.
 
@@ -213,10 +222,18 @@ Two distinct failures make this necessary, and only the first is obvious.
 sits at the resolved name, is indistinguishable from a manual drop, and is opened
 on every subsequent run.
 
-**A complete download of corrupt bytes** — a server sending full-length bad data
-and closing cleanly — is not caught by staging alone. Those bytes would be
-renamed into place, fail the build, and fail identically forever, because
-`resolve` cannot tell them from a hand-placed file. So the archive is **verified
+**A complete response that is not the archive** is not caught by staging alone.
+The realistic case is not bit-rot: it is a **proxy or captive portal returning an
+HTML error page with HTTP 200 and a correct `Content-Length`** — ordinary on hotel
+and corporate networks, and EDRDG is a plain academic mirror with no
+authentication to fail loudly. A server replacing its own copy mid-publish
+produces the same shape. Those bytes would be renamed into place, fail the build,
+and fail identically forever, because `resolve` cannot tell them from a
+hand-placed file.
+
+**A `Content-Length` check was considered and rejected as the primary guard.** It
+is nearly free and it does catch truncation, but it passes the captive-portal case
+above — the very scenario most likely to occur. So the archive is **verified
 before the rename**, by decoding it fully and discarding the output:
 
 ```rust
@@ -318,6 +335,8 @@ Required assertions:
 | A present source file ⇒ **zero** HTTP requests | The download must not fire when a local copy exists; assert a request counter, as 2A asserted its `source` call counter |
 | A `.partial` alone does **not** satisfy `resolve` | This is the killed-download case; without it, step 1 would resolve a truncation |
 | A corrupt archive fails verification, is removed, and does not land at the resolved name | This is §6's whole argument, and it is the claim this design could not verify offline |
+| An HTTP 200 whose body is HTML with a correct `Content-Length` fails verification and leaves nothing at the resolved name | The captive-portal case, and the single scenario that decides §6 against the cheaper `Content-Length` guard. If this passes without the inflate pass, §6's cost is unjustified and should be revisited |
+| `ensure-dictionary` still accepts `<xml>` positionally, and rejects being given both `<xml>` and `--source-dir` | §4 keeps both forms specifically so 2A's committed CLI tests are untouched; the `ArgGroup` is what makes "exactly one" true rather than intended |
 | A truncated archive (valid header, missing trailer) fails the same way | CRC and length are checked at EOF, so a truncation that never reaches EOF must not pass silently |
 | 4xx fails without retrying; a transport error retries up to `DOWNLOAD_ATTEMPTS` | The two halves of §6's table; collapsing them is the likely slip |
 | `TooManyAttempts` names the source directory | The message is the user's only instruction when the network is down |
@@ -366,9 +385,14 @@ authoring environment had no network access. Each is a plan-time gate, and none
 may be assumed:
 
 1. **`ureq`'s MSRV against 1.75.** Recent majors have raised it. If the current
-   release requires more, pin an older major that does not, or raise the
-   workspace MSRV as a deliberate, separate decision. Verify the resolved
-   dependency tree contains no `openssl-sys`.
+   release requires more, **pin an older major — do not raise the workspace
+   MSRV.** MSRV 1.75 is a constraint Phase 1 and 2A both paid real costs for:
+   `latest_number`'s `map_or(true, …)` accumulator and `publish`'s `exists()`
+   probe exist solely to honor it, each carrying a comment forbidding the
+   "obvious" simplification. Raising it may well be right eventually, but it
+   should be its own decision with its own justification, not a side effect of
+   choosing an HTTP client. Also verify the resolved dependency tree contains no
+   `openssl-sys`.
 2. **`flate2`'s exact behavior on a CRC mismatch and on a truncated stream.** §6
    asserts both surface as `io::Error` at end of stream. §8 requires tests for
    both, which is the point: the claim is verified by execution, not by this
