@@ -175,7 +175,16 @@ where
     let (published, _report) = generations::build_new(root, xml, table, opts)?;
     // Sweep after the publish, never before: sweeping first could delete the
     // generation the caller would have fallen back to had the build failed.
-    let _swept = generations::sweep(root, keep)?;
+    //
+    // Retention is best-effort by contract: `sweep` cannot delete a mapped
+    // file on Windows, and `DEFAULT_KEEP_GENERATIONS` exists precisely so a
+    // failed sweep leaves a usable index behind. Failing the whole call here
+    // would discard a generation that was just published successfully, after
+    // the ~60 MB source was already consumed.
+    match generations::sweep(root, keep) {
+        Ok(_removed) => {}
+        Err(_e) => {}
+    }
     Index::open(&published)
 }
 
@@ -359,6 +368,68 @@ mod tests {
         assert!(
             remaining <= 2,
             "retention was not applied: {remaining} generations"
+        );
+    }
+
+    /// A sweep that fails outright — not merely a benign race with another
+    /// sweeper, but a real removal failure — must still leave
+    /// `ensure_dictionary` returning the freshly published index. Injecting a
+    /// portable `remove_dir_all` failure needs an OS-specific trick (`chmod`
+    /// here); there is no equivalently simple one on Windows, so this test is
+    /// `#[cfg(unix)]` rather than run everywhere.
+    #[cfg(unix)]
+    #[test]
+    fn a_sweep_failure_does_not_fail_ensure_dictionary() {
+        use std::os::unix::fs::PermissionsExt;
+
+        /// Restores write permission on drop, including on a test panic, so a
+        /// failed assertion here cannot leave a scratch directory that a
+        /// later run of this same test cannot clean up.
+        struct RestorePerms(PathBuf);
+        impl Drop for RestorePerms {
+            fn drop(&mut self) {
+                let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+            }
+        }
+
+        let root = scratch("ensure-sweep-fails");
+        let (table, opts) = table_and_opts();
+
+        // Three rounds, invalidating the head each time. keep=2's normal
+        // operation already sweeps gen-1 away during this loop, leaving
+        // gen-2 and gen-3 (corrupt) once it finishes.
+        for _ in 0..3 {
+            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            let head = generations::latest(&root).expect("latest").expect("head");
+            corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
+        }
+        assert!(
+            !root.join("gen-1").exists(),
+            "setup: gen-1 should already be swept"
+        );
+        assert!(root.join("gen-2").exists(), "setup: gen-2 should remain");
+
+        // gen-2 is what the next sweep(keep=2) will target once gen-4
+        // publishes. Strip write permission so `remove_dir_all` cannot
+        // unlink its contents — a real failure, not a benign race.
+        let victim = root.join("gen-2");
+        std::fs::set_permissions(&victim, std::fs::Permissions::from_mode(0o555)).expect("chmod");
+        let _restore = RestorePerms(victim);
+
+        let index = ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes()))
+            .expect("a failed sweep must not fail ensure_dictionary");
+
+        assert_eq!(
+            index.entry(1000010).expect("entry").expect("present").id,
+            1000010
+        );
+        assert!(
+            root.join("gen-4").exists(),
+            "the newly published generation must survive"
+        );
+        assert!(
+            root.join("gen-2").exists(),
+            "the un-removable generation must survive the failed sweep"
         );
     }
 }
