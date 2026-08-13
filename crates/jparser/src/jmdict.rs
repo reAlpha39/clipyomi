@@ -138,7 +138,7 @@ fn decode_text(t: &BytesText) -> Result<String, JmdictError> {
         // `;` delimiters) are an unversioned, undocumented implementation
         // detail read from quick-xml 0.36.2's source
         // (`quick-xml-0.36.2/src/escape.rs:279`), not a contract in its
-        // public docs. `ta/Cargo.lock` pins the exact version this was
+        // public docs. `Cargo.lock` pins the exact version this was
         // verified against; a patch bump that shifts this would show up as
         // a failure in the escape/entity tests below (in particular the
         // `decodes_a_*_padded_bare_entity_to_its_code` and

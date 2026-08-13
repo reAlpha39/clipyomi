@@ -58,25 +58,24 @@ infrastructure.
 translation-aggregator/
 ├── ta-old/                       # reference only, never modified
 ├── docs/superpowers/specs/
-└── ta/
-    ├── crates/jparser/           # pure Rust. No Tauri, no UI, no globals.
-    │   ├── src/
-    │   │   ├── lib.rs            # parse() entry point, public types
-    │   │   ├── kana.rs           # normalization, char classification
-    │   │   ├── romaji.rs         # romajiTable + ToRomaji port
-    │   │   ├── conjugation.rs    # table load + Next Type resolution
-    │   │   ├── jmdict.rs         # streaming XML -> headword records
-    │   │   ├── index/
-    │   │   │   ├── build.rs      # records -> FST + payload blob
-    │   │   │   └── load.rs       # mmap + prefix query
-    │   │   ├── matcher.rs        # matches at a position + verb recursion
-    │   │   ├── segment.rs        # DP segmenter
-    │   │   └── morph.rs          # Vibrato -> BoundaryHints
-    │   ├── assets/conjugations.json
-    │   └── tests/
-    ├── src-tauri/                # thin shell
-    │   └── src/{clipboard,parse,commands,settings,window}.rs
-    └── src/                      # web UI (Vite + TypeScript)
+├── crates/jparser/               # pure Rust. No Tauri, no UI, no globals.
+│   ├── src/
+│   │   ├── lib.rs                # parse() entry point, public types
+│   │   ├── kana.rs               # normalization, char classification
+│   │   ├── romaji.rs             # romajiTable + ToRomaji port
+│   │   ├── conjugation.rs        # table load + Next Type resolution
+│   │   ├── jmdict.rs             # streaming XML -> headword records
+│   │   ├── index/
+│   │   │   ├── build.rs          # records -> FST + payload blob
+│   │   │   └── load.rs           # mmap + prefix query
+│   │   ├── matcher.rs            # matches at a position + verb recursion
+│   │   ├── segment.rs            # DP segmenter
+│   │   └── morph.rs              # Vibrato -> BoundaryHints
+│   ├── assets/conjugations.json
+│   └── tests/
+├── src-tauri/                    # thin shell
+│   └── src/{clipboard,parse,commands,settings,window}.rs
+└── src/                          # web UI (Vite + TypeScript)
 ```
 
 **Hard rule:** `crates/jparser` has no Tauri dependency and no I/O beyond
