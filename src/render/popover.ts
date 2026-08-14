@@ -1,89 +1,78 @@
-import type { Entry } from '../types';
-import { renderEntry } from './definitions';
-
-/** Distance between the chip and the popover, in px. */
-const GAP = 6;
-/** Closest the popover may sit to a viewport edge, in px. */
+/** Distance between the word and the tooltip, in px. ta-old's `rAvoid.top-2`. */
+const GAP = 2;
+/** Closest the tooltip may sit to a work-area edge, in px. */
 const MARGIN = 8;
 
+/** A rectangle in screen coordinates. */
+export interface Rect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
 /**
- * Where to put the popover, as a pure function of three rectangles.
+ * Where to put the tooltip window, as a pure function of three rectangles.
  *
  * Separated from the DOM because happy-dom returns zeros from
- * `getBoundingClientRect()`: geometry asserted through the DOM in a unit test
- * would pass regardless of what this computed.
+ * `getBoundingClientRect()` — geometry asserted through a DOM in Vitest would
+ * pass regardless of what this computed. That reasoning survives 2G unchanged;
+ * what changed is that the third argument is the monitor's work area, so the
+ * tooltip clamps above the dock rather than to the app's own window.
  */
 export function placePopover(
-  chip: DOMRect,
-  popover: { width: number; height: number },
-  viewport: { width: number },
+  chip: Rect,
+  size: { width: number; height: number },
+  work: Rect,
 ): { left: number; top: number } {
-  // Above the sentence is the input row, which nobody is reading; below it are
-  // the definition rows, which they might be. So above is preferred, and below
-  // is the fallback when the preferred position would clip the window top.
-  const above = chip.top - popover.height - GAP;
-  const top = above >= MARGIN ? above : chip.bottom + GAP;
+  let top: number;
+  let left = chip.left;
 
-  // The left clamp is applied last on purpose: for a popover wider than the
-  // viewport the right-edge limit goes negative, and `Math.max` pins it to the
-  // margin instead of letting that negative value push it off-screen.
-  const rightmost = viewport.width - popover.width - MARGIN;
-  const left = Math.max(MARGIN, Math.min(chip.left, rightmost));
+  const below = chip.bottom + GAP;
+  const above = chip.top - GAP - size.height;
+
+  if (below + size.height <= work.bottom) {
+    top = below;
+  } else if (above >= work.top) {
+    top = above;
+  } else {
+    // Fits on neither side: pin to the bottom of the work area and step
+    // sideways, right first (MyToolTip.cpp:518-523). This is the case a small
+    // window hits most — a tall entry on a word low on the screen.
+    top = work.bottom - size.height;
+    if (chip.right + GAP + size.width <= work.right) left = chip.right + GAP;
+    else if (chip.left - GAP - size.width >= work.left) left = chip.left - GAP - size.width;
+  }
+
+  // Applied last, and the left clamp wins: for a tooltip wider than the work
+  // area the right-edge limit falls below the left margin, and `Math.max` pins
+  // it to the margin instead of letting that push it off-screen.
+  left = Math.max(work.left + MARGIN, Math.min(left, work.right - size.width - MARGIN));
+  // The vertical pin can undershoot on a work area shorter than the tooltip;
+  // the same argument applies.
+  top = Math.max(work.top + MARGIN, top);
 
   return { left, top };
 }
 
+function distance(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 /**
- * The one popover element, created on first use.
+ * Whether a cursor that has left the word should keep the tooltip open.
  *
- * Module-local rather than recreated per hover: one node means one place for
- * the open state to live, and nothing to leak when a sentence is replaced.
+ * ta-old's rule (`MyToolTip.cpp:354`): compare the cursor's distance to the
+ * tooltip's centre against its distance from the previous sample. Closer means
+ * the user is heading for the tooltip. Chosen over a grace period because it
+ * holds no timer for every dismissal path to remember to clear, and because it
+ * distinguishes moving *toward* the tooltip from merely moving slowly.
  */
-let popover: HTMLElement | null = null;
-
-function element(): HTMLElement {
-  if (popover === null) {
-    popover = document.createElement('div');
-    popover.className = 'entry-popover';
-    // The same entry is already in the definitions pane, so announcing it here
-    // too would read it twice. The chip keeps its own accessible name; this
-    // surface is a visual convenience only.
-    popover.setAttribute('aria-hidden', 'true');
-    // `#app`, not `.panes`: `.panes` is `overflow-y: auto`, so a popover inside
-    // it would be clipped at the pane edge and would scroll away from the word
-    // it describes. Created lazily, which is also why `main.ts` assigning
-    // `app.innerHTML` at import time cannot wipe it.
-    document.querySelector<HTMLElement>('#app')!.append(popover);
-  }
-  return popover;
-}
-
-/** Show ENTRY beside CHIP. Safe to call when one is already open. */
-export function showEntryPopover(chip: HTMLElement, entry: Entry): void {
-  const el = element();
-  el.replaceChildren(renderEntry(entry));
-  // Reset before measuring: a previous open leaves its inline `left` applied,
-  // and for a `position: fixed` box with `right: auto; width: auto`, used
-  // width is shrink-to-fit bounded by `containing-block width - left`.
-  // Measuring against a stale `left` would starve `getBoundingClientRect()`
-  // of the viewport width it actually has, undersizing this entry's box (and,
-  // through wrapped text, its measured height too) for anything that would
-  // need more room than was left over from the previous position.
-  el.style.left = '0px';
-  // Measured before it is placed, because the height decides which side of the
-  // chip it goes on. The base style is `visibility: hidden`, which still lays
-  // out — so this measures the real box at the reset position, and no frame is
-  // ever painted in between: the style write and this layout happen inside
-  // one task.
-  const { left, top } = placePopover(chip.getBoundingClientRect(), el.getBoundingClientRect(), {
-    width: window.innerWidth,
-  });
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
-  el.classList.add('open');
-}
-
-/** Hide it. A no-op when nothing has been shown yet. */
-export function hideEntryPopover(): void {
-  popover?.classList.remove('open');
+export function shouldKeep(prev: Point, next: Point, centre: Point): boolean {
+  return distance(next, centre) < distance(prev, centre);
 }
