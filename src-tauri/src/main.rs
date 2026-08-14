@@ -90,7 +90,14 @@ fn main() {
                     app.manage(Arc::clone(&shared));
                     app.manage(state::StartupFailure(String::new()));
                     let handle = app.handle().clone();
-                    tauri::async_runtime::spawn(parse::run_worker(handle, shared, rx));
+                    // TODO(Task 4, Phase 2F): temporary shim. `run_worker` now
+                    // takes the index through a `watch` channel so it can be
+                    // spawned before one exists; startup here always has one
+                    // by this point, so this just wraps it in a channel that
+                    // never changes. Task 4 replaces this with the real
+                    // channel shared with `commands::download_dictionary`.
+                    let (_index_tx, index_rx) = tokio::sync::watch::channel(Some(shared));
+                    tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, rx));
                 }
                 Err(e) => {
                     // Startup failures are surfaced to the webview rather than

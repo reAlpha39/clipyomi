@@ -58,10 +58,32 @@ pub async fn next_input(rx: &mut watch::Receiver<String>) -> Option<String> {
     Some(text)
 }
 
+/// The index, or `None` while the app is still waiting for a first-run
+/// download to finish.
+///
+/// Separated from `run_worker` so the "no index yet" branch is testable
+/// without a live Tauri app handle. The `watch` borrow is released before the
+/// value is returned, so no guard is ever held across an `.await`.
+pub fn current_index(index: &watch::Receiver<Option<Arc<AppState>>>) -> Option<Arc<AppState>> {
+    index.borrow().clone()
+}
+
 /// Parse each new input and emit the outcome to the webview.
-pub async fn run_worker(app: AppHandle, state: Arc<AppState>, mut rx: watch::Receiver<String>) {
+///
+/// The index arrives through `index` rather than being passed by value, because
+/// the worker is spawned before startup knows whether there is one: on a first
+/// run it starts empty and begins parsing when `commands::download_dictionary`
+/// publishes. Input arriving before then is dropped — the download screen is on
+/// top at that point, so there is nothing a message could usefully tell the user.
+pub async fn run_worker(
+    app: AppHandle,
+    index: watch::Receiver<Option<Arc<AppState>>>,
+    mut rx: watch::Receiver<String>,
+) {
     while let Some(text) = next_input(&mut rx).await {
-        let state = Arc::clone(&state);
+        let Some(state) = current_index(&index) else {
+            continue;
+        };
         let len = text.chars().count();
 
         let outcome = tauri::async_runtime::spawn_blocking(move || {
@@ -135,6 +157,36 @@ mod tests {
     fn catch_parse_contains_a_panic_and_names_the_input_length() {
         let err = catch_parse(4096, || panic!("offset out of range")).expect_err("must be Err");
         assert!(err.contains("4096"), "got {err}");
+    }
+
+    /// Before the first-run download finishes there is no index, and input can
+    /// still arrive — the clipboard poll runs regardless. The worker must skip
+    /// rather than panic or emit an error the user cannot act on.
+    #[test]
+    fn no_index_yet_yields_nothing_to_parse() {
+        let (_tx, rx) = watch::channel(None::<Arc<AppState>>);
+        assert!(current_index(&rx).is_none());
+    }
+
+    /// The download publishes into this channel; the worker must see it without
+    /// a restart. This is the mechanism 2F's "no restart" promise rests on.
+    #[test]
+    fn a_published_index_becomes_visible_without_a_restart() {
+        use jparser::conjugation::ConjugationTable;
+        use jparser::index::load::Index;
+
+        let root = crate::test_support::scratch("worker-late-index");
+        let generation = crate::test_support::build_index_generation(&root);
+        let state = AppState {
+            index: Index::open(&generation).expect("open"),
+            table: ConjugationTable::load_embedded().expect("table"),
+            hints: None,
+        };
+
+        let (tx, rx) = watch::channel(None);
+        assert!(current_index(&rx).is_none(), "starts empty");
+        tx.send(Some(Arc::new(state))).expect("send");
+        assert!(current_index(&rx).is_some(), "publishing must be visible");
     }
 
     /// Ported from `commands::tests::a_parse_failure_is_reported_as_its_display_string`:
