@@ -297,3 +297,26 @@ fn ensure_dictionary_builds_through_the_source_dir_route() {
 
     assert!(out.contains("generation: gen-1"), "got: {out}");
 }
+
+/// The flag must be rejected when the dictionary is missing, rather than
+/// silently parsing without hints. Gated on `mecab`: `--hints` does not exist
+/// in the default build (see the CLI's `Parse` variant), so this only runs
+/// under `cargo test -p jparser --features mecab`.
+#[cfg(feature = "mecab")]
+#[test]
+fn parse_rejects_an_absent_hints_dictionary() {
+    let dir = scratch("cli-hints-absent");
+    std::fs::write(dir.join("mini.xml"), XML).expect("write xml");
+    cli(&["build-index", "mini.xml", "idx"], &dir);
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_jparser-cli"))
+        .args(["parse", "idx", "東京", "--hints", "nope.dic"])
+        .current_dir(&dir)
+        .output()
+        .expect("run jparser-cli");
+
+    assert!(
+        !out.status.success(),
+        "a missing dictionary must be rejected"
+    );
+}

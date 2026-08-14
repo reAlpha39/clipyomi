@@ -125,6 +125,11 @@ enum Command {
         index: PathBuf,
         /// Text to parse.
         text: String,
+        /// Path to an uncompressed compiled Vibrato dictionary. When given,
+        /// tokenization supplies boundary hints to the segmenter.
+        #[cfg(feature = "mecab")]
+        #[arg(long)]
+        hints: Option<PathBuf>,
     },
     /// Convert kana to romaji.
     Romaji {
@@ -260,12 +265,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        Command::Parse { index, text } => {
+        Command::Parse {
+            index,
+            text,
+            #[cfg(feature = "mecab")]
+            hints,
+        } => {
             let table = ConjugationTable::load_embedded()?;
             let index = Index::open(&index)?;
-            // `None` hints: BoundaryHints has no implementation until Phase 5,
-            // and `None` must behave exactly like one that always returns false.
-            let result = jparser::parse(&index, &table, &text, &ParseOptions::default(), None)?;
+
+            #[cfg(feature = "mecab")]
+            let tokenizer = match &hints {
+                Some(path) => Some(jparser::hints::VibratoTokenizer::load(path)?),
+                None => None,
+            };
+            #[cfg(feature = "mecab")]
+            let flags = tokenizer.as_ref().map(|t| t.hints(&text));
+            #[cfg(feature = "mecab")]
+            let hints: Option<&dyn jparser::BoundaryHints> =
+                flags.as_ref().map(|f| f as &dyn jparser::BoundaryHints);
+            #[cfg(not(feature = "mecab"))]
+            let hints: Option<&dyn jparser::BoundaryHints> = None;
+
+            let result = jparser::parse(&index, &table, &text, &ParseOptions::default(), hints)?;
             for seg in &result.segments {
                 if !seg.matched {
                     println!(

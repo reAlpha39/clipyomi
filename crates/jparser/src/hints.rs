@@ -326,4 +326,109 @@ mod tests {
             .expect("must fail");
         assert!(err.to_string().contains("system.dic"), "got {err}");
     }
+
+    /// The phase's reason to exist: the derivation must actually produce flags
+    /// for ordinary input. Everything else here tests individual rules, which a
+    /// no-op implementation returning all-false would also satisfy.
+    ///
+    /// `AlwaysBad` in `segment.rs` already proves the DP *responds* to hints;
+    /// this proves the hints we derive are non-empty and correctly placed.
+    #[test]
+    fn the_derivation_is_not_inert() {
+        let text = "東京都";
+        let f = flags_for(text);
+
+        let any = (0..text.chars().count()).any(|p| f.bad_start(p) || f.bad_end(p));
+        assert!(any, "the derivation produced no flags at all");
+
+        assert!(
+            f.bad_end(0) && f.bad_start(1),
+            "東京's interior must be marked"
+        );
+    }
+
+    /// The end-to-end proof, not just a unit check on the derivation: a real
+    /// `jparser::parse` call whose *segmentation* changes when hints are
+    /// supplied, versus not.
+    ///
+    /// A plain two-entry dictionary cannot force this: `score_match`'s
+    /// `MATCH_BASE`/`SINGLE_CHAR_PENALTY` make "東京"+"都" and "東"+"京都" cost
+    /// exactly the same on a bare noun dictionary, so `segment.rs`'s own
+    /// tie-break ("last writer wins") already happens to land on the correct
+    /// split with no hints at all — nothing would be proved. Giving 京都 a
+    /// JMdict priority marker (`ke_pri`, which becomes the `COMMON`/
+    /// `COMMON_LINE` bonus in `segment.rs`) breaks that tie in favor of the
+    /// *wrong* split outright: a realistic failure mode, since dictionary
+    /// frequency alone cannot tell "東"+"京都" from "東京"+"都". `flags_for`
+    /// then supplies exactly the interior hint `the_derivation_is_not_inert`
+    /// pins (`bad_end(0)`, `bad_start(1)`), which taxes both matches
+    /// straddling that interior — "東" ending at 0 and "京都" starting at 1 —
+    /// by ten points apiece, which is enough to flip the winner back.
+    #[test]
+    fn hints_change_which_segmentation_jparser_parse_returns() {
+        const XML: &str = concat!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+            "<JMdict>",
+            "<entry><ent_seq>1</ent_seq><k_ele><keb>東</keb></k_ele>",
+            "<r_ele><reb>ひがし</reb></r_ele>",
+            "<sense><pos>&n;</pos><gloss>east</gloss></sense></entry>",
+            "<entry><ent_seq>2</ent_seq><k_ele><keb>都</keb></k_ele>",
+            "<r_ele><reb>みやこ</reb></r_ele>",
+            "<sense><pos>&n;</pos><gloss>capital</gloss></sense></entry>",
+            "<entry><ent_seq>3</ent_seq><k_ele><keb>東京</keb></k_ele>",
+            "<r_ele><reb>とうきょう</reb></r_ele>",
+            "<sense><pos>&n;</pos><gloss>Tokyo</gloss></sense></entry>",
+            "<entry><ent_seq>4</ent_seq>",
+            "<k_ele><keb>京都</keb><ke_pri>news1</ke_pri></k_ele>",
+            "<r_ele><reb>きょうと</reb></r_ele>",
+            "<sense><pos>&n;</pos><gloss>Kyoto</gloss></sense></entry>",
+            "</JMdict>",
+        );
+
+        let table = crate::conjugation::ConjugationTable::load_embedded()
+            .expect("the embedded conjugation table must load");
+        let dir = scratch("e2e-segmentation-flip");
+        let report = crate::index::build::build_from_reader(
+            XML.as_bytes(),
+            &table,
+            &crate::stem::StemOptions::default(),
+            &dir,
+        )
+        .expect("the fixture must build");
+        assert_eq!(
+            report.skipped_entries, 0,
+            "the fixture must not be malformed"
+        );
+        let index = crate::index::load::Index::open(&dir).expect("open the built index");
+
+        let text = "東京都";
+        let opts = crate::ParseOptions::default();
+        let without = crate::parse(&index, &table, text, &opts, None).expect("parse without hints");
+        let flags = flags_for(text);
+        let with =
+            crate::parse(&index, &table, text, &opts, Some(&flags)).expect("parse with hints");
+
+        let shape = |r: &crate::ParseResult| -> Vec<(usize, usize, String)> {
+            r.segments
+                .iter()
+                .map(|s| (s.start, s.len, s.surface.clone()))
+                .collect()
+        };
+
+        assert_eq!(
+            shape(&without),
+            vec![(0, 1, "東".to_string()), (1, 2, "京都".to_string())],
+            "without hints, 京都's priority bonus must win the tie outright"
+        );
+        assert_eq!(
+            shape(&with),
+            vec![(0, 2, "東京".to_string()), (2, 1, "都".to_string())],
+            "with hints, the interior penalty must flip the winner back"
+        );
+        assert_ne!(
+            shape(&without),
+            shape(&with),
+            "the whole point: hints must change parse's own output, not just the derivation"
+        );
+    }
 }

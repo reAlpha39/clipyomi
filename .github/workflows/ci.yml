@@ -89,6 +89,22 @@ jobs:
             exit 1
           fi
 
+  mecab:
+    name: jparser with mecab
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # `mecab` is off by default (see Cargo.toml), so the `test` and `purity`
+      # jobs above never compile `hints.rs` at all. Without this job the
+      # phase's core module would ship unlinted and untested in CI.
+      - run: cargo test -p jparser --features mecab
+      - run: cargo clippy -p jparser --features mecab --all-targets -- -D warnings
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest
