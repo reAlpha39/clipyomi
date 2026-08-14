@@ -189,6 +189,37 @@ This is recorded here so Phase 3 inherits a measured observation rather than
 rediscovering it, and deliberately not fixed in 2E — it belongs with font sizes
 and gloss filters, decided together.
 
+### 6.2 Hover-to-preview is a known Phase 3 input
+
+ta-old showed a definition on **hover**, not on click: `FuriganaWindow.cpp:716-730`
+tracks `WM_MOUSEMOVE`, arms `TrackMouseEvent` with `TME_HOVER` and
+`dwHoverTime = 350`, and pops a tooltip (`MyToolTip.cpp`) once the cursor has
+dwelt on a word for 350 ms.
+
+The port replaced that deliberately — port design §7.2 assigns hover a purely
+visual role ("hover lifts the surface; click scrolls to and marks the definition
+row") and moves the content into a permanent pane listing every span in sentence
+order. That trade is sound for reading a whole sentence: every definition is
+visible at once, it survives the mouse moving away, and the chips are real
+`<button>`s carrying Enter/Space activation and a focus ring, which a hover
+tooltip cannot be.
+
+What it loses is the **glance** — checking one unfamiliar word without spending a
+click and then finding the matching row. First real use after 2E surfaced this
+immediately.
+
+Recorded here rather than fixed because it is the same complaint as §6.1 from the
+other direction: the pane is where definitions live and there is not enough room
+in it. Deciding hover separately from density, font sizes, and gloss filters would
+mean deciding the same thing twice.
+
+The likely shape is **additive, not a reversion** — keep the pane, add a hover
+popover for the glance case, gated behind a dwell like ta-old's 350 ms so it does
+not fire while the cursor sweeps across a sentence. A popover also inherits 2D's
+constraints: `transform`/`opacity` only, `prefers-reduced-motion` respected, and
+it must not become the only route to a definition, since hover has no keyboard
+equivalent.
+
 ## 7. Testing
 
 ### 7.1 Why no test touches the clipboard
