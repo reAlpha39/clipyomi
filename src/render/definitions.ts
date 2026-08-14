@@ -1,6 +1,6 @@
 import type { Entry, ParseResult } from '../types';
 
-function renderEntry(entry: Entry): HTMLElement {
+export function renderEntry(entry: Entry): HTMLElement {
   const el = document.createElement('div');
   el.className = 'entry';
 

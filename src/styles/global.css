@@ -195,3 +195,48 @@ details summary {
   color: var(--color-muted);
   cursor: pointer;
 }
+
+.entry-popover {
+  position: fixed;
+  z-index: 1;
+  /* `visibility` rather than `display: none`: a hidden popover still lays out,
+     so `showEntryPopover` can measure it before placing it. Playwright also
+     treats a `visibility: hidden` element as not visible, which an
+     `opacity: 0` one is not. */
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+  /* Load-bearing, not polish: the popover can never intercept the hover that
+     opened it, so the flicker loop — overlap, mouseout, hide, mouseover, show —
+     cannot occur at all. It also settles that nothing inside can be clicked,
+     expanded, scrolled, or selected. */
+  pointer-events: none;
+  max-width: min(320px, 100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: hidden;
+  padding: var(--space-pane);
+  font-size: var(--text-gloss);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px var(--color-shadow);
+}
+
+.entry-popover.open {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+}
+
+/* AFTER the rules above, deliberately: equal specificity means later wins, and
+   2F shipped this exact kind of override dead by placing it before its base
+   rule. No test in either suite catches that — only reading the cascade does. */
+@media (prefers-reduced-motion: reduce) {
+  .entry-popover {
+    transition: none;
+  }
+}

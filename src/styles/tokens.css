@@ -8,6 +8,7 @@
   --color-kana: oklch(45% 0.08 160);
   --color-particle: oklch(55% 0.10 30);
   --color-counter: oklch(50% 0.10 300);
+  --color-shadow: oklch(0% 0 0 / 0.18);
 
   --text-sentence: 24px;
   --text-reading: 11px;
@@ -30,6 +31,7 @@
     --color-kana: oklch(78% 0.08 160);
     --color-particle: oklch(80% 0.10 30);
     --color-counter: oklch(78% 0.10 300);
+    --color-shadow: oklch(0% 0 0 / 0.5);
   }
 }
 
@@ -43,4 +45,5 @@
   --color-kana: oklch(78% 0.08 160);
   --color-particle: oklch(80% 0.10 30);
   --color-counter: oklch(78% 0.10 300);
+  --color-shadow: oklch(0% 0 0 / 0.5);
 }
