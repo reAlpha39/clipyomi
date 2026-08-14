@@ -13,6 +13,7 @@
 mod clipboard;
 mod commands;
 mod parse;
+mod popover;
 mod settings;
 mod state;
 #[cfg(test)]
@@ -120,6 +121,11 @@ fn main() {
                     app.manage(state::NeedsDictionary(false));
                 }
             }
+            // Built here rather than declared in tauri.conf.json's `windows`
+            // array: the config array has no way to express "create it hidden
+            // and never show it until asked", and a tooltip that flashes at
+            // startup is worse than no tooltip.
+            popover::create(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -131,7 +137,9 @@ fn main() {
             commands::settings_warning,
             commands::frontend_ready,
             commands::download_dictionary,
-            commands::needs_dictionary
+            commands::needs_dictionary,
+            popover::place_popover,
+            popover::hide_popover
         ])
         // If the runtime cannot start, there is no window to report anything
         // in, so the alternative to this `expect` is a silent exit.
