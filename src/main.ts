@@ -17,7 +17,7 @@ app.innerHTML = `
     <button id="parse">Parse</button>
   </div>
   <div id="parse-error"></div>
-  <div class="panes"><div id="dictionary"></div><div id="output"></div></div>
+  <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
 `;
 
 const output = app.querySelector<HTMLElement>('#output')!;
@@ -63,6 +63,11 @@ export async function showSettingsWarning(): Promise<void> {
 
 const dictionary = app.querySelector<HTMLElement>('#dictionary')!;
 
+// `role="status"` on the markup element (a native ARIA live region — no JS
+// wiring needed) is what makes every `renderDictionary` text update below
+// audible to a screen reader: without it, a user who presses Download hears
+// nothing for the 15+ seconds the build takes, and nothing again if it fails.
+
 // The backend's own phase labels. Anything not in this map is an error message
 // to show verbatim, which is why this is a lookup rather than an enum — the
 // failure arm carries text the user needs to read.
@@ -72,10 +77,30 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 function renderDictionary(status: string | null): void {
+  // Read before any DOM mutation below: `replaceChildren` on a parent whose
+  // descendant currently has focus moves focus straight to `<body>` the
+  // instant that descendant is removed (confirmed against both real Chromium
+  // and happy-dom while writing this fix) — which is exactly what used to
+  // happen the moment a click on Download re-rendered the button out from
+  // under itself. Gating the restore below on this, rather than always
+  // refocusing something, is also what stops an unrelated background `ready`
+  // from stealing focus from wherever the user actually is when they never
+  // touched this screen.
+  const hadFocus = dictionary.contains(document.activeElement);
+
+  // `#dictionary` carries `tabindex="-1"` in the markup precisely so this has
+  // somewhere to land even in states with no interactive child at all — the
+  // downloading/building spinner, and the empty node `ready` leaves behind.
+  function restoreFocus(): void {
+    if (!hadFocus) return;
+    (dictionary.querySelector('button') ?? dictionary).focus();
+  }
+
   if (status === 'ready') {
     dictionary.replaceChildren();
     input.disabled = false;
     parseButton.disabled = false;
+    restoreFocus();
     return;
   }
 
@@ -93,6 +118,7 @@ function renderDictionary(status: string | null): void {
     spinner.setAttribute('aria-hidden', 'true');
     el.replaceChildren(label, spinner);
     dictionary.replaceChildren(el);
+    restoreFocus();
     return;
   }
 
@@ -116,7 +142,10 @@ function renderDictionary(status: string | null): void {
   // request, this one is belt-and-braces behind an immediate re-render:
   // `renderDictionary('downloading')` replaces this button synchronously,
   // before `invoke` even starts, so the node a second click would need to
-  // land on is already gone by the time anyone could click it again.
+  // land on is already gone by the time anyone could click it again. That
+  // same synchronous removal used to blur focus just as thoroughly as
+  // `disabled` would have — `restoreFocus`, above, is what fixes that half
+  // of the trade rather than swapping one way of losing focus for another.
   let pending = false;
   button.addEventListener('click', () => {
     if (pending) return;
@@ -131,6 +160,7 @@ function renderDictionary(status: string | null): void {
 
   el.replaceChildren(message, button);
   dictionary.replaceChildren(el);
+  restoreFocus();
 }
 
 // Exported for the same reason `showStartupError` is: a test can await it

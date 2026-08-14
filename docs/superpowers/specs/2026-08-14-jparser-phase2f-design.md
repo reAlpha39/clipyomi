@@ -61,7 +61,19 @@ app.manage(commands::IndexSender(index_tx.clone()));
 The worker is spawned unconditionally. 2E spawned it only on the success branch
 and dropped `rx` otherwise — correct then, but it leaves no live channel for a
 result to arrive on after a first-run download. Spawning always removes the
-special case rather than adding one, and `run_poll`'s exit path is unchanged.
+special case rather than adding one.
+
+**Correction (final review):** this section originally said `run_poll`'s exit
+path was unchanged. It is not — it is now unreachable. That path is
+`clipboard::run_poll`'s `if tx.send(text).is_err() { return; }`, which used to
+fire whenever `run_worker` had not been spawned (2E's fatal-startup branch
+dropped `rx` immediately, so the very first tick's `send` failed and the poll
+stopped). Now that the worker is spawned unconditionally and always holds
+`rx`, that `send` can never fail, so on a genuinely fatal startup the poll
+keeps ticking for the life of the app, feeding a worker that silently
+discards everything via its `current_index` guard. Harmless — nothing reads
+the discarded input — but it is a real behavior change this section did not
+record.
 
 `run_worker` gains exactly one guard: `borrow()` the index before parsing and skip
 when it is `None`. `next_input`, `catch_parse`, the `spawn_blocking` call, and the
@@ -126,6 +138,16 @@ network code in the shell. The purity gate guards `crates/jparser`, not the shel
 so this is permitted; it is stated here so it is a decision in the spec rather
 than a surprise in a diff.
 
+**Addendum (final review):** this is also the first time that connection is
+opened by an end user's click rather than a developer running a CLI. Its
+properties, already recorded for the CLI path in the Phase 2B spec, are worth
+repeating here for that reason: the fetch is plain HTTP
+(`http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz` — `https://` fails certificate
+validation with a subject-name mismatch), integrity is checked only via
+gzip's own CRC32 trailer, and there is no authenticity guarantee at all, so an
+on-path substitution is indistinguishable from a real response until the
+archive is decoded.
+
 ## 3. States
 
 | State | Content |
@@ -134,9 +156,19 @@ than a surprise in a diff.
 | Working | Phase label (`Downloading…` → `Building index…`) and a spinner |
 | Failed | The reason, the source directory path, a **Retry** button |
 
-The screen occupies `output` — the node `showStartupError` already uses — because
-it is the app's entire content until an index exists. On success it simply clears;
-no restart, no modal, nothing to dismiss.
+**Correction (final review):** this originally said the screen occupies
+`output`, the node `showStartupError` already uses, because it is the app's
+entire content until an index exists. The shipped code instead gives it its
+own `<div id="dictionary">`, a fixed sibling of `output` inside `.panes` — a
+deliberate controller ruling, not a drift from the plan. `output` is what a
+successful parse replaces wholesale (the same hazard `#parse-error`'s own
+comment documents for a different node), so a screen living there would be
+silently wiped by the very first parse it enables, or would pile up on repeat
+failures because nothing removes the previous node. A fixed slot has neither
+problem, and `output` is empty for the whole time this screen is showing
+regardless, so the intent — this screen is the app's entire visible content
+until an index exists — is unaffected. On success it simply clears; no
+restart, no modal, nothing to dismiss.
 
 **The spinner inherits 2D's motion rules:** `transform` and `opacity` only, so it
 is a rotation, and the `prefers-reduced-motion` block must replace it with a

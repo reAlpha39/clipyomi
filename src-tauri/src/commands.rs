@@ -170,6 +170,55 @@ fn emit_status(app: &AppHandle, status: &str) {
     }
 }
 
+/// The failure text for `err`, preferring a more specific inner error when
+/// one is recoverable.
+///
+/// `ensure_dictionary`'s source closure hands `resolve`'s failure to it as a
+/// plain `std::io::Error` — `jmdict_source::resolve_from` boxes the original
+/// `SourceError` via `std::io::Error::other`, since `jmdict-source` cannot
+/// depend on `jparser`'s `IndexError` to return one directly — and
+/// `ensure_dictionary` then wraps *that* a second time as `IndexError::Io`.
+/// Shown as-is, that reads as "index io failed: could not obtain the
+/// dictionary after 3 attempts (...)": the outer wrapper's prefix describes a
+/// build-time I/O failure, which is not what happened. Downcasting recovers
+/// the original `SourceError` and shows its own, more specific message
+/// instead. `jmdict_source`'s own `the_typed_error_survives_the_io_wrapper`
+/// test exists to prove this downcast is reliable; a genuine index-level I/O
+/// failure (no `SourceError` inside) falls through to `IndexError`'s own
+/// message unchanged.
+fn describe_index_error(err: &jparser::index::IndexError) -> String {
+    if let jparser::index::IndexError::Io(io_err) = err {
+        if let Some(source_err) = io_err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<jmdict_source::SourceError>())
+        {
+            return source_err.to_string();
+        }
+    }
+    err.to_string()
+}
+
+/// Append the manual-fallback instructions to `reason`, unless it already
+/// names `source_dir_display`.
+///
+/// `SourceError::Http` and `SourceError::TooManyAttempts` already end with
+/// "place a JMdict_e.gz in `<source_dir>` manually to bypass the download"
+/// (`crates/jmdict-source/src/lib.rs`) — appending the same instructions
+/// again would say it twice on screen. Every other failure (a corrupt
+/// archive, a conjugation-table load failure, a dead worker) says nothing
+/// about the directory at all, so this is the only place those would ever
+/// learn about the manual escape hatch.
+fn with_fallback(reason: String, source_dir_display: &str) -> String {
+    if reason.contains(source_dir_display) {
+        format!("{reason}. Retry.")
+    } else {
+        format!(
+            "{reason}. Retry, or place {} in {source_dir_display} and retry.",
+            jmdict_source::SOURCE_FILE,
+        )
+    }
+}
+
 /// Download JMdict if absent, build the index, and publish it to the worker.
 ///
 /// Returns `Err` only when the work could not be *started*; every outcome after
@@ -189,13 +238,11 @@ pub async fn download_dictionary(
     let flag = Arc::clone(&inflight.0);
     let root = paths.root.clone();
     let source_dir = paths.source_dir.clone();
+    // Read before `source_dir` moves into the closure below, so the fallback
+    // message can still be built from it once the closure has finished.
+    let source_dir_display = source_dir.display().to_string();
     let tx = index.0.clone();
     let handle = app.clone();
-    let failure_hint = format!(
-        " Retry, or place {} in {} and retry.",
-        jmdict_source::SOURCE_FILE,
-        source_dir.display()
-    );
 
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         emit_status(&handle, "downloading");
@@ -223,7 +270,7 @@ pub async fn download_dictionary(
                 Ok(reader)
             },
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| describe_index_error(&e))?;
 
         // mirrors state::load_state's hints branch
         let hints = match std::env::var_os(crate::state::HINTS_ENV) {
@@ -255,11 +302,15 @@ pub async fn download_dictionary(
                 return Ok(());
             }
         }
-        // The failure hint names the archive and directory, which is the whole
-        // manual fallback: `resolve` serves a hand-placed file without touching
-        // the network, so a user behind a proxy can drop it in and press Retry.
-        Ok(Err(message)) => format!("{message}.{failure_hint}"),
-        Err(e) => format!("the download task failed to run: {e}.{failure_hint}"),
+        // `with_fallback` names the archive and directory only when `message`
+        // does not already: `resolve` serves a hand-placed file without
+        // touching the network, so a user behind a proxy can drop it in and
+        // press Retry either way.
+        Ok(Err(message)) => with_fallback(message, &source_dir_display),
+        Err(e) => with_fallback(
+            format!("the download task failed to run: {e}"),
+            &source_dir_display,
+        ),
     };
 
     emit_status(&app, &message);
@@ -312,5 +363,75 @@ mod tests {
         claim_download(&flag).expect("first");
         release_download(&flag);
         claim_download(&flag).expect("retry after release");
+    }
+
+    /// Final review, Finding 1: `resolve_from` boxes a `SourceError` inside a
+    /// plain `io::Error` (`std::io::Error::other`), which `ensure_dictionary`
+    /// wraps again as `IndexError::Io`. The downcast must recover the
+    /// original message rather than showing the generic "index io failed: "
+    /// wrapper ahead of it.
+    #[test]
+    fn a_wrapped_source_error_replaces_the_generic_io_prefix() {
+        let source_err = jmdict_source::SourceError::TooManyAttempts {
+            attempts: 3,
+            source_dir: PathBuf::from("/tmp/example/source"),
+            last: "downloading the dictionary failed: connection refused".to_string(),
+        };
+        let expected = source_err.to_string();
+        let wrapped = jparser::index::IndexError::Io(std::io::Error::other(source_err));
+
+        let reason = describe_index_error(&wrapped);
+        assert_eq!(reason, expected, "must show SourceError's own message");
+        assert!(
+            !reason.starts_with("index io failed"),
+            "the generic wrapper prefix must not leak: {reason}"
+        );
+    }
+
+    /// An `IndexError::Io` with no `SourceError` inside it is a genuine
+    /// index-level I/O failure (e.g. a disk full while publishing a
+    /// generation), which `IndexError`'s own "index io failed: " prefix
+    /// describes correctly — the downcast must not touch it.
+    #[test]
+    fn a_genuine_index_io_error_keeps_its_own_message() {
+        let wrapped = jparser::index::IndexError::Io(std::io::Error::other("disk full"));
+        let reason = describe_index_error(&wrapped);
+        assert_eq!(reason, wrapped.to_string());
+        assert!(reason.starts_with("index io failed"), "got {reason}");
+    }
+
+    /// `SourceError::Http` and `SourceError::TooManyAttempts` already name the
+    /// source directory as part of their own manual-fallback advice —
+    /// appending a second copy would say it twice, which is the bug the whole
+    /// review finding is about.
+    #[test]
+    fn the_fallback_is_not_repeated_when_the_reason_already_names_the_directory() {
+        let dir = "/tmp/example/source";
+        let reason = format!(
+            "could not obtain the dictionary after 3 attempts (...); place a \
+             JMdict_e.gz in {dir} manually to bypass the download"
+        );
+
+        let full = with_fallback(reason, dir);
+
+        assert_eq!(
+            full.matches(dir).count(),
+            1,
+            "the directory must appear exactly once: {full}"
+        );
+        assert!(full.contains("Retry"), "got {full}");
+    }
+
+    /// A corrupt-archive build failure (`IndexError::Jmdict`) never mentions
+    /// the source directory on its own, so the fallback must still be added —
+    /// this is the escape hatch's only appearance for that failure.
+    #[test]
+    fn the_fallback_is_added_when_the_reason_does_not_name_the_directory() {
+        let dir = "/tmp/example/source";
+        let full = with_fallback("reading JMdict failed: unexpected eof".to_string(), dir);
+
+        assert!(full.contains(dir), "got {full}");
+        assert!(full.contains("Retry"), "got {full}");
+        assert!(full.contains(jmdict_source::SOURCE_FILE), "got {full}");
     }
 }

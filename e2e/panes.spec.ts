@@ -111,19 +111,22 @@ test('activating a toggle keeps keyboard focus', async ({ page }) => {
 });
 
 // STUB's default `needs_dictionary` answer is `false` so every other spec in
-// this file keeps exercising the parse path; this is the one test that needs
-// the opposite, so the override lives here rather than reshaping STUB itself.
+// this file keeps exercising the parse path; the tests below need the
+// opposite, so the override lives here rather than reshaping STUB itself.
 // Wrapping the real invoke (rather than replacing __TAURI_INTERNALS__
 // wholesale) keeps the `plugin:event|listen` handling STUB already provides.
+// Shared by every download-screen test in this file, not just the first one.
+const NEEDS_DICTIONARY_STUB = `
+  ${STUB}
+  const realInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+    if (cmd === 'needs_dictionary') return true;
+    return realInvoke(cmd, args);
+  };
+`;
+
 test('the first-run download screen appears and clears on ready', async ({ page }) => {
-  await page.addInitScript(`
-    ${STUB}
-    const realInvoke = window.__TAURI_INTERNALS__.invoke;
-    window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
-      if (cmd === 'needs_dictionary') return true;
-      return realInvoke(cmd, args);
-    };
-  `);
+  await page.addInitScript(NEEDS_DICTIONARY_STUB);
   await page.goto('/');
 
   await expect(page.locator('#download')).toBeVisible();
@@ -131,6 +134,83 @@ test('the first-run download screen appears and clears on ready', async ({ page 
   await page.evaluate(() => window.__TA_EMIT__('dictionary-status', 'ready'));
   await expect(page.locator('#dictionary')).toBeEmpty();
 });
+
+// Final review, Finding 3: the click handler used to call
+// `renderDictionary('downloading')` synchronously, which `replaceChildren`s
+// the very button the user just activated out of the DOM — real browsers
+// move focus to `<body>` the instant a focused element is removed that way.
+// `renderDictionary` now restores focus into whatever the new content
+// offers (the live region itself when there is no button yet) whenever focus
+// was inside `#dictionary` to begin with. This drives the whole journey —
+// activation, the button-less in-flight phase, then a real failure — because
+// each of those three renders is a separate DOM replacement that could
+// independently drop focus; a single assertion at the end would not tell
+// which step (if any) regressed.
+test('activating Download keeps keyboard focus through a failure and into Retry', async ({
+  page,
+}) => {
+  await page.addInitScript(NEEDS_DICTIONARY_STUB);
+  await page.goto('/');
+
+  const download = page.locator('#download');
+  await download.focus();
+  await page.keyboard.press('Enter');
+
+  // The button is gone the instant the click handler re-renders to the
+  // downloading phase, which has no button at all — focus must land on the
+  // live region itself, never on <body>.
+  await expect(page.locator('#dictionary')).toBeFocused();
+
+  // The real failure surface is a `dictionary-status` event carrying an
+  // error message, not a rejected `invoke` — `download_dictionary`'s own doc
+  // comment is explicit that it fails this way on purpose (design §2.2).
+  await page.evaluate(() => window.__TA_EMIT__('dictionary-status', 'a network error'));
+  await expect(page.locator('#download')).toBeFocused();
+});
+
+// Final review, Finding 2: the download screen — the first screen a new user
+// ever sees — had no visual baseline at all, which is why a dead
+// reduced-motion CSS rule (Ruling 11) had to be caught by a human reading the
+// cascade instead of a screenshot diff. Compact size only, both themes, same
+// reasoning as the activated-chip baselines below: `.dictionary`/`.spinner`/
+// `.dictionary button` carry no size-specific CSS, so a second viewport would
+// add baseline surface with no extra coverage. Two states are captured
+// because they are visually distinct and each has its own failure mode: the
+// initial offer (button, `.dictionary` copy) and the in-flight phase
+// (spinner, `@keyframes spin`) — Playwright's `toHaveScreenshot` default of
+// `animations: 'disabled'` completes the infinite spin at the end of its
+// first iteration (a full 360°, indistinguishable from the rest state) before
+// capturing, so this is not flaky despite the animation being unbounded.
+for (const theme of THEMES) {
+  test(`the download screen's offer renders correctly in ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 480, height: 320 });
+    await page.emulateMedia({ colorScheme: theme });
+    await page.addInitScript(NEEDS_DICTIONARY_STUB);
+    await page.goto('/');
+
+    await expect(page.locator('#download')).toBeVisible();
+
+    if (!process.env.CI) {
+      await expect(page).toHaveScreenshot(`panes-download-offer-${theme}.png`);
+    }
+  });
+
+  test(`the download screen's in-flight phase renders correctly in ${theme}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 480, height: 320 });
+    await page.emulateMedia({ colorScheme: theme });
+    await page.addInitScript(NEEDS_DICTIONARY_STUB);
+    await page.goto('/');
+
+    await page.evaluate(() => window.__TA_EMIT__('dictionary-status', 'downloading'));
+    await expect(page.locator('.spinner')).toBeVisible();
+
+    if (!process.env.CI) {
+      await expect(page).toHaveScreenshot(`panes-download-downloading-${theme}.png`);
+    }
+  });
+}
 
 // Runs everywhere, including CI (no `!process.env.CI` guard) — a screenshot
 // diff is skipped there, so this is what actually protects the focus ring

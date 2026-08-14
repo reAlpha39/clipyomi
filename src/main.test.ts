@@ -543,6 +543,15 @@ describe('the first-run download screen', () => {
     expect(document.querySelector('#download')).not.toBeNull();
   });
 
+  // Final review, Finding 3: without this, a screen-reader user who presses
+  // Download hears nothing for the 15+ seconds the build takes, and nothing
+  // again if it fails. `role="status"` is a native ARIA live region
+  // (implicit `aria-live="polite"`), set once in the markup rather than
+  // toggled per render, so this only needs to prove it is there at all.
+  test('#dictionary is a live region so status changes are announced', () => {
+    expect(document.querySelector('#dictionary')?.getAttribute('role')).toBe('status');
+  });
+
   test('a status event replaces the button with the phase', () => {
     emit('dictionary-status', 'building');
     expect(document.querySelector('#dictionary')?.textContent).toContain('Building');
