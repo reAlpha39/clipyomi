@@ -23,6 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # src-tauri joined the workspace in Phase 2D, so every job that compiles
+      # the workspace now links against webkit2gtk.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libxdo-dev libssl-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -48,6 +56,14 @@ jobs:
         rust: ["1.85"]
     steps:
       - uses: actions/checkout@v4
+
+      # src-tauri joined the workspace in Phase 2D, so every job that compiles
+      # the workspace now links against webkit2gtk.
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libxdo-dev libssl-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}

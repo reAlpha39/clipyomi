@@ -7,6 +7,10 @@ target/
 node_modules/
 dist/
 
+# Tauri: schema files tauri-build regenerates on every build, for editor
+# autocompletion of capability files. Not source.
+src-tauri/gen/schemas/
+
 # OS
 .DS_Store
 
