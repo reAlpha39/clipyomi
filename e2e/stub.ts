@@ -35,6 +35,16 @@ export const STUB = `
     transformCallback: (callback) => callback,
     invoke: async (cmd, args) => {
       if (cmd === 'startup_error') return null;
+      // No corrupt settings.json in this stub's world — the header still
+      // needs an answer, and null is the "nothing to report" case Task 6
+      // itself defines for this command.
+      if (cmd === 'settings_warning') return null;
+      // Fixed, deliberately unpressed/pressed pair rather than mirroring
+      // some other stubbed state: it gives the visual baselines a stable,
+      // non-default-looking pair (one pressed, one not) without depending on
+      // a toggle actually round-tripping through this stub.
+      if (cmd === 'get_settings') return { always_on_top: false, clipboard_monitoring: true };
+      if (cmd === 'set_always_on_top' || cmd === 'set_clipboard_monitoring') return undefined;
       if (cmd === 'plugin:event|listen') {
         window.__TA_LISTENERS__[args.event] = args.handler;
         return 0;

@@ -8,8 +8,12 @@ import './styles/global.css';
 const app = document.querySelector<HTMLElement>('#app')!;
 
 app.innerHTML = `
+  <header class="controls">
+    <button id="always-on-top" type="button" aria-pressed="false">Always on top</button>
+    <button id="monitor" type="button" aria-pressed="true">Monitoring</button>
+  </header>
   <div class="input-row">
-    <input id="text" type="text" placeholder="Paste Japanese text" aria-label="Japanese text to parse" />
+    <input id="text" type="text" aria-label="Japanese text to parse" placeholder="Paste Japanese text" />
     <button id="parse">Parse</button>
   </div>
   <div id="parse-error"></div>
@@ -45,6 +49,43 @@ export async function showStartupError(): Promise<void> {
   output.replaceChildren(errorBlock(message));
   input.disabled = true;
   parseButton.disabled = true;
+}
+
+// A corrupt settings.json is cosmetic, not fatal: the app already fell back
+// to defaults by the time this resolves, so — unlike `showStartupError`
+// above — this must never disable a control and must never touch `output`.
+// Exported for the same reason `showStartupError` is.
+export async function showSettingsWarning(): Promise<void> {
+  const message = await invoke<string | null>('settings_warning');
+  if (message === null) return;
+  parseError.replaceChildren(errorBlock(message));
+}
+
+const alwaysOnTop = app.querySelector<HTMLButtonElement>('#always-on-top');
+const monitor = app.querySelector<HTMLButtonElement>('#monitor');
+
+function bindToggle(button: HTMLButtonElement | null, command: string): void {
+  if (button === null) return;
+  button.addEventListener('click', () => {
+    const next = button.getAttribute('aria-pressed') !== 'true';
+    // Flip first so the control feels immediate; a rejected command reverts it.
+    button.setAttribute('aria-pressed', String(next));
+    void invoke(command, { enabled: next }).catch((e) => {
+      button.setAttribute('aria-pressed', String(!next));
+      parseError.replaceChildren(errorBlock(String(e)));
+    });
+  });
+}
+
+bindToggle(alwaysOnTop, 'set_always_on_top');
+bindToggle(monitor, 'set_clipboard_monitoring');
+
+async function applySettings(): Promise<void> {
+  const settings = await invoke<{ always_on_top: boolean; clipboard_monitoring: boolean }>(
+    'get_settings',
+  );
+  alwaysOnTop?.setAttribute('aria-pressed', String(settings.always_on_top));
+  monitor?.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
 }
 
 function show(result: ParseResult): void {
@@ -87,3 +128,5 @@ input.addEventListener('keydown', (e) => {
 });
 
 void showStartupError();
+void applySettings();
+void showSettingsWarning();
