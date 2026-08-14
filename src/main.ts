@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { renderSentence } from './render/sentence';
+import { renderDefinitions } from './render/definitions';
 import type { ParseResult } from './types';
 import './styles/global.css';
 
@@ -38,7 +39,23 @@ async function showStartupError(): Promise<void> {
 export async function run(): Promise<void> {
   try {
     const result = await invoke<ParseResult>('parse_text', { text: input.value });
-    output.replaceChildren(renderSentence(result));
+    const sentence = renderSentence(result);
+    const definitions = renderDefinitions(result);
+
+    // Delegated to the pane, not per-chip: chips are re-created on every
+    // parse, but the sentence container itself is fresh each time too, so one
+    // listener per parse is exactly right — nothing to leak, nothing to
+    // rebind mid-life.
+    sentence.addEventListener('click', (e) => {
+      const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-start]');
+      if (chip === null) return;
+      const row = definitions.querySelector(`.def-row[data-start="${chip.dataset.start}"]`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      definitions.querySelectorAll('.marked').forEach((n) => n.classList.remove('marked'));
+      row?.classList.add('marked');
+    });
+
+    output.replaceChildren(sentence, definitions);
     parseError.replaceChildren();
   } catch (e) {
     // A parse failure keeps the previous result on screen rather than blanking

@@ -142,3 +142,29 @@ jobs:
 
       - run: cargo llvm-cov -p jmdict-source --summary-only --fail-under-lines 80
       - run: cargo llvm-cov -p jparser --features mecab --summary-only --fail-under-lines 80
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+      - run: npx playwright install --with-deps chromium
+      # `e2e/panes.spec.ts` guards its own `toHaveScreenshot` calls with
+      # `if (!process.env.CI)`: the committed baselines under
+      # e2e/panes.spec.ts-snapshots/ were written and eyeballed on macOS, and
+      # this runner is ubuntu-latest — different font rendering means those
+      # baselines would mismatch on every run here regardless of whether the
+      # app is actually correct. There is no git remote on this repository, so
+      # there is no way to run a real Linux job and capture Linux baselines to
+      # commit instead. GitHub Actions sets `CI=true` automatically, so this
+      # job runs every DOM assertion in panes.spec.ts on every run and skips
+      # only the pixel comparison; the full visual comparison still runs
+      # wherever the baselines are valid (this developer's machine).
+      - run: npx playwright test

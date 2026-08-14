@@ -7,6 +7,12 @@ target/
 node_modules/
 dist/
 
+# Playwright: run artifacts, not snapshot baselines (those live under
+# e2e/panes.spec.ts-snapshots/ and are committed).
+test-results/
+playwright-report/
+blob-report/
+
 # Tauri: schema files tauri-build regenerates on every build, for editor
 # autocompletion of capability files. Not source.
 src-tauri/gen/schemas/

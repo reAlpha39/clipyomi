@@ -62,3 +62,37 @@ body {
   .chip { transition: none; }
   .chip:hover { transform: none; }
 }
+
+.def-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--color-rule);
+}
+
+.def-row.marked { background: var(--color-surface); }
+
+.entry-head { display: flex; align-items: baseline; gap: 8px; }
+
+.headword {
+  font-family: var(--font-cjk);
+  font-size: var(--text-sentence);
+}
+
+.conjugation {
+  font-family: var(--font-mono);
+  font-size: var(--text-tag);
+  color: var(--color-muted);
+}
+
+.reading {
+  font-family: var(--font-cjk);
+  font-size: var(--text-reading);
+  color: var(--color-muted);
+}
+
+.senses { margin: 4px 0 0; padding-left: 20px; }
+
+details summary {
+  font-size: var(--text-tag);
+  color: var(--color-muted);
+  cursor: pointer;
+}
