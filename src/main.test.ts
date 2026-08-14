@@ -562,4 +562,61 @@ describe('the first-run download screen', () => {
     expect(document.querySelector('#dictionary')?.textContent).toContain('could not reach');
     expect(document.querySelector('#download')?.textContent).toBe('Retry');
   });
+
+  // Fix-round finding 2: every other test in this describe drives state
+  // through emit(...), never a real click, so nothing proved the button's
+  // own handler calls invoke('download_dictionary') at all, or that it
+  // synchronously flips the screen to the downloading phase before that call
+  // settles. Without this, a handler that called the wrong command, or one
+  // that forgot the immediate `renderDictionary('downloading')`, would still
+  // pass the whole file.
+  test('clicking download calls download_dictionary and shows the downloading phase', async () => {
+    const button = document.querySelector<HTMLButtonElement>('#download');
+    if (button === null) throw new Error('#download missing');
+
+    button.click();
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('download_dictionary');
+    expect(document.querySelector('#dictionary')?.textContent).toContain('Downloading');
+    // The offer button is gone — replaced by the phase view, not left behind.
+    expect(document.querySelector('#download')).toBeNull();
+  });
+
+  // Fix-round finding 2: proves the `.catch((e) => renderDictionary(String(e)))`
+  // branch actually renders the rejection and leaves a Retry that works, not
+  // just that `emit('dictionary-status', <failure string>)` can — nothing
+  // upstream of that emit (a real invoke rejection) was ever exercised.
+  test('a rejected download renders the failure and a working retry', async () => {
+    let downloadCalls = 0;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'download_dictionary') {
+        downloadCalls += 1;
+        // First attempt fails; Retry's second attempt succeeds.
+        return downloadCalls === 1
+          ? Promise.reject('could not reach the server')
+          : Promise.resolve(undefined);
+      }
+      return Promise.resolve(null);
+    });
+
+    const button = document.querySelector<HTMLButtonElement>('#download');
+    if (button === null) throw new Error('#download missing');
+
+    button.click();
+    // Flushes the rejection and the .catch(...) render it triggers.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector('#dictionary')?.textContent).toContain(
+      'could not reach the server',
+    );
+    const retry = document.querySelector<HTMLButtonElement>('#download');
+    expect(retry?.textContent).toBe('Retry');
+
+    retry?.click();
+    await Promise.resolve();
+
+    expect(downloadCalls).toBe(2);
+  });
 });

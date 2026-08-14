@@ -111,12 +111,6 @@ body {
   color: var(--color-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .chip { transition: none; }
-  .chip:hover { transform: none; }
-  .spinner { animation: none; }
-}
-
 .dictionary {
   padding: var(--space-pane);
   font-family: var(--font-ui);
@@ -147,6 +141,17 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Source order matters here: this block must come after the base `.chip` and
+   `.spinner` rules above (same rule for both, see the `.chip:focus-visible`
+   comment upstream) — equal specificity means whichever rule is LATER in the
+   file wins whenever the media query matches, so the override has to sit
+   after what it overrides, not merely inside a "reduced motion" block. */
+@media (prefers-reduced-motion: reduce) {
+  .chip { transition: none; }
+  .chip:hover { transform: none; }
+  .spinner { animation: none; }
 }
 
 .def-row {

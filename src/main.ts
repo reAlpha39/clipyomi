@@ -109,9 +109,14 @@ function renderDictionary(status: string | null): void {
   button.type = 'button';
   button.textContent = status === null ? 'Download dictionary' : 'Retry';
 
-  // Closure-local, not `button.disabled`: disabling a focused element blurs it
-  // and drops it from the tab order, which nothing here restores. Same guard
-  // the header toggles use.
+  // Closure-local, not `button.disabled`: disabling a focused element blurs
+  // it and drops it from the tab order, which nothing here restores (design
+  // §3). Unlike the header toggles' `pending` (`bindToggle`, below), where
+  // the same button really does stay in the DOM across the whole in-flight
+  // request, this one is belt-and-braces behind an immediate re-render:
+  // `renderDictionary('downloading')` replaces this button synchronously,
+  // before `invoke` even starts, so the node a second click would need to
+  // land on is already gone by the time anyone could click it again.
   let pending = false;
   button.addEventListener('click', () => {
     if (pending) return;
