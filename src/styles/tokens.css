@@ -1,0 +1,46 @@
+:root {
+  --color-bg: oklch(99% 0 0);
+  --color-surface: oklch(97% 0 0);
+  --color-text: oklch(20% 0 0);
+  --color-muted: oklch(55% 0 0);
+  --color-rule: oklch(90% 0 0);
+  --color-kanji: oklch(45% 0.12 250);
+  --color-kana: oklch(45% 0.08 160);
+  --color-particle: oklch(55% 0.10 30);
+  --color-counter: oklch(50% 0.10 300);
+
+  --text-sentence: 24px;
+  --text-reading: 11px;
+  --text-gloss: 14px;
+  --text-tag: 11px;
+
+  --space-pane: 16px;
+  --duration-fast: 120ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: oklch(18% 0 0);
+    --color-surface: oklch(22% 0 0);
+    --color-text: oklch(93% 0 0);
+    --color-muted: oklch(65% 0 0);
+    --color-rule: oklch(32% 0 0);
+    --color-kanji: oklch(78% 0.12 250);
+    --color-kana: oklch(78% 0.08 160);
+    --color-particle: oklch(80% 0.10 30);
+    --color-counter: oklch(78% 0.10 300);
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-bg: oklch(18% 0 0);
+  --color-surface: oklch(22% 0 0);
+  --color-text: oklch(93% 0 0);
+  --color-muted: oklch(65% 0 0);
+  --color-rule: oklch(32% 0 0);
+  --color-kanji: oklch(78% 0.12 250);
+  --color-kana: oklch(78% 0.08 160);
+  --color-particle: oklch(80% 0.10 30);
+  --color-counter: oklch(78% 0.10 300);
+}

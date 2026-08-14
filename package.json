@@ -16,7 +16,9 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",
+    "happy-dom": "^20.0.0",
     "typescript": "7.0.2",
-    "vite": "8.2.1"
+    "vite": "8.2.1",
+    "vitest": "^4.1.10"
   }
 }

@@ -1,0 +1,28 @@
+{
+  "segments": [
+    {
+      "start": 0, "len": 2, "surface": "東京", "reading": "とうきょう",
+      "matched": true,
+      "entries": [{
+        "headword": "東京", "reading": "とうきょう", "conjugation": null,
+        "pos": ["n"],
+        "senses": [{ "pos": ["n"], "glosses": ["Tokyo"], "xrefs": [], "misc": [], "info": [] }],
+        "flags": ["primary", "common"]
+      }]
+    },
+    {
+      "start": 2, "len": 1, "surface": "は", "reading": "は",
+      "matched": true,
+      "entries": [{
+        "headword": "は", "reading": "は", "conjugation": null,
+        "pos": ["prt"],
+        "senses": [{ "pos": ["prt"], "glosses": ["topic marker"], "xrefs": [], "misc": [], "info": [] }],
+        "flags": ["primary", "particle"]
+      }]
+    },
+    {
+      "start": 3, "len": 2, "surface": "〜〜", "reading": null,
+      "matched": false, "entries": []
+    }
+  ]
+}

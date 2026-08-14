@@ -1,0 +1,16 @@
+:root {
+  --font-cjk: 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', sans-serif;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.sentence {
+  font-family: var(--font-cjk);
+  font-size: var(--text-sentence);
+  line-height: 1.7;
+}
+
+.definitions {
+  font-family: var(--font-ui);
+  font-size: var(--text-gloss);
+}
