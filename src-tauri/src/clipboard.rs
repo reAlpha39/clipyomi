@@ -61,8 +61,20 @@ pub fn should_parse(text: &str, last_seen: Option<&str>, last_written: Option<&s
     has_japanese
 }
 
+/// How long `wait_for_frontend` waits for the readiness signal before giving
+/// up and logging it, rather than hanging forever with no diagnostic.
+///
+/// Generous on purpose: this is a check for "the signal never arrives at
+/// all" (a webview that failed to load, or a `listen()` call that rejected —
+/// see `main.ts`'s own comment on why that specific failure is left
+/// unswallowed), not a deadline tuned to ordinary startup latency. A slow
+/// machine loading a webview must not trip it.
+const FRONTEND_READY_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Blocks until the webview has registered its `parse-result` /
-/// `parse-error` listeners (see `commands::frontend_ready`, which fires this).
+/// `parse-error` listeners (see `commands::frontend_ready`, which fires this),
+/// or until `timeout` elapses. Returns `false` and logs a warning in the
+/// latter case.
 ///
 /// Without this gate, `run_poll`'s first tick can read clipboard text left
 /// over from before launch, decide it is worth parsing, and record it as
@@ -73,8 +85,29 @@ pub fn should_parse(text: &str, last_seen: Option<&str>, last_written: Option<&s
 /// clipboard text is never retried: the user sees an empty pane until they
 /// copy something different. Waiting here closes that window deterministically
 /// — no delay to tune, no guess about how long the webview takes to load.
-async fn wait_for_frontend(ready: &Notify) {
-    ready.notified().await;
+///
+/// Split from `wait_for_frontend` only so a test can drive it with a
+/// millisecond-scale `timeout` instead of the real 30-second production one.
+async fn wait_for_frontend_within(ready: &Notify, timeout: Duration) -> bool {
+    if tokio::time::timeout(timeout, ready.notified())
+        .await
+        .is_ok()
+    {
+        return true;
+    }
+    // Not a panic and not fatal: `run_poll`'s caller decides what to do with
+    // `false` (see its own doc). This is purely so the hang has a visible
+    // cause in the logs instead of looking like the app silently did
+    // nothing.
+    eprintln!(
+        "the webview never signalled frontend_ready within {timeout:?}; \
+         clipboard monitoring will not start this session"
+    );
+    false
+}
+
+async fn wait_for_frontend(ready: &Notify) -> bool {
+    wait_for_frontend_within(ready, FRONTEND_READY_TIMEOUT).await
 }
 
 /// Poll the clipboard and push anything worth parsing into the input channel.
@@ -88,7 +121,18 @@ pub async fn run_poll(
     settings: Arc<SettingsState>,
     ready: Arc<Notify>,
 ) {
-    wait_for_frontend(&ready).await;
+    if !wait_for_frontend(&ready).await {
+        // Stay stopped rather than starting anyway: if the signal never
+        // arrived, the webview's `listen()` calls never finished registering
+        // either (the same handshake gates both — see `main.ts`), so
+        // `parse-result`/`parse-error` cannot reach it regardless of what the
+        // poll does. The manual Parse button is equally dead in that state.
+        // Starting the loop here would reintroduce exactly the
+        // dropped-first-parse race this gate exists to close, for a webview
+        // that by now is almost certainly never coming back — 30 seconds is
+        // long past any realistic load time.
+        return;
+    }
 
     let mut last_seen: Option<String> = None;
     let mut read_failing = false;
@@ -219,7 +263,8 @@ mod tests {
 
         let ready_clone = Arc::clone(&ready);
         let task = tokio::spawn(async move {
-            wait_for_frontend(&ready_clone).await;
+            let signalled = wait_for_frontend(&ready_clone).await;
+            assert!(signalled, "expected the ready signal, not a timeout");
             tx.send("東京".to_string()).expect("send");
         });
 
@@ -240,6 +285,19 @@ mod tests {
             Some("東京"),
             "did not publish after the ready signal"
         );
+    }
+
+    /// Residual 3 (final review): a webview that never signals ready must
+    /// not hang `wait_for_frontend` with no way to tell. Drives
+    /// `wait_for_frontend_within` directly with a millisecond-scale timeout
+    /// rather than waiting out the real 30-second production one — the
+    /// `Notify` here is never signalled, so this is a guaranteed timeout on
+    /// every run, not a race against anything.
+    #[tokio::test]
+    async fn wait_for_frontend_within_times_out_and_reports_false_when_never_signalled() {
+        let ready = Notify::new();
+        let signalled = wait_for_frontend_within(&ready, Duration::from_millis(20)).await;
+        assert!(!signalled, "expected a timeout, not a signal");
     }
 
     /// Local stand-in for `parse::next_input` so this test does not need a

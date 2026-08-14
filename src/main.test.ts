@@ -98,6 +98,48 @@ describe('the event-driven render path', () => {
   });
 });
 
+// Residual 2 (re-review, final wave): the original fix wrapped the whole
+// `Promise.all([...listen calls]).then(() => invoke('frontend_ready'))`
+// chain in one `.catch(() => {})`, so a `listen()` rejection was swallowed
+// exactly the same way a `frontend_ready` rejection was — but the comment
+// only ever described the `frontend_ready` consequence. This proves the
+// narrower catch: a `frontend_ready`-only failure degrades quietly (no
+// unhandled rejection, listeners keep working), which is the one case this
+// catch is meant to cover.
+describe('the frontend_ready call', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    vi.resetModules();
+  });
+
+  test('a frontend_ready rejection is swallowed without disrupting the registered listeners', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'frontend_ready') return Promise.reject('frontend_ready unavailable');
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The rejection above did not become an unhandled rejection (vitest
+    // would fail this test file if it had) and did not stop the listeners
+    // from being registered or from rendering a result.
+    emit('parse-result', {
+      segments: [
+        { start: 0, len: 1, surface: '本', reading: 'ほん', matched: true, entries: [] },
+      ],
+    });
+    expect(document.querySelector('.sentence')).not.toBeNull();
+  });
+});
+
 describe('main: a startup failure disables the parse controls', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
@@ -318,6 +360,61 @@ describe('overlapping toggle requests', () => {
     // silently swallowed exactly like an overlapping one.
     button.click();
     expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  // Residual 1 (re-review, final wave): the original fix awaited the
+  // `get_settings` resync *before* rendering the setter's own error, so a
+  // resync that itself failed left the user with no message at all and an
+  // unhandled rejection past the `void` at the top of `bindToggle`'s click
+  // handler. Vitest fails a test on an unhandled rejection by default, so
+  // this test failing to complete at all (rather than a clean assertion
+  // failure) was the actual signature of the bug this guards against.
+  test('a rejected setter still shows its error message when the resync itself also fails, and clears pending', async () => {
+    let rejectFirst: ((reason: unknown) => void) | undefined;
+    let getSettingsCalls = 0;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        getSettingsCalls += 1;
+        if (getSettingsCalls === 1) {
+          return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+        }
+        // The resync itself fails this time — the scenario Residual 1 covers.
+        return Promise.reject('get_settings unavailable');
+      }
+      if (cmd === 'set_clipboard_monitoring') {
+        return new Promise((_resolve, reject) => {
+          rejectFirst = reject;
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const button = document.querySelector<HTMLButtonElement>('#monitor');
+    if (button === null) throw new Error('#monitor missing');
+
+    button.click(); // 'true' -> flips to 'false'
+    rejectFirst?.('backend refused');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The original error is shown regardless of the resync's own outcome.
+    expect(document.querySelector('#parse-error')?.textContent).toContain('backend refused');
+    // The resync failed, so the button keeps its optimistic value rather
+    // than throwing or freezing on an unverified state.
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    // `pending` cleared even though the resync itself rejected.
+    button.click();
+    expect(
+      invoke.mock.calls.filter(([cmd]) => cmd === 'set_clipboard_monitoring'),
+    ).toHaveLength(2);
   });
 
   // Finding 3 (a click before settings load must survive the late response)

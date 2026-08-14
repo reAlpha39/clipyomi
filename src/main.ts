@@ -97,6 +97,10 @@ function bindToggle(
     button.setAttribute('aria-pressed', String(next));
     void invoke(command, { enabled: next })
       .catch(async (e) => {
+        // Rendered first and unconditionally: the user must see *some*
+        // message, even if the resync below also fails. Doing this before
+        // the `await` means it never depends on that second call succeeding.
+        parseError.replaceChildren(errorBlock(String(e)));
         // A rejected setter doesn't say which of two things happened:
         // `state.rs`'s `SettingsState::update` applies a change in memory
         // *before* it tries to persist it, so a write failure (e.g. a
@@ -105,9 +109,15 @@ function bindToggle(
         // opposite of what the backend actually did. Re-reading
         // `get_settings` shows whichever outcome really happened instead of
         // guessing from the shape of the error.
-        const settings = await invoke<Settings>('get_settings');
-        button.setAttribute('aria-pressed', String(settings[settingsKey]));
-        parseError.replaceChildren(errorBlock(String(e)));
+        try {
+          const settings = await invoke<Settings>('get_settings');
+          button.setAttribute('aria-pressed', String(settings[settingsKey]));
+        } catch {
+          // Best-effort only: if even this fails, the button keeps its
+          // optimistic (possibly wrong) value, but the error above is
+          // already visible — degrading silently here is better than an
+          // unhandled rejection with no message shown at all.
+        }
       })
       .finally(() => {
         pending = false;
@@ -155,18 +165,27 @@ function show(result: ParseResult): void {
 // `clipboard::wait_for_frontend`), so firing it only after BOTH listeners
 // are confirmed registered closes the race where clipboard text present at
 // launch gets parsed and emitted before anything here is listening for it.
-Promise.all([
+//
+// A `listen()` failure above is deliberately NOT caught by anything here: it
+// means parse events can never reach this webview at all (not merely that
+// the poll's first tick might drop), which is not a condition to swallow —
+// it surfaces as an unhandled rejection, exactly as it would have before
+// this handshake existed. Only the `frontend_ready` call below gets its own,
+// narrower catch, since that one really is limited to "the poll's first
+// tick after launch might drop".
+void Promise.all([
   listen<ParseResult>('parse-result', (e) => show(e.payload)),
   // A failure replaces only the message, never the result: the previous
   // parse stays readable while the user works out what went wrong.
   listen<string>('parse-error', (e) => parseError.replaceChildren(errorBlock(e.payload))),
-])
-  .then(() => invoke('frontend_ready'))
-  // Not actionable by the user if this fails — same policy as a skipped
-  // clipboard read (design §5). The only consequence is that the poll's
-  // first tick after launch can drop, exactly the race this call exists to
-  // close; nothing else in the app depends on it succeeding.
-  .catch(() => {});
+]).then(() => {
+  invoke('frontend_ready').catch(() => {
+    // Not actionable by the user if this fails — same policy as a skipped
+    // clipboard read (design §5). The only consequence is that the poll's
+    // first tick after launch can drop; nothing else in the app depends on
+    // this call succeeding.
+  });
+});
 
 async function run(): Promise<void> {
   try {
