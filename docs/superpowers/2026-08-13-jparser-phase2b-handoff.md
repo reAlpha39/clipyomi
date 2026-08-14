@@ -146,6 +146,11 @@ caught their target. Recorded because a check that cannot fail is not evidence:
   does not work either — cargo permits the 0.7 and 1.x majors side by side, so
   `clap_builder` keeps its own copy. Raising the workspace MSRV to 1.85 is what
   frees `clap` to float again.
+
+  > **Amended after implementation (2026-08-14).** Phase 2C raised the floor to
+  > 1.85 — needed for `vibrato`'s transitive `bincode 2.0.1`, not for `clap` on
+  > its own — and retired this pin in the same change. `clap = "4"` now
+  > resolves to 4.6.x and compiles clean.
 - **CI has never run.** `.github/workflows/ci.yml` exists (`6174dde`) and every
   command in it was dry-run locally, but the repo has no `origin` remote, so the
   workflow has not executed once. Confirm the first run is green.
@@ -194,6 +199,11 @@ caught their target. Recorded because a check that cannot fail is not evidence:
   dependency whose upstream may raise its floor needs an explicit bound, and only
   `cargo +1.75 check --workspace` proves the floor holds. `#[expect(...)]` is
   unavailable (stabilized 1.81); use `#[allow(...)]`.
+
+  > **Amended after implementation (2026-08-14).** Phase 2C raised this to
+  > 1.85, driven by `vibrato`'s transitive `bincode 2.0.1`. `cargo +1.85 check
+  > --workspace` is now the gate that proves the floor; `#[expect(...)]`
+  > (1.81) is available going forward, though nothing yet uses it.
 - **Never `cargo fmt`.** `crates/jparser/src/conjugation.rs` is deliberately not
   rustfmt-clean and "fixing" it is a defect. Use `rustfmt --edition 2021 <file>`
   on individual files, then check `git diff --stat`. CI has no formatting job for

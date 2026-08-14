@@ -5,4 +5,4 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "GPL-2.0-only"
-rust-version = "1.75"
+rust-version = "1.85"

@@ -52,7 +52,7 @@ fn verb_plain_collapses(matches: &[Match], i: usize, d: usize) -> bool {
         && link.tense == TENSE_NON_PAST
         && matches
             .get(i + 1)
-            .map_or(true, |nx| nx.entry_id != cur.entry_id)
+            .is_none_or(|nx| nx.entry_id != cur.entry_id)
 }
 
 /// Group, dedupe with inexact reconciliation, then rank. Called per span, so

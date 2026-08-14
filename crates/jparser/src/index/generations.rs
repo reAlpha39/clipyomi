@@ -112,8 +112,7 @@ pub(crate) fn latest_number(root: &Path) -> Result<Option<(u64, PathBuf)>, Index
         let Some(number) = generation_number(&name) else {
             continue;
         };
-        // MSRV 1.75: `Option::is_none_or` is 1.82. Do not "simplify" this.
-        if best.as_ref().map_or(true, |(best, _)| number > *best) {
+        if best.as_ref().is_none_or(|(best, _)| number > *best) {
             best = Some((number, path));
         }
     }

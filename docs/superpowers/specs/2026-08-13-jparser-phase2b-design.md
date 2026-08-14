@@ -498,6 +498,12 @@ From the Phase 1B and 2A handoffs and the crate's standing rules:
   > setting `3` is not valid ``), so the resolver setting and the compile check
   > are mutually exclusive. The compile check is the stronger of the two and wins.
 
+  > **Amended after implementation (2026-08-14).** Phase 2C raised the workspace
+  > floor to 1.85: `vibrato`, the tokenizer it adds, pulls a transitive
+  > `bincode 2.0.1`, whose own floor is 1.85. The `clap` pin above was retired
+  > with it — `clap_lex 1.1`'s edition2024 requirement is no longer above the
+  > workspace floor, so `clap = "4"` resolves and compiles unpinned.
+
 - **`crates/jparser` stays pure.** No Tauri, no UI crate, no HTTP client, no
   decompression dependency **in the library**.
 
@@ -568,6 +574,12 @@ Both are under the workspace's 1.75 floor. Confirm `cargo tree` shows no
 > `rust-version` is documentation, not a constraint. Every direct dependency
 > whose upstream may raise its floor needs an explicit bound, and the only thing
 > that actually proves the floor holds is `cargo +<MSRV> check --workspace`.
+
+> **Amended after implementation (2026-08-14).** Phase 2C raised the workspace
+> MSRV to 1.85, driven by `vibrato`'s transitive `bincode 2.0.1` (floor 1.85).
+> The `clap` pin recorded here was retired in the same change: unpinning
+> `clap = "4"` now resolves to 4.6.x and compiles clean under
+> `cargo +1.85 check --workspace`.
 
 **2. `flate2` rejects every corruption mode §6 depends on** — measured, not
 asserted:
