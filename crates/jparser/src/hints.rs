@@ -86,6 +86,65 @@ fn flags_from_worker(
     BoundaryFlags { bad_start, bad_end }
 }
 
+use std::path::Path;
+use std::path::PathBuf;
+
+/// A loaded Vibrato dictionary, ready to tokenize.
+///
+/// Loading is expensive and reading the dictionary is not, so the two are
+/// separate: a caller loads once and calls [`VibratoTokenizer::hints`] per text.
+pub struct VibratoTokenizer {
+    tokenizer: vibrato::Tokenizer,
+}
+
+impl VibratoTokenizer {
+    /// Load an **uncompressed** compiled Vibrato dictionary from `path`.
+    ///
+    /// The distributed archive is `.tar.xz` containing a zstd-compressed
+    /// `system.dic`; extracting it is deliberately out of scope (spec §5),
+    /// which is what keeps `vibrato` this phase's only new dependency.
+    pub fn load(path: &Path) -> Result<Self, HintsError> {
+        let file = std::fs::File::open(path).map_err(|source| HintsError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let dict = vibrato::Dictionary::read(std::io::BufReader::new(file))
+            .map_err(|e| HintsError::Dictionary(e.to_string()))?;
+        Ok(Self {
+            tokenizer: vibrato::Tokenizer::new(dict),
+        })
+    }
+
+    /// Tokenize `text` and derive its boundary flags.
+    ///
+    /// A fresh worker per call: workers are mutable scratch space, and sharing
+    /// one would force `&mut self` on a method that is otherwise read-only.
+    pub fn hints(&self, text: &str) -> BoundaryFlags {
+        let mut worker = self.tokenizer.new_worker();
+        worker.reset_sentence(text);
+        worker.tokenize();
+        flags_from_worker(&worker, text.chars().count())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum HintsError {
+    /// `PathBuf` does not implement `Display` (paths are not guaranteed
+    /// UTF-8), so the path is rendered via `.display()` rather than the
+    /// `{path}` shorthand.
+    #[error("reading the vibrato dictionary at {} failed: {source}", path.display())]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    /// Vibrato's error, rendered. Carried as a `String` so `vibrato` does not
+    /// become part of this crate's public API for anyone matching on it — the
+    /// same reason `SourceError::Transport` holds a `String` rather than a
+    /// `ureq` type.
+    #[error("the vibrato dictionary could not be loaded: {0}")]
+    Dictionary(String),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,5 +268,41 @@ mod tests {
             !f.bad_start(1),
             "a reading-less token must not be penalized"
         );
+    }
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("jparser-hints-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    #[test]
+    fn an_absent_dictionary_is_an_io_error() {
+        let dir = scratch("load-absent");
+        let err = VibratoTokenizer::load(&dir.join("system.dic"))
+            .err()
+            .expect("must fail");
+        assert!(matches!(err, HintsError::Io { .. }), "got {err:?}");
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_dictionary_is_a_dictionary_error() {
+        let dir = scratch("load-garbage");
+        let path = dir.join("system.dic");
+        std::fs::write(&path, b"this is not a compiled dictionary").expect("write");
+
+        let err = VibratoTokenizer::load(&path).err().expect("must fail");
+        assert!(matches!(err, HintsError::Dictionary(_)), "got {err:?}");
+    }
+
+    /// The error must be actionable: it names the file it could not load.
+    #[test]
+    fn the_io_error_renders_usefully() {
+        let dir = scratch("load-render");
+        let err = VibratoTokenizer::load(&dir.join("system.dic"))
+            .err()
+            .expect("must fail");
+        assert!(err.to_string().contains("system.dic"), "got {err}");
     }
 }
