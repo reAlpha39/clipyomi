@@ -129,10 +129,7 @@ impl VibratoTokenizer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum HintsError {
-    /// `PathBuf` does not implement `Display` (paths are not guaranteed
-    /// UTF-8), so the path is rendered via `.display()` rather than the
-    /// `{path}` shorthand.
-    #[error("reading the vibrato dictionary at {} failed: {source}", path.display())]
+    #[error("reading the vibrato dictionary at {path} failed: {source}")]
     Io {
         path: PathBuf,
         source: std::io::Error,
@@ -268,6 +265,30 @@ mod tests {
             !f.bad_start(1),
             "a reading-less token must not be penalized"
         );
+    }
+
+    /// `VibratoTokenizer::hints` is the composition of `new_worker`,
+    /// `reset_sentence`, `tokenize`, and `flags_from_worker` — this exercises
+    /// that whole path under its own name, rather than only through
+    /// `flags_from_worker` directly. Pins the same interior-only shape as
+    /// `a_multi_char_token_marks_only_its_interior` and
+    /// `a_single_char_token_marks_nothing`.
+    #[test]
+    fn vibrato_tokenizer_hints_marks_only_the_interior_of_a_multi_char_token() {
+        let tokenizer = VibratoTokenizer {
+            tokenizer: vibrato::Tokenizer::new(test_dictionary()),
+        };
+        let f = tokenizer.hints("東京都");
+
+        assert!(f.bad_end(0), "0 is interior to 東京");
+        assert!(f.bad_start(1), "1 is interior to 東京");
+        assert!(
+            !f.bad_start(0),
+            "a word may start at the token's first char"
+        );
+        assert!(!f.bad_end(1), "a word may end at the token's last char");
+        assert!(!f.bad_start(2), "都 must not mark its own start");
+        assert!(!f.bad_end(2), "都 must not mark its own end");
     }
 
     fn scratch(name: &str) -> std::path::PathBuf {
