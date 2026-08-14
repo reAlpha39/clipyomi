@@ -27,11 +27,7 @@ pub const HINTS_ENV: &str = "TA_HINTS_DICT";
 
 /// Everything built once at launch and then only read.
 ///
-/// `allow(dead_code)`: nothing in this crate reads these fields yet — Task 3's
-/// `parse_text` is the first reader. `AppState` is still built and managed
-/// here so `parse_text` can be added as a pure consumer with no further
-/// startup wiring.
-#[allow(dead_code)]
+/// Read by `commands::run_parse`, added in Task 3.
 pub struct AppState {
     pub index: Index,
     pub table: ConjugationTable,
@@ -39,11 +35,11 @@ pub struct AppState {
 }
 
 /// A startup failure, kept as a rendered string so the webview can display it.
-/// Managed instead of `AppState` when `load_state` fails.
 ///
-/// `allow(dead_code)`: the message is read by a later Tauri command, not by
-/// anything in this crate yet.
-#[allow(dead_code)]
+/// Managed unconditionally alongside `AppState` — empty string meaning
+/// success — because `commands::startup_error` needs `State<'_,
+/// StartupFailure>` to always be there: `Option<State<'_, T>>` is not a valid
+/// Tauri 2 command parameter.
 pub struct StartupFailure(pub String);
 
 #[derive(Debug, thiserror::Error)]
