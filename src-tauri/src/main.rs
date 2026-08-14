@@ -35,6 +35,8 @@ fn main() {
             }
             Ok(())
         })
+        // If the runtime cannot start, there is no window to report anything
+        // in, so the alternative to this `expect` is a silent exit.
         .run(tauri::generate_context!())
         .expect("the Tauri runtime failed to start");
 }

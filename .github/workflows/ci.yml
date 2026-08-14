@@ -56,23 +56,24 @@ jobs:
         rust: ["1.85"]
     steps:
       - uses: actions/checkout@v4
-
-      # src-tauri joined the workspace in Phase 2D, so every job that compiles
-      # the workspace now links against webkit2gtk.
-      - name: Install Tauri system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf libxdo-dev libssl-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
 
+      # Package-scoped, not `--workspace`: the 1.85 floor is a promise about
+      # the library crates (`jparser`, `jmdict-source`, `xtask`), not about
+      # `src-tauri`. Tauri's own transitive dependency tree (`darling`,
+      # `icu_*`, `plist`, `serde_with`, `time`, ...) needs rustc 1.86-1.88,
+      # newer than this floor — that's the GUI shell's toolchain to track
+      # (see its `rust-version` in `src-tauri/Cargo.toml`), not the library's.
+      # Also why this job no longer installs Tauri's system dependencies:
+      # nothing here compiles `src-tauri` anymore.
+      #
       # Library and binary targets only — deliberately not `--all-targets`.
       # MSRV is a promise to whoever compiles this workspace's crates, and
       # dev-dependencies never reach them.
-      - run: cargo check --workspace
+      - run: cargo check -p jparser -p jmdict-source -p xtask
 
       # `mecab` is off by default, so the check above never compiles `vibrato`
       # or its transitive `bincode 2.0.1` — the entire reason the floor moved
