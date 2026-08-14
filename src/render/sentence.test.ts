@@ -36,4 +36,13 @@ describe('renderSentence', () => {
   test('renders an empty result without throwing', () => {
     expect(renderSentence({ segments: [] }).querySelectorAll('[data-start]')).toHaveLength(0);
   });
+
+  test('only a matched chip is a real control; an unmatched run is not focusable', () => {
+    const el = renderSentence(result);
+    // A native <button> is focusable and fires click on Enter/Space with no
+    // extra wiring; a plain <span> with no tabindex is not in the tab order.
+    expect(el.querySelector('[data-start="0"]')?.tagName).toBe('BUTTON');
+    expect(el.querySelector('[data-start="3"]')?.tagName).toBe('SPAN');
+    expect(el.querySelector('[data-start="3"]')?.hasAttribute('tabindex')).toBe(false);
+  });
 });

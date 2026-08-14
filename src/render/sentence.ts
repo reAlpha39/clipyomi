@@ -17,12 +17,17 @@ export function renderSentence(result: ParseResult): HTMLElement {
   root.className = 'sentence';
 
   for (const segment of result.segments) {
-    const el = document.createElement('span');
+    // A matched chip is a real control (activates the same way for a mouse
+    // click and a keyboard Enter/Space, focusable, out of the tab order when
+    // disabled) — a native <button> gets all of that for free, with no
+    // separate keydown handler to keep in sync with the click listener.
+    // Unmatched runs stay a plain <span>: not a control, and — with no
+    // tabindex or role added — never reachable by keyboard, so coverage gaps
+    // are visible but never land in the tab order.
+    const el = document.createElement(segment.matched ? 'button' : 'span');
+    if (el instanceof HTMLButtonElement) el.type = 'button';
     el.dataset.start = String(segment.start);
     el.textContent = segment.surface;
-
-    // Unmatched runs stay unchipped so coverage gaps are visible rather than
-    // disguised — seeing where the parser fails is the point of the window.
     el.className = segment.matched ? `chip ${contentClass(segment)}` : 'unmatched';
 
     root.append(el);

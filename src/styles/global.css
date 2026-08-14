@@ -41,6 +41,13 @@ body {
   border-radius: 3px;
   cursor: pointer;
   transition: transform var(--duration-fast) var(--ease-out);
+  /* Chips are <button>s now (keyboard activation); undo the browser's own
+     button chrome so they still read as inline text, not form controls. */
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  appearance: none;
 }
 
 .chip:hover { transform: translateY(-1px); }
@@ -49,6 +56,16 @@ body {
 .chip.particle { color: var(--color-particle); }
 .chip.counter { color: var(--color-counter); }
 .unmatched { color: var(--color-muted); }
+
+/* :focus-visible (not :focus) so the ring shows for keyboard traversal only,
+   matching how a mouse click on a native button already behaves. The ring is
+   a shape, not a colour swap, so it survives reduced motion (no transition
+   is applied to `outline`) and reads the same way in both themes. */
+.chip:focus { outline: none; }
+.chip:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
 
 .startup-error {
   padding: var(--space-pane);
@@ -66,9 +83,17 @@ body {
 .def-row {
   padding: 8px 0;
   border-top: 1px solid var(--color-rule);
+  /* Reserved on every row, not just `.marked`, so colouring it in on mark
+     never shifts layout. */
+  border-left: 3px solid transparent;
 }
 
-.def-row.marked { background: var(--color-surface); }
+/* The background tint alone (2-4% lightness delta) is nearly imperceptible;
+   the left edge is a shape cue on top of it, not a second colour-only signal. */
+.def-row.marked {
+  background: var(--color-surface);
+  border-left-color: var(--color-text);
+}
 
 .entry-head { display: flex; align-items: baseline; gap: 8px; }
 

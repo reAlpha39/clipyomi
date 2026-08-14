@@ -47,3 +47,29 @@ test('a chip click marks its definition row', async ({ page }) => {
   await page.click('.chip[data-start="2"]');
   await expect(page.locator('.def-row[data-start="2"]')).toHaveClass(/marked/);
 });
+
+test('keyboard activation marks the same row a click does, on Enter and Space', async ({ page }) => {
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+  await page.goto('/');
+  await page.fill('#text', '東京は');
+  await page.click('#parse');
+
+  await page.locator('.chip[data-start="2"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.def-row[data-start="2"]')).toHaveClass(/marked/);
+
+  await page.locator('.chip[data-start="0"]').focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('.def-row[data-start="0"]')).toHaveClass(/marked/);
+  // Only one row marked at a time.
+  await expect(page.locator('.def-row[data-start="2"]')).not.toHaveClass(/marked/);
+});
+
+test('an unmatched run is not in the tab order', async ({ page }) => {
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+  await page.goto('/');
+  await page.fill('#text', '東京は');
+  await page.click('#parse');
+
+  expect(await page.locator('.unmatched').evaluate((el) => (el as HTMLElement).tabIndex)).toBe(-1);
+});
