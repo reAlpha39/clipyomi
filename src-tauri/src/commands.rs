@@ -116,22 +116,16 @@ pub fn settings_warning(warning: State<'_, SettingsWarning>) -> Option<String> {
 
 /// Emitted with a `String` payload as the download moves between phases:
 /// `"downloading"`, `"building"`, `"ready"`, or an error message.
-// Read only by `emit_status`, which nothing calls until Task 4 registers
-// `download_dictionary` — see that fn's own `#[allow(dead_code)]` for why the
-// whole chain below reads as unreachable until then.
-#[allow(dead_code)]
 pub const DICTIONARY_STATUS_EVENT: &str = "dictionary-status";
 
 /// The sending half of the index channel, managed so `download_dictionary` can
 /// publish a freshly built index to the already-running worker.
-#[allow(dead_code)] // constructed in Task 4's main.rs setup, not this task
 pub struct IndexSender(pub watch::Sender<Option<Arc<AppState>>>);
 
 /// Where the dictionary lives. Resolved once in `main`'s `setup`, so the
 /// command does not need the app config dir, and so `source/` stays a sibling
 /// of `dict/` rather than living inside a published generation, which is
 /// immutable.
-#[allow(dead_code)] // constructed in Task 4's main.rs setup, not this task
 pub struct DictionaryPaths {
     pub root: PathBuf,
     pub source_dir: PathBuf,
@@ -140,17 +134,12 @@ pub struct DictionaryPaths {
 /// Guards against two concurrent `ensure_dictionary` runs. An `Arc` rather than
 /// a bare `AtomicBool` because the command must clone it out of `State` before
 /// its first `.await` — `tauri::State` is not `Send`.
-#[allow(dead_code)] // constructed in Task 4's main.rs setup, not this task
 pub struct DownloadInFlight(pub Arc<AtomicBool>);
 
 /// Take the download slot, or report that it is already taken.
 ///
 /// Separated from the command so the exclusion is testable without a Tauri app
 /// handle or a real download.
-// Exercised directly by the tests below; the `#[allow]` covers only the
-// non-test binary, where `download_dictionary` — this fn's other caller — is
-// itself unreachable until Task 4 registers it.
-#[allow(dead_code)]
 fn claim_download(flag: &AtomicBool) -> Result<(), String> {
     if flag.swap(true, Ordering::SeqCst) {
         Err("a dictionary download is already running".to_string())
@@ -161,7 +150,6 @@ fn claim_download(flag: &AtomicBool) -> Result<(), String> {
 
 /// Release the slot. Called on every exit path, success or failure — a failed
 /// download that never released would disable Retry for the rest of the session.
-#[allow(dead_code)] // called from download_dictionary, itself unreachable until Task 4 registers it
 fn release_download(flag: &AtomicBool) {
     flag.store(false, Ordering::SeqCst);
 }
@@ -169,13 +157,11 @@ fn release_download(flag: &AtomicBool) {
 /// Whether startup found no dictionary, so the webview should show the download
 /// screen rather than the panes.
 #[tauri::command]
-#[allow(dead_code)] // registered in Task 4's invoke_handler, not this task
 pub fn needs_dictionary(needs: State<'_, NeedsDictionary>) -> bool {
     needs.0
 }
 
 /// Emit a phase label, logging rather than propagating a failed emit.
-#[allow(dead_code)] // called from download_dictionary, itself unreachable until Task 4 registers it
 fn emit_status(app: &AppHandle, status: &str) {
     if let Err(e) = app.emit(DICTIONARY_STATUS_EVENT, status.to_string()) {
         // Nothing to fall back on: if the event cannot reach the webview there
@@ -190,7 +176,6 @@ fn emit_status(app: &AppHandle, status: &str) {
 /// that — including failure — arrives as a `dictionary-status` event. Same
 /// split as `set_input`, and for the same reason: one path to the screen.
 #[tauri::command]
-#[allow(dead_code)] // registered in Task 4's invoke_handler, not this task
 pub async fn download_dictionary(
     app: AppHandle,
     paths: State<'_, DictionaryPaths>,

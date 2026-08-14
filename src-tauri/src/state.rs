@@ -51,12 +51,6 @@ pub struct StartupFailure(pub String);
 /// is an index, or something worse is wrong", because a command parameter
 /// cannot express "this state may not be managed" — see `StartupFailure`'s own
 /// doc comment for the `Option<State<'_, T>>` reasoning.
-// `commands::needs_dictionary` now reads `.0` (Task 3), but nothing
-// constructs a `NeedsDictionary` until Task 4 manages it in main.rs's
-// setup — `cargo clippy`'s "never constructed" lint is independent of
-// whether a field is read, so the allow stays, just for a different reason
-// than the comment Task 2 left here.
-#[allow(dead_code)]
 pub struct NeedsDictionary(pub bool);
 
 /// A non-fatal warning from loading settings (e.g. a corrupt `settings.json`),
@@ -90,7 +84,6 @@ pub enum StartupError {
 /// Matched exhaustively rather than with a wildcard: a future `StartupError`
 /// variant must force a decision here. Offering a download for an error a
 /// download cannot fix would loop the user through a wait that changes nothing.
-#[allow(dead_code)] // consumed in Task 4, removed when wiring main.rs startup match guard
 pub fn is_missing_dictionary(error: &StartupError) -> bool {
     match error {
         StartupError::NoIndex { .. } => true,

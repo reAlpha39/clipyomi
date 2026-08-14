@@ -18,6 +18,7 @@ mod state;
 #[cfg(test)]
 mod test_support;
 
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use tauri::Manager;
@@ -75,41 +76,48 @@ fn main() {
                 ready,
             ));
 
-            // `StartupFailure` is managed on both branches, empty string meaning
-            // success: `startup_error` needs `State<'_, StartupFailure>` to
-            // always be there, because `Option<State<'_, T>>` does not
-            // implement Tauri's `CommandArg` (verified by compiling it — the
-            // error is "the trait bound `State<'_, StartupFailure>:
-            // Deserialize<'_>` is not satisfied"), so a command parameter
-            // cannot express "this state may not be managed".
+            // The worker is spawned unconditionally, before startup knows
+            // whether an index exists. 2E spawned it only on the success branch
+            // and dropped `rx` otherwise, which left no live channel for a
+            // first-run download's result to arrive on. Starting it always
+            // deletes that special case rather than adding one.
+            let (index_tx, index_rx) = tokio::sync::watch::channel(None::<Arc<state::AppState>>);
+            app.manage(commands::IndexSender(index_tx.clone()));
+
+            let source_dir = config_dir.join(jmdict_source::SOURCE_DIR);
+            app.manage(commands::DictionaryPaths {
+                root: root.clone(),
+                source_dir,
+            });
+            app.manage(commands::DownloadInFlight(Arc::new(AtomicBool::new(false))));
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, rx));
+
+            // `StartupFailure` and `NeedsDictionary` are both managed on every
+            // branch: `Option<State<'_, T>>` is not a valid Tauri 2 command
+            // parameter, so a command cannot express "this state may not be
+            // managed". Empty string / `false` are the "nothing wrong" values.
             match state::load_state(&root) {
-                // `Arc` because `run_worker` moves a handle into `spawn_blocking`,
-                // and `tauri::State` itself is not `Send`.
                 Ok(s) => {
-                    let shared = Arc::new(s);
-                    app.manage(Arc::clone(&shared));
                     app.manage(state::StartupFailure(String::new()));
-                    let handle = app.handle().clone();
-                    // TODO(Task 4, Phase 2F): temporary shim. `run_worker` now
-                    // takes the index through a `watch` channel so it can be
-                    // spawned before one exists; startup here always has one
-                    // by this point, so this just wraps it in a channel that
-                    // never changes. Task 4 replaces this with the real
-                    // channel shared with `commands::download_dictionary`.
-                    let (_index_tx, index_rx) = tokio::sync::watch::channel(Some(shared));
-                    tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, rx));
+                    app.manage(state::NeedsDictionary(false));
+                    // A send failure would mean the worker died between its
+                    // spawn above and this line, which cannot happen — it is
+                    // awaiting its first input. Ignored with that reason rather
+                    // than turned into a startup abort.
+                    let _ = index_tx.send(Some(Arc::new(s)));
+                }
+                // The expected first run. Deliberately not a `StartupFailure`:
+                // that one disables the parse controls, and this state is
+                // fixable from inside the window.
+                Err(e) if state::is_missing_dictionary(&e) => {
+                    app.manage(state::StartupFailure(String::new()));
+                    app.manage(state::NeedsDictionary(true));
                 }
                 Err(e) => {
-                    // Startup failures are surfaced to the webview rather than
-                    // aborting: an app that will not launch cannot tell the user
-                    // to run `build-index`. `rx` is intentionally not moved on
-                    // this branch: it is dropped here, so once the poll finds
-                    // something worth parsing, that `tx.send` fails and
-                    // `run_poll` returns. Until then it keeps ticking with
-                    // nowhere to send to — with monitoring off, or on but with
-                    // nothing Japanese ever copied, that can be the app's
-                    // entire life.
                     app.manage(state::StartupFailure(e.to_string()));
+                    app.manage(state::NeedsDictionary(false));
                 }
             }
             Ok(())
@@ -121,7 +129,9 @@ fn main() {
             commands::get_settings,
             commands::startup_error,
             commands::settings_warning,
-            commands::frontend_ready
+            commands::frontend_ready,
+            commands::download_dictionary,
+            commands::needs_dictionary
         ])
         // If the runtime cannot start, there is no window to report anything
         // in, so the alternative to this `expect` is a silent exit.
