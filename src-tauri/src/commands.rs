@@ -16,7 +16,7 @@ use tauri::State;
 use tokio::sync::watch;
 
 use crate::settings::Settings;
-use crate::state::{SettingsState, StartupFailure};
+use crate::state::{SettingsState, SettingsWarning, StartupFailure};
 
 /// The sending half of the input channel, managed so commands can reach it.
 pub struct InputSender(pub watch::Sender<String>);
@@ -81,6 +81,18 @@ pub fn startup_error(failure: State<'_, StartupFailure>) -> Option<String> {
         None
     } else {
         Some(failure.0.clone())
+    }
+}
+
+/// A settings-load warning (e.g. a corrupt `settings.json`), or `null` when
+/// settings loaded cleanly. Unlike `startup_error`, this is never fatal — see
+/// `SettingsWarning`'s doc comment for why the two are separate.
+#[tauri::command]
+pub fn settings_warning(warning: State<'_, SettingsWarning>) -> Option<String> {
+    if warning.0.is_empty() {
+        None
+    } else {
+        Some(warning.0.clone())
     }
 }
 

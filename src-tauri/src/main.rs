@@ -32,9 +32,13 @@ fn main() {
             // Settings first: the poll needs the monitoring flag before it starts.
             let settings_path = settings::settings_path(&config_dir);
             let (loaded, settings_warning) = settings::load(&settings_path);
-            if let Some(warning) = settings_warning {
+            // Also kept for developers running from a terminal: `settings_warning`
+            // (the command) is how the webview learns about this, but stderr is
+            // free and this app already logs other soft failures the same way.
+            if let Some(warning) = &settings_warning {
                 eprintln!("{warning}");
             }
+            app.manage(state::SettingsWarning(settings_warning.unwrap_or_default()));
             if loaded.always_on_top {
                 if let Some(window) = app.get_webview_window("main") {
                     // Not fatal: the window exists, it just is not pinned, and
@@ -93,7 +97,8 @@ fn main() {
             commands::set_clipboard_monitoring,
             commands::set_always_on_top,
             commands::get_settings,
-            commands::startup_error
+            commands::startup_error,
+            commands::settings_warning
         ])
         // If the runtime cannot start, there is no window to report anything
         // in, so the alternative to this `expect` is a silent exit.

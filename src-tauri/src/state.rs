@@ -45,6 +45,16 @@ pub struct AppState {
 /// Tauri 2 command parameter.
 pub struct StartupFailure(pub String);
 
+/// A non-fatal warning from loading settings (e.g. a corrupt `settings.json`),
+/// kept separate from `StartupFailure` on purpose: `StartupFailure` being
+/// non-empty is treated by the webview as fatal — it disables the input box
+/// and the Parse button (see `src/main.ts`). A corrupt settings file must not
+/// do that; it only means the toggles reset to defaults, which is cosmetic.
+/// Same empty-string-means-nothing sentinel as `StartupFailure`, for the same
+/// reason: `commands::settings_warning` needs `State<'_, SettingsWarning>` to
+/// always be there.
+pub struct SettingsWarning(pub String);
+
 #[derive(Debug, thiserror::Error)]
 pub enum StartupError {
     #[error(
@@ -267,6 +277,33 @@ mod tests {
         let (reloaded, warning) = crate::settings::load(&path);
         assert!(reloaded.always_on_top, "not persisted");
         assert!(warning.is_none(), "got {warning:?}");
+    }
+
+    /// `main.rs` builds `SettingsWarning` from `settings::load`'s second
+    /// return value as `SettingsWarning(warning.unwrap_or_default())` — this
+    /// proves that mapping keeps the sentinel convention: non-empty for a
+    /// corrupt file, empty for a clean load.
+    #[test]
+    fn a_corrupt_settings_file_yields_a_non_empty_settings_warning() {
+        let dir = scratch("warning-corrupt");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, b"{ not json").expect("write");
+
+        let (_, warning) = crate::settings::load(&path);
+        let warning = SettingsWarning(warning.unwrap_or_default());
+        assert!(!warning.0.is_empty());
+    }
+
+    /// A missing file (first run) is not corruption and must not surface as
+    /// a warning: same distinction `settings::load` itself already makes.
+    #[test]
+    fn a_clean_settings_load_yields_an_empty_settings_warning() {
+        let dir = scratch("warning-clean");
+        let path = dir.join("settings.json");
+
+        let (_, warning) = crate::settings::load(&path);
+        let warning = SettingsWarning(warning.unwrap_or_default());
+        assert!(warning.0.is_empty(), "got {:?}", warning.0);
     }
 
     /// A read-only config dir must not make the toggles stop working in the
