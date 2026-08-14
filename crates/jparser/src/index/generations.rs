@@ -141,11 +141,10 @@ fn publish(build_dir: &Path, root: &Path, generation: u64) -> Result<PathBuf, In
     match std::fs::rename(build_dir, &target) {
         Ok(()) => Ok(target),
         Err(e) => {
-            // MSRV 1.75: `ErrorKind::DirectoryNotEmpty` is 1.83, and the raw
-            // errno differs per platform (ENOTEMPTY is 66 on Darwin, 39 on
-            // Linux, and Windows reports something else entirely). Probing
-            // the target is portable and says the same thing: if it exists,
-            // somebody else published first.
+            // The raw errno differs per platform (ENOTEMPTY is 66 on Darwin,
+            // 39 on Linux, and Windows reports something else entirely).
+            // Probing the target is portable and says the same thing: if it
+            // exists, somebody else published first.
             if target.exists() {
                 Err(IndexError::GenerationExists {
                     generation,

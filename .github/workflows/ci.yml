@@ -55,9 +55,7 @@ jobs:
 
       # Library and binary targets only — deliberately not `--all-targets`.
       # MSRV is a promise to whoever compiles this workspace's crates, and
-      # dev-dependencies never reach them. `insta` pulls `tempfile`, which pulls
-      # `getrandom 0.4.3` (edition2024, Rust 1.85), so `--all-targets` fails at
-      # 1.75 for a chain that exists only when running our own tests.
+      # dev-dependencies never reach them.
       - run: cargo check --workspace
 
   purity:
