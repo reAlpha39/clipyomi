@@ -59,7 +59,7 @@ pub use crate::segment::BoundaryHints;
 #[non_exhaustive]
 pub struct ParseOptions {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ParseResult {
     /// A contiguous cover of the input in ascending `start` order: every
     /// character belongs to exactly one segment, matched or not. Empty iff
@@ -67,7 +67,7 @@ pub struct ParseResult {
     pub segments: Vec<Segment>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Segment {
     /// Character offset into the parsed text. Never a byte offset.
     pub start: usize,
@@ -90,7 +90,7 @@ pub struct Segment {
     pub entries: Vec<Entry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Entry {
     /// The dictionary form: the matched surface for a plain headword, or the
     /// stem with its verb type's remove-suffix restored for a stem match.
@@ -671,5 +671,67 @@ mod tests {
         assert_eq!(crate::matcher::render_conjugation_label(&m.chain, &t), "");
         let e = assemble_entry(&m, &data, &t, &chars("食べ"));
         assert_eq!(e.conjugation, None);
+    }
+
+    /// Pins the exact JSON the webview parses. Field names here are the
+    /// TypeScript property names in `src/types.ts`; changing either side alone
+    /// breaks rendering with no compiler error anywhere.
+    #[test]
+    fn parse_result_serializes_to_the_documented_wire_shape() {
+        let result = ParseResult {
+            segments: vec![Segment {
+                start: 0,
+                len: 2,
+                surface: "東京".to_string(),
+                reading: Some("とうきょう".to_string()),
+                matched: true,
+                entries: vec![Entry {
+                    headword: "東京".to_string(),
+                    reading: Some("とうきょう".to_string()),
+                    conjugation: None,
+                    pos: vec!["n".to_string()],
+                    senses: vec![],
+                    flags: WordFlags::PRIMARY,
+                }],
+            }],
+        };
+
+        let json = serde_json::to_value(&result).expect("serialize");
+        let seg = &json["segments"][0];
+        assert_eq!(seg["start"], 0);
+        assert_eq!(seg["len"], 2);
+        assert_eq!(seg["surface"], "東京");
+        assert_eq!(seg["reading"], "とうきょう");
+        assert_eq!(seg["matched"], true);
+
+        let entry = &seg["entries"][0];
+        assert_eq!(entry["headword"], "東京");
+        assert_eq!(entry["conjugation"], serde_json::Value::Null);
+        assert_eq!(entry["pos"][0], "n");
+        assert_eq!(entry["flags"][0], "primary");
+    }
+
+    /// An unmatched run must still be a well-formed segment: the sentence pane
+    /// renders these muted and unchipped, so it needs them present, not omitted.
+    #[test]
+    fn an_unmatched_segment_serializes_with_null_reading_and_no_entries() {
+        let result = ParseResult {
+            segments: vec![Segment {
+                start: 0,
+                len: 1,
+                surface: "〜".to_string(),
+                reading: None,
+                matched: false,
+                entries: vec![],
+            }],
+        };
+
+        let json = serde_json::to_value(&result).expect("serialize");
+        assert_eq!(json["segments"][0]["reading"], serde_json::Value::Null);
+        assert_eq!(json["segments"][0]["matched"], false);
+        assert!(json["segments"][0]["entries"]
+            .as_array()
+            .expect("array")
+            .is_empty());
     }
 }

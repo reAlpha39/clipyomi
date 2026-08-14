@@ -17,6 +17,7 @@
 
 use crate::conjugation::{ConjugationTable, VerbTypeId};
 use crate::jmdict::RawEntry;
+use serde::ser::SerializeSeq;
 
 /// POS codes that make a word a particle for scoring purposes. ta-old's
 /// `posList` in `GetPartsOfSpeech` (`Dictionary.cpp:1409`).
@@ -59,6 +60,38 @@ impl WordFlags {
     }
     pub fn remove(&mut self, other: WordFlags) {
         self.0 &= !other.0;
+    }
+}
+
+/// The eight flags paired with their wire names, in bit order.
+///
+/// The webview reads these strings to pick a chip's content class, so they are
+/// public API — see the pinning tests below. A `u16` on the wire would force the
+/// frontend to re-declare every bit constant in TypeScript, where nothing relates
+/// them to this file.
+const FLAG_NAMES: [(WordFlags, &str); 8] = [
+    (WordFlags::PRIMARY, "primary"),
+    (WordFlags::PRONOUNCE, "pronounce"),
+    (WordFlags::COMMON_LINE, "common_line"),
+    (WordFlags::COMMON, "common"),
+    (WordFlags::PARTICLE, "particle"),
+    (WordFlags::COUNTER, "counter"),
+    (WordFlags::TOP, "top"),
+    (WordFlags::IS_NAME, "is_name"),
+];
+
+impl serde::Serialize for WordFlags {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        // Bits without a constant are skipped rather than reported: they cannot
+        // occur today, and a wire format is the wrong place to raise an error
+        // about a bit the UI has no name for.
+        let mut seq = s.serialize_seq(None)?;
+        for (flag, name) in FLAG_NAMES {
+            if self.contains(flag) {
+                seq.serialize_element(name)?;
+            }
+        }
+        seq.end()
     }
 }
 
@@ -328,5 +361,49 @@ mod tests {
         assert_eq!(WordFlags::COUNTER.0, 0x0020);
         assert_eq!(WordFlags::TOP.0, 0x0040);
         assert_eq!(WordFlags::IS_NAME.0, 0x0080);
+    }
+
+    #[test]
+    fn flags_serialize_as_names_in_bit_order() {
+        let all = WordFlags(0x00FF);
+        let json = serde_json::to_string(&all).expect("serialize");
+        assert_eq!(
+            json,
+            r#"["primary","pronounce","common_line","common","particle","counter","top","is_name"]"#
+        );
+    }
+
+    /// These strings are public API the moment the webview reads them: a rename
+    /// in Rust would compile clean and silently stop the sentence pane colouring
+    /// particles. This test is the only thing that catches that.
+    #[test]
+    fn each_flag_name_is_pinned() {
+        for (flag, name) in [
+            (WordFlags::PRIMARY, "primary"),
+            (WordFlags::PRONOUNCE, "pronounce"),
+            (WordFlags::COMMON_LINE, "common_line"),
+            (WordFlags::COMMON, "common"),
+            (WordFlags::PARTICLE, "particle"),
+            (WordFlags::COUNTER, "counter"),
+            (WordFlags::TOP, "top"),
+            (WordFlags::IS_NAME, "is_name"),
+        ] {
+            let json = serde_json::to_string(&flag).expect("serialize");
+            assert_eq!(json, format!(r#"["{name}"]"#), "flag {name} renamed?");
+        }
+    }
+
+    #[test]
+    fn empty_flags_serialize_as_an_empty_array() {
+        assert_eq!(serde_json::to_string(&WordFlags(0)).expect("ser"), "[]");
+    }
+
+    /// Bits with no constant must not invent a name or panic.
+    #[test]
+    fn unknown_bits_are_ignored() {
+        assert_eq!(
+            serde_json::to_string(&WordFlags(0x8000)).expect("ser"),
+            "[]"
+        );
     }
 }
