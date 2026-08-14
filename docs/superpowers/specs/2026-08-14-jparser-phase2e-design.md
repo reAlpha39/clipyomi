@@ -189,7 +189,7 @@ This is recorded here so Phase 3 inherits a measured observation rather than
 rediscovering it, and deliberately not fixed in 2E — it belongs with font sizes
 and gloss filters, decided together.
 
-### 6.2 Hover-to-preview is a known Phase 3 input
+### 6.2 Hover-to-preview is Phase 2g
 
 ta-old showed a definition on **hover**, not on click: `FuriganaWindow.cpp:716-730`
 tracks `WM_MOUSEMOVE`, arms `TrackMouseEvent` with `TME_HOVER` and
@@ -208,10 +208,22 @@ What it loses is the **glance** — checking one unfamiliar word without spendin
 click and then finding the matching row. First real use after 2E surfaced this
 immediately.
 
-Recorded here rather than fixed because it is the same complaint as §6.1 from the
-other direction: the pane is where definitions live and there is not enough room
-in it. Deciding hover separately from density, font sizes, and gloss filters would
-mean deciding the same thing twice.
+**Scheduled as Phase 2g, after 2f (first-run download).** An earlier draft of this
+section deferred it to Phase 3 on the grounds that hover and pane density (§6.1)
+are the same decision. That was overstated: a popover is a separate surface
+showing one entry for one word, where density is about fitting many, so the only
+real coupling is typography tokens the popover can inherit later. The argument
+runs the other way too — being able to glance at a word means scrolling the pane
+less, so shipping hover *reduces* the pressure §6.1 describes rather than
+entangling with it.
+
+2f still comes first: the first-run download is what makes the app usable without
+a terminal, whereas hover improves an app that already works.
+
+**Scope 2g tightly** — the popover only. Reuse the existing `--text-*` tokens and
+the definition renderer; do not touch pane density, font sizes, or gloss filters.
+Those stay Phase 3, and the moment 2g starts pulling them in it has become Phase 3
+under a different name.
 
 The likely shape is **additive, not a reversion** — keep the pane, add a hover
 popover for the glance case, gated behind a dwell like ta-old's 350 ms so it does
@@ -219,6 +231,41 @@ not fire while the cursor sweeps across a sentence. A popover also inherits 2D's
 constraints: `transform`/`opacity` only, `prefers-reduced-motion` respected, and
 it must not become the only route to a definition, since hover has no keyboard
 equivalent.
+
+### 6.3 The manual text input is removed in Phase 2h
+
+§6 above keeps the text box, citing port design §1's promise of "clipboard
+auto-monitoring plus manual text entry". **That is reversed in Phase 2h**, which
+makes the clipboard the only input path and deletes `#text`, `#parse`, and
+`run()`. Recorded here so the reversal is a decision with a date rather than
+drift; port design §1 and §6 of this document are both amended when 2h lands, not
+before.
+
+One objection was considered and does not hold: that pausing the monitor with no
+text box would leave the app with no input at all. §1.1 defines pause as "pause to
+study the current parse, unpause to resume" — freezing the current result is the
+entire purpose, so there is nothing to type during it.
+
+What is genuinely lost is text that cannot be copied — in an image, handwritten,
+or heard. After 2h that has to be typed into another application and copied back.
+Accepted: one input path means one source of truth for "the current parse", which
+is the same argument §4.1 used to justify collapsing `parse_text` into `set_input`.
+
+2h is sequenced **after** 2g because both rewrite the same surface. Ordering them
+this way costs a second baseline regeneration and a second pass over the Playwright
+suite — the price of reviewing them as separate, self-contained changes rather than
+one large one.
+
+Known cost, so 2h is not mistaken for a deletion-only task:
+
+- All Playwright specs currently drive the app via `page.fill('#text')` +
+  `page.click('#parse')`; every one must be rewritten to emit a `parse-result`
+  event instead.
+- `showStartupError` disables `#text`/`#parse` to stop a user parsing with no
+  index. With both gone, the fatal state needs a different affordance.
+- `set_input` survives — the clipboard poll is still its caller — but `run()` and
+  the button handlers go.
+- Six screenshot baselines regenerate.
 
 ## 7. Testing
 
