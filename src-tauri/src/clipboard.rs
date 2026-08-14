@@ -78,6 +78,7 @@ pub fn should_parse(text: &str, last_seen: Option<&str>, last_written: Option<&s
                     // yet.
 pub async fn run_poll(app: AppHandle, tx: watch::Sender<String>, settings: Arc<SettingsState>) {
     let mut last_seen: Option<String> = None;
+    let mut read_failing = false;
 
     loop {
         tokio::time::sleep(POLL_INTERVAL).await;
@@ -87,10 +88,27 @@ pub async fn run_poll(app: AppHandle, tx: watch::Sender<String>, settings: Arc<S
         }
 
         // A read can fail transiently when another app holds the clipboard.
-        // Skipping the tick is the whole policy: a poll failure is not
-        // information the user can act on (port design §9).
-        let Ok(text) = app.clipboard().read_text() else {
-            continue;
+        // Skipped rather than surfaced: that is not information the user can
+        // act on (design §5). Logged once per failure streak, not every
+        // tick, so a persistent failure (e.g. a denied permission) is
+        // debuggable without flooding stderr five times a second.
+        let text = match app.clipboard().read_text() {
+            Ok(text) => {
+                if read_failing {
+                    read_failing = false;
+                    eprintln!("reading the clipboard recovered");
+                }
+                text
+            }
+            Err(e) => {
+                if !read_failing {
+                    read_failing = true;
+                    eprintln!(
+                        "reading the clipboard failed, skipping ticks until it recovers: {e}"
+                    );
+                }
+                continue;
+            }
         };
 
         if !should_parse(&text, last_seen.as_deref(), None) {
