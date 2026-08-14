@@ -220,6 +220,20 @@ The 200 ms poll loop itself is a thin shell over `should_parse` and a clipboard
 read, and stays untested. That is the deliberate trade: the logic is tested, the
 timer is not.
 
+**Always-on-top is not tested automatically either**, and that is deliberate
+rather than an oversight — port design §10 puts it under "Not tested", alongside
+transparency and chrome switching, on a manual per-platform checklist. Automating
+window-manager behaviour is more fragile than the bugs it would catch. The
+command is one call into Tauri's window API; what could break is the window
+manager's response to it, which no assertion in this repo can observe. Verify by
+hand: toggle it on, click another window, confirm ours stays in front.
+
+Note also that `should_parse`'s "unchanged" condition can only be evaluated after
+`read_text()`, so the poll pays a clipboard read every tick regardless. That cost
+is accepted: five reads a second of a ≤10 000-character string is negligible, and
+avoiding it would mean platform-specific change-counter code for no measurable
+gain.
+
 ### 7.2 Frontend
 
 Vitest covers the event-driven render path with `listen` mocked, the header
@@ -245,6 +259,8 @@ Measured against the tree at commit `ae51029`.
 | `tokio` already in tree | 1.53.1, via `tauri` — a direct dependency adds no transitive weight |
 | Clipboard crate | `tauri-plugin-clipboard-manager` 2.3.2, MIT OR Apache-2.0 |
 | License note | Taken under **MIT**. Apache-2.0 alone is incompatible with this project's `GPL-2.0-only`; the CI purity job already guards this boundary for TLS backends |
+| Panic strategy | No `[profile]` overrides in either manifest, so `panic = "unwind"` is in force and `catch_unwind` works — see §9 |
+| `catch_unwind` ergonomics | Requires `UnwindSafe`; `&Index` and `&ConjugationTable` will not satisfy it. Wrap in `AssertUnwindSafe`, which is sound here because the managed state is read-only after startup and no `&mut` crosses the boundary |
 | `src-tauri` MSRV | 1.88, pinned separately from the workspace's 1.85 (see 2D) |
 | MSRV gate | `cargo +1.85 check -p jparser -p jmdict-source -p xtask` — **not** `--workspace` |
 | Baseline tests | 317 passed / 1 ignored; 16 Vitest; 10 Playwright local and CI-simulated |
@@ -264,6 +280,12 @@ Measured against the tree at commit `ae51029`.
   `pronounce`, `common_line`, `common`, `particle`, `counter`, `top`, `is_name`
 - `src-tauri`'s empty-string `StartupFailure` sentinel means "startup succeeded";
   every `StartupError` variant must keep rendering non-empty
+- **No profile may set `panic = "abort"`.** §5's panic containment is
+  `catch_unwind`, which catches nothing under an aborting profile — the app would
+  die on a matcher panic instead of keeping the previous result on screen.
+  Nothing fails loudly when this is added; the protection silently disappears.
+  There are no `[profile]` overrides today, and Tauri's own release guidance
+  recommends `panic = "abort"` for binary size, so this will come up.
 
 ## 10. Constraints inherited
 
