@@ -30,11 +30,12 @@ describe('the event-driven render path', () => {
     invoke.mockReset();
     // `startup_error` and `settings_warning` resolve to null (nothing
     // startup-fatal, nothing settings-cosmetic to report), and `get_settings`
-    // resolves to a harmless default: the header now calls all three
-    // unconditionally on import, so every test that imports `./main` must
-    // answer them or the module's own fire-and-forget calls contaminate
-    // these tests with unhandled rejections. Nothing else calls `invoke` in
-    // these tests.
+    // resolves to a harmless default: the header calls all three
+    // unconditionally on import, and `frontend_ready` is fired once the event
+    // listeners resolve (falls through to the `null` default below and is
+    // caught either way, see `main.ts`'s own comment on that call) — every
+    // test that imports `./main` must tolerate all of these or the module's
+    // own fire-and-forget calls contaminate it with unhandled rejections.
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
         return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
@@ -60,6 +61,21 @@ describe('the event-driven render path', () => {
     });
     expect(document.querySelector('.chip')?.textContent).toBe('東京');
     expect(document.querySelector('.def-row')).not.toBeNull();
+  });
+
+  // Important 2 (final review): the clipboard poll's first tick waits on the
+  // Rust-side `frontend_ready` signal before it reads anything (see
+  // `clipboard::wait_for_frontend`), so text copied before launch is not
+  // dropped on a webview that has not finished registering its listeners
+  // yet. This proves the frontend half of that handshake actually fires,
+  // and only after both `listen()` calls this test's mock already recorded
+  // into `listeners` have resolved.
+  test('signals frontend_ready once both parse-result and parse-error listeners are registered', async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(listeners.has('parse-result')).toBe(true);
+    expect(listeners.has('parse-error')).toBe(true);
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'frontend_ready')).toBe(true);
   });
 
   // Replaces the old invoke-reject-based "two consecutive failed parses leave
@@ -171,18 +187,13 @@ describe('the header controls', () => {
     expect(button.getAttribute('aria-pressed')).toBe('true');
   });
 
-  // Regression 2: the first version of this fix disabled the button for the
-  // duration of its request, which blurs a focused element and drops it
-  // from the tab order — a keyboard user activating a toggle would lose
-  // their place. Activation must never move focus off the button.
-  test('activating a focused toggle keeps focus on it', () => {
-    const button = document.querySelector<HTMLButtonElement>('#monitor');
-    if (button === null) throw new Error('#monitor missing');
-    button.focus();
-    expect(document.activeElement).toBe(button);
-    button.click();
-    expect(document.activeElement).toBe(button);
-  });
+  // Regression 2 (focus preservation) used to live here as a
+  // `document.activeElement` assertion. Deleted: happy-dom 20.0.0 does not
+  // blur a focused element when `.disabled` is set, so that assertion could
+  // never fail in this environment regardless of what `bindToggle` does — a
+  // test that cannot fail is not coverage. The real Chromium behaviour is
+  // proven for real by `e2e/panes.spec.ts`'s
+  // "activating a toggle keeps keyboard focus".
 });
 
 describe('overlapping toggle requests', () => {
@@ -240,19 +251,35 @@ describe('overlapping toggle requests', () => {
     ).toHaveLength(2);
   });
 
-  // Minor: the re-enable path was only ever exercised on success. A rejected
-  // command must both revert `aria-pressed` and clear `pending`, or the
-  // control would be stuck refusing every click after its first failure.
-  test('a rejected toggle reverts aria-pressed and accepts the next click', async () => {
+  // Important 1 (final review): a rejected setter doesn't say *which* of two
+  // things happened. `state.rs`'s `SettingsState::update` applies a change in
+  // memory before it tries to persist it, so a write failure can still mean
+  // the change is genuinely in effect — reverting to the naive inverse would
+  // then show the opposite of backend reality. This mock's second
+  // `get_settings` answer (`clipboard_monitoring: false`) simulates exactly
+  // that case, and is deliberately NOT the naive inverse of the click below
+  // ('true') — a revert-blindly implementation fails the assertion after the
+  // rejection; only a resync-from-`get_settings` implementation passes it.
+  test('a rejected toggle resyncs aria-pressed from get_settings rather than the naive inverse, and accepts the next click', async () => {
     let rejectFirst: ((reason: unknown) => void) | undefined;
-    let calls = 0;
+    let setCalls = 0;
+    let getSettingsCalls = 0;
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
-        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+        getSettingsCalls += 1;
+        if (getSettingsCalls === 1) {
+          // The initial load, matching #monitor's markup default so the
+          // click below starts from a known, predictable state.
+          return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+        }
+        // Queried again after the rejection below: the backend's in-memory
+        // value already flipped to what the user asked for, even though the
+        // write that would have persisted it failed.
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: false });
       }
       if (cmd === 'set_clipboard_monitoring') {
-        calls += 1;
-        if (calls === 1) {
+        setCalls += 1;
+        if (setCalls === 1) {
           return new Promise((_resolve, reject) => {
             rejectFirst = reject;
           });
@@ -273,17 +300,24 @@ describe('overlapping toggle requests', () => {
     expect(button.getAttribute('aria-pressed')).toBe('false');
 
     rejectFirst?.('backend refused');
+    // Flushes: the rejection, the catch handler's `await get_settings`, and
+    // the attribute write that follows it.
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(button.getAttribute('aria-pressed')).toBe('true'); // reverted
+    // NOT '!next' ('true') — the backend's own reported truth, fetched fresh
+    // rather than assumed. This is where a revert-blindly implementation
+    // fails: it would show 'true' here.
+    expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(document.querySelector('#parse-error')?.textContent).toContain('backend refused');
 
     // `pending` must have cleared even on rejection, or this click would be
     // silently swallowed exactly like an overlapping one.
     button.click();
-    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
   });
 
   // Finding 3 (a click before settings load must survive the late response)

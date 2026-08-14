@@ -61,6 +61,11 @@ export async function showSettingsWarning(): Promise<void> {
   parseError.replaceChildren(errorBlock(message));
 }
 
+interface Settings {
+  always_on_top: boolean;
+  clipboard_monitoring: boolean;
+}
+
 const alwaysOnTop = app.querySelector<HTMLButtonElement>('#always-on-top');
 const monitor = app.querySelector<HTMLButtonElement>('#monitor');
 
@@ -72,7 +77,11 @@ const monitor = app.querySelector<HTMLButtonElement>('#monitor');
 // of ever receiving its real persisted value.
 const touchedButtons = new Set<HTMLButtonElement>();
 
-function bindToggle(button: HTMLButtonElement | null, command: string): void {
+function bindToggle(
+  button: HTMLButtonElement | null,
+  command: string,
+  settingsKey: keyof Settings,
+): void {
   if (button === null) return;
   // Closure-local, not `button.disabled`: disabling a focused element blurs
   // it and drops it from the tab order, which a `finally` re-enable does not
@@ -84,11 +93,20 @@ function bindToggle(button: HTMLButtonElement | null, command: string): void {
     pending = true;
     touchedButtons.add(button);
     const next = button.getAttribute('aria-pressed') !== 'true';
-    // Flip first so the control feels immediate; a rejected command reverts it.
+    // Flip first so the control feels immediate; a rejected command corrects it below.
     button.setAttribute('aria-pressed', String(next));
     void invoke(command, { enabled: next })
-      .catch((e) => {
-        button.setAttribute('aria-pressed', String(!next));
+      .catch(async (e) => {
+        // A rejected setter doesn't say which of two things happened:
+        // `state.rs`'s `SettingsState::update` applies a change in memory
+        // *before* it tries to persist it, so a write failure (e.g. a
+        // read-only config dir) still leaves the new value in effect
+        // (design §5) — reverting to the naive inverse would then show the
+        // opposite of what the backend actually did. Re-reading
+        // `get_settings` shows whichever outcome really happened instead of
+        // guessing from the shape of the error.
+        const settings = await invoke<Settings>('get_settings');
+        button.setAttribute('aria-pressed', String(settings[settingsKey]));
         parseError.replaceChildren(errorBlock(String(e)));
       })
       .finally(() => {
@@ -97,13 +115,11 @@ function bindToggle(button: HTMLButtonElement | null, command: string): void {
   });
 }
 
-bindToggle(alwaysOnTop, 'set_always_on_top');
-bindToggle(monitor, 'set_clipboard_monitoring');
+bindToggle(alwaysOnTop, 'set_always_on_top', 'always_on_top');
+bindToggle(monitor, 'set_clipboard_monitoring', 'clipboard_monitoring');
 
 async function applySettings(): Promise<void> {
-  const settings = await invoke<{ always_on_top: boolean; clipboard_monitoring: boolean }>(
-    'get_settings',
-  );
+  const settings = await invoke<Settings>('get_settings');
   if (alwaysOnTop !== null && !touchedButtons.has(alwaysOnTop)) {
     alwaysOnTop.setAttribute('aria-pressed', String(settings.always_on_top));
   }
@@ -133,10 +149,24 @@ function show(result: ParseResult): void {
   output.replaceChildren(sentence, definitions);
 }
 
-void listen<ParseResult>('parse-result', (e) => show(e.payload));
-// A failure replaces only the message, never the result: the previous parse
-// stays readable while the user works out what went wrong.
-void listen<string>('parse-error', (e) => parseError.replaceChildren(errorBlock(e.payload)));
+// `listen()`'s returned promise resolves only once its IPC round trip has
+// registered the handler on the Rust side. The clipboard poll's first tick
+// waits on `frontend_ready` before it reads anything (see
+// `clipboard::wait_for_frontend`), so firing it only after BOTH listeners
+// are confirmed registered closes the race where clipboard text present at
+// launch gets parsed and emitted before anything here is listening for it.
+Promise.all([
+  listen<ParseResult>('parse-result', (e) => show(e.payload)),
+  // A failure replaces only the message, never the result: the previous
+  // parse stays readable while the user works out what went wrong.
+  listen<string>('parse-error', (e) => parseError.replaceChildren(errorBlock(e.payload))),
+])
+  .then(() => invoke('frontend_ready'))
+  // Not actionable by the user if this fails — same policy as a skipped
+  // clipboard read (design §5). The only consequence is that the poll's
+  // first tick after launch can drop, exactly the race this call exists to
+  // close; nothing else in the app depends on it succeeding.
+  .catch(() => {});
 
 async function run(): Promise<void> {
   try {
