@@ -64,16 +64,34 @@ export async function showSettingsWarning(): Promise<void> {
 const alwaysOnTop = app.querySelector<HTMLButtonElement>('#always-on-top');
 const monitor = app.querySelector<HTMLButtonElement>('#monitor');
 
+// Set the instant a user clicks either toggle, before its request even
+// starts: `applySettings` below checks this and skips its writes once it's
+// true, so a settings response that resolves after the user has already
+// acted can never clobber what they just set.
+let touched = false;
+
 function bindToggle(button: HTMLButtonElement | null, command: string): void {
   if (button === null) return;
   button.addEventListener('click', () => {
+    touched = true;
     const next = button.getAttribute('aria-pressed') !== 'true';
     // Flip first so the control feels immediate; a rejected command reverts it.
     button.setAttribute('aria-pressed', String(next));
-    void invoke(command, { enabled: next }).catch((e) => {
-      button.setAttribute('aria-pressed', String(!next));
-      parseError.replaceChildren(errorBlock(String(e)));
-    });
+    // Disabled for the duration of the request, re-enabled in `finally`
+    // regardless of outcome: two clicks on the same button can otherwise
+    // settle out of order (the backend writes settings to disk outside a
+    // mutex), and a late revert from an earlier click could stomp a later
+    // one's settled state. Disabling makes overlapping requests on this
+    // button structurally impossible rather than merely unlikely.
+    button.disabled = true;
+    void invoke(command, { enabled: next })
+      .catch((e) => {
+        button.setAttribute('aria-pressed', String(!next));
+        parseError.replaceChildren(errorBlock(String(e)));
+      })
+      .finally(() => {
+        button.disabled = false;
+      });
   });
 }
 
@@ -84,6 +102,7 @@ async function applySettings(): Promise<void> {
   const settings = await invoke<{ always_on_top: boolean; clipboard_monitoring: boolean }>(
     'get_settings',
   );
+  if (touched) return;
   alwaysOnTop?.setAttribute('aria-pressed', String(settings.always_on_top));
   monitor?.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
 }

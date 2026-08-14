@@ -136,9 +136,14 @@ describe('the header controls', () => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
     invoke.mockReset();
+    // Deliberately the INVERSE of the markup's hardcoded aria-pressed
+    // defaults ('false' on #always-on-top, 'true' on #monitor): if these
+    // matched the markup, "reflects loaded settings" would still pass with
+    // `applySettings` deleted entirely, since the DOM would already show the
+    // right values before it ever ran.
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
-        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+        return Promise.resolve({ always_on_top: true, clipboard_monitoring: false });
       }
       if (cmd === 'set_always_on_top' || cmd === 'set_clipboard_monitoring') {
         return Promise.resolve(undefined);
@@ -154,8 +159,8 @@ describe('the header controls', () => {
   });
 
   test('reflects loaded settings in aria-pressed', () => {
-    expect(document.querySelector('#monitor')?.getAttribute('aria-pressed')).toBe('true');
-    expect(document.querySelector('#always-on-top')?.getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('#monitor')?.getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('#always-on-top')?.getAttribute('aria-pressed')).toBe('true');
   });
 
   test('toggling monitoring flips aria-pressed', async () => {
@@ -163,7 +168,90 @@ describe('the header controls', () => {
     if (button === null) throw new Error('#monitor missing');
     button.click();
     await Promise.resolve();
-    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('overlapping toggle requests', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    vi.resetModules();
+  });
+
+  // Finding 2: without disabling the button for the duration of its
+  // request, a second click before the first settles could produce two
+  // in-flight requests whose responses arrive out of order.
+  test('a button disables itself while its request is in flight and re-enables once it settles', async () => {
+    let resolveSet: (() => void) | undefined;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'set_clipboard_monitoring') {
+        return new Promise<void>((resolve) => {
+          resolveSet = resolve;
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const button = document.querySelector<HTMLButtonElement>('#monitor');
+    if (button === null) throw new Error('#monitor missing');
+
+    button.click();
+    expect(button.disabled).toBe(true);
+
+    // A disabled button does not dispatch further clicks — this is what
+    // makes a second, overlapping request structurally impossible rather
+    // than merely unlikely.
+    button.click();
+    expect(
+      invoke.mock.calls.filter(([cmd]) => cmd === 'set_clipboard_monitoring'),
+    ).toHaveLength(1);
+
+    resolveSet?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(button.disabled).toBe(false);
+  });
+
+  // Finding 3: `applySettings` resolves asynchronously, after the click
+  // listeners are already attached. A click landing in that window must win
+  // over the late settings response, not be overwritten by it.
+  test('a click before settings load survives the late get_settings response', async () => {
+    let resolveGetSettings: ((value: unknown) => void) | undefined;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return new Promise((resolve) => {
+          resolveGetSettings = resolve;
+        });
+      }
+      if (cmd === 'set_always_on_top') return Promise.resolve(undefined);
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+
+    const button = document.querySelector<HTMLButtonElement>('#always-on-top');
+    if (button === null) throw new Error('#always-on-top missing');
+    // Markup default is 'false'; the click flips it before get_settings has
+    // resolved at all.
+    button.click();
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+
+    resolveGetSettings?.({ always_on_top: false, clipboard_monitoring: true });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Without the `touched` guard, this settings response — resolving after
+    // the click — would clobber the button back to 'false'.
+    expect(button.getAttribute('aria-pressed')).toBe('true');
   });
 });
 
