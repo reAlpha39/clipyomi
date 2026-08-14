@@ -57,6 +57,25 @@ pub const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_secs(2)
 /// The two-byte gzip magic, `1f 8b`.
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
 
+/// Prefixes an ungzipped source file may start with: the real archive's XML
+/// prolog, its doctype, and its root element for a hand-trimmed copy.
+///
+/// Matched against JMdict specifically rather than against `<`: the parser reads
+/// markup it does not recognise as zero entries, so a saved error page would
+/// otherwise build an empty index and report success.
+const XML_PREFIXES: [&[u8]; 3] = [b"<?xml", b"<!DOCTYPE JMdict", b"<JMdict"];
+
+/// A leading UTF-8 BOM, skipped before the prefix check: editors on Windows add
+/// one, and the XML behind it is still the archive the user meant to place.
+const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
+
+/// Whether `head` — a file's first bytes — begins JMdict XML.
+fn begins_jmdict_xml(head: &[u8]) -> bool {
+    let head = head.strip_prefix(&UTF8_BOM).unwrap_or(head);
+    let head = head.trim_ascii_start();
+    XML_PREFIXES.iter().any(|prefix| head.starts_with(prefix))
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SourceError {
     #[error("source io failed: {0}")]
@@ -87,6 +106,24 @@ pub enum SourceError {
     /// I/O failure is not (retrying will not free disk or fix permissions).
     #[error("the downloaded archive is corrupt: {0}")]
     Corrupt(String),
+    /// The file at the resolved name is neither gzip nor JMdict XML. Only a
+    /// hand-placed file reaches this: a download is gzip-verified before it is
+    /// renamed into place. Separate from [`SourceError::Corrupt`], which says
+    /// "the server sent us something broken, retrying may help" — here nothing
+    /// will change until the file itself does, so the message says so.
+    #[error(
+        "{path} is neither a gzip archive nor JMdict XML — it starts with \"{head}\". \
+         Delete it, or replace it with a real {file}",
+        path = path.display(),
+        file = SOURCE_FILE,
+    )]
+    NotAnArchive {
+        path: PathBuf,
+        /// The first bytes, escaped and truncated. A user who saved the wrong
+        /// file usually recognises it from its opening — an unquoted length or
+        /// byte count would not tell them which file they grabbed.
+        head: String,
+    },
     #[error(
         "could not obtain the dictionary after {attempts} attempts ({last}); \
          place a {file} in {source_dir} manually to bypass the download",
@@ -108,18 +145,42 @@ pub enum SourceError {
 /// decompressed it by hand and kept the name is a case worth supporting, and
 /// exactly one resolved name — rather than one per encoding — avoids needing a
 /// precedence rule between two copies that disagree.
+///
+/// Anything that is neither is rejected rather than passed through as text: the
+/// XML parser downstream reads what it cannot recognise as zero entries, so a
+/// wrong file used to publish an empty index and report success. This is the
+/// only boundary where those bytes are still identifiable as a wrong *file*
+/// rather than an empty dictionary.
 pub fn open_local(path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
     let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
-    // `fill_buf` peeks without consuming, so the magic bytes remain available
-    // to whichever reader is constructed below.
-    let gzipped = reader.fill_buf()?.starts_with(&GZIP_MAGIC);
+    // `fill_buf` peeks without consuming, so the sniffed bytes remain available
+    // to whichever reader is constructed below. The borrow ends with this block,
+    // before `reader` moves into a decoder.
+    let (gzipped, xml, head) = {
+        let head = reader.fill_buf()?;
+        (
+            head.starts_with(&GZIP_MAGIC),
+            begins_jmdict_xml(head),
+            // Enough to recognise a saved web page or a text file by, short
+            // enough to sit inside a one-line message.
+            String::from_utf8_lossy(&head[..head.len().min(24)])
+                .escape_debug()
+                .to_string(),
+        )
+    };
+
     if gzipped {
-        Ok(Box::new(std::io::BufReader::new(
+        return Ok(Box::new(std::io::BufReader::new(
             flate2::read::GzDecoder::new(reader),
-        )))
-    } else {
-        Ok(Box::new(reader))
+        )));
     }
+    if xml {
+        return Ok(Box::new(reader));
+    }
+    Err(SourceError::NotAnArchive {
+        path: path.to_path_buf(),
+        head,
+    })
 }
 
 /// Open the JMdict source in `source_dir`, downloading it first if absent.
@@ -208,21 +269,95 @@ mod tests {
         assert_eq!(read_all(open_local(&path).expect("open")), XML);
     }
 
-    /// Shorter than the two magic bytes. Must not panic on the slice.
+    /// A hand-trimmed file that starts at the root element, with no prolog.
     #[test]
-    fn a_one_byte_file_takes_the_plain_path() {
+    fn a_plain_file_starting_at_the_root_element_is_passed_through() {
+        let dir = scratch("open-root");
+        let path = dir.join(SOURCE_FILE);
+        std::fs::write(&path, b"<JMdict></JMdict>").expect("write");
+        assert_eq!(
+            read_all(open_local(&path).expect("open")),
+            b"<JMdict></JMdict>"
+        );
+    }
+
+    /// Editors on Windows prepend a BOM. That is not the file's fault, and the
+    /// XML behind it is still the archive the user meant to place.
+    #[test]
+    fn a_bom_and_leading_whitespace_do_not_reject_real_xml() {
+        let dir = scratch("open-bom");
+        let path = dir.join(SOURCE_FILE);
+        let mut bytes = vec![0xEF, 0xBB, 0xBF, b'\n', b' '];
+        bytes.extend_from_slice(XML);
+        std::fs::write(&path, &bytes).expect("write");
+        assert_eq!(read_all(open_local(&path).expect("open")), bytes);
+    }
+
+    /// The failure this rejection exists for: the XML parser reads anything it
+    /// does not recognise as zero entries, so a file that is neither gzip nor
+    /// JMdict used to build an empty index and report success. Phase 2F put
+    /// "place a JMdict_e.gz here" in front of every user who hits a download
+    /// failure, so a wrong file is now something users will actually do.
+    #[test]
+    fn a_file_that_is_neither_gzip_nor_jmdict_xml_is_rejected() {
+        let dir = scratch("open-junk");
+        let path = dir.join(SOURCE_FILE);
+        std::fs::write(&path, b"this is not a dictionary").expect("write");
+
+        let err = open_local(&path).err().expect("must fail");
+        assert!(
+            matches!(err, SourceError::NotAnArchive { .. }),
+            "got {err:?}"
+        );
+        // The message has to name the file and what to do, because it is shown
+        // verbatim on the download screen's failure state.
+        let msg = err.to_string();
+        assert!(msg.contains(SOURCE_FILE), "got {msg}");
+    }
+
+    /// The realistic wrong file: a captive portal or 404 page saved under the
+    /// archive's name. It IS well-formed markup, so a bare "starts with `<`"
+    /// check would wave it through.
+    #[test]
+    fn an_html_page_saved_under_the_archive_name_is_rejected() {
+        let dir = scratch("open-html");
+        let path = dir.join(SOURCE_FILE);
+        std::fs::write(&path, b"<!DOCTYPE html><html><body>404</body></html>").expect("write");
+
+        let err = open_local(&path).err().expect("must fail");
+        assert!(
+            matches!(err, SourceError::NotAnArchive { .. }),
+            "got {err:?}"
+        );
+    }
+
+    /// Shorter than the two magic bytes. Must not panic on the slice — and is
+    /// not a dictionary either.
+    #[test]
+    fn a_one_byte_file_is_rejected() {
         let dir = scratch("open-tiny");
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, b"<").expect("write");
-        assert_eq!(read_all(open_local(&path).expect("open")), b"<");
+
+        let err = open_local(&path).err().expect("must fail");
+        assert!(
+            matches!(err, SourceError::NotAnArchive { .. }),
+            "got {err:?}"
+        );
     }
 
+    /// A zero-length file is the shape a killed `cp` or a full disk leaves.
     #[test]
-    fn an_empty_file_takes_the_plain_path() {
+    fn an_empty_file_is_rejected() {
         let dir = scratch("open-empty");
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, b"").expect("write");
-        assert!(read_all(open_local(&path).expect("open")).is_empty());
+
+        let err = open_local(&path).err().expect("must fail");
+        assert!(
+            matches!(err, SourceError::NotAnArchive { .. }),
+            "got {err:?}"
+        );
     }
 
     #[test]
