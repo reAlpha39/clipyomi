@@ -788,7 +788,10 @@ npx playwright test
 CI=1 npx playwright test
 ```
 
-Expected: PASS at 22 (17 + 5) locally; `CI=1` also PASS with the two screenshot comparisons skipped. Report both counts.
+Expected: PASS at 23 (17 + 6) locally — the code block above adds six tests,
+not five: the four standalone `test(...)` calls plus the `for (const theme of
+THEMES)` loop, which yields two (light and dark), not one. `CI=1` also PASS
+with the two screenshot comparisons skipped. Report both counts.
 
 - [ ] **Step 3: Look at the baselines you just created**
 
@@ -819,7 +822,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 git diff --stat
 ```
 
-Expected: Vitest 43, Playwright 22, Rust 357 unchanged, clippy clean. The Rust commands are here to prove this phase changed nothing on that side — `git diff --stat` must list no file under `src-tauri/` or `crates/`.
+Expected: Vitest 43, Playwright 23 (see Step 2's corrected count), Rust 357 unchanged, clippy clean. The Rust commands are here to prove this phase changed nothing on that side — `git diff --stat` must list no file under `src-tauri/` or `crates/`.
 
 - [ ] **Step 6: Verify by hand what no test can**
 

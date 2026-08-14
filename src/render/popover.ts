@@ -62,10 +62,19 @@ function element(): HTMLElement {
 export function showEntryPopover(chip: HTMLElement, entry: Entry): void {
   const el = element();
   el.replaceChildren(renderEntry(entry));
+  // Reset before measuring: a previous open leaves its inline `left` applied,
+  // and for a `position: fixed` box with `right: auto; width: auto`, used
+  // width is shrink-to-fit bounded by `containing-block width - left`.
+  // Measuring against a stale `left` would starve `getBoundingClientRect()`
+  // of the viewport width it actually has, undersizing this entry's box (and,
+  // through wrapped text, its measured height too) for anything that would
+  // need more room than was left over from the previous position.
+  el.style.left = '0px';
   // Measured before it is placed, because the height decides which side of the
   // chip it goes on. The base style is `visibility: hidden`, which still lays
-  // out — so this measures correctly and no frame is ever painted at the
-  // pre-placement position.
+  // out — so this measures the real box at the reset position, and no frame is
+  // ever painted in between: the style write and this layout happen inside
+  // one task.
   const { left, top } = placePopover(chip.getBoundingClientRect(), el.getBoundingClientRect(), {
     width: window.innerWidth,
   });

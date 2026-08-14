@@ -121,6 +121,29 @@ describe('the hover popover', () => {
     ],
   };
 
+  // Three separate chips (distinct `start`s), for the sweep test below: a
+  // single-chip fixture can't distinguish "re-armed per chip" from "just
+  // works because there's only one chip to hover".
+  const SWEEP_SEGMENTS = {
+    segments: [0, 2, 4].map((start) => ({
+      start,
+      len: 2,
+      surface: '東京',
+      reading: 'とうきょう',
+      matched: true,
+      entries: [
+        {
+          headword: '東京',
+          reading: 'とうきょう',
+          conjugation: null,
+          pos: ['n'],
+          senses: [{ pos: ['n'], glosses: ['Tokyo'], xrefs: [], misc: [], info: [] }],
+          flags: ['primary'],
+        },
+      ],
+    })),
+  };
+
   function chip(): HTMLButtonElement {
     const el = document.querySelector<HTMLButtonElement>('.chip');
     if (el === null) throw new Error('.chip missing');
@@ -158,6 +181,9 @@ describe('the hover popover', () => {
     expect(open()).toBeNull();
     vi.advanceTimersByTime(350);
     expect(open()?.textContent).toContain('Tokyo');
+    // Design §2: the entry is already in the definitions pane, so this surface
+    // must stay unannounced rather than read twice.
+    expect(open()?.getAttribute('aria-hidden')).toBe('true');
   });
 
   test('a cursor that leaves before the dwell completes opens nothing', () => {
@@ -194,6 +220,30 @@ describe('the hover popover', () => {
     expect(open()).not.toBeNull();
 
     emit('parse-result', SEGMENTS);
+    expect(open()).toBeNull();
+  });
+
+  // Design §3.1: "re-armed per chip, with no sticky swap" — the rule the
+  // dwell was introduced to enforce, and the one the existing single-chip
+  // "leaves before the dwell completes" test above cannot exercise, since
+  // there is nothing to re-arm against with only one chip in play. Each
+  // `mouseover` below is well inside the previous chip's 350ms dwell, so a
+  // sweep that fired one popover per chip touched — instead of re-arming and
+  // canceling — would leave one open at the end.
+  test('a sweep across several chips leaves nothing open, including from the last one it touched', () => {
+    emit('parse-result', SWEEP_SEGMENTS);
+    const chips = Array.from(document.querySelectorAll<HTMLButtonElement>('.chip'));
+    expect(chips).toHaveLength(3);
+
+    for (const c of chips) {
+      c.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(20);
+    }
+    // The cursor kept moving past the last chip too, not stopping on it.
+    chips[chips.length - 1].dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+
+    // Past DWELL_MS for every chip touched, including the last.
+    vi.advanceTimersByTime(350);
     expect(open()).toBeNull();
   });
 });

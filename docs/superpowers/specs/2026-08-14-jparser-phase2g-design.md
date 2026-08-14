@@ -53,9 +53,13 @@ export function showEntryPopover(chip: HTMLElement, entry: Entry): void
 export function hideEntryPopover(): void
 export function placePopover(
   chip: DOMRect, popover: { width: number; height: number },
-  viewport: { width: number; height: number },
+  viewport: { width: number },
 ): { left: number; top: number }
 ```
+
+`viewport.height` is deliberately absent: the vertical decision only ever needs
+the chip's own `top`, and a popover taller than the viewport is capped by
+`max-height` (§3.4) rather than repositioned, so no code path ever reads it.
 
 One reused `<div class="entry-popover">` lives in `#app`, created on first use. It is
 filled by calling `renderEntry(segment.entries[0])` — the ranked primary, the same one
@@ -145,6 +149,11 @@ soft one.
 
 Accepted rather than worked around: §6.2 requires the pane to remain the complete
 route to a definition, and this is the case where that requirement earns its keep.
+
+The cap can also be imposed by the window edge rather than by `max-height`: a
+popover flipped below a chip on the first line of a short (320px-tall) window
+can be cut off by the bottom of the viewport before it ever reaches its
+`max-height` limit. Same accepted trade, a different enforcer.
 
 ## 4. Placement
 

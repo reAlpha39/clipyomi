@@ -218,11 +218,12 @@ details summary {
   max-height: calc(100vh - 16px);
   overflow: hidden;
   padding: var(--space-pane);
+  font-family: var(--font-ui);
   font-size: var(--text-gloss);
   color: var(--color-text);
   background: var(--color-surface);
   border: 1px solid var(--color-rule);
-  border-radius: 4px;
+  border-radius: 3px;
   box-shadow: 0 2px 8px var(--color-shadow);
 }
 

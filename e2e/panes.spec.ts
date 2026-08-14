@@ -349,9 +349,20 @@ test('a chip at the right edge gets a clamped popover, not an overflowing one', 
   await page.goto('/');
   await emitWideResult(page);
 
+  const popover = page.locator('.entry-popover');
+
+  // Hover a left-side chip first, so the popover's inline `left` is already
+  // set to a small value before the rightmost chip is ever measured. This is
+  // what exercises the stale-position bug: measuring the second open while
+  // the first's `left` is still applied would starve `getBoundingClientRect()`
+  // of the viewport width it needs, letting an undersized measurement pass
+  // the clamp untouched. Hovering only the rightmost chip, as this spec used
+  // to, can never see that — it is always the first open.
+  await page.locator('.chip').first().hover();
+  await expect(popover).toBeVisible();
+
   const index = await rightmostChip(page);
   await page.locator('.chip').nth(index).hover();
-  const popover = page.locator('.entry-popover');
   await expect(popover).toBeVisible();
 
   const popBox = await popover.boundingBox();
@@ -408,7 +419,13 @@ for (const theme of THEMES) {
     await emitFixtureResult(page);
 
     await page.locator('.chip').first().hover();
-    await expect(page.locator('.entry-popover')).toBeVisible();
+    const popover = page.locator('.entry-popover');
+    await expect(popover).toBeVisible();
+
+    // Load-bearing per design §3.3, not polish: this is the entire anti-flicker
+    // argument (the popover can never intercept the hover that opened it), so
+    // it needs its own assertion rather than riding along on the screenshot.
+    expect(await popover.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
 
     // Local only, exactly as every other baseline in this file: CI is
     // ubuntu-latest and these were written on macOS.
@@ -417,3 +434,23 @@ for (const theme of THEMES) {
     }
   });
 }
+
+// Design §5: the reduced-motion override lives in a `@media` block placed
+// after `.entry-popover`'s own transition rule, exactly as Phase 2F's dead
+// override did not — that one sat before its base rule and lost the cascade
+// silently, caught only by a human reading the CSS, not a test. This proves
+// the live behaviour that ordering is protected by: no baseline, since it
+// asserts a computed style rather than pixels.
+test('respects prefers-reduced-motion: the popover opens with no transition', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 480 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const popover = page.locator('.entry-popover');
+  await page.locator('.chip').first().hover();
+  await expect(popover).toBeVisible();
+
+  expect(await popover.evaluate((el) => getComputedStyle(el).transitionProperty)).toBe('none');
+});
