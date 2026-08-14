@@ -64,33 +64,35 @@ export async function showSettingsWarning(): Promise<void> {
 const alwaysOnTop = app.querySelector<HTMLButtonElement>('#always-on-top');
 const monitor = app.querySelector<HTMLButtonElement>('#monitor');
 
-// Set the instant a user clicks either toggle, before its request even
-// starts: `applySettings` below checks this and skips its writes once it's
-// true, so a settings response that resolves after the user has already
-// acted can never clobber what they just set.
-let touched = false;
+// Populated with a button the instant it's clicked, before its request even
+// starts: `applySettings` below skips writing to a button that's in this
+// set, so a settings response that resolves after the user has already
+// acted can never clobber what they just set. Per-button (not a single
+// shared flag) so clicking one control doesn't also freeze its sibling out
+// of ever receiving its real persisted value.
+const touchedButtons = new Set<HTMLButtonElement>();
 
 function bindToggle(button: HTMLButtonElement | null, command: string): void {
   if (button === null) return;
+  // Closure-local, not `button.disabled`: disabling a focused element blurs
+  // it and drops it from the tab order, which a `finally` re-enable does not
+  // undo. This guard gives the same exclusion — a click while one is
+  // already in flight is a no-op — without touching the DOM or focus at all.
+  let pending = false;
   button.addEventListener('click', () => {
-    touched = true;
+    if (pending) return;
+    pending = true;
+    touchedButtons.add(button);
     const next = button.getAttribute('aria-pressed') !== 'true';
     // Flip first so the control feels immediate; a rejected command reverts it.
     button.setAttribute('aria-pressed', String(next));
-    // Disabled for the duration of the request, re-enabled in `finally`
-    // regardless of outcome: two clicks on the same button can otherwise
-    // settle out of order (the backend writes settings to disk outside a
-    // mutex), and a late revert from an earlier click could stomp a later
-    // one's settled state. Disabling makes overlapping requests on this
-    // button structurally impossible rather than merely unlikely.
-    button.disabled = true;
     void invoke(command, { enabled: next })
       .catch((e) => {
         button.setAttribute('aria-pressed', String(!next));
         parseError.replaceChildren(errorBlock(String(e)));
       })
       .finally(() => {
-        button.disabled = false;
+        pending = false;
       });
   });
 }
@@ -102,9 +104,12 @@ async function applySettings(): Promise<void> {
   const settings = await invoke<{ always_on_top: boolean; clipboard_monitoring: boolean }>(
     'get_settings',
   );
-  if (touched) return;
-  alwaysOnTop?.setAttribute('aria-pressed', String(settings.always_on_top));
-  monitor?.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
+  if (alwaysOnTop !== null && !touchedButtons.has(alwaysOnTop)) {
+    alwaysOnTop.setAttribute('aria-pressed', String(settings.always_on_top));
+  }
+  if (monitor !== null && !touchedButtons.has(monitor)) {
+    monitor.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
+  }
 }
 
 function show(result: ParseResult): void {

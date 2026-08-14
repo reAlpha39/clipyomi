@@ -170,6 +170,19 @@ describe('the header controls', () => {
     await Promise.resolve();
     expect(button.getAttribute('aria-pressed')).toBe('true');
   });
+
+  // Regression 2: the first version of this fix disabled the button for the
+  // duration of its request, which blurs a focused element and drops it
+  // from the tab order — a keyboard user activating a toggle would lose
+  // their place. Activation must never move focus off the button.
+  test('activating a focused toggle keeps focus on it', () => {
+    const button = document.querySelector<HTMLButtonElement>('#monitor');
+    if (button === null) throw new Error('#monitor missing');
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    button.click();
+    expect(document.activeElement).toBe(button);
+  });
 });
 
 describe('overlapping toggle requests', () => {
@@ -180,10 +193,11 @@ describe('overlapping toggle requests', () => {
     vi.resetModules();
   });
 
-  // Finding 2: without disabling the button for the duration of its
-  // request, a second click before the first settles could produce two
-  // in-flight requests whose responses arrive out of order.
-  test('a button disables itself while its request is in flight and re-enables once it settles', async () => {
+  // Finding 2: without some guard against a second click landing before the
+  // first settles, two in-flight requests could arrive out of order.
+  // Guarded with a closure-local `pending` flag, not `button.disabled` — see
+  // the focus-preservation test above for why not.
+  test('a button suppresses overlapping clicks while its request is in flight, without disabling the element', async () => {
     let resolveSet: (() => void) | undefined;
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
@@ -205,11 +219,11 @@ describe('overlapping toggle requests', () => {
     if (button === null) throw new Error('#monitor missing');
 
     button.click();
-    expect(button.disabled).toBe(true);
+    // Never disabled — disabling a focused button would blur it (Regression 2).
+    expect(button.disabled).toBe(false);
 
-    // A disabled button does not dispatch further clicks — this is what
-    // makes a second, overlapping request structurally impossible rather
-    // than merely unlikely.
+    // A second click while the first request is still in flight must not
+    // start a second, overlapping request.
     button.click();
     expect(
       invoke.mock.calls.filter(([cmd]) => cmd === 'set_clipboard_monitoring'),
@@ -218,13 +232,64 @@ describe('overlapping toggle requests', () => {
     resolveSet?.();
     await Promise.resolve();
     await Promise.resolve();
-    expect(button.disabled).toBe(false);
+
+    // Settled: a further click now goes through as a new request.
+    button.click();
+    expect(
+      invoke.mock.calls.filter(([cmd]) => cmd === 'set_clipboard_monitoring'),
+    ).toHaveLength(2);
   });
 
-  // Finding 3: `applySettings` resolves asynchronously, after the click
-  // listeners are already attached. A click landing in that window must win
-  // over the late settings response, not be overwritten by it.
-  test('a click before settings load survives the late get_settings response', async () => {
+  // Minor: the re-enable path was only ever exercised on success. A rejected
+  // command must both revert `aria-pressed` and clear `pending`, or the
+  // control would be stuck refusing every click after its first failure.
+  test('a rejected toggle reverts aria-pressed and accepts the next click', async () => {
+    let rejectFirst: ((reason: unknown) => void) | undefined;
+    let calls = 0;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'set_clipboard_monitoring') {
+        calls += 1;
+        if (calls === 1) {
+          return new Promise((_resolve, reject) => {
+            rejectFirst = reject;
+          });
+        }
+        return Promise.resolve(undefined);
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const button = document.querySelector<HTMLButtonElement>('#monitor');
+    if (button === null) throw new Error('#monitor missing');
+
+    button.click(); // markup/loaded default 'true' -> flips to 'false'
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    rejectFirst?.('backend refused');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(button.getAttribute('aria-pressed')).toBe('true'); // reverted
+    expect(document.querySelector('#parse-error')?.textContent).toContain('backend refused');
+
+    // `pending` must have cleared even on rejection, or this click would be
+    // silently swallowed exactly like an overlapping one.
+    button.click();
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  // Finding 3 (a click before settings load must survive the late response)
+  // AND Regression 1 (that must not come at the cost of freezing the
+  // sibling control the user never touched).
+  test('a click before settings load survives the late response, and the untouched sibling still updates', async () => {
     let resolveGetSettings: ((value: unknown) => void) | undefined;
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
@@ -238,20 +303,29 @@ describe('overlapping toggle requests', () => {
 
     await import('./main');
 
-    const button = document.querySelector<HTMLButtonElement>('#always-on-top');
-    if (button === null) throw new Error('#always-on-top missing');
+    const alwaysOnTopButton = document.querySelector<HTMLButtonElement>('#always-on-top');
+    const monitorButton = document.querySelector<HTMLButtonElement>('#monitor');
+    if (alwaysOnTopButton === null) throw new Error('#always-on-top missing');
+    if (monitorButton === null) throw new Error('#monitor missing');
+
     // Markup default is 'false'; the click flips it before get_settings has
-    // resolved at all.
-    button.click();
-    expect(button.getAttribute('aria-pressed')).toBe('true');
+    // resolved at all. #monitor is never clicked.
+    alwaysOnTopButton.click();
+    expect(alwaysOnTopButton.getAttribute('aria-pressed')).toBe('true');
 
-    resolveGetSettings?.({ always_on_top: false, clipboard_monitoring: true });
+    // Both values differ from their own control's markup default (false and
+    // true respectively). If `touched` were a single flag shared by both
+    // buttons — the actual regression found in review — #monitor would stay
+    // frozen at its 'true' markup default instead of picking up 'false'
+    // here, which is exactly what the second assertion below would catch.
+    resolveGetSettings?.({ always_on_top: true, clipboard_monitoring: false });
     await Promise.resolve();
     await Promise.resolve();
 
-    // Without the `touched` guard, this settings response — resolving after
-    // the click — would clobber the button back to 'false'.
-    expect(button.getAttribute('aria-pressed')).toBe('true');
+    // The clicked control keeps the user's value...
+    expect(alwaysOnTopButton.getAttribute('aria-pressed')).toBe('true');
+    // ...and the untouched sibling still receives its real loaded value.
+    expect(monitorButton.getAttribute('aria-pressed')).toBe('false');
   });
 });
 
