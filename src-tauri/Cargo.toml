@@ -24,3 +24,8 @@ jparser = { path = "../crates/jparser", features = ["mecab"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
+# `tauri::async_runtime` re-exports mpsc, Mutex, and RwLock but not `watch`, and
+# its own module doc says to use tokio directly when what you need is missing.
+# tokio 1.53 is already in the tree via tauri, so this adds no transitive weight.
+# `macros` and `rt` are for `#[tokio::test]`; `time` is for the poll's sleep.
+tokio = { version = "1", features = ["sync", "macros", "rt", "time"] }
