@@ -8,7 +8,7 @@ const app = document.querySelector<HTMLElement>('#app')!;
 
 app.innerHTML = `
   <div class="input-row">
-    <input id="text" type="text" placeholder="Paste Japanese text" />
+    <input id="text" type="text" placeholder="Paste Japanese text" aria-label="Japanese text to parse" />
     <button id="parse">Parse</button>
   </div>
   <div id="parse-error"></div>
@@ -17,6 +17,7 @@ app.innerHTML = `
 
 const output = app.querySelector<HTMLElement>('#output')!;
 const input = app.querySelector<HTMLInputElement>('#text')!;
+const parseButton = app.querySelector<HTMLButtonElement>('#parse')!;
 // A fixed slot rather than a node prepended into `output`: `output` is what a
 // successful parse replaces wholesale (and what Task 5 replaces with two
 // panes), so an error node living there either gets silently wiped on the
@@ -31,9 +32,18 @@ function errorBlock(message: string): HTMLElement {
   return el;
 }
 
-async function showStartupError(): Promise<void> {
+// Exported so a test can await it directly rather than racing the
+// fire-and-forget call at the bottom of this module.
+export async function showStartupError(): Promise<void> {
   const message = await invoke<string | null>('startup_error');
-  if (message !== null) output.replaceChildren(errorBlock(message));
+  if (message === null) return;
+  // No index (the expected first run — 2E adds the download) and an
+  // unopenable index both mean `parse_text` cannot succeed. Disabling the
+  // controls here is what stops that failure from ever reaching the user as
+  // a raw Tauri "state not managed" string the moment they try to parse.
+  output.replaceChildren(errorBlock(message));
+  input.disabled = true;
+  parseButton.disabled = true;
 }
 
 export async function run(): Promise<void> {
@@ -65,7 +75,7 @@ export async function run(): Promise<void> {
   }
 }
 
-app.querySelector('#parse')!.addEventListener('click', () => void run());
+parseButton.addEventListener('click', () => void run());
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') void run();
 });

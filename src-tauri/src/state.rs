@@ -125,4 +125,70 @@ mod tests {
         let err = load_state(&root).err().expect("must fail");
         assert!(matches!(err, StartupError::Index(_)), "got {err:?}");
     }
+
+    /// Guards the sentinel `main.rs` relies on: an empty `StartupFailure`
+    /// string means "startup succeeded" (see `StartupFailure`'s own doc
+    /// comment). If a future `StartupError` variant ever rendered an empty
+    /// string, a real startup failure would silently read as success.
+    /// **Extend this list whenever a variant is added to `StartupError`.**
+    #[test]
+    fn every_startup_error_variant_renders_a_non_empty_string() {
+        let variants: Vec<StartupError> = vec![
+            StartupError::NoIndex {
+                root: PathBuf::from("/nowhere"),
+            },
+            StartupError::Index(IndexError::Io(std::io::Error::other("boom"))),
+            StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
+                name: "x".to_string(),
+                pos: "y".to_string(),
+            }),
+            StartupError::Hints(HintsError::Dictionary("boom".to_string())),
+        ];
+        for variant in variants {
+            assert!(
+                !variant.to_string().is_empty(),
+                "{variant:?} rendered an empty string"
+            );
+        }
+    }
+
+    // Serializes every test in this binary that mutates `TA_HINTS_DICT`.
+    // `load_state` is the only code in this crate that reads it, and the
+    // test below is currently the only one that writes it — mutating process
+    // env is a whole-process hazard (why `set_var`/`remove_var` are `unsafe`
+    // at this toolchain version), not just a hazard for this one variable, so
+    // a future test that also touches `TA_HINTS_DICT` (or any other env var,
+    // to be fully safe) should take this same lock rather than adding an
+    // unguarded second one.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// `TA_HINTS_DICT` pointing at nothing must surface as
+    /// `StartupError::Hints`, not silently skip hints or panic. This needs a
+    /// real, openable index: `load_state` only reaches the hints branch after
+    /// the index and conjugation table both load, so the no-index shortcut
+    /// `commands::run_parse`'s tests use cannot reach this code path.
+    #[test]
+    fn a_missing_hints_dictionary_is_reported_as_startup_error_hints() {
+        let root = scratch("hints-missing");
+        crate::test_support::build_index_generation(&root);
+
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // SAFETY: `ENV_LOCK` above is the only writer of `TA_HINTS_DICT` in
+        // this binary, held for the full set/read/clear cycle, so no other
+        // thread can observe this variable mid-write.
+        unsafe { std::env::set_var(HINTS_ENV, "/nonexistent/ta-hints-dict.dic") };
+        let result = load_state(&root);
+        unsafe { std::env::remove_var(HINTS_ENV) };
+
+        // Matched by hand rather than `matches!(result, ..., "got {result:?}")`:
+        // `AppState` (the `Ok` payload) has no `Debug` impl, so a
+        // format-string assert on the whole `Result` will not compile.
+        match result {
+            Err(StartupError::Hints(_)) => {}
+            Ok(_) => panic!("expected StartupError::Hints, got Ok(_)"),
+            Err(other) => panic!("expected StartupError::Hints, got a different error: {other}"),
+        }
+    }
 }

@@ -11,6 +11,8 @@
 
 mod commands;
 mod state;
+#[cfg(test)]
+mod test_support;
 
 use std::sync::Arc;
 

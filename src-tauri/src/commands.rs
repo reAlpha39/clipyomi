@@ -19,9 +19,13 @@ use crate::state::{AppState, StartupFailure};
 
 /// Parse `text`, applying hints when a tokenizer was loaded.
 ///
-/// `index: None` yields an empty result rather than an error: it is the shape a
-/// caller with no dictionary gets, and the webview already shows the startup
-/// message in that case.
+/// `index: None` yields an empty result rather than an error, but this branch
+/// is test-only: in production it is unreachable. `parse_text` takes
+/// `State<'_, Arc<AppState>>`, and Tauri's `State` extractor rejects the
+/// invocation before this function's body ever runs when `AppState` is
+/// unmanaged (the no-index case manages `StartupFailure` instead — see
+/// `main.rs`'s `setup`). The branch exists only so `run_parse` can be
+/// unit-tested without a live Tauri app or a real index fixture.
 fn run_parse(
     index: Option<&Index>,
     table: &ConjugationTable,
@@ -101,5 +105,34 @@ mod tests {
         let table = jparser::conjugation::ConjugationTable::load_embedded().expect("table");
         let out = run_parse(None, &table, "some text", None).expect("no index parses to nothing");
         assert!(out.segments.is_empty());
+    }
+
+    /// `run_parse`'s `.map_err(|e| e.to_string())` needs a real `ParseError`
+    /// to exercise, not a fabricated string — this drives one by corrupting a
+    /// freshly built index's payload file. Corruption happens *before*
+    /// `Index::open`, never after: mutating a file underneath a live `Index`
+    /// is documented UB (see `jparser::index::load::Index::open`'s doc
+    /// comment), so this builds a working index, drops it, corrupts the file
+    /// on disk, and only then opens the corrupted copy this test queries.
+    #[test]
+    fn a_parse_failure_is_reported_as_its_display_string() {
+        let root = crate::test_support::scratch("parse-failure");
+        let generation = crate::test_support::build_index_generation(&root);
+
+        // A 4-byte `records.bin` cannot hold a valid length-prefixed blob at
+        // any real offset, so the first lookup that reaches it fails no
+        // matter what that offset actually is.
+        std::fs::write(generation.join(jparser::index::RECORDS_FILE), [0xFFu8; 4])
+            .expect("corrupt the records file");
+
+        let index = Index::open(&generation).expect("header.bin and entries.idx are untouched");
+        let table = jparser::conjugation::ConjugationTable::load_embedded().expect("table");
+
+        // "本" is the fixture's own headword (see `test_support`), so this is
+        // a real FST hit that then fails reading its record payload back —
+        // the actual `Err` path `run_parse` exists to map, not a fabrication.
+        let err = run_parse(Some(&index), &table, "本", None)
+            .expect_err("a corrupt records file must fail the parse");
+        assert!(!err.is_empty(), "parse error message must not be empty");
     }
 }

@@ -25,12 +25,21 @@ jobs:
       - uses: actions/checkout@v4
 
       # src-tauri joined the workspace in Phase 2D, so every job that compiles
-      # the workspace now links against webkit2gtk.
+      # the workspace now links against webkit2gtk. Only the dev package for
+      # what is actually linked is installed: `cargo tree -p
+      # translation-aggregator -e normal --target x86_64-unknown-linux-gnu`
+      # resolves to `gtk` + `webkit2gtk` and nothing else Tauri-related — no
+      # `tray-icon`, no `libappindicator`, no `xdo`. `librsvg2-dev` and
+      # `patchelf` are bundling-only tools and `bundle.active` is `false`
+      # (`src-tauri/tauri.conf.json`); `libssl-dev` has no TLS crate in the
+      # tree to link against. The previous list was also simply broken:
+      # `libappindicator3-dev` does not exist on `ubuntu-latest` (24.04+,
+      # where it was renamed `libayatana-appindicator3-dev`), so
+      # `apt-get install -y` would have exited non-zero on the very first run.
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf libxdo-dev libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -123,9 +132,14 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
 
-      # `mecab` is off by default (see Cargo.toml), so the `test` and `purity`
-      # jobs above never compile `hints.rs` at all. Without this job the
-      # phase's core module would ship unlinted and untested in CI.
+      # `mecab` is off by default (see Cargo.toml), so the `purity` job above
+      # never compiles `hints.rs`. The `test` job's `cargo test --workspace`
+      # now does, incidentally: `src-tauri` enables `jparser/mecab`
+      # unconditionally, and Cargo's feature unification carries that into
+      # every workspace-wide command. This job stays anyway because its
+      # `clippy -p jparser --features mecab --all-targets` isolates
+      # mecab-specific lints to a scope a workspace-wide clippy run does not
+      # guarantee.
       - run: cargo test -p jparser --features mecab
       - run: cargo clippy -p jparser --features mecab --all-targets -- -D warnings
 

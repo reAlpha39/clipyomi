@@ -67,6 +67,19 @@ body {
   outline-offset: 2px;
 }
 
+/* Falls back for engines with no :focus-visible support at all (older
+   WebKit): without this, `.chip:focus-visible` above is just an invalid
+   selector there, so only `.chip:focus { outline: none }` applies and a
+   keyboard user gets no focus indicator anywhere — a WCAG 2.4.7 failure.
+   Same selector as that rule, later in the cascade, so it wins only where
+   :focus-visible does not exist to make the override necessary. */
+@supports not selector(:focus-visible) {
+  .chip:focus {
+    outline: 2px solid var(--color-text);
+    outline-offset: 2px;
+  }
+}
+
 .startup-error {
   padding: var(--space-pane);
   font-family: var(--font-mono);

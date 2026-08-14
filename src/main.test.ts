@@ -30,3 +30,40 @@ describe('main: the parse-error slot', () => {
     expect(document.querySelectorAll('.startup-error')).toHaveLength(1);
   });
 });
+
+describe('main: a startup failure disables the parse controls', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    invoke.mockReset();
+    document.body.innerHTML = '<main id="app"></main>';
+  });
+
+  test('startup_error resolving to a message disables #text and #parse', async () => {
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'startup_error'
+        ? Promise.resolve('no dictionary index in /nowhere')
+        : Promise.reject('parse_text must not be reachable once controls are disabled'),
+    );
+
+    const { showStartupError } = await import('./main');
+    await showStartupError();
+
+    expect((document.querySelector('#text') as HTMLInputElement).disabled).toBe(true);
+    expect((document.querySelector('#parse') as HTMLButtonElement).disabled).toBe(true);
+    expect(document.querySelector('.startup-error')?.textContent).toContain(
+      'no dictionary index',
+    );
+  });
+
+  test('startup_error resolving to null leaves the controls enabled', async () => {
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'startup_error' ? Promise.resolve(null) : Promise.reject('unused'),
+    );
+
+    const { showStartupError } = await import('./main');
+    await showStartupError();
+
+    expect((document.querySelector('#text') as HTMLInputElement).disabled).toBe(false);
+    expect((document.querySelector('#parse') as HTMLButtonElement).disabled).toBe(false);
+  });
+});
