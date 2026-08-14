@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { renderSentence } from './render/sentence';
 import { renderDefinitions } from './render/definitions';
 import type { ParseResult } from './types';
@@ -46,31 +47,36 @@ export async function showStartupError(): Promise<void> {
   parseButton.disabled = true;
 }
 
-export async function run(): Promise<void> {
+function show(result: ParseResult): void {
+  const sentence = renderSentence(result);
+  const definitions = renderDefinitions(result);
+
+  // Delegated to the pane, not per-chip: chips are re-created on every
+  // parse, but the sentence container itself is fresh each time too, so one
+  // listener per parse is exactly right — nothing to leak, nothing to
+  // rebind mid-life.
+  sentence.addEventListener('click', (e) => {
+    const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-start]');
+    if (chip === null) return;
+    const row = definitions.querySelector(`.def-row[data-start="${chip.dataset.start}"]`);
+    row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    definitions.querySelectorAll('.marked').forEach((n) => n.classList.remove('marked'));
+    row?.classList.add('marked');
+  });
+
+  parseError.replaceChildren();
+  output.replaceChildren(sentence, definitions);
+}
+
+void listen<ParseResult>('parse-result', (e) => show(e.payload));
+// A failure replaces only the message, never the result: the previous parse
+// stays readable while the user works out what went wrong.
+void listen<string>('parse-error', (e) => parseError.replaceChildren(errorBlock(e.payload)));
+
+async function run(): Promise<void> {
   try {
-    const result = await invoke<ParseResult>('parse_text', { text: input.value });
-    const sentence = renderSentence(result);
-    const definitions = renderDefinitions(result);
-
-    // Delegated to the pane, not per-chip: chips are re-created on every
-    // parse, but the sentence container itself is fresh each time too, so one
-    // listener per parse is exactly right — nothing to leak, nothing to
-    // rebind mid-life.
-    sentence.addEventListener('click', (e) => {
-      const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-start]');
-      if (chip === null) return;
-      const row = definitions.querySelector(`.def-row[data-start="${chip.dataset.start}"]`);
-      row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      definitions.querySelectorAll('.marked').forEach((n) => n.classList.remove('marked'));
-      row?.classList.add('marked');
-    });
-
-    output.replaceChildren(sentence, definitions);
-    parseError.replaceChildren();
+    await invoke('set_input', { text: input.value });
   } catch (e) {
-    // A parse failure keeps the previous result on screen rather than blanking
-    // it; only the message is shown, replacing any previous message rather
-    // than stacking alongside it.
     parseError.replaceChildren(errorBlock(String(e)));
   }
 }

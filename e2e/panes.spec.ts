@@ -1,8 +1,23 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 // Playwright loads this file through Node's native ESM loader (not Vite), which
 // requires an explicit import attribute for JSON modules on Node 22+.
 import fixture from '../src/fixtures/tokyo.json' with { type: 'json' };
 import { STUB } from './stub';
+
+declare global {
+  interface Window {
+    __FIXTURE__: unknown;
+    __TA_EMIT__: (event: string, payload: unknown) => void;
+  }
+}
+
+// The backend now pushes results as a `parse-result` event rather than
+// returning them from `invoke`; `#parse` still triggers `set_input` for real
+// (see stub.ts), but firing the fixture back in is on the test, standing in
+// for the backend's async worker.
+async function emitFixtureResult(page: Page): Promise<void> {
+  await page.evaluate(() => window.__TA_EMIT__('parse-result', window.__FIXTURE__));
+}
 
 const SIZES = [
   { name: 'compact', width: 480, height: 320 },
@@ -20,6 +35,7 @@ for (const size of SIZES) {
 
       await page.fill('#text', '東京は');
       await page.click('#parse');
+      await emitFixtureResult(page);
 
       await expect(page.locator('.chip').first()).toBeVisible();
       await expect(page.locator('.def-row')).toHaveCount(2);
@@ -43,6 +59,7 @@ test('a chip click marks its definition row', async ({ page }) => {
   await page.goto('/');
   await page.fill('#text', '東京は');
   await page.click('#parse');
+  await emitFixtureResult(page);
 
   await page.click('.chip[data-start="2"]');
   await expect(page.locator('.def-row[data-start="2"]')).toHaveClass(/marked/);
@@ -53,6 +70,7 @@ test('keyboard activation marks the same row a click does, on Enter and Space', 
   await page.goto('/');
   await page.fill('#text', '東京は');
   await page.click('#parse');
+  await emitFixtureResult(page);
 
   await page.locator('.chip[data-start="2"]').focus();
   await page.keyboard.press('Enter');
@@ -70,6 +88,7 @@ test('an unmatched run is not in the tab order', async ({ page }) => {
   await page.goto('/');
   await page.fill('#text', '東京は');
   await page.click('#parse');
+  await emitFixtureResult(page);
 
   expect(await page.locator('.unmatched').evaluate((el) => (el as HTMLElement).tabIndex)).toBe(-1);
 });
@@ -85,6 +104,7 @@ test('a focused chip resolves a real outline, and a marked row is border-disting
   await page.goto('/');
   await page.fill('#text', '東京は');
   await page.click('#parse');
+  await emitFixtureResult(page);
 
   // :focus-visible needs real keyboard traversal: a bare `.focus()` call
   // does not flip Chromium's focus modality after the preceding mouse click
@@ -123,6 +143,7 @@ for (const theme of THEMES) {
     await page.goto('/');
     await page.fill('#text', '東京は');
     await page.click('#parse');
+    await emitFixtureResult(page);
 
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
