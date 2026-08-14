@@ -21,8 +21,6 @@ use tokio::sync::watch;
 use crate::state::SettingsState;
 
 /// Poll interval. Port design §6.
-#[allow(dead_code)] // Read by `run_poll` below; not reachable from `main` until
-                    // Task 4 spawns the poll.
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Longest input worth parsing, in characters.
@@ -30,13 +28,9 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 /// A soundness guard rather than a performance one: the matcher does offset
 /// arithmetic over the whole input, and an unbounded paste is the cheapest way
 /// to find out what that costs.
-#[allow(dead_code)] // Read by `should_parse` below and unit-tested directly;
-                    // not reachable from `main` until Task 4 spawns the poll.
 pub const MAX_INPUT_CHARS: usize = 10_000;
 
 /// Kana or a CJK ideograph — ta-old's test for "is this worth parsing".
-#[allow(dead_code)] // Called by `should_parse` below; not reachable from
-                    // `main` until Task 4 spawns the poll.
 fn is_japanese(c: char) -> bool {
     matches!(c,
         '\u{3040}'..='\u{309F}'   // hiragana
@@ -51,8 +45,6 @@ fn is_japanese(c: char) -> bool {
 /// `last_written` is always `None` in this phase — nothing writes to the
 /// clipboard yet. It is in the signature because this predicate is the thing
 /// under test, and adding a parameter later would invalidate those tests.
-#[allow(dead_code)] // Called by `run_poll` below and unit-tested directly; not
-                    // reachable from `main` until Task 4 spawns the poll.
 pub fn should_parse(text: &str, last_seen: Option<&str>, last_written: Option<&str>) -> bool {
     if last_seen == Some(text) || last_written == Some(text) {
         return false;
@@ -74,8 +66,6 @@ pub fn should_parse(text: &str, last_seen: Option<&str>, last_written: Option<&s
 /// Runs for the life of the app. Pausing is a settings flag rather than a
 /// stopped task: restarting a task on every toggle is more moving parts than
 /// checking a bool five times a second.
-#[allow(dead_code)] // Task 4 spawns `run_poll` from `main.rs`; nothing calls it
-                    // yet.
 pub async fn run_poll(app: AppHandle, tx: watch::Sender<String>, settings: Arc<SettingsState>) {
     let mut last_seen: Option<String> = None;
     let mut read_failing = false;

@@ -17,10 +17,8 @@ use tokio::sync::watch;
 use crate::state::AppState;
 
 /// Emitted with a `ParseResult` payload whenever a parse succeeds.
-#[allow(dead_code)] // Not read until Task 4 wires `run_worker` into `main.rs`.
 pub const PARSE_RESULT_EVENT: &str = "parse-result";
 /// Emitted with a `String` payload when a parse fails or panics.
-#[allow(dead_code)] // Not read until Task 4 wires `run_worker` into `main.rs`.
 pub const PARSE_ERROR_EVENT: &str = "parse-error";
 
 /// Run a parse, converting a panic into an error rather than an abort.
@@ -28,8 +26,6 @@ pub const PARSE_ERROR_EVENT: &str = "parse-error";
 /// `AssertUnwindSafe` is sound here: the managed state is read-only after
 /// startup and no `&mut` crosses this boundary, so there is no invariant a
 /// half-completed parse could leave broken.
-#[allow(dead_code)] // Called by `run_worker` below and unit-tested directly; not
-                    // reachable from `main` until Task 4 spawns the worker.
 pub fn catch_parse<F>(input_len: usize, f: F) -> Result<ParseResult, String>
 where
     F: FnOnce() -> Result<ParseResult, String>,
@@ -48,8 +44,6 @@ where
 /// `borrow_and_update` is what makes this latest-wins: a `watch` channel keeps
 /// only its most recent value, so inputs that arrived during a parse are already
 /// collapsed by the time we look.
-#[allow(dead_code)] // Called by `run_worker` below and unit-tested directly; not
-                    // reachable from `main` until Task 4 spawns the worker.
 pub async fn next_input(rx: &mut watch::Receiver<String>) -> Option<String> {
     rx.changed().await.ok()?;
     let text = rx.borrow_and_update().clone();
@@ -57,8 +51,6 @@ pub async fn next_input(rx: &mut watch::Receiver<String>) -> Option<String> {
 }
 
 /// Parse each new input and emit the outcome to the webview.
-#[allow(dead_code)] // Task 4 spawns `run_worker` from `main.rs`; nothing calls
-                    // it yet.
 pub async fn run_worker(app: AppHandle, state: Arc<AppState>, mut rx: watch::Receiver<String>) {
     while let Some(text) = next_input(&mut rx).await {
         let state = Arc::clone(&state);

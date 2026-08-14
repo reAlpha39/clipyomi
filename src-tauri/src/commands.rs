@@ -5,69 +5,67 @@
 // under the terms of the GNU General Public License version 2 as published
 // by the Free Software Foundation.
 
-//! The webview's two entry points: parse a string, and ask why startup failed.
+//! The webview's entry points: push input, toggle settings, read settings,
+//! and ask why startup failed. Parsing itself runs in `parse::run_worker`;
+//! results arrive as `parse-result` / `parse-error` events, not as a command
+//! return value.
 
 use std::sync::Arc;
 
-use jparser::conjugation::ConjugationTable;
-use jparser::hints::VibratoTokenizer;
-use jparser::index::load::Index;
-use jparser::{BoundaryHints, ParseOptions, ParseResult};
 use tauri::State;
+use tokio::sync::watch;
 
-use crate::state::{AppState, StartupFailure};
+use crate::settings::Settings;
+use crate::state::{SettingsState, StartupFailure};
 
-/// Parse `text`, applying hints when a tokenizer was loaded.
+/// The sending half of the input channel, managed so commands can reach it.
+pub struct InputSender(pub watch::Sender<String>);
+
+/// Publish text for the worker to parse.
 ///
-/// `index: None` yields an empty result rather than an error, but this branch
-/// is test-only: in production it is unreachable. `parse_text` takes
-/// `State<'_, Arc<AppState>>`, and Tauri's `State` extractor rejects the
-/// invocation before this function's body ever runs when `AppState` is
-/// unmanaged (the no-index case manages `StartupFailure` instead — see
-/// `main.rs`'s `setup`). The branch exists only so `run_parse` can be
-/// unit-tested without a live Tauri app or a real index fixture.
-fn run_parse(
-    index: Option<&Index>,
-    table: &ConjugationTable,
-    text: &str,
-    hints: Option<&VibratoTokenizer>,
-) -> Result<ParseResult, String> {
-    let Some(index) = index else {
-        return Ok(ParseResult { segments: vec![] });
-    };
-    let flags = hints.map(|t| t.hints(text));
-    jparser::parse(
-        index,
-        table,
-        text,
-        &ParseOptions::default(),
-        flags.as_ref().map(|f| f as &dyn BoundaryHints),
-    )
-    .map_err(|e| e.to_string())
+/// Separated from the command so it can be tested without a Tauri app handle.
+fn push_input(tx: &watch::Sender<String>, text: String) -> Result<(), String> {
+    tx.send(text)
+        .map_err(|_| "the parse worker is no longer running".to_string())
 }
 
-/// Parse TEXT against the loaded index.
+/// Queue TEXT for parsing. The result arrives as a `parse-result` event.
 ///
-/// The parse runs on a blocking thread: `jparser::parse` is synchronous CPU work
-/// over the whole input, and running it on the async runtime would stall the
-/// webview. `tauri::State` is not `Send`, so the `Arc` is cloned out first and
-/// the clone is what crosses the boundary.
+/// Fire-and-forget rather than request/response: the clipboard produces parses
+/// nobody asked for, so the webview renders from the event stream either way and
+/// a returned value here would be a second, redundant path.
 #[tauri::command]
-pub async fn parse_text(
-    text: String,
-    state: State<'_, Arc<AppState>>,
-) -> Result<ParseResult, String> {
-    let state = Arc::clone(&state);
-    tauri::async_runtime::spawn_blocking(move || {
-        run_parse(
-            Some(&state.index),
-            &state.table,
-            &text,
-            state.hints.as_ref(),
-        )
-    })
-    .await
-    .map_err(|e| format!("the parse task failed to run: {e}"))?
+pub fn set_input(text: String, input: State<'_, InputSender>) -> Result<(), String> {
+    push_input(&input.0, text)
+}
+
+#[tauri::command]
+pub fn set_clipboard_monitoring(
+    enabled: bool,
+    settings: State<'_, Arc<SettingsState>>,
+) -> Result<(), String> {
+    settings
+        .update(|s| s.clipboard_monitoring = enabled)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_always_on_top(
+    enabled: bool,
+    window: tauri::Window,
+    settings: State<'_, Arc<SettingsState>>,
+) -> Result<(), String> {
+    window
+        .set_always_on_top(enabled)
+        .map_err(|e| e.to_string())?;
+    settings
+        .update(|s| s.always_on_top = enabled)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_settings(settings: State<'_, Arc<SettingsState>>) -> Settings {
+    settings.snapshot()
 }
 
 /// The startup error, or `null` when startup succeeded.
@@ -90,49 +88,24 @@ pub fn startup_error(failure: State<'_, StartupFailure>) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// `parse_text` is a thin async wrapper, so the part worth testing is the
-    /// piece that is not Tauri: turning parser output into the command's Result.
-    /// A Tauri command needs a live app handle; this seam does not.
-    ///
-    /// This exercises `run_parse`'s `index: None` shortcut, not empty-input
-    /// parsing against a real index — `text` here is non-empty on purpose, to
-    /// show the empty result comes from the missing index, not from the input.
-    /// `src-tauri` has no index fixture and `jparser`'s index-building test
-    /// helpers are private to that crate, so a genuine empty-input parse is not
-    /// cheaply reachable from this crate.
-    #[test]
-    fn a_missing_index_parses_to_no_segments() {
-        let table = jparser::conjugation::ConjugationTable::load_embedded().expect("table");
-        let out = run_parse(None, &table, "some text", None).expect("no index parses to nothing");
-        assert!(out.segments.is_empty());
+    /// `set_input` is a thin push into the watch channel; the part worth testing
+    /// is that the newest value is what a reader sees.
+    #[tokio::test]
+    async fn set_input_publishes_the_text_to_the_channel() {
+        let (tx, mut rx) = tokio::sync::watch::channel(String::new());
+        push_input(&tx, "東京".to_string()).expect("push");
+        assert_eq!(
+            crate::parse::next_input(&mut rx).await.as_deref(),
+            Some("東京")
+        );
     }
 
-    /// `run_parse`'s `.map_err(|e| e.to_string())` needs a real `ParseError`
-    /// to exercise, not a fabricated string — this drives one by corrupting a
-    /// freshly built index's payload file. Corruption happens *before*
-    /// `Index::open`, never after: mutating a file underneath a live `Index`
-    /// is documented UB (see `jparser::index::load::Index::open`'s doc
-    /// comment), so this builds a working index, drops it, corrupts the file
-    /// on disk, and only then opens the corrupted copy this test queries.
-    #[test]
-    fn a_parse_failure_is_reported_as_its_display_string() {
-        let root = crate::test_support::scratch("parse-failure");
-        let generation = crate::test_support::build_index_generation(&root);
-
-        // A 4-byte `records.bin` cannot hold a valid length-prefixed blob at
-        // any real offset, so the first lookup that reaches it fails no
-        // matter what that offset actually is.
-        std::fs::write(generation.join(jparser::index::RECORDS_FILE), [0xFFu8; 4])
-            .expect("corrupt the records file");
-
-        let index = Index::open(&generation).expect("header.bin and entries.idx are untouched");
-        let table = jparser::conjugation::ConjugationTable::load_embedded().expect("table");
-
-        // "本" is the fixture's own headword (see `test_support`), so this is
-        // a real FST hit that then fails reading its record payload back —
-        // the actual `Err` path `run_parse` exists to map, not a fabrication.
-        let err = run_parse(Some(&index), &table, "本", None)
-            .expect_err("a corrupt records file must fail the parse");
-        assert!(!err.is_empty(), "parse error message must not be empty");
+    /// A dead worker must surface as an error rather than a silent no-op: the
+    /// user pressed Parse and nothing would ever arrive.
+    #[tokio::test]
+    async fn set_input_reports_a_dead_worker() {
+        let (tx, rx) = tokio::sync::watch::channel(String::new());
+        drop(rx);
+        assert!(push_input(&tx, "東京".to_string()).is_err());
     }
 }

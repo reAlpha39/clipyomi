@@ -30,7 +30,7 @@ pub const HINTS_ENV: &str = "TA_HINTS_DICT";
 
 /// Everything built once at launch and then only read.
 ///
-/// Read by `commands::run_parse`, added in Task 3.
+/// Read by `parse::run_worker`, spawned from `main.rs`'s `setup`.
 pub struct AppState {
     pub index: Index,
     pub table: ConjugationTable,
@@ -88,13 +88,11 @@ pub fn load_state(root: &Path) -> Result<AppState, StartupError> {
 
 /// Settings plus the path they persist to, shared between the commands that
 /// change them and the poll that reads them.
-#[allow(dead_code)] // Not managed until Task 4 wires it into `main.rs`.
 pub struct SettingsState {
     path: PathBuf,
     settings: Mutex<Settings>,
 }
 
-#[allow(dead_code)] // Not called until Task 4 wires it into `main.rs`.
 impl SettingsState {
     pub fn new(path: PathBuf, settings: Settings) -> Self {
         Self {
@@ -243,5 +241,49 @@ mod tests {
             Ok(_) => panic!("expected StartupError::Hints, got Ok(_)"),
             Err(other) => panic!("expected StartupError::Hints, got a different error: {other}"),
         }
+    }
+
+    #[test]
+    fn settings_state_reports_the_monitoring_flag() {
+        let dir = scratch("monitoring");
+        let state = SettingsState::new(dir.join("settings.json"), Settings::default());
+        assert!(state.monitoring_enabled(), "default is monitoring on");
+
+        state
+            .update(|s| s.clipboard_monitoring = false)
+            .expect("update");
+        assert!(!state.monitoring_enabled());
+    }
+
+    /// The toggle has to outlive the process, or it is not a setting.
+    #[test]
+    fn updating_settings_writes_them_to_disk() {
+        let dir = scratch("persist");
+        let path = dir.join("settings.json");
+        let state = SettingsState::new(path.clone(), Settings::default());
+
+        state.update(|s| s.always_on_top = true).expect("update");
+
+        let (reloaded, warning) = crate::settings::load(&path);
+        assert!(reloaded.always_on_top, "not persisted");
+        assert!(warning.is_none(), "got {warning:?}");
+    }
+
+    /// A read-only config dir must not make the toggles stop working in the
+    /// running session — the in-memory value still changes.
+    #[test]
+    fn a_failed_write_still_updates_the_in_memory_value() {
+        // A path whose parent is a file, not a directory: create_dir_all fails.
+        let dir = scratch("readonly");
+        let blocker = dir.join("blocker");
+        std::fs::write(&blocker, b"not a directory").expect("write");
+        let state = SettingsState::new(blocker.join("settings.json"), Settings::default());
+
+        let result = state.update(|s| s.always_on_top = true);
+        assert!(result.is_err(), "the write should have failed");
+        assert!(
+            state.snapshot().always_on_top,
+            "in-memory value must still change"
+        );
     }
 }

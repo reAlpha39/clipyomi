@@ -16,16 +16,13 @@ use serde::{Deserialize, Serialize};
 
 /// Filename inside the app config dir. A sibling of `dict/`, never inside it —
 /// a published generation directory is immutable.
-#[allow(dead_code)]
 pub const SETTINGS_FILE: &str = "settings.json";
 
-#[allow(dead_code)]
 fn default_true() -> bool {
     true
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct Settings {
     #[serde(default)]
     pub always_on_top: bool,
@@ -48,7 +45,6 @@ impl Default for Settings {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[allow(dead_code)]
 pub enum SettingsError {
     #[error("writing {path} failed: {source}")]
     Write {
@@ -60,7 +56,6 @@ pub enum SettingsError {
 }
 
 /// The settings file inside an app config directory.
-#[allow(dead_code)]
 pub fn settings_path(app_config_dir: &Path) -> PathBuf {
     app_config_dir.join(SETTINGS_FILE)
 }
@@ -70,7 +65,6 @@ pub fn settings_path(app_config_dir: &Path) -> PathBuf {
 /// Returns the settings and, when something was wrong with the file, a reason to
 /// show the user. A missing file is not wrong — it is first run — so it reports
 /// no reason. Never fails: settings are not important enough to block launch.
-#[allow(dead_code)]
 pub fn load(path: &Path) -> (Settings, Option<String>) {
     let raw = match std::fs::read_to_string(path) {
         Ok(raw) => raw,
@@ -92,7 +86,6 @@ pub fn load(path: &Path) -> (Settings, Option<String>) {
 }
 
 /// Write settings, creating the parent directory if needed.
-#[allow(dead_code)]
 pub fn save(path: &Path, settings: &Settings) -> Result<(), SettingsError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|source| SettingsError::Write {
