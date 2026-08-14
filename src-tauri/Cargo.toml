@@ -29,3 +29,6 @@ thiserror = "1"
 # tokio 1.53 is already in the tree via tauri, so this adds no transitive weight.
 # `macros` and `rt` are for `#[tokio::test]`; `time` is for the poll's sleep.
 tokio = { version = "1", features = ["sync", "macros", "rt", "time"] }
+# MIT OR Apache-2.0, taken under MIT: Apache-2.0 alone is incompatible with this
+# project's GPL-2.0-only.
+tauri-plugin-clipboard-manager = "2.3.2"

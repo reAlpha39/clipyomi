@@ -9,6 +9,7 @@
 
 //! The Tauri shell. Opens the index once at startup and exposes `parse_text`.
 
+mod clipboard;
 mod commands;
 mod parse;
 mod settings;

@@ -11,12 +11,15 @@
 //! lets `AppState` live in Tauri's managed state behind a shared reference.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use jparser::conjugation::{ConjugationError, ConjugationTable};
 use jparser::hints::{HintsError, VibratoTokenizer};
 use jparser::index::generations;
 use jparser::index::load::Index;
 use jparser::index::IndexError;
+
+use crate::settings::{save, Settings, SettingsError};
 
 /// Environment variable naming an uncompressed compiled Vibrato dictionary.
 ///
@@ -81,6 +84,56 @@ pub fn load_state(root: &Path) -> Result<AppState, StartupError> {
         table,
         hints,
     })
+}
+
+/// Settings plus the path they persist to, shared between the commands that
+/// change them and the poll that reads them.
+#[allow(dead_code)] // Not managed until Task 4 wires it into `main.rs`.
+pub struct SettingsState {
+    path: PathBuf,
+    settings: Mutex<Settings>,
+}
+
+#[allow(dead_code)] // Not called until Task 4 wires it into `main.rs`.
+impl SettingsState {
+    pub fn new(path: PathBuf, settings: Settings) -> Self {
+        Self {
+            path,
+            settings: Mutex::new(settings),
+        }
+    }
+
+    /// A lock poisoned by a panic in another thread still holds usable settings:
+    /// every write replaces the whole value, so there is no torn state to
+    /// protect against. Recovering beats refusing to read a toggle.
+    fn locked(&self) -> std::sync::MutexGuard<'_, Settings> {
+        self.settings.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn snapshot(&self) -> Settings {
+        self.locked().clone()
+    }
+
+    pub fn monitoring_enabled(&self) -> bool {
+        self.locked().clipboard_monitoring
+    }
+
+    /// Apply a change and persist it.
+    ///
+    /// The in-memory value is updated even when the write fails, so a read-only
+    /// config dir degrades to "settings do not survive restart" rather than
+    /// "the toggles do not work".
+    pub fn update<F>(&self, change: F) -> Result<(), SettingsError>
+    where
+        F: FnOnce(&mut Settings),
+    {
+        let snapshot = {
+            let mut settings = self.locked();
+            change(&mut settings);
+            settings.clone()
+        };
+        save(&self.path, &snapshot)
+    }
 }
 
 #[cfg(test)]
