@@ -24,8 +24,6 @@ fn default_true() -> bool {
     true
 }
 
-/// `Eq` is not derived: `extra` holds `serde_json::Value`, which is `PartialEq`
-/// but not `Eq` because it can hold an `f64`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct Settings {

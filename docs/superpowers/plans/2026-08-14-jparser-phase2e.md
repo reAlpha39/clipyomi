@@ -43,7 +43,7 @@ Measured 2026-08-14 against the tree at commit `772857b`.
 | Clipboard crate | `tauri-plugin-clipboard-manager` **2.3.2**, MIT OR Apache-2.0, taken under **MIT** |
 | Panic strategy | No `[profile]` overrides in either manifest → `panic = "unwind"` is in force, so `catch_unwind` works |
 | `catch_unwind` ergonomics | Requires `UnwindSafe`; `&Index`/`&ConjugationTable` will not satisfy it. Wrap in `AssertUnwindSafe` — sound here because managed state is read-only after startup and no `&mut` crosses the boundary |
-| `serde_json::Value` | is `PartialEq` but **not `Eq`** (it holds `f64`), so `Settings` derives `PartialEq` only |
+| `serde_json::Value` | does derive `Eq` (its `Number` wraps `f64` but implements `Eq` since JSON has no NaN), so `Settings` derives `PartialEq` only because nothing needs total equality — YAGNI on `Eq` |
 | Baseline tests | **317 passed / 1 ignored**; **16** Vitest; **10** Playwright local and CI-simulated |
 | Current sizes | `state.rs` 194, `commands.rs` 138, `main.rs` 57, `main.ts` 83, `main.test.ts` 69, `global.css` 136 |
 | 2D contract to migrate | `parse_text(text) -> Result<ParseResult, String>`, consumed by `src/main.ts` and `src/main.test.ts` |
@@ -200,8 +200,6 @@ fn default_true() -> bool {
     true
 }
 
-/// `Eq` is not derived: `extra` holds `serde_json::Value`, which is `PartialEq`
-/// but not `Eq` because it can hold an `f64`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
