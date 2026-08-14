@@ -12,8 +12,12 @@ const KANA = /[぀-ヿ]/;
 /** 【 and 】, which ta-old treats as Japanese and breaks before. */
 const OPEN_LENTICULAR = '【';
 const BRACKET = /[【】]/;
-/** CJK ideographs, including extension A and the compatibility block. */
-const CJK = /[㐀-䶿一-鿿豈-﫿]/;
+/**
+ * CJK ideographs, including extension A and the compatibility block, plus
+ * the kanji iteration mark 々 — ta-old special-cases it explicitly
+ * (`StringUtil.cpp:531-535`) rather than including it in a range.
+ */
+const CJK = /[㐀-䶿一-鿿豈-﫿々]/;
 
 function isJapanese(ch: string): boolean {
   return KANA.test(ch) || BRACKET.test(ch) || CJK.test(ch);

@@ -31,6 +31,13 @@ describe('colourLine', () => {
     expect(kinds('旅だつ【たびだつ】')).toEqual(['kanji', 'kana']);
   });
 
+  // StringUtil.cpp:531-535 — the kanji iteration mark 々 is special-cased into
+  // ta-old's IsKanji, not covered by a Unicode range. Without it, 時々 splits
+  // into a kanji run and a stray text run instead of staying one kanji run.
+  test('kanji iteration mark 々 stays in the kanji run', () => {
+    expect(colourLine('時々')).toEqual([{ text: '時々', kind: 'kanji' }]);
+  });
+
   // MyToolTip.cpp:214-217 — everything from ( to its match is one paren run.
   test('a parenthesised span is one run', () => {
     expect(colourLine('(v1,vi) x')).toEqual([
