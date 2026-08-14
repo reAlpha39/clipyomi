@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 // `main.ts` is the wired app entry, not a pure render function like
 // `sentence.ts` — exercising it means stubbing both IPC boundaries it uses:
@@ -95,6 +95,106 @@ describe('the event-driven render path', () => {
 
     expect(document.querySelectorAll('.startup-error')).toHaveLength(1);
     expect(document.querySelector('.sentence')).not.toBeNull();
+  });
+});
+
+describe('the hover popover', () => {
+  const SEGMENTS = {
+    segments: [
+      {
+        start: 0,
+        len: 2,
+        surface: '東京',
+        reading: 'とうきょう',
+        matched: true,
+        entries: [
+          {
+            headword: '東京',
+            reading: 'とうきょう',
+            conjugation: null,
+            pos: ['n'],
+            senses: [{ pos: ['n'], glosses: ['Tokyo'], xrefs: [], misc: [], info: [] }],
+            flags: ['primary'],
+          },
+        ],
+      },
+    ],
+  };
+
+  function chip(): HTMLButtonElement {
+    const el = document.querySelector<HTMLButtonElement>('.chip');
+    if (el === null) throw new Error('.chip missing');
+    return el;
+  }
+
+  function open(): Element | null {
+    return document.querySelector('.entry-popover.open');
+  }
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    emit('parse-result', SEGMENTS);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The dwell is what stops a popover firing for every chip the cursor sweeps
+  // across on its way somewhere else.
+  test('a completed dwell opens the popover', () => {
+    chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    expect(open()).toBeNull();
+    vi.advanceTimersByTime(350);
+    expect(open()?.textContent).toContain('Tokyo');
+  });
+
+  test('a cursor that leaves before the dwell completes opens nothing', () => {
+    chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    vi.advanceTimersByTime(200);
+    chip().dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+    vi.advanceTimersByTime(500);
+    expect(open()).toBeNull();
+  });
+
+  // Focus moves only on a deliberate keypress, so it has no sweeping problem
+  // for a dwell to solve — waiting 350 ms there would be delay with no purpose.
+  test('focus opens it immediately, with no timer', () => {
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(open()).not.toBeNull();
+  });
+
+  // Escape must not move focus: the user is mid-sentence and would otherwise
+  // have to Tab back in from the start.
+  test('Escape hides it and leaves focus on the chip', () => {
+    const target = chip();
+    target.focus();
+    target.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(open()).toBeNull();
+    expect(document.activeElement).toBe(target);
+  });
+
+  // The guard with teeth: `show()` replaces `#output` wholesale, so a popover
+  // left open would be anchored to a chip that is no longer in the document.
+  test('a new parse-result hides it', () => {
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(open()).not.toBeNull();
+
+    emit('parse-result', SEGMENTS);
+    expect(open()).toBeNull();
   });
 });
 

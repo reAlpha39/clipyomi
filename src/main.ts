@@ -2,7 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { renderSentence } from './render/sentence';
 import { renderDefinitions } from './render/definitions';
-import type { ParseResult } from './types';
+import { hideEntryPopover, showEntryPopover } from './render/popover';
+import type { ParseResult, Segment } from './types';
 import './styles/global.css';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -23,6 +24,7 @@ app.innerHTML = `
 const output = app.querySelector<HTMLElement>('#output')!;
 const input = app.querySelector<HTMLInputElement>('#text')!;
 const parseButton = app.querySelector<HTMLButtonElement>('#parse')!;
+const panes = app.querySelector<HTMLElement>('.panes')!;
 // A fixed slot rather than a node prepended into `output`: `output` is what a
 // successful parse replaces wholesale (and what Task 5 replaces with two
 // panes), so an error node living there either gets silently wiped on the
@@ -251,7 +253,103 @@ async function applySettings(): Promise<void> {
   }
 }
 
+/** Milliseconds the cursor must rest on a chip before its popover opens. */
+const DWELL_MS = 350;
+
+/**
+ * The most recent parse, kept so a hover can find the entry for the chip under
+ * the cursor. The chips carry only `data-start`; the entries live here.
+ */
+let lastResult: ParseResult | null = null;
+
+/** Pending dwell timer, or `undefined` when none is armed. */
+let dwell: number | undefined;
+
+function segmentAt(start: string | undefined): Segment | undefined {
+  if (start === undefined || lastResult === null) return undefined;
+  return lastResult.segments.find((segment) => String(segment.start) === start);
+}
+
+/**
+ * The chip an event happened on, or `null`.
+ *
+ * `.unmatched` runs are `<span>`s without the `chip` class, so this returns
+ * `null` for them and they get no popover — an empty box for a span with no
+ * entries is the one wrong outcome available here.
+ */
+function chipFrom(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) return null;
+  return target.closest<HTMLElement>('.chip');
+}
+
+function clearDwell(): void {
+  if (dwell === undefined) return;
+  clearTimeout(dwell);
+  dwell = undefined;
+}
+
+function closePopover(): void {
+  clearDwell();
+  hideEntryPopover();
+}
+
+/** Open the popover for CHIP, if the last parse still knows that span. */
+function openFor(chip: HTMLElement): void {
+  const entry = segmentAt(chip.dataset.start)?.entries[0];
+  // No entry means a stale chip from a superseded parse, which is not an error
+  // worth surfacing — the next hover on a live chip works.
+  if (entry === undefined) return;
+  showEntryPopover(chip, entry);
+}
+
+// Delegated on `#output` rather than on `.sentence`: `show()` replaces the
+// sentence element on every parse, so a listener bound to it would be dropped
+// with it, while `#output` lives for the app's lifetime.
+output.addEventListener('mouseover', (e) => {
+  const chip = chipFrom(e.target);
+  if (chip === null) return;
+  // Re-armed per chip with no sticky swap: moving between chips hides the open
+  // popover and starts a fresh dwell. One rule, and it is the rule the dwell
+  // was introduced to enforce.
+  closePopover();
+  dwell = window.setTimeout(() => openFor(chip), DWELL_MS);
+});
+
+output.addEventListener('mouseout', (e) => {
+  if (chipFrom(e.target) === null) return;
+  closePopover();
+});
+
+output.addEventListener('focusin', (e) => {
+  const chip = chipFrom(e.target);
+  if (chip === null) return;
+  clearDwell();
+  openFor(chip);
+});
+
+output.addEventListener('focusout', (e) => {
+  if (chipFrom(e.target) === null) return;
+  closePopover();
+});
+
+document.addEventListener('keydown', (e) => {
+  // Focus is deliberately not moved: the user is mid-sentence, and Escape
+  // dismissing a popover should not cost them their place in the tab order.
+  if (e.key === 'Escape') closePopover();
+});
+
+// The popover is placed from a rectangle that both of these invalidate, and it
+// cannot follow the chip — `pointer-events: none` means there is nothing to
+// reposition against once the geometry moves.
+panes.addEventListener('scroll', closePopover);
+window.addEventListener('resize', closePopover);
+
 function show(result: ParseResult): void {
+  // Before anything is replaced: a popover left open would be anchored to a
+  // chip from the previous sentence that is about to leave the document.
+  closePopover();
+  lastResult = result;
+
   const sentence = renderSentence(result);
   const definitions = renderDefinitions(result);
 
