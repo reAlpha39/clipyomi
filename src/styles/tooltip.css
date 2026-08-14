@@ -1,0 +1,52 @@
+@import './tokens.css';
+@import './typography.css';
+
+/* The window is undecorated, so the page paints its own border — this is
+   ta-old's `WS_BORDER` (`MyToolTip.cpp:826`), which a Tauri decorationless
+   window has no frame to provide. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--tt-bg);
+  color: var(--tt-text);
+}
+
+#tooltip {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 3px 4px;
+  border: 1px solid var(--tt-border);
+  /* Scrolls rather than truncating: 2G capped the height and showed only an
+     entry's head, which spec §3.4 reverses. ta-old scrolls here too
+     (`MyToolTip.cpp:492-497`). */
+  overflow-y: auto;
+  font-family: var(--font-ui);
+  font-size: var(--text-gloss);
+  line-height: 1.35;
+}
+
+.tt-line {
+  /* Wrapped continuations hang by 10px, matching MyDrawText's `xOffset = 10`,
+     so a long sense reads as a column rather than as a paragraph. */
+  padding-left: 10px;
+  text-indent: -10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tt-kanji {
+  color: var(--tt-kanji);
+}
+.tt-kana {
+  color: var(--tt-kana);
+}
+.tt-paren {
+  color: var(--tt-paren);
+}
+.tt-conj {
+  color: var(--tt-conj);
+}
+.tt-text {
+  color: var(--tt-text);
+}
