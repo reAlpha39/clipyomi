@@ -127,6 +127,13 @@ enum Command {
         text: String,
         /// Path to an uncompressed compiled Vibrato dictionary. When given,
         /// tokenization supplies boundary hints to the segmenter.
+        ///
+        /// The distributed archive is compressed twice, and this flag wants
+        /// neither layer. Download IPADIC from
+        /// https://github.com/daac-tools/vibrato/releases/download/v0.5.0/ipadic-mecab-2_7_0.tar.xz
+        /// then run: tar xf ipadic-mecab-2_7_0.tar.xz && zstd -d
+        /// ipadic-mecab-2_7_0/system.dic.zst -- and pass the resulting
+        /// ipadic-mecab-2_7_0/system.dic here.
         #[cfg(feature = "mecab")]
         #[arg(long)]
         hints: Option<PathBuf>,

@@ -7,9 +7,8 @@ rust-version.workspace = true
 
 [dependencies]
 # No TLS backend: EDRDG serves no usable HTTPS for this archive (certificate
-# subject-name mismatch), so this crate fetches over plain HTTP only. Adding
-# `rustls` back would also pull in `zeroize`, whose 1.9.0 requires edition2024
-# and breaks the same MSRV floor. Do not add a TLS feature back.
+# subject-name mismatch), so this crate fetches over plain HTTP only. Do not
+# add a TLS feature back.
 ureq = { version = "3", default-features = false }
 flate2 = "1"
 thiserror = "1"

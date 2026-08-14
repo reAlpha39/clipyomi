@@ -58,6 +58,13 @@ jobs:
       # dev-dependencies never reach them.
       - run: cargo check --workspace
 
+      # `mecab` is off by default, so the check above never compiles `vibrato`
+      # or its transitive `bincode 2.0.1` — the entire reason the floor moved
+      # to 1.85 this phase. Without this step, a future `vibrato` release that
+      # raises its own MSRV past 1.85 would pass every gate here and ship
+      # invisibly.
+      - run: cargo check -p jparser --features mecab
+
   purity:
     name: jparser stays pure
     runs-on: ubuntu-latest
@@ -117,4 +124,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - run: cargo llvm-cov -p jmdict-source --summary-only --fail-under-lines 80
-      - run: cargo llvm-cov -p jparser --summary-only --fail-under-lines 80
+      - run: cargo llvm-cov -p jparser --features mecab --summary-only --fail-under-lines 80

@@ -12,12 +12,14 @@
 //! tokenizes with Vibrato and marks the *interior* positions of each token, so
 //! the DP is discouraged from splitting inside a word the tokenizer recognized.
 
-/// Index of the reading in an IPADIC feature string. ta-old skips a token whose
-/// reading is `*` or absent — "If katakana is '*' or does not exist, not real
-/// word, so don't penalize" (`ta-old/exe/util/Dictionary.cpp:1115-1121`).
-const READING_FIELD: usize = 7;
+use std::path::{Path, PathBuf};
 
 use crate::BoundaryHints;
+
+/// Index of the reading in an IPADIC feature string. ta-old skips a token whose
+/// reading is `*`, absent, or empty — "If katakana is '*' or does not exist,
+/// not real word, so don't penalize" (`ta-old/exe/util/Dictionary.cpp:1115-1121`).
+const READING_FIELD: usize = 7;
 
 /// Positions where a word should not begin or end, derived from tokenization.
 ///
@@ -48,9 +50,10 @@ impl BoundaryHints for BoundaryFlags {
 /// boundaries stay free — the hint says "do not split inside this," not "split
 /// here." A single-char token therefore marks nothing.
 ///
-/// A token whose reading ([`READING_FIELD`]) is absent or `*` is skipped
-/// entirely. That is ta-old's unknown-word guard: penalizing splits inside a
-/// word the tokenizer only guessed at would be worse than staying silent.
+/// A token whose reading ([`READING_FIELD`]) is absent, `*`, or empty is
+/// skipped entirely. That is ta-old's unknown-word guard: penalizing splits
+/// inside a word the tokenizer only guessed at would be worse than staying
+/// silent.
 ///
 /// ta-old carries a second guard — a fuzzy re-match of the token against the
 /// source, commented "I don't trust mecab all that much" — which is
@@ -58,6 +61,11 @@ impl BoundaryHints for BoundaryFlags {
 /// text pipe and had to re-find each token by scanning. Vibrato returns char
 /// ranges into the exact string it was handed, so misalignment cannot occur and
 /// the branch would be untestable.
+///
+/// The bounds checks below keep release builds total even if a future caller
+/// breaks the "same text the worker was reset with" invariant; the
+/// `debug_assert!` makes that mismatch loud in tests instead of silently
+/// dropping flags.
 fn flags_from_worker(
     worker: &vibrato::tokenizer::worker::Worker,
     char_len: usize,
@@ -73,6 +81,10 @@ fn flags_from_worker(
         }
 
         let range = token.range_char();
+        debug_assert!(
+            range.end <= char_len,
+            "token range {range:?} exceeds char_len {char_len}"
+        );
         for pos in range.start..range.end.saturating_sub(1) {
             if pos < char_len {
                 bad_end[pos] = true;
@@ -85,9 +97,6 @@ fn flags_from_worker(
 
     BoundaryFlags { bad_start, bad_end }
 }
-
-use std::path::Path;
-use std::path::PathBuf;
 
 /// A loaded Vibrato dictionary, ready to tokenize.
 ///
@@ -186,13 +195,14 @@ mod tests {
         assert_eq!(reading, Some("トウキョウ"));
     }
 
-    /// Build flags for `text` using the built-in test dictionary.
+    /// Build flags for `text` using the built-in test dictionary, through
+    /// [`VibratoTokenizer::hints`] rather than [`flags_from_worker`] directly,
+    /// so every test using this helper also exercises the real method.
     fn flags_for(text: &str) -> BoundaryFlags {
-        let tokenizer = vibrato::Tokenizer::new(test_dictionary());
-        let mut worker = tokenizer.new_worker();
-        worker.reset_sentence(text);
-        worker.tokenize();
-        flags_from_worker(&worker, text.chars().count())
+        let tokenizer = VibratoTokenizer {
+            tokenizer: vibrato::Tokenizer::new(test_dictionary()),
+        };
+        tokenizer.hints(text)
     }
 
     /// 東京 spans chars 0..2, so only its interior boundary is marked: a word
@@ -267,30 +277,6 @@ mod tests {
         );
     }
 
-    /// `VibratoTokenizer::hints` is the composition of `new_worker`,
-    /// `reset_sentence`, `tokenize`, and `flags_from_worker` — this exercises
-    /// that whole path under its own name, rather than only through
-    /// `flags_from_worker` directly. Pins the same interior-only shape as
-    /// `a_multi_char_token_marks_only_its_interior` and
-    /// `a_single_char_token_marks_nothing`.
-    #[test]
-    fn vibrato_tokenizer_hints_marks_only_the_interior_of_a_multi_char_token() {
-        let tokenizer = VibratoTokenizer {
-            tokenizer: vibrato::Tokenizer::new(test_dictionary()),
-        };
-        let f = tokenizer.hints("東京都");
-
-        assert!(f.bad_end(0), "0 is interior to 東京");
-        assert!(f.bad_start(1), "1 is interior to 東京");
-        assert!(
-            !f.bad_start(0),
-            "a word may start at the token's first char"
-        );
-        assert!(!f.bad_end(1), "a word may end at the token's last char");
-        assert!(!f.bad_start(2), "都 must not mark its own start");
-        assert!(!f.bad_end(2), "都 must not mark its own end");
-    }
-
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("jparser-hints-test-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -327,12 +313,15 @@ mod tests {
         assert!(err.to_string().contains("system.dic"), "got {err}");
     }
 
-    /// The phase's reason to exist: the derivation must actually produce flags
-    /// for ordinary input. Everything else here tests individual rules, which a
-    /// no-op implementation returning all-false would also satisfy.
+    /// A unit check that the derivation produces non-empty, correctly-placed
+    /// flags for ordinary input — individual rules are covered elsewhere, and a
+    /// no-op implementation returning all-false would fail only this one.
     ///
-    /// `AlwaysBad` in `segment.rs` already proves the DP *responds* to hints;
-    /// this proves the hints we derive are non-empty and correctly placed.
+    /// Superseded as the phase's central proof by
+    /// `hints_change_which_segmentation_jparser_parse_returns` below, which
+    /// shows the derivation actually reaches `parse`'s output rather than only
+    /// being correct in isolation. Kept because it is cheaper to run and pins
+    /// the derivation's shape directly.
     #[test]
     fn the_derivation_is_not_inert() {
         let text = "東京都";

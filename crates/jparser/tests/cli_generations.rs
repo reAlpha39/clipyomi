@@ -319,4 +319,6 @@ fn parse_rejects_an_absent_hints_dictionary() {
         !out.status.success(),
         "a missing dictionary must be rejected"
     );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("nope.dic"), "wrong failure: {stderr}");
 }
