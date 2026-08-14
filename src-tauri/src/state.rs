@@ -45,6 +45,15 @@ pub struct AppState {
 /// Tauri 2 command parameter.
 pub struct StartupFailure(pub String);
 
+/// Whether startup found no index at all.
+///
+/// Managed unconditionally alongside `StartupFailure`, `false` meaning "there
+/// is an index, or something worse is wrong", because a command parameter
+/// cannot express "this state may not be managed" — see `StartupFailure`'s own
+/// doc comment for the `Option<State<'_, T>>` reasoning.
+#[allow(dead_code)] // consumed in Task 3, removed when wiring commands::needs_dictionary
+pub struct NeedsDictionary(pub bool);
+
 /// A non-fatal warning from loading settings (e.g. a corrupt `settings.json`),
 /// kept separate from `StartupFailure` on purpose: `StartupFailure` being
 /// non-empty is treated by the webview as fatal — it disables the input box
@@ -68,6 +77,20 @@ pub enum StartupError {
     Conjugation(#[from] ConjugationError),
     #[error("{HINTS_ENV} is set but the dictionary could not be loaded: {0}")]
     Hints(#[from] HintsError),
+}
+
+/// Whether this startup error is the first-run condition the download screen
+/// can fix, rather than a genuine failure.
+///
+/// Matched exhaustively rather than with a wildcard: a future `StartupError`
+/// variant must force a decision here. Offering a download for an error a
+/// download cannot fix would loop the user through a wait that changes nothing.
+#[allow(dead_code)] // consumed in Task 4, removed when wiring main.rs startup match guard
+pub fn is_missing_dictionary(error: &StartupError) -> bool {
+    match error {
+        StartupError::NoIndex { .. } => true,
+        StartupError::Index(_) | StartupError::Conjugation(_) | StartupError::Hints(_) => false,
+    }
 }
 
 /// The directory holding published index generations.
@@ -332,5 +355,36 @@ mod tests {
             state.snapshot().always_on_top,
             "in-memory value must still change"
         );
+    }
+
+    /// The first-run condition is fixable from inside the window, so it must
+    /// not take the fatal path that disables the parse controls.
+    #[test]
+    fn a_missing_index_is_the_first_run_condition_not_a_failure() {
+        let err = StartupError::NoIndex {
+            root: PathBuf::from("/nowhere"),
+        };
+        assert!(is_missing_dictionary(&err));
+    }
+
+    /// Everything else stays fatal. Listed exhaustively rather than with a
+    /// wildcard so a new `StartupError` variant forces a decision here instead
+    /// of silently defaulting to "offer a download that cannot help".
+    #[test]
+    fn every_other_startup_error_stays_fatal() {
+        let fatal: Vec<StartupError> = vec![
+            StartupError::Index(IndexError::Io(std::io::Error::other("boom"))),
+            StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
+                name: "x".to_string(),
+                pos: "y".to_string(),
+            }),
+            StartupError::Hints(HintsError::Dictionary("boom".to_string())),
+        ];
+        for err in fatal {
+            assert!(
+                !is_missing_dictionary(&err),
+                "{err:?} must not offer a download"
+            );
+        }
     }
 }
