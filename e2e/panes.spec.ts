@@ -274,3 +274,146 @@ for (const theme of THEMES) {
     }
   });
 }
+
+/**
+ * A sentence long enough to wrap, so some chip ends a line hard against the
+ * right edge — the case the horizontal clamp exists for. The committed
+ * fixture's three-chip sentence never gets near it.
+ */
+async function emitWideResult(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const segments = Array.from({ length: 24 }, (_, i) => ({
+      start: i,
+      len: 1,
+      surface: '本',
+      reading: 'ほん',
+      matched: true,
+      entries: [
+        {
+          headword: '本',
+          reading: 'ほん',
+          conjugation: null,
+          pos: ['n'],
+          senses: [{ pos: ['n'], glosses: ['book'], xrefs: [], misc: [], info: [] }],
+          flags: ['primary'],
+        },
+      ],
+    }));
+    window.__TA_EMIT__('parse-result', { segments });
+  });
+}
+
+/** Index of the chip whose left edge is furthest right — the one nearest the edge. */
+async function rightmostChip(page: Page): Promise<number> {
+  const chips = page.locator('.chip');
+  const count = await chips.count();
+  let index = 0;
+  let furthest = -1;
+  for (let i = 0; i < count; i += 1) {
+    const box = await chips.nth(i).boundingBox();
+    if (box !== null && box.x > furthest) {
+      furthest = box.x;
+      index = i;
+    }
+  }
+  return index;
+}
+
+test('dwelling on a chip opens its definition above it, inside the viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 480 });
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const chip = page.locator('.chip').first();
+  await chip.hover();
+  // No explicit wait for the 350 ms dwell: the visibility assertion auto-waits,
+  // which is the deterministic form of the same check.
+  const popover = page.locator('.entry-popover');
+  await expect(popover).toBeVisible();
+  await expect(popover).toContainText('Tokyo');
+
+  const chipBox = await chip.boundingBox();
+  const popBox = await popover.boundingBox();
+  if (chipBox === null || popBox === null) throw new Error('no box');
+  expect(popBox.y + popBox.height).toBeLessThanOrEqual(chipBox.y);
+  expect(popBox.x).toBeGreaterThanOrEqual(8);
+  expect(popBox.y).toBeGreaterThanOrEqual(0);
+});
+
+test('a chip at the right edge gets a clamped popover, not an overflowing one', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 480, height: 320 });
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+  await page.goto('/');
+  await emitWideResult(page);
+
+  const index = await rightmostChip(page);
+  await page.locator('.chip').nth(index).hover();
+  const popover = page.locator('.entry-popover');
+  await expect(popover).toBeVisible();
+
+  const popBox = await popover.boundingBox();
+  if (popBox === null) throw new Error('no box');
+  // 8px margin, with a pixel of slack for fractional layout.
+  expect(popBox.x + popBox.width).toBeLessThanOrEqual(480 - 8 + 1);
+});
+
+test('focusing a chip opens the popover, and Escape closes it without losing focus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 720, height: 480 });
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  await page.locator('.chip').first().focus();
+  const popover = page.locator('.entry-popover');
+  await expect(popover).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(popover).not.toBeVisible();
+  // The chip keeps focus, so the user does not have to Tab back in.
+  await expect(page.locator('.chip').first()).toBeFocused();
+});
+
+// Task 2 could not prove this: its fixture has no unmatched run, and inventing
+// one there would have tested the mock rather than the guard.
+test('an unmatched run opens no popover', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 480 });
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+  await page.goto('/');
+  await page.evaluate(() => {
+    window.__TA_EMIT__('parse-result', {
+      segments: [{ start: 0, len: 3, surface: 'xyz', reading: null, matched: false, entries: [] }],
+    });
+  });
+
+  await page.locator('.unmatched').hover();
+  // Past the 350 ms dwell: without this the assertion is true the instant it
+  // runs, and would pass even with the `.chip` guard deleted (controller
+  // ruling, task-3-brief.md — the brief's original immediate assertion is a
+  // vacuous pass regardless of the guard).
+  await page.waitForTimeout(400);
+  await expect(page.locator('.entry-popover')).not.toBeVisible();
+});
+
+for (const theme of THEMES) {
+  test(`the popover renders correctly in ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 480, height: 320 });
+    await page.emulateMedia({ colorScheme: theme });
+    await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
+    await page.goto('/');
+    await emitFixtureResult(page);
+
+    await page.locator('.chip').first().hover();
+    await expect(page.locator('.entry-popover')).toBeVisible();
+
+    // Local only, exactly as every other baseline in this file: CI is
+    // ubuntu-latest and these were written on macOS.
+    if (!process.env.CI) {
+      await expect(page).toHaveScreenshot(`panes-popover-${theme}.png`);
+    }
+  });
+}
