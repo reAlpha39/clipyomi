@@ -25,6 +25,8 @@
 use std::collections::HashMap;
 
 pub mod conjugation;
+#[cfg(feature = "mecab")]
+pub mod hints;
 pub mod index;
 pub mod jmdict;
 pub mod kana;
