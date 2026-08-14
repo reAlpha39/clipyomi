@@ -93,6 +93,23 @@ test('an unmatched run is not in the tab order', async ({ page }) => {
   expect(await page.locator('.unmatched').evaluate((el) => (el as HTMLElement).tabIndex)).toBe(-1);
 });
 
+// The header toggles don't need a parse result to exist, so no fixture here
+// — just the STUB, since `#monitor` still calls the real (stubbed)
+// `set_clipboard_monitoring` command on activation. Real Chromium implements
+// the spec's disabled-blurs-focus behaviour that happy-dom does not (see the
+// task report), so this is the one place that can actually prove activating
+// a toggle never drops keyboard focus — the closure-local `pending` guard in
+// `bindToggle` is what makes that true without ever touching `.disabled`.
+test('activating a toggle keeps keyboard focus', async ({ page }) => {
+  await page.addInitScript(STUB);
+  await page.goto('/');
+
+  const monitor = page.locator('#monitor');
+  await monitor.focus();
+  await page.keyboard.press('Enter');
+  await expect(monitor).toBeFocused();
+});
+
 // Runs everywhere, including CI (no `!process.env.CI` guard) — a screenshot
 // diff is skipped there, so this is what actually protects the focus ring
 // and the marked-row border from a silent CSS regression on that runner.
