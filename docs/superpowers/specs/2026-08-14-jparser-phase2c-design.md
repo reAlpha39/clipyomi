@@ -157,6 +157,15 @@ pub enum HintsError {
 }
 ```
 
+> **Amended after implementation (2026-08-14).** `HintsError::Io`'s shape
+> above cannot deliver what §10's testing table implicitly wants — a `File::
+> open` `io::Error` carries no path, so a tuple variant can never name the
+> file it could not load. Shipped as `Io { path: PathBuf, source: std::io::
+> Error }`, rendered by `thiserror`'s bare `{path}` shorthand for `PathBuf`
+> fields (its private `AsDisplay` trait), the same pattern already used by
+> `IndexError::GenerationExists` and `SourceError::Http` elsewhere in this
+> codebase.
+
 The split matters: a `BoundaryHints` implementor is queried by position for **one
 text**, so per-text state cannot live on the tokenizer without making it
 single-use or stateful. `hints(text) -> BoundaryFlags` keeps the expensive object
@@ -188,6 +197,13 @@ This is the phase's main ergonomic cost, and it is accepted: 2C's deliverable is
 the derivation and its proof, not another downloader. Phase 2B already
 established the acquisition shape, and the app shell will reuse it against an HTTPS host
 with an archive format that needs its own decompressors.
+
+> **Amended after implementation (2026-08-14).** "The CLI documents the
+> commands" was aspirational when this section was written, not yet true:
+> `--hints`'s `--help` text carried no download or extraction instructions
+> until the phase's final commit (`3f761f8`, review finding I2). Before that,
+> a user pointed at `--hints` with no dictionary in hand had nowhere in the
+> binary itself to learn what to fetch or how to unpack it.
 
 ---
 

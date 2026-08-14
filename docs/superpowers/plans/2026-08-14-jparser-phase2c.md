@@ -23,6 +23,8 @@
 - **File size** 200–400 lines typical, **800 hard maximum including `#[cfg(test)] mod tests`**.
 - **Formatting:** `rustfmt --edition 2021 <individual files>`. **Never `cargo fmt`, never `cargo fmt -p jparser`** — it reformats `conjugation.rs`, `kana.rs`, and `romaji.rs`, which this phase must leave untouched. `conjugation.rs` is deliberately not rustfmt-clean; "fixing" it is a defect. After formatting run `git diff --stat` and confirm only intended files moved.
 - **Clippy:** `cargo clippy --workspace --all-targets -- -D warnings` clean at the end of every task.
+
+  > **Amended after implementation (2026-08-14).** This gate never compiled `hints.rs`: `mecab` is off by default, so `--workspace --all-targets` skips the module, and every task's "clippy clean" checkpoint was clean by omission through Task 4. Closed with a dedicated `mecab` CI job (`cargo clippy -p jparser --features mecab --all-targets -- -D warnings`) plus `--features mecab` added to the `msrv` and `coverage` jobs.
 - **`crates/jparser/src/segment.rs` is at 778/800 lines and must not be edited.**
 
 **Invariants this phase must not break:** `INDEX_FORMAT_VERSION` stays 3; `EntryData`'s field order is wire format; a published `gen-N` is immutable; directory knowledge lives only in `generations.rs` and `ensure_dictionary`; the staging filename stays process-unique; a `.partial` file is never resolved. This phase touches none of them.
@@ -193,6 +195,14 @@ git commit -m "chore: raise the workspace MSRV to 1.85 and unpin clap"
 ```
 
 `git diff --stat` must show only those files. No `.rs` file should appear.
+
+> **Amended after implementation (2026-08-14).** A `.rs` file did appear:
+> raising `rust-version` to 1.85 made clippy's MSRV-aware `unnecessary_map_or`
+> fire, since `Option::is_none_or` (stabilized 1.82) became available under
+> the new floor. Fixed in this same commit at `generations.rs:116` and
+> `rank.rs:53`. A same-phase follow-up (`8502a6b`) also unpinned `ureq` in
+> `crates/jmdict-source/Cargo.toml`, whose pin comment cited the now-retired
+> 1.75 floor.
 
 ---
 
@@ -676,6 +686,16 @@ pub enum HintsError {
 
 **If `vibrato::Dictionary::read` does not exist or takes a different argument** under 0.5.2, find the actual loader and use it — then **report the difference**. `SystemDictionaryBuilder::from_readers` was verified; the on-disk reader was not.
 
+> **Amended after implementation (2026-08-14).** Both this shape and Step 1's
+> assertion were wrong. `HintsError::Io(#[from] std::io::Error)` cannot "name
+> the file it could not load" as Step 1's doc comment claims — `File::open`'s
+> `io::Error` carries no path — so `the_io_error_renders_usefully` could only
+> assert `!err.to_string().is_empty()`. Shipped as `Io { path: PathBuf,
+> source: std::io::Error }`, with the test asserting the message contains the
+> filename; `thiserror` renders a bare `{path}` shorthand for a `PathBuf`
+> field via its `AsDisplay` trait, the same pattern `IndexError::GenerationExists`
+> and `SourceError::Http` already use elsewhere in this codebase.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cargo test -p jparser --features mecab --lib hints`
@@ -814,6 +834,13 @@ fn parse_rejects_an_absent_hints_dictionary() {
 ```
 
 **Confirm the `build-index` subcommand name and argument order** against the existing tests in that file before using it — 2A's CLI is kebab-case and this plan has not verified this particular invocation. If the file's other tests build an index differently, copy their form. This test needs the `mecab` feature to be meaningful; if the default `cargo test -p jparser` build has `mecab` off, gate the test with `#[cfg(feature = "mecab")]` and note that it runs only under `cargo test -p jparser --features mecab`.
+
+> **Amended after implementation (2026-08-14).** The code block above has the
+> invocation backwards: `Command::BuildIndex` takes `xml` then `out`, so
+> `["build-index", "idx", "mini.xml"]` would try to build from a file named
+> `idx`. The shipped test uses `["build-index", "mini.xml", "idx"]`, exactly
+> as this step's own instruction to verify against the file's other tests
+> would have caught.
 
 - [ ] **Step 6: Run the full gate**
 
