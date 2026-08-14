@@ -4097,6 +4097,7 @@ dependencies = [
 name = "translation-aggregator"
 version = "0.1.0"
 dependencies = [
+ "jmdict-source",
  "jparser",
  "serde",
  "serde_json",

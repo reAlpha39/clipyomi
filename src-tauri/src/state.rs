@@ -51,7 +51,12 @@ pub struct StartupFailure(pub String);
 /// is an index, or something worse is wrong", because a command parameter
 /// cannot express "this state may not be managed" — see `StartupFailure`'s own
 /// doc comment for the `Option<State<'_, T>>` reasoning.
-#[allow(dead_code)] // consumed in Task 3, removed when wiring commands::needs_dictionary
+// `commands::needs_dictionary` now reads `.0` (Task 3), but nothing
+// constructs a `NeedsDictionary` until Task 4 manages it in main.rs's
+// setup — `cargo clippy`'s "never constructed" lint is independent of
+// whether a field is read, so the allow stays, just for a different reason
+// than the comment Task 2 left here.
+#[allow(dead_code)]
 pub struct NeedsDictionary(pub bool);
 
 /// A non-fatal warning from loading settings (e.g. a corrupt `settings.json`),

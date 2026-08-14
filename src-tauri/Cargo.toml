@@ -32,3 +32,7 @@ tokio = { version = "1", features = ["sync", "macros", "rt", "time"] }
 # MIT OR Apache-2.0, taken under MIT: Apache-2.0 alone is incompatible with this
 # project's GPL-2.0-only.
 tauri-plugin-clipboard-manager = "2.3.2"
+# The first network code in the shell. `crates/jparser` must stay pure — the
+# purity gate guards it — but the shell is where a download belongs, and
+# `jmdict-source` already owns the retry, staging, and gzip handling.
+jmdict-source = { path = "../crates/jmdict-source" }
