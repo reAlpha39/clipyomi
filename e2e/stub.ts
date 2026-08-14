@@ -45,6 +45,11 @@ export const STUB = `
       // a toggle actually round-tripping through this stub.
       if (cmd === 'get_settings') return { always_on_top: false, clipboard_monitoring: true };
       if (cmd === 'set_always_on_top' || cmd === 'set_clipboard_monitoring') return undefined;
+      // Every existing spec exercises the parse path, so the stub's default
+      // answer is "a dictionary already exists" — Task 5's own spec overrides
+      // this to true for the one test that needs the download screen instead.
+      if (cmd === 'needs_dictionary') return false;
+      if (cmd === 'download_dictionary') return undefined;
       if (cmd === 'plugin:event|listen') {
         window.__TA_LISTENERS__[args.event] = args.handler;
         return 0;

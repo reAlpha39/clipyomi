@@ -17,7 +17,7 @@ app.innerHTML = `
     <button id="parse">Parse</button>
   </div>
   <div id="parse-error"></div>
-  <div class="panes"><div id="output"></div></div>
+  <div class="panes"><div id="dictionary"></div><div id="output"></div></div>
 `;
 
 const output = app.querySelector<HTMLElement>('#output')!;
@@ -59,6 +59,84 @@ export async function showSettingsWarning(): Promise<void> {
   const message = await invoke<string | null>('settings_warning');
   if (message === null) return;
   parseError.replaceChildren(errorBlock(message));
+}
+
+const dictionary = app.querySelector<HTMLElement>('#dictionary')!;
+
+// The backend's own phase labels. Anything not in this map is an error message
+// to show verbatim, which is why this is a lookup rather than an enum — the
+// failure arm carries text the user needs to read.
+const PHASE_LABELS: Record<string, string> = {
+  downloading: 'Downloading dictionary…',
+  building: 'Building index…',
+};
+
+function renderDictionary(status: string | null): void {
+  if (status === 'ready') {
+    dictionary.replaceChildren();
+    input.disabled = false;
+    parseButton.disabled = false;
+    return;
+  }
+
+  const el = document.createElement('div');
+  el.className = 'dictionary';
+  const phase = status === null ? undefined : PHASE_LABELS[status];
+
+  if (phase !== undefined) {
+    const label = document.createElement('p');
+    label.textContent = phase;
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner';
+    // Decorative: the label above already carries the information, and under
+    // `prefers-reduced-motion` this stops moving entirely.
+    spinner.setAttribute('aria-hidden', 'true');
+    el.replaceChildren(label, spinner);
+    dictionary.replaceChildren(el);
+    return;
+  }
+
+  // Idle or failed. `null` is the first-run offer; anything else is a message
+  // from the backend, which already names the archive and directory to drop in.
+  const message = document.createElement('p');
+  message.textContent =
+    status === null
+      ? 'No dictionary yet. JMdict is a one-time download of roughly ten megabytes from EDRDG.'
+      : status;
+
+  const button = document.createElement('button');
+  button.id = 'download';
+  button.type = 'button';
+  button.textContent = status === null ? 'Download dictionary' : 'Retry';
+
+  // Closure-local, not `button.disabled`: disabling a focused element blurs it
+  // and drops it from the tab order, which nothing here restores. Same guard
+  // the header toggles use.
+  let pending = false;
+  button.addEventListener('click', () => {
+    if (pending) return;
+    pending = true;
+    renderDictionary('downloading');
+    void invoke('download_dictionary')
+      .catch((e) => renderDictionary(String(e)))
+      .finally(() => {
+        pending = false;
+      });
+  });
+
+  el.replaceChildren(message, button);
+  dictionary.replaceChildren(el);
+}
+
+// Exported for the same reason `showStartupError` is: a test can await it
+// directly rather than racing the fire-and-forget call at the bottom.
+export async function showDictionaryScreen(): Promise<void> {
+  if (!(await invoke<boolean>('needs_dictionary'))) return;
+  // Parsing cannot succeed until an index exists. Unlike `showStartupError`'s
+  // disabling, this is reversible — `ready` turns both back on.
+  input.disabled = true;
+  parseButton.disabled = true;
+  renderDictionary(null);
 }
 
 interface Settings {
@@ -178,6 +256,7 @@ void Promise.all([
   // A failure replaces only the message, never the result: the previous
   // parse stays readable while the user works out what went wrong.
   listen<string>('parse-error', (e) => parseError.replaceChildren(errorBlock(e.payload))),
+  listen<string>('dictionary-status', (e) => renderDictionary(e.payload)),
 ]).then(() => {
   invoke('frontend_ready').catch(() => {
     // Not actionable by the user if this fails — same policy as a skipped
@@ -203,3 +282,4 @@ input.addEventListener('keydown', (e) => {
 void showStartupError();
 void applySettings();
 void showSettingsWarning();
+void showDictionaryScreen();

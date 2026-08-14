@@ -110,6 +110,28 @@ test('activating a toggle keeps keyboard focus', async ({ page }) => {
   await expect(monitor).toBeFocused();
 });
 
+// STUB's default `needs_dictionary` answer is `false` so every other spec in
+// this file keeps exercising the parse path; this is the one test that needs
+// the opposite, so the override lives here rather than reshaping STUB itself.
+// Wrapping the real invoke (rather than replacing __TAURI_INTERNALS__
+// wholesale) keeps the `plugin:event|listen` handling STUB already provides.
+test('the first-run download screen appears and clears on ready', async ({ page }) => {
+  await page.addInitScript(`
+    ${STUB}
+    const realInvoke = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'needs_dictionary') return true;
+      return realInvoke(cmd, args);
+    };
+  `);
+  await page.goto('/');
+
+  await expect(page.locator('#download')).toBeVisible();
+
+  await page.evaluate(() => window.__TA_EMIT__('dictionary-status', 'ready'));
+  await expect(page.locator('#dictionary')).toBeEmpty();
+});
+
 // Runs everywhere, including CI (no `!process.env.CI` guard) — a screenshot
 // diff is skipped there, so this is what actually protects the focus ring
 // and the marked-row border from a silent CSS regression on that runner.

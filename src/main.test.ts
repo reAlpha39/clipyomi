@@ -158,6 +158,11 @@ describe('main: a startup failure disables the parse controls', () => {
         return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
       }
       if (cmd === 'settings_warning') return Promise.resolve(null);
+      // showDictionaryScreen's own invoke call, awaited before this test's
+      // assertions run — without an explicit answer here it falls through to
+      // the reject below and turns `void showDictionaryScreen()` into an
+      // unhandled rejection that fails the whole file.
+      if (cmd === 'needs_dictionary') return Promise.resolve(false);
       return Promise.reject('parse_text must not be reachable once controls are disabled');
     });
 
@@ -178,6 +183,9 @@ describe('main: a startup failure disables the parse controls', () => {
         return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
       }
       if (cmd === 'settings_warning') return Promise.resolve(null);
+      // Same reason as the sibling test above: showDictionaryScreen must not
+      // fall through to a rejection here.
+      if (cmd === 'needs_dictionary') return Promise.resolve(false);
       return Promise.reject('unused');
     });
 
@@ -509,5 +517,49 @@ describe('the settings warning', () => {
     await showSettingsWarning();
 
     expect(document.querySelector('#parse-error')?.children).toHaveLength(0);
+  });
+});
+
+describe('the first-run download screen', () => {
+  beforeEach(async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'needs_dictionary') return Promise.resolve(true);
+      if (cmd === 'download_dictionary') return Promise.resolve(undefined);
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  test('offers a download when no dictionary is present', () => {
+    expect(document.querySelector('#download')).not.toBeNull();
+  });
+
+  test('a status event replaces the button with the phase', () => {
+    emit('dictionary-status', 'building');
+    expect(document.querySelector('#dictionary')?.textContent).toContain('Building');
+    expect(document.querySelector('#download')).toBeNull();
+  });
+
+  test('ready clears the screen and re-enables the controls', () => {
+    emit('dictionary-status', 'ready');
+    expect(document.querySelector('#dictionary')?.childElementCount).toBe(0);
+    expect((document.querySelector('#text') as HTMLInputElement).disabled).toBe(false);
+  });
+
+  // A failure must leave a working Retry, or the user relaunches for a problem
+  // that reconnecting to wifi would have fixed.
+  test('a failure shows the reason and a retry', () => {
+    emit('dictionary-status', 'could not reach the server');
+    expect(document.querySelector('#dictionary')?.textContent).toContain('could not reach');
+    expect(document.querySelector('#download')?.textContent).toBe('Retry');
   });
 });
