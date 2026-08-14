@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
-use tokio::sync::watch;
+use tokio::sync::{watch, Notify};
 
 use crate::state::SettingsState;
 
@@ -61,12 +61,35 @@ pub fn should_parse(text: &str, last_seen: Option<&str>, last_written: Option<&s
     has_japanese
 }
 
+/// Blocks until the webview has registered its `parse-result` /
+/// `parse-error` listeners (see `commands::frontend_ready`, which fires this).
+///
+/// Without this gate, `run_poll`'s first tick can read clipboard text left
+/// over from before launch, decide it is worth parsing, and record it as
+/// `last_seen` — all before the webview's `listen()` calls have finished
+/// their async round-trip to register on the Rust side. The `emit` that
+/// follows then reaches zero listeners and is silently dropped (`emit`
+/// returns `Ok` either way), and because `last_seen` is already set, the same
+/// clipboard text is never retried: the user sees an empty pane until they
+/// copy something different. Waiting here closes that window deterministically
+/// — no delay to tune, no guess about how long the webview takes to load.
+async fn wait_for_frontend(ready: &Notify) {
+    ready.notified().await;
+}
+
 /// Poll the clipboard and push anything worth parsing into the input channel.
 ///
 /// Runs for the life of the app. Pausing is a settings flag rather than a
 /// stopped task: restarting a task on every toggle is more moving parts than
 /// checking a bool five times a second.
-pub async fn run_poll(app: AppHandle, tx: watch::Sender<String>, settings: Arc<SettingsState>) {
+pub async fn run_poll(
+    app: AppHandle,
+    tx: watch::Sender<String>,
+    settings: Arc<SettingsState>,
+    ready: Arc<Notify>,
+) {
+    wait_for_frontend(&ready).await;
+
     let mut last_seen: Option<String> = None;
     let mut read_failing = false;
 
@@ -124,6 +147,14 @@ mod tests {
         assert!(should_parse("トウキョウ", None, None));
     }
 
+    /// The other three `is_japanese` blocks each have a case above; this one
+    /// (CJK Unified Ideographs Extension A) did not, so a typo in its range
+    /// could ship silently. `'㐀'` (U+3400) is the block's first codepoint.
+    #[test]
+    fn cjk_extension_a_is_worth_parsing() {
+        assert!(should_parse("㐀", None, None));
+    }
+
     /// Every poll tick re-reads the clipboard; without this the parser would
     /// re-run five times a second on text that has not changed.
     #[test]
@@ -172,5 +203,49 @@ mod tests {
             "precondition: byte length exceeds the cap"
         );
         assert!(should_parse(&text, None, None));
+    }
+
+    /// The seam behind Important 2's fix: nothing downstream of
+    /// `wait_for_frontend` may run before the frontend signals ready, however
+    /// long that takes. `run_poll` cannot be exercised directly (it needs a
+    /// real `AppHandle` and touches the system clipboard, §7.1), so this
+    /// drives the exact gate `run_poll` awaits first, using the same
+    /// `Notify` type, with a `watch::Sender::send` standing in for the
+    /// clipboard publish it guards.
+    #[tokio::test]
+    async fn wait_for_frontend_blocks_the_first_publish_until_signalled() {
+        let ready = Arc::new(Notify::new());
+        let (tx, mut rx) = watch::channel(String::new());
+
+        let ready_clone = Arc::clone(&ready);
+        let task = tokio::spawn(async move {
+            wait_for_frontend(&ready_clone).await;
+            tx.send("東京".to_string()).expect("send");
+        });
+
+        // Give the spawned task every chance to run before it is signalled.
+        for _ in 0..16 {
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            !rx.has_changed().expect("sender still alive"),
+            "published before the frontend signalled ready"
+        );
+
+        ready.notify_one();
+        task.await.expect("wait_for_frontend task panicked");
+
+        assert_eq!(
+            next_input_for_test(&mut rx).await.as_deref(),
+            Some("東京"),
+            "did not publish after the ready signal"
+        );
+    }
+
+    /// Local stand-in for `parse::next_input` so this test does not need a
+    /// dependency from `clipboard` onto `parse` just to read one value back.
+    async fn next_input_for_test(rx: &mut watch::Receiver<String>) -> Option<String> {
+        rx.changed().await.ok()?;
+        Some(rx.borrow_and_update().clone())
     }
 }

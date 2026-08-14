@@ -41,9 +41,17 @@ where
 
 /// Wait for new input and return the newest value, skipping anything superseded.
 ///
-/// `borrow_and_update` is what makes this latest-wins: a `watch` channel keeps
-/// only its most recent value, so inputs that arrived during a parse are already
-/// collapsed by the time we look.
+/// Latest-wins comes from the `watch` channel itself, not from this function:
+/// it holds exactly one slot, and `Sender::send` overwrites that slot rather
+/// than queueing behind it, so anything sent while a parse was in flight is
+/// already gone by the time this looks — there is nothing left to skip past.
+/// `borrow_and_update` just reads that one slot and marks it seen; a plain
+/// `borrow()` would see the same value, because `changed()` above already
+/// marked the previous value seen before returning.
+///
+/// Returns `None` once `changed()` reports `RecvError`, which means every
+/// `Sender` — the clipboard poll's and the `set_input` command's — has been
+/// dropped, so no further input can ever arrive.
 pub async fn next_input(rx: &mut watch::Receiver<String>) -> Option<String> {
     rx.changed().await.ok()?;
     let text = rx.borrow_and_update().clone();

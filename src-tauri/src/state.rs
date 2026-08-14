@@ -131,6 +131,16 @@ impl SettingsState {
     /// The in-memory value is updated even when the write fails, so a read-only
     /// config dir degrades to "settings do not survive restart" rather than
     /// "the toggles do not work".
+    ///
+    /// The lock is released before `save`'s file I/O runs, deliberately: holding
+    /// it across a write would block every other read and update for the
+    /// duration of a disk operation. The cost is a narrow, real race — two
+    /// concurrent `update` calls can interleave so the file on disk ends up
+    /// holding the older of the two snapshots while memory holds the newer.
+    /// Not closed here: both callers (`set_always_on_top`,
+    /// `set_clipboard_monitoring`) are driven by clicks on one webview, one at
+    /// a time, so the window is narrow — and holding the lock across I/O to
+    /// close it would be worse than the race itself.
     pub fn update<F>(&self, change: F) -> Result<(), SettingsError>
     where
         F: FnOnce(&mut Settings),

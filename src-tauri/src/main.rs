@@ -60,8 +60,20 @@ fn main() {
             let (tx, rx) = tokio::sync::watch::channel(String::new());
             app.manage(commands::InputSender(tx.clone()));
 
+            // Fires once, from `commands::frontend_ready`, right after the
+            // webview finishes registering its event listeners. `run_poll`
+            // blocks its first tick on this — see
+            // `clipboard::wait_for_frontend` for the race it closes.
+            let ready = Arc::new(tokio::sync::Notify::new());
+            app.manage(commands::FrontendReady(Arc::clone(&ready)));
+
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(clipboard::run_poll(handle, tx, Arc::clone(&settings)));
+            tauri::async_runtime::spawn(clipboard::run_poll(
+                handle,
+                tx,
+                Arc::clone(&settings),
+                ready,
+            ));
 
             // `StartupFailure` is managed on both branches, empty string meaning
             // success: `startup_error` needs `State<'_, StartupFailure>` to
@@ -84,9 +96,12 @@ fn main() {
                     // Startup failures are surfaced to the webview rather than
                     // aborting: an app that will not launch cannot tell the user
                     // to run `build-index`. `rx` is intentionally not moved on
-                    // this branch: it is dropped here, so the poll's `tx.send`
-                    // starts failing and the poll task exits instead of
-                    // spinning forever with nothing downstream.
+                    // this branch: it is dropped here, so once the poll finds
+                    // something worth parsing, that `tx.send` fails and
+                    // `run_poll` returns. Until then it keeps ticking with
+                    // nowhere to send to — with monitoring off, or on but with
+                    // nothing Japanese ever copied, that can be the app's
+                    // entire life.
                     app.manage(state::StartupFailure(e.to_string()));
                 }
             }
@@ -98,7 +113,8 @@ fn main() {
             commands::set_always_on_top,
             commands::get_settings,
             commands::startup_error,
-            commands::settings_warning
+            commands::settings_warning,
+            commands::frontend_ready
         ])
         // If the runtime cannot start, there is no window to report anything
         // in, so the alternative to this `expect` is a silent exit.

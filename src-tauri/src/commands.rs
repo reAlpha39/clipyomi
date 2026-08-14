@@ -5,21 +5,27 @@
 // under the terms of the GNU General Public License version 2 as published
 // by the Free Software Foundation.
 
-//! The webview's entry points: push input, toggle settings, read settings,
-//! and ask why startup failed. Parsing itself runs in `parse::run_worker`;
-//! results arrive as `parse-result` / `parse-error` events, not as a command
-//! return value.
+//! The webview's entry points: push input, toggle settings, read settings, ask
+//! why startup failed or why settings fell back to defaults, and signal that
+//! the event listeners are registered. Parsing itself runs in
+//! `parse::run_worker`; results arrive as `parse-result` / `parse-error`
+//! events, not as a command return value.
 
 use std::sync::Arc;
 
 use tauri::State;
-use tokio::sync::watch;
+use tokio::sync::{watch, Notify};
 
 use crate::settings::Settings;
 use crate::state::{SettingsState, SettingsWarning, StartupFailure};
 
 /// The sending half of the input channel, managed so commands can reach it.
 pub struct InputSender(pub watch::Sender<String>);
+
+/// Signals that the webview has registered its `parse-result` /
+/// `parse-error` listeners. `frontend_ready` fires it; `clipboard::run_poll`
+/// blocks its first tick on it — see `clipboard::wait_for_frontend` for why.
+pub struct FrontendReady(pub Arc<Notify>);
 
 /// Publish text for the worker to parse.
 ///
@@ -66,6 +72,15 @@ pub fn set_always_on_top(
 #[tauri::command]
 pub fn get_settings(settings: State<'_, Arc<SettingsState>>) -> Settings {
     settings.snapshot()
+}
+
+/// Called once by the webview immediately after both `parse-result` and
+/// `parse-error` listeners finish registering. Lifts the gate that keeps
+/// `clipboard::run_poll` from reading the clipboard before anything is
+/// listening for the result — see `clipboard::wait_for_frontend`.
+#[tauri::command]
+pub fn frontend_ready(ready: State<'_, FrontendReady>) {
+    ready.0.notify_one();
 }
 
 /// The startup error, or `null` when startup succeeded.
