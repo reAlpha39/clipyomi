@@ -12,6 +12,7 @@
 
 mod clipboard;
 mod commands;
+mod mouse_tracker;
 mod parse;
 mod popover;
 mod settings;
@@ -140,6 +141,7 @@ fn main() {
             // and never show it until asked", and a tooltip that flashes at
             // startup is worse than no tooltip.
             popover::create(app)?;
+            mouse_tracker::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
