@@ -170,8 +170,8 @@ function renderDictionary(status: string | null): void {
 export async function showDictionaryScreen(): Promise<void> {
   if (!(await invoke<boolean>('needs_dictionary'))) return;
   // Parsing cannot succeed until an index exists; `renderDictionary` shows the
-  // download/build screen in place of the panes until a `ready` event clears
-  // it.
+  // download/build screen in place of `#dictionary`'s idle state until a
+  // `ready` event clears it.
   renderDictionary(null);
 }
 

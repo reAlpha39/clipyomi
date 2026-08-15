@@ -497,8 +497,8 @@ describe('overlapping toggle requests', () => {
 
 // Carried forward from Task 4: `settings_warning` exists but, until now,
 // nothing rendered it. Deliberately not colocated with the fatal
-// `startup_error` tests above — the whole point is that this path must
-// behave differently (cosmetic, non-disabling) from that one.
+// `startup_error` tests above: that path is fatal and writes its message into
+// `#output`, this one is cosmetic and writes into `#parse-error` instead.
 describe('the settings warning', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
