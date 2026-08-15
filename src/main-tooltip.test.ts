@@ -149,6 +149,24 @@ describe('the hover tooltip', () => {
     expect(emitted).toContainEqual(['popover-content', SEGMENTS.segments[0].entries]);
   });
 
+  // Restores the coverage deleted with 2G's DOM-popover specs in Task 7: an
+  // unmatched run is a plain `<span>` with no `chip` class, so `chipFrom`'s
+  // `.closest('.chip')` returns null for it and no dwell is ever armed. An
+  // empty tooltip for a span with no entries is the one wrong outcome
+  // available here.
+  test('an unmatched run opens no popover', () => {
+    emit('parse-result', {
+      segments: [
+        { start: 0, len: 2, surface: '𠮟る', reading: null, matched: false, entries: [] },
+      ],
+    });
+    const span = document.querySelector<HTMLElement>('.unmatched');
+    if (span === null) throw new Error('.unmatched missing');
+    span.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    vi.advanceTimersByTime(350);
+    expect(events()).not.toContain('popover-content');
+  });
+
   test('a cursor that leaves before the dwell completes sends nothing', () => {
     chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     vi.advanceTimersByTime(200);

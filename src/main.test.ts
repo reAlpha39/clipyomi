@@ -28,8 +28,18 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 // mocked too, even though nothing in this file ever reaches `placeFor` or
 // the keep poll — that coverage, and the fuller controllable stubs it needs,
 // lives in `main-tooltip.test.ts`.
+// All three exports `main.ts` imports, even though no describe in this file
+// reaches the last two: a factory that omits an export fails any future test
+// that does touch it with an opaque "No export is defined on the mock".
+// `src/main-tooltip.test.ts` owns the describes that actually drive these.
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ label: 'main' }),
+  getCurrentWindow: () => ({
+    label: 'main',
+    outerPosition: () => Promise.resolve({ x: 0, y: 0 }),
+    scaleFactor: () => Promise.resolve(1),
+  }),
+  cursorPosition: () => Promise.resolve({ x: 0, y: 0 }),
+  monitorFromPoint: () => Promise.resolve(null),
 }));
 
 function emit(event: string, payload: unknown): void {
