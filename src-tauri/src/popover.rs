@@ -18,9 +18,16 @@ pub fn create(app: &App) -> tauri::Result<()> {
         // `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST`
         // (`MyToolTip.cpp:825`). These are the Tauri equivalents; the border is
         // CSS on the page, since a decorationless window has no frame to style.
+        // `WS_EX_NOACTIVATE` is `focusable(false)`, NOT `focused(false)`:
+        // `focused` governs creation only, while `show()` below maps to
+        // `makeKeyAndOrderFront:` (tauri-runtime-wry `WindowMessage::Show` ->
+        // tao `set_visible(true)`), and tao's `canBecomeKeyWindow` returns the
+        // `focusable` ivar — which defaults to true. Without this the main
+        // window loses its focus ring on every hover.
         .decorations(false)
         .always_on_top(true)
         .focused(false)
+        .focusable(false)
         .skip_taskbar(true)
         .visible(false)
         .resizable(false)
