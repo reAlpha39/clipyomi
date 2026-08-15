@@ -377,6 +377,11 @@ function openFor(chip: HTMLElement): void {
   // No entries means a stale chip from a superseded parse, or an unmatched
   // run — neither is an error worth surfacing.
   if (entries === undefined || entries.length === 0) return;
+  // Bumped here, not only in `closePopover`: focus moving straight from chip
+  // A to chip B (no `closePopover` in between — see the `focusin` listener
+  // below) must still invalidate a `placeFor` already in flight for A, or
+  // the two placements race and whichever resolves last wins the window.
+  openId += 1;
   pendingChip = chip;
   // Fire-and-forget: a failed emit just leaves the tooltip unshown, no worse
   // than the user never having hovered at all.
@@ -432,11 +437,16 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
     width: Math.round(size.width),
     height: Math.round(height),
   });
-  // A dismissal that lands during this last await still shows the window
-  // (the command was already in flight) but must not arm a poll for it: the
-  // dismissal's own `closePopover` already reset `tooltipCentre` to `null`,
-  // and a poll armed on top of that would just early-return forever.
-  if (openId !== generation) return;
+  if (openId !== generation) {
+    // The window is already shown — that `invoke` above was already in
+    // flight when this round trip was invalidated. Whatever invalidated it
+    // ran while `pendingChip` was `null` and `keepPoll` was not yet armed, so
+    // `closePopover`'s own `wasActive` gate (finding 7) saw nothing to hide
+    // and skipped it. This is the one place that must undo a show it did not
+    // arm, rather than leaving a tooltip nothing can ever dismiss again.
+    void invoke('hide_popover').catch(() => {});
+    return;
+  }
   startKeepPoll();
 }
 
