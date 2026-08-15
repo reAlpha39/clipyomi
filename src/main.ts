@@ -616,8 +616,14 @@ void Promise.all([
   listen<string>('parse-error', (e) => parseError.replaceChildren(errorBlock(e.payload))),
   listen<string>('dictionary-status', (e) => renderDictionary(e.payload)),
   listen<{ width: number; height: number }>('popover-measured', (e) => {
+    // `pendingChip` is deliberately NOT cleared here — `closePopover` owns its
+    // lifetime. Clearing it dropped the second of two interleaved
+    // measurements: a fast Tab from A to B sets `pendingChip = B` before A's
+    // measurement lands, so A's reply placed B at A's size and emptied the
+    // slot, and B's own reply then arrived to nothing and was discarded,
+    // leaving B wrong until the next hover. Leaving it set costs one extra
+    // `place_popover` on that rare interleaving and re-places B correctly.
     const chip = pendingChip;
-    pendingChip = null;
     // A chip removed by a parse that landed mid-round-trip has nothing to
     // anchor to; dropping the measurement is the correct outcome.
     if (chip === null || !chip.isConnected) return;
