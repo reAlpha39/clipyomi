@@ -81,9 +81,17 @@ Its flags are the Tauri equivalents of ta-old's:
 |---|---|
 | `WS_POPUP`, no caption | `decorations(false)` |
 | `WS_EX_TOPMOST` | `always_on_top(true)` |
-| `WS_EX_NOACTIVATE` | `focused(false)` and never focused thereafter |
+| `WS_EX_NOACTIVATE` | `focusable(false)` |
 | `WS_EX_TOOLWINDOW` | `skip_taskbar(true)` |
 | `WS_BORDER` | a 1px CSS border on the body |
+
+`focusable(false)` and not `focused(false)`: `focused` governs creation only.
+Showing the window is not passive — `WindowMessage::Show` maps to tao's
+`set_visible(true)`, which on macOS is `makeKeyAndOrderFront:`, and tao's
+`canBecomeKeyWindow` returns the `focusable` ivar, which defaults to true. With
+`focused(false)` alone the tooltip takes key status on every hover and the main
+window loses its focus ring — §7's named top risk. A non-key window still
+receives `scrollWheel:` under the cursor, so §3.4's scrolling is unaffected.
 
 It loads `popover.html`, a second Vite entry point, which renders nothing but the
 tooltip. Vite needs `build.rollupOptions.input` to emit both pages.
@@ -165,6 +173,14 @@ the tooltip's centre against its distance from the previous position. Closer mea
 the user is heading for the tooltip — keep it. Otherwise dismiss. Edge-specific
 variants short-circuit the common cases (moving down toward a tooltip below,
 moving up toward one above).
+
+**Only the distance comparison is ported** (`MyToolTip.cpp:352-354`). ta-old's
+four edge-specific variants at `:339-350` — the ones that make a move straight
+down toward a tooltip below forgiving of horizontal drift — are a deliberate
+simplification, not an oversight. The consequence is that this rule feels
+twitchier than ta-old's on exactly those approaches: a diagonal drift while
+heading for a tooltip directly below the word can measure as moving away and
+dismiss. Recorded as a decision so a later phase can port them knowingly.
 
 Chosen over a grace period because it holds no timer that every dismissal path
 must remember to clear, and because it distinguishes the two cases a timer
