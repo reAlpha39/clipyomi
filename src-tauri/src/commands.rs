@@ -91,12 +91,18 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
             extern "C" {
                 fn objc_msgSend(receiver: *mut c_void, sel: *const c_void, ...) -> *mut c_void;
                 fn sel_registerName(name: *const std::ffi::c_char) -> *const c_void;
+                fn objc_getClass(name: *const std::ffi::c_char) -> *mut c_void;
             }
             unsafe {
                 let sel_set_style_mask = sel_registerName(c"setStyleMask:".as_ptr());
                 let sel_content_view = sel_registerName(c"contentView".as_ptr());
                 let sel_make_first_responder = sel_registerName(c"makeFirstResponder:".as_ptr());
                 let sel_make_key = sel_registerName(c"makeKeyAndOrderFront:".as_ptr());
+                let sel_make_main = sel_registerName(c"makeMainWindow".as_ptr());
+                let sel_accepts_mouse_moved =
+                    sel_registerName(c"setAcceptsMouseMovedEvents:".as_ptr());
+                let sel_shared_app = sel_registerName(c"sharedApplication".as_ptr());
+                let sel_activate = sel_registerName(c"activateIgnoringOtherApps:".as_ptr());
 
                 let mask: usize = if enabled {
                     // NSWindowStyleMaskTitled (1) | NSWindowStyleMaskClosable (2) |
@@ -111,8 +117,14 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
                     std::mem::transmute(objc_msgSend as *const ());
                 set_mask_fn(ptr, sel_set_style_mask, mask);
 
-                let get_content_view_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
+                let set_accepts_fn: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
                     std::mem::transmute(objc_msgSend as *const ());
+                set_accepts_fn(ptr, sel_accepts_mouse_moved, true);
+
+                let get_content_view_fn: unsafe extern "C" fn(
+                    *mut c_void,
+                    *const c_void,
+                ) -> *mut c_void = std::mem::transmute(objc_msgSend as *const ());
                 let content_view = get_content_view_fn(ptr, sel_content_view);
 
                 if !content_view.is_null() {
@@ -127,6 +139,24 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
                 let make_key_fn: unsafe extern "C" fn(*mut c_void, *const c_void, *mut c_void) =
                     std::mem::transmute(objc_msgSend as *const ());
                 make_key_fn(ptr, sel_make_key, std::ptr::null_mut());
+
+                let make_main_fn: unsafe extern "C" fn(*mut c_void, *const c_void) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                make_main_fn(ptr, sel_make_main);
+
+                let ns_app_class = objc_getClass(c"NSApplication".as_ptr());
+                if !ns_app_class.is_null() {
+                    let get_app_fn: unsafe extern "C" fn(
+                        *mut c_void,
+                        *const c_void,
+                    ) -> *mut c_void = std::mem::transmute(objc_msgSend as *const ());
+                    let app = get_app_fn(ns_app_class, sel_shared_app);
+                    if !app.is_null() {
+                        let activate_fn: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
+                            std::mem::transmute(objc_msgSend as *const ());
+                        activate_fn(app, sel_activate, true);
+                    }
+                }
             }
             let _ = win.set_theme(win.theme().ok());
         })
@@ -145,6 +175,7 @@ pub fn set_decorations(
     window
         .set_decorations(enabled)
         .map_err(|e| e.to_string())?;
+    let _ = window.set_focus();
     settings
         .update(|s| s.decorations = enabled)
         .map_err(|e| e.to_string())
