@@ -17,6 +17,7 @@ With the tooltip operating as a real window, having a redundant, duplicate list 
 - Update `src/main.ts` so `show()` renders only `renderSentence(result)` into `#output`
 - Delete the chip-click `.marked` / `scrollIntoView` listener in `src/main.ts`
 - Remove obsolete definition styles from `src/styles/global.css` and `src/styles/typography.css`
+- Reduce minimum window dimensions in `src-tauri/tauri.conf.json` from 480×320 to 160×80 to allow a compact single-line sentence strip
 - Update `src/main.test.ts` to assert the absence of `.definitions` and `.def-row`
 - Update `e2e/panes.spec.ts` to remove definition row assertions and update/regenerate screenshot baselines
 - Amend predecessor design specs where appropriate
@@ -66,6 +67,11 @@ Remove the `.definitions` selector block (`font-family: var(--font-ui); font-siz
 
 ### 3.3 `src/styles/tokens.css`
 Retain all tokens, including `--text-gloss` (which is used by `src/styles/tooltip.css`).
+
+### 3.4 Window Geometry (`src-tauri/tauri.conf.json`)
+With both the text input (Phase 2H) and the definition list (Phase 2J) removed, the main window only needs to host the top control bar and the parsed sentence.
+
+`src-tauri/tauri.conf.json` reduces `"minWidth"` from `480` to `160` and `"minHeight"` from `320` to `80`, enabling the user to resize the app down to a minimal single-line sentence reader. Default size remains `720×480`.
 
 ---
 

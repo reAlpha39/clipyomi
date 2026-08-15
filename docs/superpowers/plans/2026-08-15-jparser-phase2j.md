@@ -48,6 +48,7 @@ Measured against the tree at `dbe7d61`.
 | `src/main.test.ts` | *(modified)* `.def-row` assertions removed; assertion pinning absence of `.definitions` added |
 | `src/styles/global.css` | *(modified)* definition classes and `.sentence` bottom margin removed |
 | `src/styles/typography.css` | *(modified)* `.definitions` font rule removed |
+| `src-tauri/tauri.conf.json` | *(modified)* `minWidth`/`minHeight` lowered to 160×80 for compact sentence strip |
 | `e2e/panes.spec.ts` | *(modified)* `.def-row` count and marking assertions removed |
 | `e2e/panes.spec.ts-snapshots/*.png` | *(regenerated)* all ten baselines updated for sentence-only output |
 
@@ -183,4 +184,37 @@ Verify all checks pass.
 ```bash
 git add e2e/
 git commit -m "test: update e2e specs and baselines for definitions pane removal"
+```
+
+---
+
+## Task 3: Reduce minimum window dimensions
+
+**Files:**
+- Modify: `src-tauri/tauri.conf.json`
+
+**Interfaces:**
+- Consumes: Single-sentence output layout from Task 1
+- Produces: Window configurable down to 160×80 px for a compact reading bar.
+
+- [x] **Step 1: Update `tauri.conf.json`**
+
+In `src-tauri/tauri.conf.json`, change:
+```json
+        "minWidth": 160,
+        "minHeight": 80,
+```
+
+- [x] **Step 2: Run verification**
+
+Run:
+```bash
+npm test && cargo test
+```
+
+- [x] **Step 3: Commit**
+
+```bash
+git add src-tauri/tauri.conf.json
+git commit -m "feat: reduce minimum window dimensions to 160x80 for compact sentence strip"
 ```
