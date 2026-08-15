@@ -167,7 +167,7 @@ describe('the frontend_ready call', () => {
   });
 });
 
-describe('main: a startup failure disables the parse controls', () => {
+describe('main: a startup failure reports itself', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
@@ -176,7 +176,7 @@ describe('main: a startup failure disables the parse controls', () => {
     vi.resetModules();
   });
 
-  test('startup_error resolving to a message disables #text and #parse', async () => {
+  test('startup_error resolving to a message renders it into #output', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'startup_error') return Promise.resolve('no dictionary index in /nowhere');
       // The header's own settings calls fire unconditionally on import, so
@@ -191,20 +191,18 @@ describe('main: a startup failure disables the parse controls', () => {
       // the reject below and turns `void showDictionaryScreen()` into an
       // unhandled rejection that fails the whole file.
       if (cmd === 'needs_dictionary') return Promise.resolve(false);
-      return Promise.reject('parse_text must not be reachable once controls are disabled');
+      return Promise.reject('no other invoke call is expected in this test');
     });
 
     const { showStartupError } = await import('./main');
     await showStartupError();
 
-    expect((document.querySelector('#text') as HTMLInputElement).disabled).toBe(true);
-    expect((document.querySelector('#parse') as HTMLButtonElement).disabled).toBe(true);
     expect(document.querySelector('.startup-error')?.textContent).toContain(
       'no dictionary index',
     );
   });
 
-  test('startup_error resolving to null leaves the controls enabled', async () => {
+  test('startup_error resolving to null renders nothing', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'startup_error') return Promise.resolve(null);
       if (cmd === 'get_settings') {
@@ -220,8 +218,7 @@ describe('main: a startup failure disables the parse controls', () => {
     const { showStartupError } = await import('./main');
     await showStartupError();
 
-    expect((document.querySelector('#text') as HTMLInputElement).disabled).toBe(false);
-    expect((document.querySelector('#parse') as HTMLButtonElement).disabled).toBe(false);
+    expect(document.querySelector('.startup-error')).toBeNull();
   });
 });
 
@@ -511,7 +508,7 @@ describe('the settings warning', () => {
     vi.resetModules();
   });
 
-  test('a non-null settings_warning renders into #parse-error and leaves #text/#parse enabled', async () => {
+  test('a non-null settings_warning renders into #parse-error and leaves #output alone', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'settings_warning') {
         return Promise.resolve('settings.json was corrupt; defaults were used');
@@ -528,11 +525,8 @@ describe('the settings warning', () => {
     expect(document.querySelector('#parse-error')?.textContent).toContain(
       'settings.json was corrupt',
     );
-    // The point of this assertion: a settings warning is cosmetic. It must
-    // never disable the controls the way a fatal `startup_error` correctly
-    // does, and it must never touch `output` (nothing was parsed).
-    expect((document.querySelector('#text') as HTMLInputElement).disabled).toBe(false);
-    expect((document.querySelector('#parse') as HTMLButtonElement).disabled).toBe(false);
+    // The point of this assertion: a settings warning is cosmetic. Unlike a
+    // fatal `startup_error` it must never touch `output` — nothing was parsed.
     expect(document.querySelector('#output')?.children).toHaveLength(0);
   });
 
@@ -590,10 +584,9 @@ describe('the first-run download screen', () => {
     expect(document.querySelector('#download')).toBeNull();
   });
 
-  test('ready clears the screen and re-enables the controls', () => {
+  test('ready clears the screen', () => {
     emit('dictionary-status', 'ready');
     expect(document.querySelector('#dictionary')?.childElementCount).toBe(0);
-    expect((document.querySelector('#text') as HTMLInputElement).disabled).toBe(false);
   });
 
   // A failure must leave a working Retry, or the user relaunches for a problem
@@ -659,5 +652,31 @@ describe('the first-run download screen', () => {
     await Promise.resolve();
 
     expect(downloadCalls).toBe(2);
+  });
+});
+
+// Phase 2H: the clipboard is the only user-facing input path. `#text` and
+// `#parse` were the two elements a user could type into or click to parse, so
+// their absence is what makes that claim true. Asserted on the rendered shell
+// rather than on the source, because the shell is what a user gets.
+describe('the input surface', () => {
+  beforeEach(async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+  });
+
+  test('renders no manual text input', () => {
+    expect(document.querySelector('#text')).toBeNull();
+    expect(document.querySelector('#parse')).toBeNull();
+    expect(document.querySelector('.input-row')).toBeNull();
   });
 });

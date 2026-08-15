@@ -22,17 +22,11 @@ app.innerHTML = `
     <button id="always-on-top" type="button" aria-pressed="false">Always on top</button>
     <button id="monitor" type="button" aria-pressed="true">Monitoring</button>
   </header>
-  <div class="input-row">
-    <input id="text" type="text" aria-label="Japanese text to parse" placeholder="Paste Japanese text" />
-    <button id="parse">Parse</button>
-  </div>
   <div id="parse-error"></div>
   <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
 `;
 
 const output = app.querySelector<HTMLElement>('#output')!;
-const input = app.querySelector<HTMLInputElement>('#text')!;
-const parseButton = app.querySelector<HTMLButtonElement>('#parse')!;
 const panes = app.querySelector<HTMLElement>('.panes')!;
 // A fixed slot rather than a node prepended into `output`: `output` is what a
 // successful parse replaces wholesale (and what Task 5 replaces with two
@@ -54,17 +48,16 @@ export async function showStartupError(): Promise<void> {
   const message = await invoke<string | null>('startup_error');
   if (message === null) return;
   // No index (the expected first run — 2E adds the download) and an
-  // unopenable index both mean `parse_text` cannot succeed. Disabling the
-  // controls here is what stops that failure from ever reaching the user as
-  // a raw Tauri "state not managed" string the moment they try to parse.
+  // unopenable index both mean `parse_text` cannot succeed. Clipboard
+  // monitoring keeps running regardless, and each failed parse now surfaces
+  // its own error into `#parse-error`; this message stays in `#output`
+  // explaining why nothing has appeared there yet.
   output.replaceChildren(errorBlock(message));
-  input.disabled = true;
-  parseButton.disabled = true;
 }
 
 // A corrupt settings.json is cosmetic, not fatal: the app already fell back
 // to defaults by the time this resolves, so — unlike `showStartupError`
-// above — this must never disable a control and must never touch `output`.
+// above — this must never touch `output`.
 // Exported for the same reason `showStartupError` is.
 export async function showSettingsWarning(): Promise<void> {
   const message = await invoke<string | null>('settings_warning');
@@ -109,8 +102,6 @@ function renderDictionary(status: string | null): void {
 
   if (status === 'ready') {
     dictionary.replaceChildren();
-    input.disabled = false;
-    parseButton.disabled = false;
     restoreFocus();
     return;
   }
@@ -178,10 +169,9 @@ function renderDictionary(status: string | null): void {
 // directly rather than racing the fire-and-forget call at the bottom.
 export async function showDictionaryScreen(): Promise<void> {
   if (!(await invoke<boolean>('needs_dictionary'))) return;
-  // Parsing cannot succeed until an index exists. Unlike `showStartupError`'s
-  // disabling, this is reversible — `ready` turns both back on.
-  input.disabled = true;
-  parseButton.disabled = true;
+  // Parsing cannot succeed until an index exists; `renderDictionary` shows the
+  // download/build screen in place of the panes until a `ready` event clears
+  // it.
   renderDictionary(null);
 }
 
@@ -714,19 +704,6 @@ void Promise.all([
     // first tick after launch can drop; nothing else in the app depends on
     // this call succeeding.
   });
-});
-
-async function run(): Promise<void> {
-  try {
-    await invoke('set_input', { text: input.value });
-  } catch (e) {
-    parseError.replaceChildren(errorBlock(String(e)));
-  }
-}
-
-parseButton.addEventListener('click', () => void run());
-input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') void run();
 });
 
 void showStartupError();
