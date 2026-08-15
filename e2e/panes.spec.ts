@@ -11,10 +11,11 @@ declare global {
   }
 }
 
-// The backend now pushes results as a `parse-result` event rather than
-// returning them from `invoke`; `#parse` still triggers `set_input` for real
-// (see stub.ts), but firing the fixture back in is on the test, standing in
-// for the backend's async worker.
+// The backend pushes results as a `parse-result` event rather than returning
+// them from `invoke`, so firing the fixture back in is on the test, standing in
+// for the backend's async worker. Phase 2H removed the manual input the specs
+// used to click; it never reached Rust here anyway, since Playwright runs
+// against the stub.
 async function emitFixtureResult(page: Page): Promise<void> {
   await page.evaluate(() => window.__TA_EMIT__('parse-result', window.__FIXTURE__));
 }
@@ -33,8 +34,6 @@ for (const size of SIZES) {
       await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
       await page.goto('/');
 
-      await page.fill('#text', '東京は');
-      await page.click('#parse');
       await emitFixtureResult(page);
 
       await expect(page.locator('.chip').first()).toBeVisible();
@@ -57,8 +56,6 @@ for (const size of SIZES) {
 test('a chip click marks its definition row', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
   await page.goto('/');
-  await page.fill('#text', '東京は');
-  await page.click('#parse');
   await emitFixtureResult(page);
 
   await page.click('.chip[data-start="2"]');
@@ -68,8 +65,6 @@ test('a chip click marks its definition row', async ({ page }) => {
 test('keyboard activation marks the same row a click does, on Enter and Space', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
   await page.goto('/');
-  await page.fill('#text', '東京は');
-  await page.click('#parse');
   await emitFixtureResult(page);
 
   await page.locator('.chip[data-start="2"]').focus();
@@ -86,8 +81,6 @@ test('keyboard activation marks the same row a click does, on Enter and Space', 
 test('an unmatched run is not in the tab order', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
   await page.goto('/');
-  await page.fill('#text', '東京は');
-  await page.click('#parse');
   await emitFixtureResult(page);
 
   expect(await page.locator('.unmatched').evaluate((el) => (el as HTMLElement).tabIndex)).toBe(-1);
@@ -221,14 +214,14 @@ for (const theme of THEMES) {
 test('a focused chip resolves a real outline, and a marked row is border-distinguishable', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
   await page.goto('/');
-  await page.fill('#text', '東京は');
-  await page.click('#parse');
   await emitFixtureResult(page);
 
-  // :focus-visible needs real keyboard traversal: a bare `.focus()` call
-  // does not flip Chromium's focus modality after the preceding mouse click
-  // on #parse (confirmed by hand while writing this fix — see the report).
-  await page.keyboard.press('Tab'); // #parse -> 東京
+  // :focus-visible needs real keyboard traversal, and this test asserts a
+  // ring the keyboard produces. There is no `#parse` to click into focus any
+  // more, so all four stops from a fresh load are walked by hand.
+  await page.keyboard.press('Tab'); // -> #always-on-top
+  await page.keyboard.press('Tab'); // -> #monitor
+  await page.keyboard.press('Tab'); // -> 東京
   await page.keyboard.press('Tab'); // 東京 -> は
   const chip = page.locator('.chip[data-start="2"]');
   const outlineStyle = await chip.evaluate((el) => getComputedStyle(el).outlineStyle);
@@ -260,12 +253,12 @@ for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
     await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
     await page.goto('/');
-    await page.fill('#text', '東京は');
-    await page.click('#parse');
     await emitFixtureResult(page);
 
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab'); // -> #always-on-top
+    await page.keyboard.press('Tab'); // -> #monitor
+    await page.keyboard.press('Tab'); // -> 東京
+    await page.keyboard.press('Tab'); // 東京 -> は
     await page.keyboard.press('Enter');
     await expect(page.locator('.def-row[data-start="2"]')).toHaveClass(/marked/);
 
