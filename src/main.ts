@@ -634,7 +634,8 @@ void listen<{ x: number; y: number; screen_x: number; screen_y: number }>(
       if (lastUnfocusedChip !== null) {
         lastUnfocusedChip = null;
         clearDwell();
-        closePopover();
+        keepArmed = true;
+        startKeepPoll();
       }
       return;
     }
