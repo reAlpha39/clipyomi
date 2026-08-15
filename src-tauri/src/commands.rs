@@ -91,70 +91,47 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
             extern "C" {
                 fn objc_msgSend(receiver: *mut c_void, sel: *const c_void, ...) -> *mut c_void;
                 fn sel_registerName(name: *const std::ffi::c_char) -> *const c_void;
-                fn objc_getClass(name: *const std::ffi::c_char) -> *mut c_void;
             }
             unsafe {
                 let sel_set_style_mask = sel_registerName(c"setStyleMask:".as_ptr());
-                let sel_content_view = sel_registerName(c"contentView".as_ptr());
-                let sel_make_first_responder = sel_registerName(c"makeFirstResponder:".as_ptr());
-                let sel_make_key = sel_registerName(c"makeKeyAndOrderFront:".as_ptr());
-                let sel_make_main = sel_registerName(c"makeMainWindow".as_ptr());
-                let sel_accepts_mouse_moved =
-                    sel_registerName(c"setAcceptsMouseMovedEvents:".as_ptr());
-                let sel_shared_app = sel_registerName(c"sharedApplication".as_ptr());
-                let sel_activate = sel_registerName(c"activateIgnoringOtherApps:".as_ptr());
+                let sel_set_title_visibility = sel_registerName(c"setTitleVisibility:".as_ptr());
+                let sel_standard_window_button =
+                    sel_registerName(c"standardWindowButton:".as_ptr());
+                let sel_set_hidden = sel_registerName(c"setHidden:".as_ptr());
+                let sel_set_titlebar_transparent =
+                    sel_registerName(c"setTitlebarAppearsTransparent:".as_ptr());
 
-                let mask: usize = if enabled {
-                    // NSWindowStyleMaskTitled (1) | NSWindowStyleMaskClosable (2) |
-                    // NSWindowStyleMaskMiniaturizable (4) | NSWindowStyleMaskResizable (8) |
-                    // NSWindowStyleMaskFullSizeContentView (32768)
-                    1 | 2 | 4 | 8 | 32768
-                } else {
-                    // NSWindowStyleMaskBorderless (0) | NSWindowStyleMaskResizable (8)
-                    8
-                };
+                // Maintain Titled + FullSizeContentView mask so WebKit retains key window status,
+                // first responder, and continuous mouse tracking (hover).
+                let mask: usize = 1 | 2 | 4 | 8 | 32768;
                 let set_mask_fn: unsafe extern "C" fn(*mut c_void, *const c_void, usize) =
                     std::mem::transmute(objc_msgSend as *const ());
                 set_mask_fn(ptr, sel_set_style_mask, mask);
 
-                let set_accepts_fn: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
+                // Set title visibility: 0 = Visible, 1 = Hidden
+                let title_visibility: isize = if enabled { 0 } else { 1 };
+                let set_title_vis_fn: unsafe extern "C" fn(*mut c_void, *const c_void, isize) =
                     std::mem::transmute(objc_msgSend as *const ());
-                set_accepts_fn(ptr, sel_accepts_mouse_moved, true);
+                set_title_vis_fn(ptr, sel_set_title_visibility, title_visibility);
 
-                let get_content_view_fn: unsafe extern "C" fn(
+                let set_transparent_fn: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                set_transparent_fn(ptr, sel_set_titlebar_transparent, !enabled);
+
+                // Hide or show standard window buttons:
+                // 0 = Close, 1 = Miniaturize, 2 = Zoom, 7 = FullScreen
+                let get_btn_fn: unsafe extern "C" fn(
                     *mut c_void,
                     *const c_void,
+                    usize,
                 ) -> *mut c_void = std::mem::transmute(objc_msgSend as *const ());
-                let content_view = get_content_view_fn(ptr, sel_content_view);
-
-                if !content_view.is_null() {
-                    let make_first_responder_fn: unsafe extern "C" fn(
-                        *mut c_void,
-                        *const c_void,
-                        *mut c_void,
-                    ) = std::mem::transmute(objc_msgSend as *const ());
-                    make_first_responder_fn(ptr, sel_make_first_responder, content_view);
-                }
-
-                let make_key_fn: unsafe extern "C" fn(*mut c_void, *const c_void, *mut c_void) =
+                let set_hidden_fn: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
                     std::mem::transmute(objc_msgSend as *const ());
-                make_key_fn(ptr, sel_make_key, std::ptr::null_mut());
 
-                let make_main_fn: unsafe extern "C" fn(*mut c_void, *const c_void) =
-                    std::mem::transmute(objc_msgSend as *const ());
-                make_main_fn(ptr, sel_make_main);
-
-                let ns_app_class = objc_getClass(c"NSApplication".as_ptr());
-                if !ns_app_class.is_null() {
-                    let get_app_fn: unsafe extern "C" fn(
-                        *mut c_void,
-                        *const c_void,
-                    ) -> *mut c_void = std::mem::transmute(objc_msgSend as *const ());
-                    let app = get_app_fn(ns_app_class, sel_shared_app);
-                    if !app.is_null() {
-                        let activate_fn: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
-                            std::mem::transmute(objc_msgSend as *const ());
-                        activate_fn(app, sel_activate, true);
+                for button_type in [0usize, 1, 2, 7] {
+                    let btn = get_btn_fn(ptr, sel_standard_window_button, button_type);
+                    if !btn.is_null() {
+                        set_hidden_fn(btn, sel_set_hidden, !enabled);
                     }
                 }
             }
@@ -175,7 +152,6 @@ pub fn set_decorations(
     window
         .set_decorations(enabled)
         .map_err(|e| e.to_string())?;
-    let _ = window.set_focus();
     settings
         .update(|s| s.decorations = enabled)
         .map_err(|e| e.to_string())
