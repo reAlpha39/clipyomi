@@ -3,7 +3,15 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { cursorPosition, getCurrentWindow, monitorFromPoint } from '@tauri-apps/api/window';
 import { renderSentence } from './render/sentence';
 import { renderDefinitions } from './render/definitions';
-import { MARGIN, placePopover, shouldKeep, type Point, type Rect } from './render/popover';
+import {
+  MARGIN,
+  centreOf,
+  contains,
+  placePopover,
+  shouldKeep,
+  type Point,
+  type Rect,
+} from './render/popover';
 import type { ParseResult, Segment } from './types';
 import './styles/global.css';
 
@@ -293,18 +301,38 @@ function clearDwell(): void {
 const KEEP_POLL_MS = 60;
 
 /**
- * Centre of the tooltip as last placed, in **physical** screen px — the same
+ * The tooltip's rectangle as last placed, in **physical** screen px — the same
  * unit `cursorPosition()` reports, and the only unit `shouldKeep`'s distance
  * comparison can be safely measured against. Every other coordinate in this
  * file is CSS px; this one field deliberately is not — mixing the two here
  * makes a cursor moving toward the tooltip measure as moving away on any
  * display above 1x. `null` when closed.
+ *
+ * The whole rect rather than just its centre because spec §3.3 has two rules,
+ * not one: a cursor *inside* the tooltip is reading it and must never be
+ * judged by direction of travel (reaching for the scrollbar at the right edge
+ * is almost always a move away from the centre), and a cursor that leaves the
+ * tooltip dismisses it. Neither is expressible from a centre point alone.
  */
-let tooltipCentre: Point | null = null;
+let tooltipRect: Rect | null = null;
 /** Previous cursor sample, so the keep rule has something to compare against. */
 let lastCursor: Point | null = null;
 /** The keep-rule poll, or `undefined` when the tooltip is closed. */
 let keepPoll: number | undefined;
+/**
+ * Whether the cursor has left the chip the open tooltip belongs to.
+ *
+ * Spec §3.3's first row is a conjunction — "cursor leaves the chip **and** the
+ * keep rule fails" — so the keep rule must not judge anything while the cursor
+ * is still on the word. ta-old holds the same shape: `KeepToolTip` is only a
+ * flag, and the word window consumes it on mouse-leave
+ * (`MyToolTip.cpp:333-360`), so its mouse hook never hides a tooltip whose word
+ * is still under the cursor. Set by the chip's `mouseout`, which also means a
+ * tooltip opened by FOCUS never arms the poll at all — there is no cursor
+ * gesture to judge, and unrelated mouse movement elsewhere on screen must not
+ * dismiss a tooltip the keyboard opened.
+ */
+let keepArmed = false;
 /** The chip awaiting a measurement, so the reply knows what to anchor to. */
 let pendingChip: HTMLElement | null = null;
 /**
@@ -327,7 +355,8 @@ function closePopover(): void {
     clearInterval(keepPoll);
     keepPoll = undefined;
   }
-  tooltipCentre = null;
+  keepArmed = false;
+  tooltipRect = null;
   lastCursor = null;
   pendingChip = null;
   if (wasActive) {
@@ -345,24 +374,44 @@ function closePopover(): void {
  * moments over NEITHER webview — in the gap between the word and the tooltip —
  * where no `mousemove` reaches either page. `cursorPosition()` reads the
  * global position, which is the only thing that works there.
+ *
+ * Called from two places — the chip's `mouseout` and the end of `placeFor` —
+ * because either can be last: the cursor can leave the word before the
+ * measurement round trip returns, or long after. Both guards below make the
+ * earlier of the two a no-op.
  */
 function startKeepPoll(): void {
-  if (keepPoll !== undefined) return;
+  // Not armed means the cursor is still on the word (or the tooltip was opened
+  // by focus and there is no cursor gesture to judge); no rect means nothing
+  // has been placed yet for this open.
+  if (!keepArmed || tooltipRect === null || keepPoll !== undefined) return;
   keepPoll = window.setInterval(() => {
-    if (tooltipCentre === null) return;
+    if (tooltipRect === null) return;
     void cursorPosition()
       .then((position) => {
         // A stale tick from a tooltip that closed while this read was in
         // flight must not resurrect `lastCursor` out from under whatever
         // opened next — checked first, before touching it.
-        if (tooltipCentre === null) return;
+        const rect = tooltipRect;
+        if (rect === null) return;
         const next = { x: position.x, y: position.y };
         const previous = lastCursor;
+        const wasInside = previous !== null && contains(rect, previous);
         lastCursor = next;
+        // Inside the tooltip: the user is reading or scrolling it, and no
+        // movement in there is a dismissal. Reaching for the scrollbar at the
+        // right edge is a move away from the centre, so judging this by
+        // direction of travel would close the tooltip mid-scroll.
+        if (contains(rect, next)) return;
+        // Spec §3.3, second row: "cursor leaves the tooltip itself".
+        if (wasInside) {
+          closePopover();
+          return;
+        }
         if (previous === null) return;
         // A resting cursor is not movement away, so it keeps the tooltip.
         if (previous.x === next.x && previous.y === next.y) return;
-        if (!shouldKeep(previous, next, tooltipCentre)) closePopover();
+        if (!shouldKeep(previous, next, centreOf(rect))) closePopover();
       })
       .catch(() => {
         // A dropped read costs this tick its comparison; the next one, 60ms
@@ -382,6 +431,11 @@ function openFor(chip: HTMLElement): void {
   // below) must still invalidate a `placeFor` already in flight for A, or
   // the two placements race and whichever resolves last wins the window.
   openId += 1;
+  // A fresh open owns its own arm state. On the mouse path this is already
+  // false (a `mouseout` cancels the dwell, so a completed dwell means the
+  // cursor never left), and the focus path must not inherit a `true` left by
+  // an earlier hover that never opened anything.
+  keepArmed = false;
   pendingChip = chip;
   // Fire-and-forget: a failed emit just leaves the tooltip unshown, no worse
   // than the user never having hovered at all.
@@ -424,11 +478,13 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
   // does, rather than being placed off-screen.
   const height = Math.min(size.height, work.bottom - work.top - 2 * MARGIN);
   const placed = placePopover(rect, { width: size.width, height }, work);
-  // Physical px, matching `cursorPosition()` — see `tooltipCentre`'s own
+  // Physical px, matching `cursorPosition()` — see `tooltipRect`'s own
   // declaration for why this one field isn't CSS px like everything above it.
-  tooltipCentre = {
-    x: (placed.left + size.width / 2) * scale,
-    y: (placed.top + height / 2) * scale,
+  tooltipRect = {
+    left: placed.left * scale,
+    top: placed.top * scale,
+    right: (placed.left + size.width) * scale,
+    bottom: (placed.top + height) * scale,
   };
   lastCursor = null;
   await invoke('place_popover', {
@@ -468,6 +524,13 @@ output.addEventListener('mouseout', (e) => {
   // keep rule — leaving the word *toward* the tooltip must not dismiss it,
   // which is the whole point of spec §3.2.
   clearDwell();
+  // And this is the other half of spec §3.3's first row: the keep rule only
+  // starts judging once the cursor has actually left the chip. Before that,
+  // every sample is a hand resting on the word, and any two-pixel drift away
+  // from the tooltip's centre would dismiss it — with no way to reopen, since
+  // `mouseover` does not re-fire inside the same element.
+  keepArmed = true;
+  startKeepPoll();
 });
 
 output.addEventListener('focusin', (e) => {

@@ -60,6 +60,18 @@ export function placePopover(
   return { left, top };
 }
 
+/** Whether POINT lies within RECT, edges included. Both must be in the same unit. */
+export function contains(rect: Rect, point: Point): boolean {
+  return (
+    point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
+  );
+}
+
+/** Centre of RECT, in whatever unit RECT is expressed in. */
+export function centreOf(rect: Rect): Point {
+  return { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 };
+}
+
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }

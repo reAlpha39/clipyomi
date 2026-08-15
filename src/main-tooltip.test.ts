@@ -267,14 +267,56 @@ describe('the tooltip round trip', () => {
     return el;
   }
 
+  /**
+   * Flush the awaits inside `placeFor`: the `outerPosition`/`scaleFactor`
+   * `Promise.all`, the `monitorFromPoint` read, and the `place_popover`
+   * invoke, plus the `.then` chaining between them.
+   */
+  async function flushPlacement(): Promise<void> {
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  }
+
+  /**
+   * Open and place the tooltip by HOVER, leaving the cursor on the chip.
+   *
+   * The mouse path, not the focus one: spec §3.3's keep rule only starts
+   * judging once the cursor has left the chip, so a focus-opened tooltip
+   * never arms the poll at all and could not exercise it.
+   */
+  async function openByHover(): Promise<void> {
+    chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    vi.advanceTimersByTime(350);
+    emit('popover-measured', { width: 200, height: 60 });
+    await flushPlacement();
+  }
+
+  /** The cursor has left the word — this is what arms the keep rule. */
+  function leaveChip(): void {
+    chip().dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+  }
+
+  /** Feed the keep poll one cursor sample, in physical px, and let its tick settle. */
+  async function sample(x: number, y: number): Promise<void> {
+    cursorPositionMock.mockResolvedValueOnce({ x, y });
+    vi.advanceTimersByTime(60);
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
   beforeEach(async () => {
     // Fake timers purely so `startKeepPoll`'s real `setInterval` (armed once
-    // `place_popover` resolves, below) can't keep firing with real timers in
+    // the cursor leaves the chip, below) can't keep firing with real timers in
     // the background after this test ends.
     vi.useFakeTimers();
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
     emitted.length = 0;
+    // These two are the only window stubs any test overrides; resetting them
+    // restores the implementation `vi.fn(impl)` was given AND drops any
+    // `…Once` value a test queued but never consumed, which would otherwise
+    // leak into whichever test ran next.
+    cursorPositionMock.mockReset();
+    scaleFactor.mockReset();
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
@@ -328,39 +370,84 @@ describe('the tooltip round trip', () => {
   // physical-px one give opposite keep/dismiss verdicts, which is the only
   // way to make the unit choice itself observable.
   //
-  // At scale 2 the tooltip lands at (8,8)/200x60 (see the sibling test), so
-  // its CSS-px centre is (108,38) and its correct physical-px centre is
-  // (216,76). The samples below move from (108,76) to (108,40): distance to
-  // the physical centre grows (108 -> ~113.8, a dismiss), while distance to
-  // the CSS centre shrinks (38 -> 2, a keep) — the two units disagree on the
-  // same movement.
+  // At scale 2 the tooltip lands at (8,8)/200x60 CSS px (see the sibling
+  // test), so its rect is (16,16)-(416,136) physical with centre (216,76),
+  // against (8,8)-(208,68) with centre (108,38) had it been left in CSS px.
+  // The samples below run along y=300 — outside BOTH rects, so neither
+  // version short-circuits on the inside-the-tooltip rule — and move LEFT,
+  // from x=162 to x=100. That crosses between the two candidate centres:
+  // distance to the physical centre grows (~230 -> ~252, a dismiss) while
+  // distance to the CSS one shrinks (~268 -> ~262, a keep). The two units
+  // disagree on the same movement, which is the only way to make the unit
+  // choice itself observable.
+  //
+  // Opened by hover rather than by focus since the whole-branch review's C1:
+  // the keep rule is gated on the cursor having left the chip, so a
+  // focus-opened tooltip never arms the poll. The comparison being asserted
+  // is unchanged.
   test('the keep poll compares against the physical-px centre, not a CSS-px one', async () => {
     scaleFactor.mockResolvedValueOnce(2);
-    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    emit('popover-measured', { width: 200, height: 60 });
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await openByHover();
+    leaveChip();
     invoke.mockClear();
 
     // First sample: no prior cursor position to compare against, so this
     // only sets the baseline — no verdict yet.
-    cursorPositionMock.mockResolvedValueOnce({ x: 108, y: 76 });
-    vi.advanceTimersByTime(60);
-    await Promise.resolve();
-    await Promise.resolve();
-
+    await sample(162, 300);
     // Second sample: the real comparison. Physical-px code dismisses; a
     // CSS-px regression would keep it instead.
-    cursorPositionMock.mockResolvedValueOnce({ x: 108, y: 40 });
-    vi.advanceTimersByTime(60);
-    await Promise.resolve();
-    await Promise.resolve();
+    await sample(100, 300);
 
     expect(invoke.mock.calls.map((c) => c[0])).toContain('hide_popover');
+  });
+
+  // Whole-branch review C1. At the default scale of 1 the tooltip's rect is
+  // (8,8)-(208,68) with centre (108,38). Reaching for the scrollbar at its
+  // right edge — (110,40) to (200,66), both inside, distance to the centre
+  // growing from ~3 to ~96 — is movement away by every measure the keep rule
+  // has, and dismissing there closes the tooltip mid-scroll. A cursor inside
+  // the tooltip is reading it, and is never judged.
+  test('a cursor inside the tooltip keeps it, even moving away from its centre', async () => {
+    await openByHover();
+    leaveChip();
+    invoke.mockClear();
+
+    await sample(110, 40);
+    await sample(200, 66);
+
+    expect(invoke.mock.calls.map((c) => c[0])).not.toContain('hide_popover');
+  });
+
+  // Spec §3.3's second row, which the shipped code could not express at all
+  // from a centre point. The move below LOWERS the distance to the centre
+  // (~99 -> ~78), so the direction-of-travel rule alone would keep it — only
+  // "was inside, now outside" dismisses here.
+  test('a cursor that was inside the tooltip and leaves it dismisses it', async () => {
+    await openByHover();
+    leaveChip();
+    invoke.mockClear();
+
+    await sample(12, 60); // inside, near the left edge
+    await sample(60, 100); // outside: below the rect's bottom of 68
+
+    expect(invoke.mock.calls.map((c) => c[0])).toContain('hide_popover');
+  });
+
+  // Spec §3.3's first row is a conjunction: "cursor leaves the chip AND the
+  // keep rule fails". Armed from `place_popover` instead, a two-pixel drift
+  // of a hand resting on the word dismissed the tooltip 60ms after it opened
+  // — and it could not be reopened without leaving and re-entering the chip,
+  // since `mouseover` does not re-fire inside the same element. The samples
+  // below move away from the centre, so they would dismiss if the poll were
+  // judging at all.
+  test('movement while the cursor is still on the chip dismisses nothing', async () => {
+    await openByHover();
+    invoke.mockClear();
+
+    await sample(108, 300);
+    await sample(108, 400);
+
+    expect(invoke.mock.calls.map((c) => c[0])).not.toContain('hide_popover');
   });
 
   // Task 6 review round 2, Important 1: during the round trip `pendingChip`
