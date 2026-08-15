@@ -94,6 +94,10 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
             }
             unsafe {
                 let sel_set_style_mask = sel_registerName(c"setStyleMask:".as_ptr());
+                let sel_content_view = sel_registerName(c"contentView".as_ptr());
+                let sel_make_first_responder = sel_registerName(c"makeFirstResponder:".as_ptr());
+                let sel_make_key = sel_registerName(c"makeKeyAndOrderFront:".as_ptr());
+
                 let mask: usize = if enabled {
                     // NSWindowStyleMaskTitled (1) | NSWindowStyleMaskClosable (2) |
                     // NSWindowStyleMaskMiniaturizable (4) | NSWindowStyleMaskResizable (8) |
@@ -106,6 +110,23 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
                 let set_mask_fn: unsafe extern "C" fn(*mut c_void, *const c_void, usize) =
                     std::mem::transmute(objc_msgSend as *const ());
                 set_mask_fn(ptr, sel_set_style_mask, mask);
+
+                let get_content_view_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let content_view = get_content_view_fn(ptr, sel_content_view);
+
+                if !content_view.is_null() {
+                    let make_first_responder_fn: unsafe extern "C" fn(
+                        *mut c_void,
+                        *const c_void,
+                        *mut c_void,
+                    ) = std::mem::transmute(objc_msgSend as *const ());
+                    make_first_responder_fn(ptr, sel_make_first_responder, content_view);
+                }
+
+                let make_key_fn: unsafe extern "C" fn(*mut c_void, *const c_void, *mut c_void) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                make_key_fn(ptr, sel_make_key, std::ptr::null_mut());
             }
             let _ = win.set_theme(win.theme().ok());
         })

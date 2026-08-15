@@ -571,6 +571,11 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
 output.addEventListener('mouseover', (e) => {
   const chip = chipFrom(e.target);
   if (chip === null) return;
+  const relatedChip = chipFrom(e.relatedTarget as EventTarget | null);
+  if (relatedChip === chip) return;
+
+  viewportOrigin = { x: e.screenX - e.clientX, y: e.screenY - e.clientY };
+
   // Re-armed per chip with no sticky swap: moving between chips hides the open
   // tooltip and starts a fresh dwell.
   closePopover();
@@ -578,7 +583,11 @@ output.addEventListener('mouseover', (e) => {
 });
 
 output.addEventListener('mouseout', (e) => {
-  if (chipFrom(e.target) === null) return;
+  const chip = chipFrom(e.target);
+  if (chip === null) return;
+  const relatedChip = chipFrom(e.relatedTarget as EventTarget | null);
+  if (relatedChip === chip) return;
+
   // Only the pending dwell is cancelled here. An OPEN tooltip is left to the
   // keep rule — leaving the word *toward* the tooltip must not dismiss it,
   // which is the whole point of spec §3.2.
