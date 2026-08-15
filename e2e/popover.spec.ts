@@ -84,9 +84,14 @@ test('scrolls rather than truncating when the content is tall', async ({ page })
   await page.evaluate((entries) => window.__TA_EMIT__('popover-content', entries), many);
 
   // 2G truncated here and offered no way to read the rest; spec §3.4 reverses
-  // that, and this is the assertion that fails if `overflow-y` regresses.
-  const scrollable = await page
-    .locator('#tooltip')
-    .evaluate((el) => el.scrollHeight > el.clientHeight);
-  expect(scrollable).toBe(true);
+  // that. `scrollHeight > clientHeight` only proves the content overflows the
+  // box — it is true under `overflow: hidden` too, so it can't tell truncation
+  // and scrolling apart on its own. The `overflow-y` check below is the one
+  // that actually distinguishes them, and is what fails if it regresses.
+  const tooltip = page.locator('#tooltip');
+  const overflows = await tooltip.evaluate((el) => el.scrollHeight > el.clientHeight);
+  expect(overflows).toBe(true);
+
+  const overflowY = await tooltip.evaluate((el) => getComputedStyle(el).overflowY);
+  expect(overflowY).toBe('auto');
 });
