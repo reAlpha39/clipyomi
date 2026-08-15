@@ -37,7 +37,8 @@ for (const size of SIZES) {
       await emitFixtureResult(page);
 
       await expect(page.locator('.chip').first()).toBeVisible();
-      await expect(page.locator('.def-row')).toHaveCount(2);
+      await expect(page.locator('.sentence')).toBeVisible();
+      await expect(page.locator('.def-row')).toHaveCount(0);
 
       // Screenshot baselines here were written and eyeballed on macOS (see the
       // task report). CI runs ubuntu-latest, where font rendering differs
@@ -52,31 +53,6 @@ for (const size of SIZES) {
     });
   }
 }
-
-test('a chip click marks its definition row', async ({ page }) => {
-  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
-  await page.goto('/');
-  await emitFixtureResult(page);
-
-  await page.click('.chip[data-start="2"]');
-  await expect(page.locator('.def-row[data-start="2"]')).toHaveClass(/marked/);
-});
-
-test('keyboard activation marks the same row a click does, on Enter and Space', async ({ page }) => {
-  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
-  await page.goto('/');
-  await emitFixtureResult(page);
-
-  await page.locator('.chip[data-start="2"]').focus();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('.def-row[data-start="2"]')).toHaveClass(/marked/);
-
-  await page.locator('.chip[data-start="0"]').focus();
-  await page.keyboard.press('Space');
-  await expect(page.locator('.def-row[data-start="0"]')).toHaveClass(/marked/);
-  // Only one row marked at a time.
-  await expect(page.locator('.def-row[data-start="2"]')).not.toHaveClass(/marked/);
-});
 
 test('an unmatched run is not in the tab order', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
@@ -207,11 +183,11 @@ for (const theme of THEMES) {
 
 // Runs everywhere, including CI (no `!process.env.CI` guard) — a screenshot
 // diff is skipped there, so this is what actually protects the focus ring
-// and the marked-row border from a silent CSS regression on that runner.
+// from a silent CSS regression on that runner.
 // Reads resolved styles via getComputedStyle rather than asserting on the
 // class name alone, which would still pass if the underlying CSS rule were
 // deleted.
-test('a focused chip resolves a real outline, and a marked row is border-distinguishable', async ({ page }) => {
+test('a focused chip resolves a real outline', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
   await page.goto('/');
   await emitFixtureResult(page);
@@ -228,27 +204,18 @@ test('a focused chip resolves a real outline, and a marked row is border-disting
   const outlineWidth = await chip.evaluate((el) => parseFloat(getComputedStyle(el).outlineWidth));
   expect(outlineStyle).not.toBe('none');
   expect(outlineWidth).toBeGreaterThan(0);
-
-  await page.keyboard.press('Enter');
-  const markedColor = await page
-    .locator('.def-row[data-start="2"]')
-    .evaluate((el) => getComputedStyle(el).borderLeftColor);
-  const unmarkedColor = await page
-    .locator('.def-row[data-start="0"]')
-    .evaluate((el) => getComputedStyle(el).borderLeftColor);
-  expect(markedColor).not.toBe(unmarkedColor);
 });
 
-// A committed baseline of the activated state, so the two cues above have a
+// A committed baseline of the activated state, so the cue above has a
 // visual proof that persists in the repo rather than living only in a
 // throwaway check. Compact size only, both themes: the cues are theme-
 // dependent (colour tokens) but not size-dependent (no size-specific CSS on
-// `outline`/`border-left`), so a second size would add baseline surface with
-// no extra coverage. One screenshot per theme captures both cues at once —
-// activating a chip with Enter leaves focus on it, so the ring and the
-// marked row's border are both visible in the same frame.
+// `outline`), so a second size would add baseline surface with
+// no extra coverage. One screenshot per theme captures the cue —
+// activating a chip with Enter leaves focus on it, so the ring is visible in
+// the same frame.
 for (const theme of THEMES) {
-  test(`activated chip and marked row render correctly in ${theme}`, async ({ page }) => {
+  test(`activated chip renders correctly in ${theme}`, async ({ page }) => {
     await page.setViewportSize({ width: 480, height: 320 });
     await page.emulateMedia({ colorScheme: theme });
     await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${STUB}`);
@@ -260,7 +227,7 @@ for (const theme of THEMES) {
     await page.keyboard.press('Tab'); // -> 東京
     await page.keyboard.press('Tab'); // 東京 -> は
     await page.keyboard.press('Enter');
-    await expect(page.locator('.def-row[data-start="2"]')).toHaveClass(/marked/);
+    await expect(page.locator('.chip[data-start="2"]')).toBeFocused();
 
     if (!process.env.CI) {
       await expect(page).toHaveScreenshot(`panes-activated-${theme}.png`);
