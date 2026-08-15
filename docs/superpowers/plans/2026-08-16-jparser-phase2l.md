@@ -298,7 +298,7 @@ git commit -m "feat(tauri): add background mouse tracker for unfocused window ho
 
 **Files:**
 - Modify: `src/main.ts:600-645`
-- Test: `src/main.test.ts`
+- Test: `src/main-tooltip.test.ts`
 
 **Interfaces:**
 - Consumes:
@@ -308,13 +308,128 @@ git commit -m "feat(tauri): add background mouse tracker for unfocused window ho
   - Unfocused hover activation of `openFor(chip)` with 350ms dwell timer.
   - Automatic dismissal when cursor leaves chip/window.
 
-- [ ] **Step 1: Write unit tests in `src/main.test.ts` for unfocused hover listeners**
+- [ ] **Step 1: Write unit tests in `src/main-tooltip.test.ts` for unfocused hover listeners**
 
-Add unit tests validating:
-1. `unfocused-mouse-move` over a `.chip` element arms the dwell timer and opens the popover after 350ms when `!document.hasFocus()`.
-2. `unfocused-mouse-move` over non-chip element cancels pending dwell timer and closes popover.
-3. `unfocused-mouse-leave` closes popover if cursor is outside `tooltipRect`.
-4. Listeners do nothing if `document.hasFocus()` is true.
+Add this test suite at the bottom of `src/main-tooltip.test.ts`:
+
+```typescript
+describe('unfocused background hover', () => {
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    invoke.mockResolvedValue(null);
+    innerPosition.mockResolvedValue({ x: 0, y: 0 });
+    outerPosition.mockResolvedValue({
+      x: 0,
+      y: 0,
+      toLogical: (_factor: number) => ({ x: 0, y: 0 }),
+    });
+    scaleFactor.mockResolvedValue(1);
+    availableMonitorsMock.mockResolvedValue([retina()]);
+    vi.resetModules();
+    await import('./main');
+
+    emit('parse-result', {
+      segments: [
+        {
+          start: 0,
+          len: 2,
+          surface: '東京',
+          reading: 'とうきょう',
+          matched: true,
+          entries: [
+            {
+              headword: '東京',
+              reading: 'とうきょう',
+              conjugation: null,
+              pos: ['n'],
+              senses: [{ pos: ['n'], glosses: ['Tokyo'], xrefs: [], misc: [], info: [] }],
+              flags: ['primary'],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('unfocused-mouse-move over a chip opens popover after 350ms dwell when window is unfocused', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    expect(chip).not.toBeNull();
+
+    // Stub elementFromPoint to return the chip for the event coordinates
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+
+    // Dwell has not completed yet
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(false);
+
+    // Advance dwell timer by 350ms
+    await vi.advanceTimersByTimeAsync(350);
+
+    // place_popover should have been called
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(true);
+  });
+
+  test('unfocused-mouse-move over non-chip area cancels pending dwell', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+
+    // Advance 200ms (mid-dwell)
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Move to non-chip element (e.g. background)
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(document.body);
+    emit('unfocused-mouse-move', { x: 10, y: 10, screen_x: 110, screen_y: 110 });
+
+    // Complete remaining dwell time
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(false);
+  });
+
+  test('unfocused-mouse-leave closes popover when cursor is outside tooltip rect', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+    await vi.advanceTimersByTimeAsync(350);
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(true);
+
+    invoke.mockClear();
+    // Cursor position far away on desktop
+    cursorPositionMock.mockResolvedValue({ x: 1000, y: 1000 });
+
+    emit('unfocused-mouse-leave', null);
+    await Promise.resolve();
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'hide_popover')).toBe(true);
+  });
+
+  test('unfocused-mouse-move is ignored when window has focus', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+    await vi.advanceTimersByTimeAsync(350);
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(false);
+  });
+});
+```
 
 - [ ] **Step 2: Update `src/main.ts` to add listeners**
 
