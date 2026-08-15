@@ -77,14 +77,18 @@ pub fn start(app: AppHandle) {
             unsafe {
                 let sel_mouse_location = sel_registerName(c"mouseLocation".as_ptr());
                 let sel_frame = sel_registerName(c"frame".as_ptr());
-                let sel_content_view = sel_registerName(c"contentView".as_ptr());
+                let sel_style_mask = sel_registerName(c"styleMask".as_ptr());
+                let sel_title_vis = sel_registerName(c"titleVisibility".as_ptr());
+                let sel_is_trans = sel_registerName(c"titlebarAppearsTransparent".as_ptr());
+                let sel_frame_rect_for_content = sel_registerName(c"frameRectForContentRect:styleMask:".as_ptr());
                 let sel_screens = sel_registerName(c"screens".as_ptr());
                 let sel_first_object = sel_registerName(c"firstObject".as_ptr());
 
+                let ns_window_class = objc_getClass(c"NSWindow".as_ptr());
                 let ns_event_class = objc_getClass(c"NSEvent".as_ptr());
                 let ns_screen_class = objc_getClass(c"NSScreen".as_ptr());
 
-                if ns_event_class.is_null() || ns_screen_class.is_null() {
+                if ns_window_class.is_null() || ns_event_class.is_null() || ns_screen_class.is_null() {
                     continue;
                 }
 
@@ -120,27 +124,36 @@ pub fn start(app: AppHandle) {
                     r
                 };
 
-                let content_view_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
+                let style_mask_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> usize =
                     std::mem::transmute(objc_msgSend as *const ());
-                let content_view = content_view_fn(ptr, sel_content_view);
-                if content_view.is_null() {
-                    continue;
-                }
+                let style_mask = style_mask_fn(ptr, sel_style_mask);
 
-                #[cfg(target_arch = "aarch64")]
-                let content_frame: NSRect = {
-                    let frame_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> NSRect =
-                        std::mem::transmute(objc_msgSend as *const ());
-                    frame_fn(content_view, sel_frame)
-                };
+                let title_vis_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> isize =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let title_visibility = title_vis_fn(ptr, sel_title_vis);
 
-                #[cfg(target_arch = "x86_64")]
-                let content_frame: NSRect = {
-                    let frame_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void) =
-                        std::mem::transmute(objc_msgSend as *const ());
-                    let mut r = NSRect::default();
-                    frame_fn(&mut r, content_view, sel_frame);
-                    r
+                let is_trans_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> bool =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let is_transparent = is_trans_fn(ptr, sel_is_trans);
+
+                let title_bar_height = if (style_mask & 1) != 0 && !(title_visibility == 1 && is_transparent) {
+                    #[cfg(target_arch = "aarch64")]
+                    {
+                        let frame_rect_fn: unsafe extern "C" fn(*mut c_void, *const c_void, NSRect, usize) -> NSRect =
+                            std::mem::transmute(objc_msgSend as *const ());
+                        let sample = frame_rect_fn(ns_window_class, sel_frame_rect_for_content, NSRect { x: 0.0, y: 0.0, width: 100.0, height: 100.0 }, 15);
+                        sample.height - 100.0
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        let frame_rect_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void, NSRect, usize) =
+                            std::mem::transmute(objc_msgSend as *const ());
+                        let mut sample = NSRect::default();
+                        frame_rect_fn(&mut sample, ns_window_class, sel_frame_rect_for_content, NSRect { x: 0.0, y: 0.0, width: 100.0, height: 100.0 }, 15);
+                        sample.height - 100.0
+                    }
+                } else {
+                    0.0
                 };
 
                 let screens_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
@@ -173,10 +186,10 @@ pub fn start(app: AppHandle) {
                     1080.0
                 };
 
-                let content_left = win_frame.x + content_frame.x;
-                let content_bottom = win_frame.y + content_frame.y;
-                let content_width = content_frame.width;
-                let content_height = content_frame.height;
+                let content_left = win_frame.x;
+                let content_bottom = win_frame.y;
+                let content_width = win_frame.width;
+                let content_height = win_frame.height - title_bar_height;
                 let content_top_cocoa = content_bottom + content_height;
 
                 let is_inside = mouse_loc.x >= content_left
@@ -373,17 +386,18 @@ mod tests {
     fn titled_window_coordinate_conversion() {
         let win_frame_x = 100.0f64;
         let win_frame_y = 500.0f64;
-        let content_frame_x = 0.0f64;
-        let content_frame_y = 0.0f64;
-        let content_width = 720.0f64;
-        let content_height = 480.0f64;
+        let win_frame_width = 720.0f64;
+        let win_frame_height = 512.0f64;
+        let title_bar_height = 32.0f64;
         let primary_screen_height = 1080.0f64;
 
-        let content_left = win_frame_x + content_frame_x;
-        let content_bottom = win_frame_y + content_frame_y;
+        let content_left = win_frame_x;
+        let content_bottom = win_frame_y;
+        let content_width = win_frame_width;
+        let content_height = win_frame_height - title_bar_height;
         let content_top_cocoa = content_bottom + content_height;
 
-        // Inside content view (top-left of content view)
+        // Inside content view (top-left of webview content view)
         let mouse_x = 100.0f64;
         let mouse_y = 980.0f64; // content_top_cocoa (500 + 480)
 
