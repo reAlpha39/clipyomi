@@ -2,7 +2,7 @@
 
 **ClipYomi** is a fast, lightweight Japanese reading companion and clipboard parsing HUD for visual novels, games, and immersion reading.
 
-It is a modern cross-platform (Rust + Tauri v2 + TypeScript) rewrite of the classic **JParser** engine from [Translation Aggregator](https://github.com/leiman/translation-aggregator). Unlike full translation suites, **ClipYomi contains zero machine translation**—it focuses exclusively on morphological text segmentation, conjugation deinflection, furigana readings, and instant dictionary lookups.
+It is a modern cross-platform (Rust + Tauri v2 + TypeScript) rewrite of the classic **JParser** engine from [Translation Aggregator](https://github.com/Translation-Aggregator/Translation-Aggregator). Unlike full translation suites, **ClipYomi contains zero machine translation**—it focuses exclusively on morphological text segmentation, conjugation deinflection, furigana readings, and instant dictionary lookups.
 
 ---
 
