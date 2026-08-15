@@ -89,7 +89,11 @@ pub fn set_decorations(
     window
         .set_decorations(enabled)
         .map_err(|e| e.to_string())?;
-    let _ = window.set_theme(window.theme().ok());
+    #[cfg(target_os = "macos")]
+    if enabled {
+        let _ = window.set_title_bar_style(tauri::TitleBarStyle::Visible);
+        let _ = window.set_theme(window.theme().ok());
+    }
     settings
         .update(|s| s.decorations = enabled)
         .map_err(|e| e.to_string())
