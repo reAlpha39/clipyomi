@@ -1,4 +1,4 @@
-# ClipYomi (クリップ読み)
+# ClipYomi
 
 **ClipYomi** is a fast, lightweight Japanese reading companion and clipboard parsing HUD for visual novels, games, and immersion reading.
 
