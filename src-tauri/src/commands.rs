@@ -89,6 +89,7 @@ pub fn set_decorations(
     window
         .set_decorations(enabled)
         .map_err(|e| e.to_string())?;
+    let _ = window.set_theme(window.theme().ok());
     settings
         .update(|s| s.decorations = enabled)
         .map_err(|e| e.to_string())
