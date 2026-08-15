@@ -21,7 +21,7 @@ tooltip did not work at the app's own minimum window size. 2H now follows 2I. Th
 
 - Delete `#text`, `#parse`, the `.input-row` wrapper, and their CSS
 - Delete `run()` and its two listeners
-- Delete the `set_input` command, its handler registration, and its two Rust tests
+- Keep the `set_input` command, and document why it now has no caller (§2.3)
 - Remove the `disabled` toggling from `showStartupError` and `renderDictionary`
 - Delete the ceremonial drive lines in `e2e/panes.spec.ts`
 - Regenerate all ten screenshot baselines
@@ -62,22 +62,31 @@ already renders into, and §3 below makes it carry more weight, not less.
 `.input-row` and `.input-row input` come out of `src/styles/global.css`. No other
 rule in that file references either.
 
-### 2.3 The command
+### 2.3 The command stays
 
 `commands::set_input` has exactly one production caller — the `invoke` inside
-`run()`. With `run()` gone the command is dead, so it goes too, along with its
-entry in `generate_handler!` and its two unit tests. Rust drops from 357 tests to
-355.
+`run()` — so removing `run()` leaves it with none. **It stays anyway**, and Rust
+is otherwise untouched by this phase: no change to `generate_handler!`, no deleted
+tests, and `parse.rs`'s comment about "two senders — the clipboard poll's and the
+`set_input` command's" stays accurate as written. Rust holds at 357 tests.
 
-`parse.rs`'s comment describing "two senders — the clipboard poll's and the
-`set_input` command's" is amended to name one. This is the only Rust change
-outside the deletion itself.
+The reason is testing. With the clipboard as the only user-facing input,
+exercising the app by hand means putting text on the system clipboard for every
+attempt. `set_input` is a programmatic way in — from the DevTools console, or from
+a harness — that costs nothing to keep and is genuinely awkward to reconstruct
+later.
 
-Deleting a command is a one-way door on the IPC surface: a later phase wanting
-programmatic text injection — an OCR feed, a plugin — brings it back. Accepted,
-because leaving a second producer into the parse channel preserves exactly the
-ambiguity this phase exists to remove, and an uncalled command with live tests is
-the worst of both.
+This does not weaken the phase's rationale. §6.3's "one source of truth for the
+current parse" is about the **user-facing** input path, and after this phase that
+is the clipboard alone. A command reachable only from a developer console or a
+test is not a second way for a user to enter text.
+
+**One addition is required, not optional.** The command must carry a doc comment
+saying it deliberately has no caller and why — that it is a test and debug entry
+point, kept on purpose. Without it the command is indistinguishable from dead
+code, and the next reader doing a cleanup sweep deletes it. That reading is not
+hypothetical: this spec's first draft proposed deleting it, on exactly that
+evidence.
 
 ## 3. The fatal state
 
@@ -140,8 +149,9 @@ blindly. 2G shipped a serif gloss that a committed baseline had ratified, and th
 phase regenerates every baseline at once — the single largest opportunity in the
 project's history to ratify a defect.
 
-**Rust:** 357 → 355, with no new tests. The two being deleted covered a command
-that no longer exists.
+**Rust:** unchanged at 357. This phase touches no Rust beyond the doc comment
+§2.3 requires, which is why the `set_input` tests stay green rather than
+disappearing with their command.
 
 ## 6. Documents amended
 
