@@ -28,10 +28,19 @@ pub fn start(app: AppHandle) {
         }
 
         #[repr(C)]
-        #[derive(Copy, Clone, Default)]
+        #[derive(Copy, Clone, Default, Debug, PartialEq)]
         struct NSPoint {
             x: f64,
             y: f64,
+        }
+
+        #[repr(C)]
+        #[derive(Copy, Clone, Default, Debug, PartialEq)]
+        struct NSRect {
+            x: f64,
+            y: f64,
+            width: f64,
+            height: f64,
         }
 
         let mut was_inside = false;
@@ -67,9 +76,15 @@ pub fn start(app: AppHandle) {
 
             unsafe {
                 let sel_mouse_location = sel_registerName(c"mouseLocation".as_ptr());
-                let ns_event_class = objc_getClass(c"NSEvent".as_ptr());
+                let sel_frame = sel_registerName(c"frame".as_ptr());
+                let sel_content_view = sel_registerName(c"contentView".as_ptr());
+                let sel_screens = sel_registerName(c"screens".as_ptr());
+                let sel_first_object = sel_registerName(c"firstObject".as_ptr());
 
-                if ns_event_class.is_null() {
+                let ns_event_class = objc_getClass(c"NSEvent".as_ptr());
+                let ns_screen_class = objc_getClass(c"NSScreen".as_ptr());
+
+                if ns_event_class.is_null() || ns_screen_class.is_null() {
                     continue;
                 }
 
@@ -89,30 +104,93 @@ pub fn start(app: AppHandle) {
                     pt
                 };
 
-                let Ok(inner_pos) = win.inner_position() else { continue; };
-                let Ok(inner_size) = win.inner_size() else { continue; };
-                let Ok(Some(primary_monitor)) = win.primary_monitor() else { continue; };
-                
-                let scale_factor = win.scale_factor().unwrap_or(1.0);
-                let logical_pos = inner_pos.to_logical::<f64>(scale_factor);
-                let logical_size = inner_size.to_logical::<f64>(scale_factor);
-                let primary_logical_size = primary_monitor.size().to_logical::<f64>(primary_monitor.scale_factor());
-                
-                let mouse_logical_x = mouse_loc.x;
-                let mouse_logical_y = primary_logical_size.height - mouse_loc.y;
+                #[cfg(target_arch = "aarch64")]
+                let win_frame: NSRect = {
+                    let frame_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> NSRect =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    frame_fn(ptr, sel_frame)
+                };
 
-                let is_inside = mouse_logical_x >= logical_pos.x
-                    && mouse_logical_x <= (logical_pos.x + logical_size.width)
-                    && mouse_logical_y >= logical_pos.y
-                    && mouse_logical_y <= (logical_pos.y + logical_size.height);
+                #[cfg(target_arch = "x86_64")]
+                let win_frame: NSRect = {
+                    let frame_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void) =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    let mut r = NSRect::default();
+                    frame_fn(&mut r, ptr, sel_frame);
+                    r
+                };
+
+                let content_view_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let content_view = content_view_fn(ptr, sel_content_view);
+                if content_view.is_null() {
+                    continue;
+                }
+
+                #[cfg(target_arch = "aarch64")]
+                let content_frame: NSRect = {
+                    let frame_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> NSRect =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    frame_fn(content_view, sel_frame)
+                };
+
+                #[cfg(target_arch = "x86_64")]
+                let content_frame: NSRect = {
+                    let frame_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void) =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    let mut r = NSRect::default();
+                    frame_fn(&mut r, content_view, sel_frame);
+                    r
+                };
+
+                let screens_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
+                    std::mem::transmute(objc_msgSend as *const ());
+                let screens = screens_fn(ns_screen_class, sel_screens);
+                let first_screen = if !screens.is_null() {
+                    let first_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    first_fn(screens, sel_first_object)
+                } else {
+                    std::ptr::null_mut()
+                };
+
+                let primary_screen_height = if !first_screen.is_null() {
+                    #[cfg(target_arch = "aarch64")]
+                    {
+                        let frame_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> NSRect =
+                            std::mem::transmute(objc_msgSend as *const ());
+                        frame_fn(first_screen, sel_frame).height
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        let frame_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void) =
+                            std::mem::transmute(objc_msgSend as *const ());
+                        let mut r = NSRect::default();
+                        frame_fn(&mut r, first_screen, sel_frame);
+                        r.height
+                    }
+                } else {
+                    1080.0
+                };
+
+                let content_left = win_frame.x + content_frame.x;
+                let content_bottom = win_frame.y + content_frame.y;
+                let content_width = content_frame.width;
+                let content_height = content_frame.height;
+                let content_top_cocoa = content_bottom + content_height;
+
+                let is_inside = mouse_loc.x >= content_left
+                    && mouse_loc.x <= (content_left + content_width)
+                    && mouse_loc.y >= content_bottom
+                    && mouse_loc.y <= content_top_cocoa;
 
                 if is_inside {
-                    if (mouse_logical_x - last_loc.0).abs() > 0.1 || (mouse_logical_y - last_loc.1).abs() > 0.1 {
-                        last_loc = (mouse_logical_x, mouse_logical_y);
-                        let client_x = mouse_logical_x - logical_pos.x;
-                        let client_y = mouse_logical_y - logical_pos.y;
-                        let screen_x = mouse_logical_x;
-                        let screen_y = mouse_logical_y;
+                    if (mouse_loc.x - last_loc.0).abs() > 0.1 || (mouse_loc.y - last_loc.1).abs() > 0.1 {
+                        last_loc = (mouse_loc.x, mouse_loc.y);
+                        let client_x = mouse_loc.x - content_left;
+                        let client_y = content_top_cocoa - mouse_loc.y;
+                        let screen_x = mouse_loc.x;
+                        let screen_y = primary_screen_height - mouse_loc.y;
 
                         let _ = win.emit(
                             "unfocused-mouse-move",
@@ -133,6 +211,7 @@ pub fn start(app: AppHandle) {
         }
     });
 }
+
 
 #[cfg(target_os = "windows")]
 pub fn start(app: AppHandle) {
@@ -289,4 +368,48 @@ mod tests {
         assert_eq!(screen_x, 100.0);
         assert_eq!(screen_y, 380.0);
     }
+
+    #[test]
+    fn titled_window_coordinate_conversion() {
+        let win_frame_x = 100.0f64;
+        let win_frame_y = 500.0f64;
+        let content_frame_x = 0.0f64;
+        let content_frame_y = 0.0f64;
+        let content_width = 720.0f64;
+        let content_height = 480.0f64;
+        let primary_screen_height = 1080.0f64;
+
+        let content_left = win_frame_x + content_frame_x;
+        let content_bottom = win_frame_y + content_frame_y;
+        let content_top_cocoa = content_bottom + content_height;
+
+        // Inside content view (top-left of content view)
+        let mouse_x = 100.0f64;
+        let mouse_y = 980.0f64; // content_top_cocoa (500 + 480)
+
+        let is_inside = mouse_x >= content_left
+            && mouse_x <= (content_left + content_width)
+            && mouse_y >= content_bottom
+            && mouse_y <= content_top_cocoa;
+        assert!(is_inside);
+
+        let client_x = mouse_x - content_left;
+        let client_y = content_top_cocoa - mouse_y;
+        let screen_x = mouse_x;
+        let screen_y = primary_screen_height - mouse_y;
+
+        assert_eq!(client_x, 0.0);
+        assert_eq!(client_y, 0.0);
+        assert_eq!(screen_x, 100.0);
+        assert_eq!(screen_y, 100.0);
+
+        // Point inside title bar (y = 1000 > content_top_cocoa = 980)
+        let mouse_in_title_y = 1000.0f64;
+        let is_title_inside = mouse_x >= content_left
+            && mouse_x <= (content_left + content_width)
+            && mouse_in_title_y >= content_bottom
+            && mouse_in_title_y <= content_top_cocoa;
+        assert!(!is_title_inside);
+    }
 }
+
