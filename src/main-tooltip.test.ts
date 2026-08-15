@@ -61,13 +61,26 @@ function retina(): MonitorStub {
 // regression to the wrong one must fail an assertion with a wrong number
 // rather than throw an opaque "No export is defined on the mock".
 const innerPosition = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
-const outerPosition = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
+const outerPosition = vi.fn(() =>
+  Promise.resolve({
+    x: 0,
+    y: 0,
+    toLogical: (_factor: number) => ({ x: 0, y: 0 }),
+  }),
+);
+const innerSize = vi.fn(() =>
+  Promise.resolve({
+    width: 800,
+    height: 600,
+    toLogical: (_factor: number) => ({ width: 800, height: 600 }),
+  }),
+);
 const scaleFactor = vi.fn(() => Promise.resolve(1));
 const cursorPositionMock = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
 const availableMonitorsMock = vi.fn((): Promise<MonitorStub[]> => Promise.resolve([]));
 
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ label: 'main', innerPosition, outerPosition, scaleFactor }),
+  getCurrentWindow: () => ({ label: 'main', innerPosition, outerPosition, innerSize, scaleFactor }),
   cursorPosition: () => cursorPositionMock(),
   availableMonitors: () => availableMonitorsMock(),
 }));
@@ -416,7 +429,11 @@ describe('the tooltip round trip', () => {
   // different answers: 130 from the client area, 102 from the frame.
   test('the chip rect is offset from the client area, not the window frame', async () => {
     innerPosition.mockResolvedValueOnce({ x: 100, y: 128 });
-    outerPosition.mockResolvedValueOnce({ x: 100, y: 100 });
+    outerPosition.mockResolvedValueOnce({
+      x: 100,
+      y: 100,
+      toLogical: (_factor: number) => ({ x: 100, y: 100 }),
+    });
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 // `main.ts` is the wired app entry, not a pure render function like
 // `sentence.ts` — exercising it means stubbing both IPC boundaries it uses:
@@ -36,6 +36,18 @@ vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     label: 'main',
     innerPosition: () => Promise.resolve({ x: 0, y: 0 }),
+    outerPosition: () =>
+      Promise.resolve({
+        x: 100,
+        y: 100,
+        toLogical: (factor: number) => ({ x: 100 / factor, y: 100 / factor }),
+      }),
+    innerSize: () =>
+      Promise.resolve({
+        width: 800,
+        height: 600,
+        toLogical: (factor: number) => ({ width: 800 / factor, height: 600 / factor }),
+      }),
     scaleFactor: () => Promise.resolve(1),
   }),
   cursorPosition: () => Promise.resolve({ x: 0, y: 0 }),
@@ -682,3 +694,94 @@ describe('the input surface', () => {
     expect(document.querySelector('.input-row')).toBeNull();
   });
 });
+
+describe('the decorations toggle', () => {
+  beforeEach(async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, decorations: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+  });
+
+  test('renders in the header with initial state from get_settings', () => {
+    const button = document.querySelector<HTMLButtonElement>('#decorations');
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('clicking toggles aria-pressed and invokes set_decorations with negated state', async () => {
+    const button = document.querySelector<HTMLButtonElement>('#decorations')!;
+    button.click();
+    await Promise.resolve();
+    expect(invoke).toHaveBeenCalledWith('set_decorations', { enabled: false });
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('the header drag region', () => {
+  beforeEach(async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, decorations: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+  });
+
+  test('header carries data-tauri-drag-region attribute', () => {
+    const header = document.querySelector<HTMLElement>('header.controls');
+    expect(header?.hasAttribute('data-tauri-drag-region')).toBe(true);
+  });
+});
+
+describe('window geometry save on resize/move', () => {
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, decorations: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('debounces save_window_geometry on move and resize events', async () => {
+    emit('tauri://resize', {});
+    emit('tauri://move', {});
+    expect(invoke).not.toHaveBeenCalledWith('save_window_geometry', expect.anything());
+
+    vi.advanceTimersByTime(300);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('save_window_geometry', {
+      width: 800,
+      height: 600,
+      x: 100,
+      y: 100,
+    });
+  });
+});
+

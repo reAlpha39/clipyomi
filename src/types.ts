@@ -41,3 +41,14 @@ export interface Segment {
 export interface ParseResult {
   segments: Segment[];
 }
+
+export interface Settings {
+  always_on_top: boolean;
+  clipboard_monitoring: boolean;
+  decorations: boolean;
+  window_width?: number;
+  window_height?: number;
+  window_x?: number;
+  window_y?: number;
+}
+

@@ -11,15 +11,16 @@ import {
   type Point,
   type Rect,
 } from './render/popover';
-import type { ParseResult, Segment } from './types';
+import type { ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 
 app.innerHTML = `
-  <header class="controls">
+  <header class="controls" data-tauri-drag-region>
     <button id="always-on-top" type="button" aria-pressed="false">Always on top</button>
     <button id="monitor" type="button" aria-pressed="true">Monitoring</button>
+    <button id="decorations" type="button" aria-pressed="true">Title bar</button>
   </header>
   <div id="parse-error"></div>
   <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
@@ -176,13 +177,9 @@ export async function showDictionaryScreen(): Promise<void> {
   renderDictionary(null);
 }
 
-interface Settings {
-  always_on_top: boolean;
-  clipboard_monitoring: boolean;
-}
-
 const alwaysOnTop = app.querySelector<HTMLButtonElement>('#always-on-top');
 const monitor = app.querySelector<HTMLButtonElement>('#monitor');
+const decorations = app.querySelector<HTMLButtonElement>('#decorations');
 
 // Populated with a button the instant it's clicked, before its request even
 // starts: `applySettings` below skips writing to a button that's in this
@@ -226,7 +223,10 @@ function bindToggle(
         // guessing from the shape of the error.
         try {
           const settings = await invoke<Settings>('get_settings');
-          button.setAttribute('aria-pressed', String(settings[settingsKey]));
+          const val = settings[settingsKey];
+          if (val !== undefined) {
+            button.setAttribute('aria-pressed', String(val));
+          }
         } catch {
           // Best-effort only: if even this fails, the button keeps its
           // optimistic (possibly wrong) value, but the error above is
@@ -242,14 +242,18 @@ function bindToggle(
 
 bindToggle(alwaysOnTop, 'set_always_on_top', 'always_on_top');
 bindToggle(monitor, 'set_clipboard_monitoring', 'clipboard_monitoring');
+bindToggle(decorations, 'set_decorations', 'decorations');
 
 async function applySettings(): Promise<void> {
   const settings = await invoke<Settings>('get_settings');
-  if (alwaysOnTop !== null && !touchedButtons.has(alwaysOnTop)) {
+  if (alwaysOnTop !== null && !touchedButtons.has(alwaysOnTop) && settings.always_on_top !== undefined) {
     alwaysOnTop.setAttribute('aria-pressed', String(settings.always_on_top));
   }
-  if (monitor !== null && !touchedButtons.has(monitor)) {
+  if (monitor !== null && !touchedButtons.has(monitor) && settings.clipboard_monitoring !== undefined) {
     monitor.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
+  }
+  if (decorations !== null && !touchedButtons.has(decorations) && settings.decorations !== undefined) {
+    decorations.setAttribute('aria-pressed', String(settings.decorations));
   }
 }
 
@@ -615,6 +619,28 @@ panes.addEventListener('scroll', closePopover);
 // emit — left unscoped, both listeners below register but are never invoked,
 // and the tooltip strands on the desktop the first time this window moves.
 const windowTarget = { kind: 'Window', label: getCurrentWindow().label } as const;
+
+let geometrySaveTimer: number | null = null;
+function scheduleGeometrySave(): void {
+  if (geometrySaveTimer !== null) window.clearTimeout(geometrySaveTimer);
+  geometrySaveTimer = window.setTimeout(async () => {
+    try {
+      const win = getCurrentWindow();
+      const size = await win.innerSize();
+      const pos = await win.outerPosition();
+      const factor = await win.scaleFactor();
+      const logicalSize = size.toLogical(factor);
+      const logicalPos = pos.toLogical(factor);
+      void invoke('save_window_geometry', {
+        width: Math.round(logicalSize.width),
+        height: Math.round(logicalSize.height),
+        x: Math.round(logicalPos.x),
+        y: Math.round(logicalPos.y),
+      });
+    } catch {}
+  }, 300);
+}
+
 /**
  * The window moved or resized, so the open tooltip's anchor is stale — and so
  * is the measured viewport origin, since dragging a title bar produces no
@@ -625,6 +651,7 @@ const windowTarget = { kind: 'Window', label: getCurrentWindow().label } as cons
 function invalidateGeometry(): void {
   viewportOrigin = null;
   closePopover();
+  scheduleGeometrySave();
 }
 
 void listen('tauri://move', invalidateGeometry, { target: windowTarget }).catch(() => {
