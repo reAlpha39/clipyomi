@@ -32,6 +32,14 @@ export const STUB = `
     handler({ event, id: 0, payload });
   };
   window.__TAURI_INTERNALS__ = {
+    // Task 6's \`main.ts\` calls \`getCurrentWindow()\` at module load (to scope
+    // the move/resize listeners to this window), and that reads
+    // \`metadata.currentWindow.label\` directly off this object rather than
+    // going through \`invoke\` — nothing else in this stub can supply it.
+    // 'main' matches both the vitest mocks (src/main.test.ts,
+    // src/main-tooltip.test.ts) and tauri.conf.json's unlabelled window,
+    // which Tauri defaults to "main".
+    metadata: { currentWindow: { label: 'main' } },
     transformCallback: (callback) => callback,
     invoke: async (cmd, args) => {
       if (cmd === 'startup_error') return null;
