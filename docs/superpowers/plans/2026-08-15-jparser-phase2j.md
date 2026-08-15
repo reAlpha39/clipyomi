@@ -63,7 +63,7 @@ Measured against the tree at `dbe7d61`.
 - Consumes: `renderSentence(result: ParseResult): HTMLElement`
 - Produces: A DOM where `#output.panes` holds only `.sentence`, with zero `.definitions` or `.def-row` nodes.
 
-- [ ] **Step 1: Write the failing / updated unit tests in `src/main.test.ts`**
+- [x] **Step 1: Write the failing / updated unit tests in `src/main.test.ts`**
 
 In `src/main.test.ts`:
 1. In the `parse-result handling` describe block (around line 80):
@@ -82,13 +82,13 @@ In `src/main.test.ts`:
 2. Remove the tests that specifically test row marking on chip clicks:
    Remove `a chip click marks its definition row` and `keyboard activation marks the same row a click does`.
 
-- [ ] **Step 2: Delete `definitions.ts` and `definitions.test.ts`**
+- [x] **Step 2: Delete `definitions.ts` and `definitions.test.ts`**
 
 Delete:
 - `src/render/definitions.ts`
 - `src/render/definitions.test.ts`
 
-- [ ] **Step 3: Update `src/main.ts`**
+- [x] **Step 3: Update `src/main.ts`**
 
 1. Remove:
    ```ts
@@ -103,7 +103,7 @@ Delete:
    output.replaceChildren(sentence);
    ```
 
-- [ ] **Step 4: Clean up CSS rules**
+- [x] **Step 4: Clean up CSS rules**
 
 1. In `src/styles/global.css`:
    - Line 42: Change `.sentence { margin-bottom: var(--space-pane); }` to `.sentence {}` or delete the `margin-bottom` property.
@@ -117,7 +117,7 @@ Delete:
      }
      ```
 
-- [ ] **Step 5: Run tests and typecheck**
+- [x] **Step 5: Run tests and typecheck**
 
 Run:
 ```bash
@@ -125,7 +125,7 @@ npm test && npx tsc --noEmit
 ```
 Verify all Vitest tests pass cleanly.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -u
@@ -144,7 +144,7 @@ git commit -m "feat: remove the definitions pane from the main window"
 - Consumes: Updated DOM layout from Task 1
 - Produces: Green Playwright suite and updated baseline screenshots.
 
-- [ ] **Step 1: Update `e2e/panes.spec.ts`**
+- [x] **Step 1: Update `e2e/panes.spec.ts`**
 
 1. In `test('panes render at ...')`:
    Replace:
@@ -162,7 +162,7 @@ git commit -m "feat: remove the definitions pane from the main window"
 3. In `test('dark theme matches data-theme override ...')` and `test('data-theme override takes precedence over system dark mode')`:
    Replace `.def-row` locator checks with `.chip` or `.panes` / `.sentence` checks.
 
-- [ ] **Step 2: Run Playwright tests and update snapshots**
+- [x] **Step 2: Run Playwright tests and update snapshots**
 
 Run:
 ```bash
@@ -170,7 +170,7 @@ npx playwright test -u
 ```
 Verify all Playwright tests pass and screenshots are regenerated.
 
-- [ ] **Step 3: Run the full gate**
+- [x] **Step 3: Run the full gate**
 
 Run:
 ```bash
@@ -178,7 +178,7 @@ npm test && npx tsc --noEmit && cargo test && cargo clippy --workspace --all-tar
 ```
 Verify all checks pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add e2e/
