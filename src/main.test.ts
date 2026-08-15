@@ -6,11 +6,17 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 // events) and `@tauri-apps/api/core` (`invoke`, still used directly for
 // `set_input` and `startup_error`).
 const listeners = new Map<string, (e: { payload: unknown }) => void>();
+/** Every `emit` the app made, as [event, payload] pairs. */
+const emitted: [string, unknown][] = [];
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: (event: string, handler: (e: { payload: unknown }) => void) => {
     listeners.set(event, handler);
     return Promise.resolve(() => listeners.delete(event));
+  },
+  emit: (event: string, payload: unknown) => {
+    emitted.push([event, payload]);
+    return Promise.resolve();
   },
 }));
 
@@ -27,6 +33,7 @@ describe('the event-driven render path', () => {
   beforeEach(async () => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     // `startup_error` and `settings_warning` resolve to null (nothing
     // startup-fatal, nothing settings-cosmetic to report), and `get_settings`
@@ -98,7 +105,7 @@ describe('the event-driven render path', () => {
   });
 });
 
-describe('the hover popover', () => {
+describe('the hover tooltip', () => {
   const SEGMENTS = {
     segments: [
       {
@@ -121,43 +128,27 @@ describe('the hover popover', () => {
     ],
   };
 
-  // Three separate chips (distinct `start`s), for the sweep test below: a
-  // single-chip fixture can't distinguish "re-armed per chip" from "just
-  // works because there's only one chip to hover".
-  const SWEEP_SEGMENTS = {
-    segments: [0, 2, 4].map((start) => ({
-      start,
-      len: 2,
-      surface: '東京',
-      reading: 'とうきょう',
-      matched: true,
-      entries: [
-        {
-          headword: '東京',
-          reading: 'とうきょう',
-          conjugation: null,
-          pos: ['n'],
-          senses: [{ pos: ['n'], glosses: ['Tokyo'], xrefs: [], misc: [], info: [] }],
-          flags: ['primary'],
-        },
-      ],
-    })),
-  };
-
   function chip(): HTMLButtonElement {
     const el = document.querySelector<HTMLButtonElement>('.chip');
     if (el === null) throw new Error('.chip missing');
     return el;
   }
 
-  function open(): Element | null {
-    return document.querySelector('.entry-popover.open');
+  /** Names of the commands invoked so far, in order. */
+  function calls(): string[] {
+    return invoke.mock.calls.map((c) => c[0] as string);
+  }
+
+  /** Names of the events emitted so far, in order. */
+  function events(): string[] {
+    return emitted.map((e) => e[0]);
   }
 
   beforeEach(async () => {
     vi.useFakeTimers();
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
@@ -174,31 +165,28 @@ describe('the hover popover', () => {
     vi.useRealTimers();
   });
 
-  // The dwell is what stops a popover firing for every chip the cursor sweeps
-  // across on its way somewhere else.
-  test('a completed dwell opens the popover', () => {
+  // The dwell is what stops the tooltip firing for every chip the cursor
+  // sweeps across on its way somewhere else.
+  test('a completed dwell sends the content', () => {
     chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    expect(open()).toBeNull();
+    expect(events()).not.toContain('popover-content');
     vi.advanceTimersByTime(350);
-    expect(open()?.textContent).toContain('Tokyo');
-    // Design §2: the entry is already in the definitions pane, so this surface
-    // must stay unannounced rather than read twice.
-    expect(open()?.getAttribute('aria-hidden')).toBe('true');
+    expect(emitted).toContainEqual(['popover-content', SEGMENTS.segments[0].entries]);
   });
 
-  test('a cursor that leaves before the dwell completes opens nothing', () => {
+  test('a cursor that leaves before the dwell completes sends nothing', () => {
     chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     vi.advanceTimersByTime(200);
     chip().dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
     vi.advanceTimersByTime(500);
-    expect(open()).toBeNull();
+    expect(events()).not.toContain('popover-content');
   });
 
   // Focus moves only on a deliberate keypress, so it has no sweeping problem
-  // for a dwell to solve — waiting 350 ms there would be delay with no purpose.
-  test('focus opens it immediately, with no timer', () => {
+  // for a dwell to solve.
+  test('focus sends the content immediately, with no timer', () => {
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    expect(open()).not.toBeNull();
+    expect(events()).toContain('popover-content');
   });
 
   // Escape must not move focus: the user is mid-sentence and would otherwise
@@ -209,42 +197,33 @@ describe('the hover popover', () => {
     target.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
-    expect(open()).toBeNull();
+    expect(calls()).toContain('hide_popover');
     expect(document.activeElement).toBe(target);
   });
 
-  // The guard with teeth: `show()` replaces `#output` wholesale, so a popover
-  // left open would be anchored to a chip that is no longer in the document.
+  // `show()` replaces `#output` wholesale, so a tooltip left open would be
+  // anchored to a chip that is no longer in the document.
   test('a new parse-result hides it', () => {
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    expect(open()).not.toBeNull();
-
+    invoke.mockClear();
     emit('parse-result', SEGMENTS);
-    expect(open()).toBeNull();
+    expect(calls()).toContain('hide_popover');
   });
 
-  // Design §3.1: "re-armed per chip, with no sticky swap" — the rule the
-  // dwell was introduced to enforce, and the one the existing single-chip
-  // "leaves before the dwell completes" test above cannot exercise, since
-  // there is nothing to re-arm against with only one chip in play. Each
-  // `mouseover` below is well inside the previous chip's 350ms dwell, so a
-  // sweep that fired one popover per chip touched — instead of re-arming and
-  // canceling — would leave one open at the end.
-  test('a sweep across several chips leaves nothing open, including from the last one it touched', () => {
-    emit('parse-result', SWEEP_SEGMENTS);
-    const chips = Array.from(document.querySelectorAll<HTMLButtonElement>('.chip'));
-    expect(chips).toHaveLength(3);
+  // New this phase: a separate window does not travel with its parent, so a
+  // moved main window would strand it on the desktop.
+  test('moving the main window hides it', () => {
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    invoke.mockClear();
+    emit('tauri://move', {});
+    expect(calls()).toContain('hide_popover');
+  });
 
-    for (const c of chips) {
-      c.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      vi.advanceTimersByTime(20);
-    }
-    // The cursor kept moving past the last chip too, not stopping on it.
-    chips[chips.length - 1].dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
-
-    // Past DWELL_MS for every chip touched, including the last.
-    vi.advanceTimersByTime(350);
-    expect(open()).toBeNull();
+  test('resizing the main window hides it', () => {
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    invoke.mockClear();
+    emit('tauri://resize', {});
+    expect(calls()).toContain('hide_popover');
   });
 });
 
@@ -260,6 +239,7 @@ describe('the frontend_ready call', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     vi.resetModules();
   });
@@ -294,6 +274,7 @@ describe('main: a startup failure disables the parse controls', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     vi.resetModules();
   });
@@ -351,6 +332,7 @@ describe('the header controls', () => {
   beforeEach(async () => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     // Deliberately the INVERSE of the markup's hardcoded aria-pressed
     // defaults ('false' on #always-on-top, 'true' on #monitor): if these
@@ -400,6 +382,7 @@ describe('overlapping toggle requests', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     vi.resetModules();
   });
@@ -626,6 +609,7 @@ describe('the settings warning', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     vi.resetModules();
   });
@@ -674,6 +658,7 @@ describe('the first-run download screen', () => {
   beforeEach(async () => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
+    emitted.length = 0;
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
