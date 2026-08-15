@@ -144,18 +144,38 @@ window level.
 ### 2.4 Screen coordinates
 
 The chip's `getBoundingClientRect()` is in the main webview's client space. Screen
-space needs the window's `innerPosition()` and `scaleFactor()`, both on
-`getCurrentWindow()`.
+space needs the viewport's own screen origin, and the window's `scaleFactor()`
+for the physical conversions.
 
-**`innerPosition()`, not `outerPosition()`.** This document said `outerPosition()`
-until first real use proved it wrong. `outerPosition()` is the top-left of the
-window *frame*; `innerPosition()` is the top-left of its *client area*, which is
-the origin `getBoundingClientRect()` measures from. On a decorated window — and
-the main window is decorated — the two differ by the title bar, so adding a
-client-space rect to the frame's corner places every tooltip a title bar too
-high: on top of the word it is anchored to, rather than below it. The two reads
-also need different capabilities, so picking the wrong one is denied at runtime
-rather than merely misplaced.
+**The viewport origin is measured from a mouse event, not read from the window.**
+This document named `outerPosition()` first and `innerPosition()` second, and
+both were wrong on macOS. `outerPosition()` is the window *frame*'s corner, which
+omits the title bar by construction. `innerPosition()` is documented as the
+*client area*'s corner — but measured in the running app it returned exactly the
+same value as `outerPosition()` (both `(56, 1038)` physical on a decorated
+window), so it omits the title bar too. Either way every tooltip is placed a
+title bar too high: "below the word" lands on top of the word, and "above the
+word" floats the same distance clear of it.
+
+A mouse event carries `clientX/Y` and `screenX/Y` in the same CSS px, so their
+difference *is* the viewport's screen origin — measured rather than asserted.
+Against a real hover that gave `(47, 588)` where `innerPosition()` gave
+`(47, 556)`: the missing 32px. `window.screenX/Y` is not an alternative, since
+WKWebView reports the screen's own origin there — `(0, 1169)` in the same run.
+
+The listener is document-wide so any movement over the app calibrates it,
+including for the keyboard path, which has no mouse event of its own. A window
+move drops the measurement: dragging a title bar produces no `mousemove` inside
+the webview to re-measure with, so placement falls back to `innerPosition()`
+until the mouse moves again — wrong by a title bar rather than by however far
+the window travelled.
+
+**What was ruled out first, so nobody re-litigates it.** The Rust side is not at
+fault: `place_popover` puts the window exactly where it is told, verified by
+reading the position back after `show()` — requested `(287, 437)` logical, landed
+`(574, 874)` physical. `set_size`, `set_position`, the Cocoa coordinate flip and
+both windows' scale factors were all confirmed correct before the frontend was
+suspected.
 
 **The monitor is found by containment, not by `monitorFromPoint`.** This document
 originally named `currentMonitor()`, and the implementation reached for
