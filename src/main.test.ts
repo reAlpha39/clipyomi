@@ -39,7 +39,7 @@ vi.mock('@tauri-apps/api/window', () => ({
     scaleFactor: () => Promise.resolve(1),
   }),
   cursorPosition: () => Promise.resolve({ x: 0, y: 0 }),
-  monitorFromPoint: () => Promise.resolve(null),
+  availableMonitors: () => Promise.resolve([]),
 }));
 
 function emit(event: string, payload: unknown): void {

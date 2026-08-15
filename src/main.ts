@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
-import { cursorPosition, getCurrentWindow, monitorFromPoint } from '@tauri-apps/api/window';
+import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import { renderSentence } from './render/sentence';
 import { renderDefinitions } from './render/definitions';
 import {
@@ -469,9 +469,34 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
 
   // The monitor under the WORD, not the app's own — a window straddling two
   // screens must clamp against the one the user is looking at.
-  const monitor = await monitorFromPoint(left * scale, top * scale);
+  //
+  // Found by containment rather than with `monitorFromPoint`, whose units are
+  // not the same on every platform: on macOS tao hands the point straight to
+  // `CGRectContainsPoint(CGDisplayBounds(..))`, which is logical points, while
+  // on Windows it goes to `MonitorFromPoint`, which is physical device pixels.
+  // Fed physical coordinates on a 2x display it therefore missed every screen
+  // for any word past roughly half the display's width and returned null — and
+  // this function returned silently, so the right-hand side of every sentence
+  // had no tooltip at all. `position` and `size` are physical everywhere, so
+  // testing the point against them has one answer on every platform.
+  const monitors = await availableMonitors();
   if (openId !== generation) return;
-  if (monitor === null) return;
+  const point = { x: left * scale, y: top * scale };
+  const monitor = monitors.find((m) =>
+    contains(
+      {
+        left: m.position.x,
+        top: m.position.y,
+        right: m.position.x + m.size.width,
+        bottom: m.position.y + m.size.height,
+      },
+      point,
+    ),
+  );
+  // Genuinely off every screen — a window dragged mostly past an edge. Placing
+  // against an arbitrary monitor would park the tooltip somewhere unrelated to
+  // the word, so nothing is shown.
+  if (monitor === undefined) return;
   const work: Rect = {
     left: monitor.workArea.position.x / scale,
     top: monitor.workArea.position.y / scale,

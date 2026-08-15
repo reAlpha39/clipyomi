@@ -155,7 +155,20 @@ the main window is decorated — the two differ by the title bar, so adding a
 client-space rect to the frame's corner places every tooltip a title bar too
 high: on top of the word it is anchored to, rather than below it. The two reads
 also need different capabilities, so picking the wrong one is denied at runtime
-rather than merely misplaced. The work area comes from `currentMonitor()`, whose `Monitor`
+rather than merely misplaced.
+
+**The monitor is found by containment, not by `monitorFromPoint`.** This document
+originally named `currentMonitor()`, and the implementation reached for
+`monitorFromPoint()` to get the screen under the *word* rather than under the
+app. That call's units are not the same on every platform: on macOS tao hands
+the point straight to `CGRectContainsPoint(CGDisplayBounds(…))`, which is
+logical points, while on Windows it goes to `MonitorFromPoint`, which is
+physical device pixels — and `Monitor.position`/`size` are physical on both.
+Fed physical coordinates on a 2× display it missed every screen for any word
+past roughly half the display's width and returned `null`, and placement
+returned silently, so the right-hand side of every sentence had no tooltip at
+all. `availableMonitors()` plus a containment test against each monitor's
+physical bounds has one answer on every platform. The work area comes from `currentMonitor()`, whose `Monitor`
 type carries `workArea` in `@tauri-apps/api` 2.11.1 — the direct equivalent of
 `GetMonitorInfo`'s `rcWork`, and the reason the tooltip must not clamp to the
 full monitor: it would sit under the dock or the taskbar.

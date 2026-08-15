@@ -30,9 +30,27 @@ vi.mock('@tauri-apps/api/event', () => ({
 const invoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
-/** Just the shape `placeFor` actually reads off a Tauri `Monitor`. */
+/**
+ * Just the shape `placeFor` actually reads off a Tauri `Monitor`.
+ *
+ * `position` and `size` are the monitor's own physical bounds, which is what
+ * `placeFor` tests the chip's point against to pick a screen; `workArea` is
+ * what it then clamps the tooltip into. All three are physical px on every
+ * platform.
+ */
 interface MonitorStub {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
   workArea: { position: { x: number; y: number }; size: { width: number; height: number } };
+}
+
+/** A 3024x1964 physical (1512x982 at 2x) display at the origin, dock included. */
+function retina(): MonitorStub {
+  return {
+    position: { x: 0, y: 0 },
+    size: { width: 3024, height: 1964 },
+    workArea: { position: { x: 0, y: 50 }, size: { width: 3024, height: 1864 } },
+  };
 }
 
 // Controllable stubs: this file is the only one that ever drives `placeFor`
@@ -46,14 +64,12 @@ const innerPosition = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
 const outerPosition = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
 const scaleFactor = vi.fn(() => Promise.resolve(1));
 const cursorPositionMock = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
-const monitorFromPointMock = vi.fn(
-  (_x: number, _y: number): Promise<MonitorStub | null> => Promise.resolve(null),
-);
+const availableMonitorsMock = vi.fn((): Promise<MonitorStub[]> => Promise.resolve([]));
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({ label: 'main', innerPosition, outerPosition, scaleFactor }),
   cursorPosition: () => cursorPositionMock(),
-  monitorFromPoint: (x: number, y: number) => monitorFromPointMock(x, y),
+  availableMonitors: () => availableMonitorsMock(),
 }));
 
 function emit(event: string, payload: unknown): void {
@@ -348,10 +364,15 @@ describe('the tooltip round trip', () => {
       return Promise.resolve(null);
     });
     // A 1000x800 CSS-px work area at the origin (2000x1600 physical, at the
-    // scale of 2 the tests below pin).
-    monitorFromPointMock.mockResolvedValue({
-      workArea: { position: { x: 0, y: 0 }, size: { width: 2000, height: 1600 } },
-    });
+    // scale of 2 the tests below pin), on a monitor large enough that every
+    // chip in these tests falls inside its bounds.
+    availableMonitorsMock.mockResolvedValue([
+      {
+        position: { x: 0, y: 0 },
+        size: { width: 2000, height: 1600 },
+        workArea: { position: { x: 0, y: 0 }, size: { width: 2000, height: 1600 } },
+      },
+    ]);
     vi.resetModules();
     await import('./main');
     emit('parse-result', SEGMENTS);
@@ -406,6 +427,52 @@ describe('the tooltip round trip', () => {
       width: 200,
       height: 60,
     });
+  });
+
+  // The monitor is picked by testing the chip's PHYSICAL point against each
+  // monitor's PHYSICAL bounds. That sounds obvious and wasn't: the call this
+  // replaced, `monitorFromPoint`, wants logical points on macOS (tao hands
+  // them straight to `CGRectContainsPoint(CGDisplayBounds(..))`) but physical
+  // ones on Windows (`MonitorFromPoint`), while `Monitor.position`/`size` are
+  // physical everywhere. Fed physical coordinates on a 2x display, it missed
+  // every screen for any word past roughly half the display's width and
+  // returned null, and `placeFor` returned silently — no tooltip at all on
+  // the right-hand side of the text.
+  //
+  // 1000 CSS px is 2000 physical, past the 1512-CSS-px midpoint of this
+  // 3024-physical-px display. Double it once more and it falls off the screen
+  // and this test goes red, which is the regression that matters.
+  test('a word on the right half of a 2x display still gets a monitor', async () => {
+    availableMonitorsMock.mockResolvedValueOnce([retina()]);
+    innerPosition.mockResolvedValueOnce({ x: 2000, y: 300 });
+    scaleFactor.mockResolvedValueOnce(2);
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    emit('popover-measured', { width: 200, height: 60 });
+    await flushPlacement();
+
+    // Work area 0..1512 x 25..957 in CSS px; the chip sits at (1000, 150) with
+    // happy-dom's zero-size rect, so below-the-chip placement lands at 152 and
+    // the left edge needs no clamping (1000 < 1512 - 200 - 8).
+    expect(invoke).toHaveBeenCalledWith('place_popover', {
+      x: 1000,
+      y: 152,
+      width: 200,
+      height: 60,
+    });
+  });
+
+  // The genuinely-off-screen case the null check exists for: a window dragged
+  // mostly past the right edge. Placing against an arbitrary monitor would
+  // park the tooltip somewhere unrelated to the word, so nothing is shown.
+  test('a chip outside every monitor places nothing', async () => {
+    availableMonitorsMock.mockResolvedValueOnce([retina()]);
+    innerPosition.mockResolvedValueOnce({ x: 4000, y: 300 });
+    scaleFactor.mockResolvedValueOnce(2);
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    emit('popover-measured', { width: 200, height: 60 });
+    await flushPlacement();
+
+    expect(invoke.mock.calls.map((c) => c[0])).not.toContain('place_popover');
   });
 
   // Task 6 review round 2, Important 3: this test's own assertion above is

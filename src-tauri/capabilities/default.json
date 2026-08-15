@@ -9,6 +9,6 @@
     "core:window:allow-inner-position",
     "core:window:allow-scale-factor",
     "core:window:allow-cursor-position",
-    "core:window:allow-monitor-from-point"
+    "core:window:allow-available-monitors"
   ]
 }
