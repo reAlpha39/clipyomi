@@ -80,23 +80,50 @@ pub fn set_always_on_top(
         .map_err(|e| e.to_string())
 }
 
+#[cfg(target_os = "macos")]
+pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<(), String> {
+    use std::ffi::c_void;
+    let ptr_addr = window.ns_window().map_err(|e| e.to_string())? as usize;
+    let win = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let ptr = ptr_addr as *mut c_void;
+            extern "C" {
+                fn objc_msgSend(receiver: *mut c_void, sel: *const c_void, ...) -> *mut c_void;
+                fn sel_registerName(name: *const std::ffi::c_char) -> *const c_void;
+            }
+            unsafe {
+                let sel_set_style_mask = sel_registerName(c"setStyleMask:".as_ptr());
+                let mask: usize = if enabled {
+                    // NSWindowStyleMaskTitled (1) | NSWindowStyleMaskClosable (2) |
+                    // NSWindowStyleMaskMiniaturizable (4) | NSWindowStyleMaskResizable (8) |
+                    // NSWindowStyleMaskFullSizeContentView (32768)
+                    1 | 2 | 4 | 8 | 32768
+                } else {
+                    // NSWindowStyleMaskBorderless (0) | NSWindowStyleMaskResizable (8)
+                    8
+                };
+                let set_mask_fn: unsafe extern "C" fn(*mut c_void, *const c_void, usize) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                set_mask_fn(ptr, sel_set_style_mask, mask);
+            }
+            let _ = win.set_theme(win.theme().ok());
+        })
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn set_decorations(
     enabled: bool,
     window: tauri::Window,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    apply_decorations_macos(&window, enabled)?;
+    #[cfg(not(target_os = "macos"))]
     window
         .set_decorations(enabled)
         .map_err(|e| e.to_string())?;
-    #[cfg(target_os = "macos")]
-    if enabled {
-        let win = window.clone();
-        let _ = window.run_on_main_thread(move || {
-            let _ = win.set_title_bar_style(tauri::TitleBarStyle::Visible);
-            let _ = win.set_theme(win.theme().ok());
-        });
-    }
     settings
         .update(|s| s.decorations = enabled)
         .map_err(|e| e.to_string())

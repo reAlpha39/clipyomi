@@ -48,6 +48,9 @@ fn main() {
                     let _ = main_window.set_always_on_top(true);
                 }
                 if !loaded.decorations {
+                    #[cfg(target_os = "macos")]
+                    let _ = commands::apply_decorations_macos(&main_window.as_ref().window(), false);
+                    #[cfg(not(target_os = "macos"))]
                     let _ = main_window.set_decorations(false);
                 }
                 if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
