@@ -174,9 +174,9 @@ The port design's full header (`[— ひ カ R]` · always-on-top · clipboard p
 ⚙) is Phase 3/4; 2E ships the two controls it has behaviour for and leaves the
 row's remaining space empty rather than stubbing dead affordances.
 
-The manual text input stays. Port design §1 is explicit that the app offers
-"clipboard auto-monitoring plus manual text entry" — the clipboard does not
-replace the box.
+The manual text input stays **for this phase only**. §6.3 below schedules its
+removal, and Phase 2H carried it out — the clipboard did replace the box. See
+`docs/superpowers/specs/2026-08-15-jparser-phase2h-design.md`.
 
 ### 6.1 Pane density is a known Phase 3 input
 
@@ -261,6 +261,18 @@ Known cost, so 2h is not mistaken for a deletion-only task:
 - All Playwright specs currently drive the app via `page.fill('#text')` +
   `page.click('#parse')`; every one must be rewritten to emit a `parse-result`
   event instead.
+  **Corrected when 2H landed:** they already emitted. Playwright runs against
+  the Vite dev server with `__TAURI_INTERNALS__` stubbed, so the `set_input`
+  that `#parse` triggered never reached Rust, and `emitFixtureResult` was
+  already what produced every render. But "ceremony" overstated it: two of the
+  six `fill`/`click` pairs — in `a focused chip resolves a real outline, and a
+  marked row is border-distinguishable` and in `activated chip and marked row
+  render correctly in {light,dark}` — also left keyboard focus parked on
+  `#parse`, and three tests counted their `Tab` presses from there. With
+  `#text`/`#parse` gone the first two tab stops are `#always-on-top` and
+  `#monitor`, so those three tests moved from two `Tab` presses to four.
+  Still: no spec was rewritten, none added, none deleted, and the count held
+  at 20.
 - `showStartupError` disables `#text`/`#parse` to stop a user parsing with no
   index. With both gone, the fatal state needs a different affordance.
 - `set_input` survives — the clipboard poll is still its caller — but `run()` and

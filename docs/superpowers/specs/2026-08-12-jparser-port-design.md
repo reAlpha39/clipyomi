@@ -16,7 +16,9 @@ word-by-word breakdown with readings, conjugations, and English definitions.
   index, prefix matcher with verb-conjugation recursion, dynamic-programming
   segmenter.
 - MeCab boundary hints (optional, as in ta-old).
-- Clipboard auto-monitoring plus manual text entry.
+- Clipboard auto-monitoring. (Manual text entry was removed in Phase 2H — see
+  `docs/superpowers/specs/2026-08-15-jparser-phase2h-design.md`. The clipboard is
+  the only user-facing input path.)
 - Segmented-sentence + definition-list UI with furigana modes.
 - Light/dark/system theming, always-on-top, per-pixel background transparency,
   three window-chrome states.

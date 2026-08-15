@@ -43,6 +43,14 @@ fn push_input(tx: &watch::Sender<String>, text: String) -> Result<(), String> {
 /// Fire-and-forget rather than request/response: the clipboard produces parses
 /// nobody asked for, so the webview renders from the event stream either way and
 /// a returned value here would be a second, redundant path.
+///
+/// **This command deliberately has no caller.** Phase 2H removed the manual
+/// text box, making the clipboard the only user-facing input path, and with it
+/// the one `invoke` that reached this. It is kept as a test and debug entry
+/// point: with clipboard-only input, exercising a parse by hand otherwise means
+/// putting text on the system clipboard for every attempt, and this can be
+/// driven from the DevTools console instead. Not dead code — do not remove it
+/// without replacing that affordance.
 #[tauri::command]
 pub fn set_input(text: String, input: State<'_, InputSender>) -> Result<(), String> {
     push_input(&input.0, text)
