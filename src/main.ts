@@ -301,6 +301,35 @@ function clearDwell(): void {
 const KEEP_POLL_MS = 60;
 
 /**
+ * Screen position of the webview viewport's top-left corner, in CSS px, or
+ * `null` before any mouse has moved over the app.
+ *
+ * This exists because `innerPosition()` does not deliver it. It is documented
+ * as the client area's corner, but on macOS it returns the window *frame*'s
+ * corner — measured in a running app it came back byte-identical to
+ * `outerPosition()`, so the title bar was missing from it and every tooltip
+ * was placed a title bar too high: "below the word" landed on top of the word,
+ * and "above the word" floated the same distance clear of it.
+ *
+ * A mouse event carries both viewport (`clientX/Y`) and screen (`screenX/Y`)
+ * coordinates in the same CSS px, so their difference is the origin — measured
+ * rather than assumed. `window.screenX/Y` is not an alternative: WKWebView
+ * reports it as the screen's own origin, not the viewport's.
+ */
+let viewportOrigin: Point | null = null;
+
+// Passive and document-wide so any movement over the app calibrates this, not
+// only movement that reaches a chip: the keyboard path has no mouse event of
+// its own and would otherwise never have an origin to use.
+document.addEventListener(
+  'mousemove',
+  (e) => {
+    viewportOrigin = { x: e.screenX - e.clientX, y: e.screenY - e.clientY };
+  },
+  { passive: true },
+);
+
+/**
  * The tooltip's rectangle as last placed, in **physical** screen px — the same
  * unit `cursorPosition()` reports, and the only unit `shouldKeep`'s distance
  * comparison can be safely measured against. Every other coordinate in this
@@ -463,8 +492,13 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
   const [origin, scale] = await Promise.all([current.innerPosition(), current.scaleFactor()]);
   if (openId !== generation || !chip.isConnected) return;
   const box = chip.getBoundingClientRect();
-  const left = origin.x / scale + box.left;
-  const top = origin.y / scale + box.top;
+  // The measured origin when there is one; `innerPosition` only as a fallback,
+  // and a knowingly wrong one — see `viewportOrigin`. It is reached before the
+  // mouse has ever entered the app, i.e. a session driven by Tab from the very
+  // first keystroke, where being a title bar out beats not opening at all.
+  const client = viewportOrigin ?? { x: origin.x / scale, y: origin.y / scale };
+  const left = client.x + box.left;
+  const top = client.y + box.top;
   const rect: Rect = { left, top, right: left + box.width, bottom: top + box.height };
 
   // The monitor under the WORD, not the app's own — a window straddling two
@@ -590,12 +624,24 @@ panes.addEventListener('scroll', closePopover);
 // emit — left unscoped, both listeners below register but are never invoked,
 // and the tooltip strands on the desktop the first time this window moves.
 const windowTarget = { kind: 'Window', label: getCurrentWindow().label } as const;
-void listen('tauri://move', closePopover, { target: windowTarget }).catch(() => {
+/**
+ * The window moved or resized, so the open tooltip's anchor is stale — and so
+ * is the measured viewport origin, since dragging a title bar produces no
+ * `mousemove` inside the webview to re-measure it. Dropping it falls placement
+ * back to `innerPosition` until the next mouse movement, which is wrong by a
+ * title bar rather than by however far the window travelled.
+ */
+function invalidateGeometry(): void {
+  viewportOrigin = null;
+  closePopover();
+}
+
+void listen('tauri://move', invalidateGeometry, { target: windowTarget }).catch(() => {
   // Unlike the parse/dictionary listeners below, losing this one doesn't
   // break parsing — the tooltip just stops following window moves, a step
   // back to the old DOM-popover behaviour rather than a functional failure.
 });
-void listen('tauri://resize', closePopover, { target: windowTarget }).catch(() => {
+void listen('tauri://resize', invalidateGeometry, { target: windowTarget }).catch(() => {
   // Same reasoning as the `move` listener above.
 });
 

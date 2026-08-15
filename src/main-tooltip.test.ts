@@ -429,6 +429,65 @@ describe('the tooltip round trip', () => {
     });
   });
 
+  /** A mouse event that puts the viewport's top-left at (0, 32) on screen. */
+  function calibrate(): void {
+    document.dispatchEvent(
+      new MouseEvent('mousemove', {
+        bubbles: true,
+        clientX: 10,
+        clientY: 20,
+        screenX: 10,
+        screenY: 52,
+      }),
+    );
+  }
+
+  // `innerPosition()` is documented as the client area's corner, but on macOS
+  // it returns the window FRAME's corner — measured in a running app it came
+  // back byte-identical to `outerPosition()`, so the title bar was missing from
+  // it and every tooltip landed a title bar too high, on top of the word rather
+  // than below it. A mouse event carries both viewport and screen coordinates
+  // in the same CSS px, so their difference is the origin.
+  //
+  // Here `innerPosition` reports (0,0) while the mouse says the viewport really
+  // starts at (0,32), so a chip at viewport y=0 with happy-dom's zero-height
+  // rect belongs at 32+2; anything trusting `innerPosition` clamps it to 8.
+  test('the viewport origin comes from the mouse, not from innerPosition', async () => {
+    calibrate();
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    emit('popover-measured', { width: 200, height: 60 });
+    await flushPlacement();
+
+    expect(invoke).toHaveBeenCalledWith('place_popover', {
+      x: 8,
+      y: 34,
+      width: 200,
+      height: 60,
+    });
+  });
+
+  // Dragging a title bar moves the window without producing a single
+  // `mousemove` inside the webview, so a measured origin outlives its own
+  // truth. Dropping it on move falls back to `innerPosition` — wrong by a title
+  // bar — rather than staying wrong by however far the window travelled.
+  test('a window move drops the measured origin', async () => {
+    calibrate();
+    emit('tauri://move', {});
+    invoke.mockClear();
+
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    emit('popover-measured', { width: 200, height: 60 });
+    await flushPlacement();
+
+    // Back to the `innerPosition` fallback of (0,0), so both axes clamp to MARGIN.
+    expect(invoke).toHaveBeenCalledWith('place_popover', {
+      x: 8,
+      y: 8,
+      width: 200,
+      height: 60,
+    });
+  });
+
   // The monitor is picked by testing the chip's PHYSICAL point against each
   // monitor's PHYSICAL bounds. That sounds obvious and wasn't: the call this
   // replaced, `monitorFromPoint`, wants logical points on macOS (tao hands
