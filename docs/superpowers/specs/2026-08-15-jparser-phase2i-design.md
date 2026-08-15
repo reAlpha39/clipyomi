@@ -144,8 +144,18 @@ window level.
 ### 2.4 Screen coordinates
 
 The chip's `getBoundingClientRect()` is in the main webview's client space. Screen
-space needs the window's `outerPosition()` and `scaleFactor()`, both on
-`getCurrentWindow()`. The work area comes from `currentMonitor()`, whose `Monitor`
+space needs the window's `innerPosition()` and `scaleFactor()`, both on
+`getCurrentWindow()`.
+
+**`innerPosition()`, not `outerPosition()`.** This document said `outerPosition()`
+until first real use proved it wrong. `outerPosition()` is the top-left of the
+window *frame*; `innerPosition()` is the top-left of its *client area*, which is
+the origin `getBoundingClientRect()` measures from. On a decorated window — and
+the main window is decorated — the two differ by the title bar, so adding a
+client-space rect to the frame's corner places every tooltip a title bar too
+high: on top of the word it is anchored to, rather than below it. The two reads
+also need different capabilities, so picking the wrong one is denied at runtime
+rather than merely misplaced. The work area comes from `currentMonitor()`, whose `Monitor`
 type carries `workArea` in `@tauri-apps/api` 2.11.1 — the direct equivalent of
 `GetMonitorInfo`'s `rcWork`, and the reason the tooltip must not clamp to the
 full monitor: it would sit under the dock or the taskbar.

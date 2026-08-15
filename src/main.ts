@@ -445,7 +445,7 @@ function openFor(chip: HTMLElement): void {
 /**
  * Convert the chip's client rect to screen coordinates and place the window.
  *
- * `outerPosition` and the monitor are physical pixels; everything the DOM
+ * `innerPosition` and the monitor are physical pixels; everything the DOM
  * reports is CSS pixels. Dividing by the scale factor before mixing them is
  * invisible on a 1x display and doubles every offset on a Retina one.
  */
@@ -455,7 +455,12 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
   // nothing can dismiss anymore, rather than racing it to the screen.
   const generation = openId;
   const current = getCurrentWindow();
-  const [origin, scale] = await Promise.all([current.outerPosition(), current.scaleFactor()]);
+  // `innerPosition`, NOT `outerPosition`: the rect below is measured from the
+  // top-left of the webview, and on a decorated window that is a title bar
+  // lower than the window frame's corner. Added to the frame's corner instead,
+  // every tooltip lands a title bar too high — squarely on top of the word it
+  // is anchored to, rather than below it.
+  const [origin, scale] = await Promise.all([current.innerPosition(), current.scaleFactor()]);
   if (openId !== generation || !chip.isConnected) return;
   const box = chip.getBoundingClientRect();
   const left = origin.x / scale + box.left;

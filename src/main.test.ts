@@ -35,7 +35,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     label: 'main',
-    outerPosition: () => Promise.resolve({ x: 0, y: 0 }),
+    innerPosition: () => Promise.resolve({ x: 0, y: 0 }),
     scaleFactor: () => Promise.resolve(1),
   }),
   cursorPosition: () => Promise.resolve({ x: 0, y: 0 }),

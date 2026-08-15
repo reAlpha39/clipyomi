@@ -38,6 +38,11 @@ interface MonitorStub {
 // Controllable stubs: this file is the only one that ever drives `placeFor`
 // or the keep poll, so every one of these gets exercised (unlike the trivial
 // stub `main.test.ts` keeps for its own, tooltip-free describes).
+// Both position reads are stubbed even though `placeFor` calls only one of
+// them. They differ by a title bar on a real decorated window, so a
+// regression to the wrong one must fail an assertion with a wrong number
+// rather than throw an opaque "No export is defined on the mock".
+const innerPosition = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
 const outerPosition = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
 const scaleFactor = vi.fn(() => Promise.resolve(1));
 const cursorPositionMock = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
@@ -46,7 +51,7 @@ const monitorFromPointMock = vi.fn(
 );
 
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ label: 'main', outerPosition, scaleFactor }),
+  getCurrentWindow: () => ({ label: 'main', innerPosition, outerPosition, scaleFactor }),
   cursorPosition: () => cursorPositionMock(),
   monitorFromPoint: (x: number, y: number) => monitorFromPointMock(x, y),
 }));
@@ -378,6 +383,29 @@ describe('the tooltip round trip', () => {
     // the window origin: below-the-chip placement (top=2) clamps to the
     // 8px margin on both axes, landing at (8,8).
     expect(invoke).toHaveBeenCalledWith('place_popover', { x: 8, y: 8, width: 200, height: 60 });
+  });
+
+  // The chip's rect is measured from the top-left of the WEBVIEW, which on a
+  // decorated window starts below the title bar. Added to `outerPosition` --
+  // the frame's corner -- every tooltip lands a title bar too high, which puts
+  // it on top of the word it is anchored to instead of below it. Only
+  // `innerPosition` shares an origin with `getBoundingClientRect()`.
+  //
+  // The stubs differ by 28px here, a macOS title bar, so the two origins give
+  // different answers: 130 from the client area, 102 from the frame.
+  test('the chip rect is offset from the client area, not the window frame', async () => {
+    innerPosition.mockResolvedValueOnce({ x: 100, y: 128 });
+    outerPosition.mockResolvedValueOnce({ x: 100, y: 100 });
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    emit('popover-measured', { width: 200, height: 60 });
+    await flushPlacement();
+
+    expect(invoke).toHaveBeenCalledWith('place_popover', {
+      x: 100,
+      y: 130,
+      width: 200,
+      height: 60,
+    });
   });
 
   // Task 6 review round 2, Important 3: this test's own assertion above is
