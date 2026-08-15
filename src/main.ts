@@ -2,7 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
 import { renderSentence } from './render/sentence';
-import { renderDefinitions } from './render/definitions';
 import {
   MARGIN,
   centreOf,
@@ -644,23 +643,9 @@ function show(result: ParseResult): void {
   lastResult = result;
 
   const sentence = renderSentence(result);
-  const definitions = renderDefinitions(result);
-
-  // Delegated to the pane, not per-chip: chips are re-created on every
-  // parse, but the sentence container itself is fresh each time too, so one
-  // listener per parse is exactly right — nothing to leak, nothing to
-  // rebind mid-life.
-  sentence.addEventListener('click', (e) => {
-    const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-start]');
-    if (chip === null) return;
-    const row = definitions.querySelector(`.def-row[data-start="${chip.dataset.start}"]`);
-    row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    definitions.querySelectorAll('.marked').forEach((n) => n.classList.remove('marked'));
-    row?.classList.add('marked');
-  });
 
   parseError.replaceChildren();
-  output.replaceChildren(sentence, definitions);
+  output.replaceChildren(sentence);
 }
 
 // `listen()`'s returned promise resolves only once its IPC round trip has

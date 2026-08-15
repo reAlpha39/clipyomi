@@ -23,3 +23,6 @@ src-tauri/gen/schemas/
 # Agent scratch
 .claude/worktrees/
 .superpowers/
+
+# Agents
+.agents/

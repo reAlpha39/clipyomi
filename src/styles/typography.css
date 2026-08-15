@@ -9,8 +9,3 @@
   font-size: var(--text-sentence);
   line-height: 1.7;
 }
-
-.definitions {
-  font-family: var(--font-ui);
-  font-size: var(--text-gloss);
-}

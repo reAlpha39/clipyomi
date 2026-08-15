@@ -86,7 +86,9 @@ describe('the event-driven render path', () => {
       ],
     });
     expect(document.querySelector('.chip')?.textContent).toBe('東京');
-    expect(document.querySelector('.def-row')).not.toBeNull();
+    expect(document.querySelector('.sentence')).not.toBeNull();
+    expect(document.querySelector('.definitions')).toBeNull();
+    expect(document.querySelector('.def-row')).toBeNull();
   });
 
   // Important 2 (final review): the clipboard poll's first tick waits on the
