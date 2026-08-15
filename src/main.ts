@@ -658,10 +658,15 @@ void listen('unfocused-mouse-leave', async () => {
       const pos = await cursorPosition();
       if (!contains(tooltipRect, pos)) {
         closePopover();
+      } else {
+        keepArmed = true;
+        startKeepPoll();
       }
     } catch {
       closePopover();
     }
+  } else {
+    closePopover();
   }
 });
 

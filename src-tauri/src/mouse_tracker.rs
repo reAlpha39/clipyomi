@@ -34,27 +34,17 @@ pub fn start(app: AppHandle) {
             y: f64,
         }
 
-        #[repr(C)]
-        #[derive(Copy, Clone, Default)]
-        struct NSSize {
-            width: f64,
-            height: f64,
-        }
-
-        #[repr(C)]
-        #[derive(Copy, Clone, Default)]
-        struct NSRect {
-            origin: NSPoint,
-            size: NSSize,
-        }
-
         let mut was_inside = false;
         let mut last_loc = (0.0f64, 0.0f64);
+        let mut win_opt = None;
 
         loop {
             std::thread::sleep(Duration::from_millis(35));
 
-            let Some(win) = app.get_webview_window("main") else {
+            if win_opt.is_none() {
+                win_opt = app.get_webview_window("main");
+            }
+            let Some(win) = &win_opt else {
                 continue;
             };
 
@@ -62,6 +52,7 @@ pub fn start(app: AppHandle) {
             if is_focused {
                 if was_inside {
                     was_inside = false;
+                    let _ = win.emit("unfocused-mouse-leave", ());
                 }
                 std::thread::sleep(Duration::from_millis(150));
                 continue;
@@ -76,13 +67,9 @@ pub fn start(app: AppHandle) {
 
             unsafe {
                 let sel_mouse_location = sel_registerName(c"mouseLocation".as_ptr());
-                let sel_frame = sel_registerName(c"frame".as_ptr());
-                let sel_screens = sel_registerName(c"screens".as_ptr());
-                let sel_first_object = sel_registerName(c"firstObject".as_ptr());
                 let ns_event_class = objc_getClass(c"NSEvent".as_ptr());
-                let ns_screen_class = objc_getClass(c"NSScreen".as_ptr());
 
-                if ns_event_class.is_null() || ns_screen_class.is_null() {
+                if ns_event_class.is_null() {
                     continue;
                 }
 
@@ -102,64 +89,30 @@ pub fn start(app: AppHandle) {
                     pt
                 };
 
-                #[cfg(target_arch = "aarch64")]
-                let win_frame: NSRect = {
-                    let frame_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> NSRect =
-                        std::mem::transmute(objc_msgSend as *const ());
-                    frame_fn(ptr, sel_frame)
-                };
+                let Ok(inner_pos) = win.inner_position() else { continue; };
+                let Ok(inner_size) = win.inner_size() else { continue; };
+                let Ok(Some(primary_monitor)) = win.primary_monitor() else { continue; };
+                
+                let scale_factor = win.scale_factor().unwrap_or(1.0);
+                let logical_pos = inner_pos.to_logical::<f64>(scale_factor);
+                let logical_size = inner_size.to_logical::<f64>(scale_factor);
+                let primary_logical_size = primary_monitor.size().to_logical::<f64>(primary_monitor.scale_factor());
+                
+                let mouse_logical_x = mouse_loc.x;
+                let mouse_logical_y = primary_logical_size.height - mouse_loc.y;
 
-                #[cfg(target_arch = "x86_64")]
-                let win_frame: NSRect = {
-                    let frame_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void) =
-                        std::mem::transmute(objc_msgSend as *const ());
-                    let mut r = NSRect::default();
-                    frame_fn(&mut r, ptr, sel_frame);
-                    r
-                };
-
-                let screens_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
-                    std::mem::transmute(objc_msgSend as *const ());
-                let screens = screens_fn(ns_screen_class, sel_screens);
-                let first_screen = if !screens.is_null() {
-                    let first_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut c_void =
-                        std::mem::transmute(objc_msgSend as *const ());
-                    first_fn(screens, sel_first_object)
-                } else {
-                    std::ptr::null_mut()
-                };
-
-                let primary_screen_height = if !first_screen.is_null() {
-                    #[cfg(target_arch = "aarch64")]
-                    {
-                        let frame_fn: unsafe extern "C" fn(*mut c_void, *const c_void) -> NSRect =
-                            std::mem::transmute(objc_msgSend as *const ());
-                        frame_fn(first_screen, sel_frame).size.height
-                    }
-                    #[cfg(target_arch = "x86_64")]
-                    {
-                        let frame_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void) =
-                            std::mem::transmute(objc_msgSend as *const ());
-                        let mut r = NSRect::default();
-                        frame_fn(&mut r, first_screen, sel_frame);
-                        r.size.height
-                    }
-                } else {
-                    1080.0
-                };
-
-                let is_inside = mouse_loc.x >= win_frame.origin.x
-                    && mouse_loc.x <= (win_frame.origin.x + win_frame.size.width)
-                    && mouse_loc.y >= win_frame.origin.y
-                    && mouse_loc.y <= (win_frame.origin.y + win_frame.size.height);
+                let is_inside = mouse_logical_x >= logical_pos.x
+                    && mouse_logical_x <= (logical_pos.x + logical_size.width)
+                    && mouse_logical_y >= logical_pos.y
+                    && mouse_logical_y <= (logical_pos.y + logical_size.height);
 
                 if is_inside {
-                    if (mouse_loc.x - last_loc.0).abs() > 0.1 || (mouse_loc.y - last_loc.1).abs() > 0.1 {
-                        last_loc = (mouse_loc.x, mouse_loc.y);
-                        let client_x = mouse_loc.x - win_frame.origin.x;
-                        let client_y = (win_frame.origin.y + win_frame.size.height) - mouse_loc.y;
-                        let screen_x = mouse_loc.x;
-                        let screen_y = primary_screen_height - mouse_loc.y;
+                    if (mouse_logical_x - last_loc.0).abs() > 0.1 || (mouse_logical_y - last_loc.1).abs() > 0.1 {
+                        last_loc = (mouse_logical_x, mouse_logical_y);
+                        let client_x = mouse_logical_x - logical_pos.x;
+                        let client_y = mouse_logical_y - logical_pos.y;
+                        let screen_x = mouse_logical_x;
+                        let screen_y = mouse_logical_y;
 
                         let _ = win.emit(
                             "unfocused-mouse-move",
@@ -202,17 +155,23 @@ pub fn start(app: AppHandle) {
     extern "system" {
         fn GetCursorPos(lpPoint: *mut POINT) -> i32;
         fn GetWindowRect(hWnd: isize, lpRect: *mut RECT) -> i32;
+        fn GetClientRect(hWnd: isize, lpRect: *mut RECT) -> i32;
+        fn ScreenToClient(hWnd: isize, lpPoint: *mut POINT) -> i32;
         fn GetDpiForWindow(hWnd: isize) -> u32;
     }
 
     std::thread::spawn(move || {
         let mut was_inside = false;
         let mut last_loc = (0i32, 0i32);
+        let mut win_opt = None;
 
         loop {
             std::thread::sleep(Duration::from_millis(35));
 
-            let Some(win) = app.get_webview_window("main") else {
+            if win_opt.is_none() {
+                win_opt = app.get_webview_window("main");
+            }
+            let Some(win) = &win_opt else {
                 continue;
             };
 
@@ -220,6 +179,7 @@ pub fn start(app: AppHandle) {
             if is_focused {
                 if was_inside {
                     was_inside = false;
+                    let _ = win.emit("unfocused-mouse-leave", ());
                 }
                 std::thread::sleep(Duration::from_millis(150));
                 continue;
@@ -236,12 +196,17 @@ pub fn start(app: AppHandle) {
                     continue;
                 }
 
-                let mut rect = RECT::default();
-                if GetWindowRect(hwnd_val, &mut rect) == 0 {
+                let mut pt_client = POINT { x: pt.x, y: pt.y };
+                if ScreenToClient(hwnd_val, &mut pt_client) == 0 {
                     continue;
                 }
 
-                let is_inside = pt.x >= rect.left && pt.x <= rect.right && pt.y >= rect.top && pt.y <= rect.bottom;
+                let mut client_rect = RECT::default();
+                if GetClientRect(hwnd_val, &mut client_rect) == 0 {
+                    continue;
+                }
+
+                let is_inside = pt_client.x >= client_rect.left && pt_client.x <= client_rect.right && pt_client.y >= client_rect.top && pt_client.y <= client_rect.bottom;
 
                 if is_inside {
                     if (pt.x - last_loc.0).abs() > 0 || (pt.y - last_loc.1).abs() > 0 {
@@ -249,8 +214,8 @@ pub fn start(app: AppHandle) {
                         let dpi = GetDpiForWindow(hwnd_val);
                         let scale = if dpi > 0 { dpi as f64 / 96.0 } else { 1.0 };
 
-                        let client_x = (pt.x - rect.left) as f64 / scale;
-                        let client_y = (pt.y - rect.top) as f64 / scale;
+                        let client_x = pt_client.x as f64 / scale;
+                        let client_y = pt_client.y as f64 / scale;
                         let screen_x = pt.x as f64 / scale;
                         let screen_y = pt.y as f64 / scale;
 
