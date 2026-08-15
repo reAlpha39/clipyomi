@@ -120,19 +120,23 @@ regenerate.
 ## 5. Testing
 
 **Vitest:** `src/main.test.ts` asserts on `#text`/`#parse` in five places across
-four tests, and two of those tests are *named* for the controls —
-`startup_error resolving to a message disables #text and #parse` and
-`a non-null settings_warning renders into #parse-error and leaves #text/#parse
-enabled`. Deleting the assertions alone would leave two tests whose titles
-describe behaviour that no longer exists.
+four tests. Every one of those four titles names the controls, as does the
+describe block holding two of them — so deleting the assertions alone would leave
+five titles describing behaviour that no longer exists.
 
-Both are rewritten around what survives, which is the part that always mattered:
-the startup error still renders its message into `#output`, and the settings
-warning still renders into `#parse-error`. The three remaining "control is
-enabled" assertions are deleted outright, since there is no control to be enabled.
-No test loses its purpose and no test disappears, so the Vitest count is expected
-to hold — the implementation confirms it rather than assuming it. The clipboard
-path's own coverage is untouched throughout.
+Each is retitled around what survives, which is the part that always mattered: the
+startup error still renders its message into `#output`, the settings warning still
+renders into `#parse-error`, and `dictionary-status: ready` still clears the
+screen. Four of the five assertions are deleted outright, since there is no
+control left to be enabled or disabled. The fifth is **replaced, not deleted** —
+`startup_error resolving to null` has no other assertion, so removing its two
+lines would leave a test that asserts nothing; it instead asserts that no
+`.startup-error` was rendered.
+
+One test is added, pinning the absence of `#text` and `#parse` in the rendered
+shell. That is the only guard on this phase's entire premise, so the Vitest count
+rises by exactly one, to 83. The clipboard path's own coverage is untouched
+throughout.
 
 **Playwright — and here 2E §6.3 overestimated the cost.** §6.3 warned that "all
 Playwright specs currently drive the app via `page.fill('#text')` +
@@ -140,9 +144,9 @@ Playwright specs currently drive the app via `page.fill('#text')` +
 instead." They already do. Playwright runs against the Vite dev server with
 `__TAURI_INTERNALS__` stubbed, so the `set_input` that `#parse` triggers never
 reaches Rust, and `emitFixtureResult` is what actually produces every render. The
-`fill`/`click` pair is ceremony. Six lines are deleted across `panes.spec.ts`;
-`popover.spec.ts` never touched the input. No spec is rewritten and no spec count
-changes.
+`fill`/`click` pair is ceremony. Twelve lines are deleted across `panes.spec.ts`
+— six pairs — and `popover.spec.ts` never touched the input. No spec is rewritten
+and no spec count changes.
 
 **Baselines:** all ten regenerate, and they are **looked at**, not accepted
 blindly. 2G shipped a serif gloss that a committed baseline had ratified, and this
