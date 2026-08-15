@@ -110,8 +110,9 @@ fn main() {
                     let _ = index_tx.send(Some(Arc::new(s)));
                 }
                 // The expected first run. Deliberately not a `StartupFailure`:
-                // that one disables the parse controls, and this state is
-                // fixable from inside the window.
+                // that one puts a fatal message in `#output` for the rest of
+                // the session, and this state is fixable from inside the
+                // window instead — the download screen handles it.
                 Err(e) if state::is_missing_dictionary(&e) => {
                     app.manage(state::StartupFailure(String::new()));
                     app.manage(state::NeedsDictionary(true));

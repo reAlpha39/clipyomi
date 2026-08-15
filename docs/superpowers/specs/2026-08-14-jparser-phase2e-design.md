@@ -261,7 +261,7 @@ Known cost, so 2h is not mistaken for a deletion-only task:
 - All Playwright specs currently drive the app via `page.fill('#text')` +
   `page.click('#parse')`; every one must be rewritten to emit a `parse-result`
   event instead.
-  **Corrected when 2H landed:** they already emitted. Playwright runs against
+  **Corrected when 2H landed:** they already did. Playwright runs against
   the Vite dev server with `__TAURI_INTERNALS__` stubbed, so the `set_input`
   that `#parse` triggered never reached Rust, and `emitFixtureResult` was
   already what produced every render. But "ceremony" overstated it: two of the

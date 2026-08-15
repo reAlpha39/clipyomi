@@ -48,10 +48,12 @@ export async function showStartupError(): Promise<void> {
   const message = await invoke<string | null>('startup_error');
   if (message === null) return;
   // No index (the expected first run — 2E adds the download) and an
-  // unopenable index both mean `parse_text` cannot succeed. Clipboard
-  // monitoring keeps running regardless, and each failed parse now surfaces
-  // its own error into `#parse-error`; this message stays in `#output`
-  // explaining why nothing has appeared there yet.
+  // unopenable index both mean the worker has no index to parse with.
+  // Clipboard monitoring keeps running regardless, but a copy made in this
+  // state produces nothing — the worker never reaches `jparser::parse`, so
+  // there is no `parse-result` and no `parse-error` either. This message
+  // stays in `#output` as the standing explanation for why nothing has
+  // appeared there yet.
   output.replaceChildren(errorBlock(message));
 }
 

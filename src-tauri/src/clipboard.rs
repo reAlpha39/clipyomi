@@ -126,8 +126,7 @@ pub async fn run_poll(
         // arrived, the webview's `listen()` calls never finished registering
         // either (the same handshake gates both — see `main.ts`), so
         // `parse-result`/`parse-error` cannot reach it regardless of what the
-        // poll does. The manual Parse button is equally dead in that state.
-        // Starting the loop here would reintroduce exactly the
+        // poll does. Starting the loop here would reintroduce exactly the
         // dropped-first-parse race this gate exists to close, for a webview
         // that by now is almost certainly never coming back — 30 seconds is
         // long past any realistic load time.

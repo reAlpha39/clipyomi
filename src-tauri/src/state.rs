@@ -55,9 +55,11 @@ pub struct NeedsDictionary(pub bool);
 
 /// A non-fatal warning from loading settings (e.g. a corrupt `settings.json`),
 /// kept separate from `StartupFailure` on purpose: `StartupFailure` being
-/// non-empty is treated by the webview as fatal — it disables the input box
-/// and the Parse button (see `src/main.ts`). A corrupt settings file must not
-/// do that; it only means the toggles reset to defaults, which is cosmetic.
+/// non-empty is treated by the webview as fatal — `showStartupError` writes it
+/// into `#output`, the pane a real parse result would otherwise occupy (see
+/// `src/main.ts`). A corrupt settings file must not do that; it only means the
+/// toggles reset to defaults, which is cosmetic, so `showSettingsWarning`
+/// renders it into `#parse-error` instead and never touches `#output`.
 /// Same empty-string-means-nothing sentinel as `StartupFailure`, for the same
 /// reason: `commands::settings_warning` needs `State<'_, SettingsWarning>` to
 /// always be there.
@@ -356,7 +358,8 @@ mod tests {
     }
 
     /// The first-run condition is fixable from inside the window, so it must
-    /// not take the fatal path that disables the parse controls.
+    /// not take the fatal path that puts a fatal message in `#output` for the
+    /// rest of the session.
     #[test]
     fn a_missing_index_is_the_first_run_condition_not_a_failure() {
         let err = StartupError::NoIndex {

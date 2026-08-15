@@ -49,10 +49,11 @@ tooltip did not work at the app's own minimum window size. 2H now follows 2I. Th
 `input` and `parseButton` element handles, the `run()` function, its `click`
 listener on the parse button, and its `keydown` listener for Enter.
 
-Four `disabled` assignments go with them: two in `showStartupError`, and the pair
-in `renderDictionary` that disable on the idle/failed branch and re-enable on
-`ready`. Nothing replaces them — after this phase there is no control whose
-availability depends on whether an index exists.
+Six `disabled` assignments go with them, three pairs: one in `showStartupError`,
+one in `renderDictionary` that re-enables on the `ready` branch, and one in
+`showDictionaryScreen` that disables while the download/build screen is up.
+Nothing replaces them — after this phase there is no control whose availability
+depends on whether an index exists.
 
 `#parse-error` stays exactly as it is. It is the slot the `parse-error` event
 already renders into, and §3 below makes it carry more weight, not less.
@@ -95,17 +96,20 @@ evidence.
 stops a user parsing with no index. With both controls gone, something has to
 decide what happens when the clipboard delivers text into a broken parser.
 
-**Monitoring keeps running, and each failed parse surfaces its own error.** The
-`parse-error` event already routes into `#parse-error`; a copy made with no usable
-index produces an error there, the same as any other parse failure. The startup
-message stays in `#output` explaining why.
+**Monitoring keeps running, but with no index the worker has nothing to parse
+with.** `run_worker` only reaches `jparser::parse` — and only there can a
+`parse-error` fire — once an index has been loaded; with none loaded, a copy made
+in this state is dropped before that point, silently. The startup message stays
+in `#output`, and because nothing can ever clear it, it remains the standing
+explanation for why nothing has appeared there.
 
-Two alternatives were rejected. Forcing monitoring off and locking the toggle
-would replace two disabled controls with one, but it invents a new locked state
-whose only purpose is to prevent an error the app already knows how to report.
-Leaving the error and doing nothing at all would let failures pass silently.
-Per-parse errors need no new state and no new control, and they tell the truth
-every time rather than once at startup.
+Two alternatives were rejected for the general case, where an index exists but a
+parse itself fails. Forcing monitoring off and locking the toggle would replace
+two disabled controls with one, but it invents a new locked state whose only
+purpose is to prevent an error the app already knows how to report. Leaving the
+error and doing nothing at all would let those failures pass silently. Per-parse
+errors need no new state and no new control, and they tell the truth every time
+rather than once at startup.
 
 ## 4. Layout
 
@@ -144,9 +148,15 @@ Playwright specs currently drive the app via `page.fill('#text')` +
 instead." They already do. Playwright runs against the Vite dev server with
 `__TAURI_INTERNALS__` stubbed, so the `set_input` that `#parse` triggers never
 reaches Rust, and `emitFixtureResult` is what actually produces every render. The
-`fill`/`click` pair is ceremony. Twelve lines are deleted across `panes.spec.ts`
-— six pairs — and `popover.spec.ts` never touched the input. No spec is rewritten
-and no spec count changes.
+`fill`/`click` pair is ceremony in four of the six cases. In the other two — "a
+focused chip resolves a real outline, and a marked row is border-distinguishable"
+and "activated chip and marked row render correctly in {light,dark}" — the pair
+also left keyboard focus parked on `#parse`, and three tests counted their `Tab`
+presses from there; with `#text`/`#parse` gone the first two tab stops are
+`#always-on-top` and `#monitor`, so those three tests move from two `Tab`
+presses to four. Twelve lines are deleted across `panes.spec.ts` — six pairs —
+and `popover.spec.ts` never touched the input. No spec is rewritten, none added,
+none deleted, and the count holds at 20.
 
 **Baselines:** all ten regenerate, and they are **looked at**, not accepted
 blindly. 2G shipped a serif gloss that a committed baseline had ratified, and this
