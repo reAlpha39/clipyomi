@@ -28,6 +28,16 @@ pub struct Settings {
     pub always_on_top: bool,
     #[serde(default = "default_true")]
     pub clipboard_monitoring: bool,
+    #[serde(default = "default_true")]
+    pub decorations: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_x: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_y: Option<i32>,
     /// Keys this version does not know about, carried through on rewrite so a
     /// file written by a later version is not truncated by this one.
     #[serde(flatten)]
@@ -39,10 +49,16 @@ impl Default for Settings {
         Self {
             always_on_top: false,
             clipboard_monitoring: true,
+            decorations: true,
+            window_width: None,
+            window_height: None,
+            window_x: None,
+            window_y: None,
             extra: serde_json::Map::new(),
         }
     }
 }
+
 
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
@@ -183,4 +199,34 @@ mod tests {
         let root = std::path::Path::new("/tmp/cfg");
         assert_eq!(settings_path(root), root.join("settings.json"));
     }
+
+    #[test]
+    fn default_decorations_is_true() {
+        let s = Settings::default();
+        assert!(s.decorations);
+        assert_eq!(s.window_width, None);
+        assert_eq!(s.window_height, None);
+        assert_eq!(s.window_x, None);
+        assert_eq!(s.window_y, None);
+    }
+
+    #[test]
+    fn geometry_round_trips_through_json() {
+        let json = r#"{
+            "always_on_top": true,
+            "clipboard_monitoring": false,
+            "decorations": false,
+            "window_width": 500,
+            "window_height": 120,
+            "window_x": 100,
+            "window_y": 200
+        }"#;
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert!(!s.decorations);
+        assert_eq!(s.window_width, Some(500));
+        assert_eq!(s.window_height, Some(120));
+        assert_eq!(s.window_x, Some(100));
+        assert_eq!(s.window_y, Some(200));
+    }
 }
+

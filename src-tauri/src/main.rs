@@ -41,13 +41,23 @@ fn main() {
                 eprintln!("{warning}");
             }
             app.manage(state::SettingsWarning(settings_warning.unwrap_or_default()));
-            if loaded.always_on_top {
-                if let Some(window) = app.get_webview_window("main") {
+            if let Some(main_window) = app.get_webview_window("main") {
+                if loaded.always_on_top {
                     // Not fatal: the window exists, it just is not pinned, and
                     // the toggle can retry.
-                    let _ = window.set_always_on_top(true);
+                    let _ = main_window.set_always_on_top(true);
+                }
+                if !loaded.decorations {
+                    let _ = main_window.set_decorations(false);
+                }
+                if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
+                    let _ = main_window.set_size(tauri::LogicalSize::new(w, h));
+                }
+                if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
+                    let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
                 }
             }
+
             // Managed as `Arc<SettingsState>`, not bare `SettingsState`: the
             // poll below needs its own `Arc` clone to hold across `.await`
             // points, and managing the bare type while giving the poll a
@@ -133,6 +143,8 @@ fn main() {
             commands::set_input,
             commands::set_clipboard_monitoring,
             commands::set_always_on_top,
+            commands::set_decorations,
+            commands::save_window_geometry,
             commands::get_settings,
             commands::startup_error,
             commands::settings_warning,
@@ -142,6 +154,7 @@ fn main() {
             popover::place_popover,
             popover::hide_popover
         ])
+
         // If the runtime cannot start, there is no window to report anything
         // in, so the alternative to this `expect` is a silent exit.
         .run(tauri::generate_context!())

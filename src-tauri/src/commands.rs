@@ -81,6 +81,39 @@ pub fn set_always_on_top(
 }
 
 #[tauri::command]
+pub fn set_decorations(
+    enabled: bool,
+    window: tauri::Window,
+    settings: State<'_, Arc<SettingsState>>,
+) -> Result<(), String> {
+    window
+        .set_decorations(enabled)
+        .map_err(|e| e.to_string())?;
+    settings
+        .update(|s| s.decorations = enabled)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_window_geometry(
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    settings: State<'_, Arc<SettingsState>>,
+) -> Result<(), String> {
+    settings
+        .update(|s| {
+            s.window_width = Some(width);
+            s.window_height = Some(height);
+            s.window_x = Some(x);
+            s.window_y = Some(y);
+        })
+        .map_err(|e| e.to_string())
+}
+
+
+#[tauri::command]
 pub fn get_settings(settings: State<'_, Arc<SettingsState>>) -> Settings {
     settings.snapshot()
 }
@@ -328,6 +361,7 @@ pub async fn download_dictionary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::Manager;
 
     /// `set_input` is a thin push into the watch channel; the part worth testing
     /// is that the newest value is what a reader sees.
@@ -442,4 +476,31 @@ mod tests {
         assert!(full.contains("Retry"), "got {full}");
         assert!(full.contains(jmdict_source::SOURCE_FILE), "got {full}");
     }
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("ta-commands-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    #[test]
+    fn save_window_geometry_updates_settings_state() {
+        let dir = scratch("save-geometry");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings::default(),
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
+        save_window_geometry(600, 200, 50, 80, state_arg).unwrap();
+        let s = state.snapshot();
+        assert_eq!(s.window_width, Some(600));
+        assert_eq!(s.window_height, Some(200));
+        assert_eq!(s.window_x, Some(50));
+        assert_eq!(s.window_y, Some(80));
+    }
 }
+
+
