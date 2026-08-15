@@ -47,12 +47,18 @@ export const STUB = `
       // needs an answer, and null is the "nothing to report" case Task 6
       // itself defines for this command.
       if (cmd === 'settings_warning') return null;
-      // Fixed, deliberately unpressed/pressed pair rather than mirroring
+      // Fixed, deliberately unpressed/pressed values rather than mirroring
       // some other stubbed state: it gives the visual baselines a stable,
-      // non-default-looking pair (one pressed, one not) without depending on
+      // non-default-looking set of buttons without depending on
       // a toggle actually round-tripping through this stub.
-      if (cmd === 'get_settings') return { always_on_top: false, clipboard_monitoring: true };
-      if (cmd === 'set_always_on_top' || cmd === 'set_clipboard_monitoring') return undefined;
+      if (cmd === 'get_settings') return { always_on_top: false, clipboard_monitoring: true, decorations: true };
+      if (
+        cmd === 'set_always_on_top' ||
+        cmd === 'set_clipboard_monitoring' ||
+        cmd === 'set_decorations' ||
+        cmd === 'save_window_geometry'
+      )
+        return undefined;
       // Every existing spec exercises the parse path, so the stub's default
       // answer is "a dictionary already exists" — Task 5's own spec overrides
       // this to true for the one test that needs the download screen instead.

@@ -79,6 +79,16 @@ test('activating a toggle keeps keyboard focus', async ({ page }) => {
   await expect(monitor).toBeFocused();
 });
 
+test('activating decorations toggle keeps keyboard focus', async ({ page }) => {
+  await page.addInitScript(STUB);
+  await page.goto('/');
+
+  const decorations = page.locator('#decorations');
+  await decorations.focus();
+  await page.keyboard.press('Enter');
+  await expect(decorations).toBeFocused();
+});
+
 // STUB's default `needs_dictionary` answer is `false` so every other spec in
 // this file keeps exercising the parse path; the tests below need the
 // opposite, so the override lives here rather than reshaping STUB itself.
@@ -194,9 +204,10 @@ test('a focused chip resolves a real outline', async ({ page }) => {
 
   // :focus-visible needs real keyboard traversal, and this test asserts a
   // ring the keyboard produces. There is no `#parse` to click into focus any
-  // more, so all four stops from a fresh load are walked by hand.
+  // more, so all five stops from a fresh load are walked by hand.
   await page.keyboard.press('Tab'); // -> #always-on-top
   await page.keyboard.press('Tab'); // -> #monitor
+  await page.keyboard.press('Tab'); // -> #decorations
   await page.keyboard.press('Tab'); // -> 東京
   await page.keyboard.press('Tab'); // 東京 -> は
   const chip = page.locator('.chip[data-start="2"]');
@@ -224,6 +235,7 @@ for (const theme of THEMES) {
 
     await page.keyboard.press('Tab'); // -> #always-on-top
     await page.keyboard.press('Tab'); // -> #monitor
+    await page.keyboard.press('Tab'); // -> #decorations
     await page.keyboard.press('Tab'); // -> 東京
     await page.keyboard.press('Tab'); // 東京 -> は
     await page.keyboard.press('Enter');
