@@ -272,7 +272,100 @@ pub fn start(app: AppHandle) {
     });
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn start(app: AppHandle) {
+    #[repr(C)]
+    #[derive(Copy, Clone, Default)]
+    struct POINT {
+        x: i32,
+        y: i32,
+    }
+
+    #[repr(C)]
+    #[derive(Copy, Clone, Default)]
+    struct RECT {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    extern "system" {
+        fn GetCursorPos(lpPoint: *mut POINT) -> i32;
+        fn GetWindowRect(hWnd: isize, lpRect: *mut RECT) -> i32;
+        fn GetDpiForWindow(hWnd: isize) -> u32;
+    }
+
+    std::thread::spawn(move || {
+        let mut was_inside = false;
+        let mut last_loc = (0i32, 0i32);
+
+        loop {
+            std::thread::sleep(Duration::from_millis(35));
+
+            let Some(win) = app.get_webview_window("main") else {
+                continue;
+            };
+
+            let is_focused = win.is_focused().unwrap_or(false);
+            if is_focused {
+                if was_inside {
+                    was_inside = false;
+                }
+                std::thread::sleep(Duration::from_millis(150));
+                continue;
+            }
+
+            let Ok(hwnd) = win.hwnd() else {
+                continue;
+            };
+            let hwnd_val = hwnd.0;
+
+            unsafe {
+                let mut pt = POINT::default();
+                if GetCursorPos(&mut pt) == 0 {
+                    continue;
+                }
+
+                let mut rect = RECT::default();
+                if GetWindowRect(hwnd_val, &mut rect) == 0 {
+                    continue;
+                }
+
+                let is_inside = pt.x >= rect.left && pt.x <= rect.right && pt.y >= rect.top && pt.y <= rect.bottom;
+
+                if is_inside {
+                    if (pt.x - last_loc.0).abs() > 0 || (pt.y - last_loc.1).abs() > 0 {
+                        last_loc = (pt.x, pt.y);
+                        let dpi = GetDpiForWindow(hwnd_val);
+                        let scale = if dpi > 0 { dpi as f64 / 96.0 } else { 1.0 };
+
+                        let client_x = (pt.x - rect.left) as f64 / scale;
+                        let client_y = (pt.y - rect.top) as f64 / scale;
+                        let screen_x = pt.x as f64 / scale;
+                        let screen_y = pt.y as f64 / scale;
+
+                        let _ = win.emit(
+                            "unfocused-mouse-move",
+                            MouseMovePayload {
+                                x: client_x,
+                                y: client_y,
+                                screen_x,
+                                screen_y,
+                            },
+                        );
+                    }
+                    was_inside = true;
+                } else if was_inside {
+                    was_inside = false;
+                    let _ = win.emit("unfocused-mouse-leave", ());
+                }
+            }
+        }
+    });
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn start(_app: AppHandle) {}
 ```
 
