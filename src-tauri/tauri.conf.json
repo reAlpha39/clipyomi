@@ -15,8 +15,8 @@
         "title": "Translation Aggregator",
         "width": 720,
         "height": 480,
-        "minWidth": 480,
-        "minHeight": 320,
+        "minWidth": 160,
+        "minHeight": 80,
         "resizable": true
       }
     ],
