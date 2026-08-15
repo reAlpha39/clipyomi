@@ -3,7 +3,7 @@ import { emit, listen } from '@tauri-apps/api/event';
 import { cursorPosition, getCurrentWindow, monitorFromPoint } from '@tauri-apps/api/window';
 import { renderSentence } from './render/sentence';
 import { renderDefinitions } from './render/definitions';
-import { placePopover, shouldKeep, type Point, type Rect } from './render/popover';
+import { MARGIN, placePopover, shouldKeep, type Point, type Rect } from './render/popover';
 import type { ParseResult, Segment } from './types';
 import './styles/global.css';
 
@@ -292,7 +292,14 @@ function clearDwell(): void {
 /** How often the keep rule samples the cursor while the tooltip is open, in ms. */
 const KEEP_POLL_MS = 60;
 
-/** Centre of the tooltip as last placed, in screen px, or `null` when closed. */
+/**
+ * Centre of the tooltip as last placed, in **physical** screen px — the same
+ * unit `cursorPosition()` reports, and the only unit `shouldKeep`'s distance
+ * comparison can be safely measured against. Every other coordinate in this
+ * file is CSS px; this one field deliberately is not — mixing the two here
+ * makes a cursor moving toward the tooltip measure as moving away on any
+ * display above 1x. `null` when closed.
+ */
 let tooltipCentre: Point | null = null;
 /** Previous cursor sample, so the keep rule has something to compare against. */
 let lastCursor: Point | null = null;
@@ -300,9 +307,22 @@ let lastCursor: Point | null = null;
 let keepPoll: number | undefined;
 /** The chip awaiting a measurement, so the reply knows what to anchor to. */
 let pendingChip: HTMLElement | null = null;
+/**
+ * Bumped every time `closePopover` runs. `placeFor` captures this at the
+ * start of its round trip and re-checks it after every await: a dismissal
+ * that lands mid-flight (Escape, a scroll, a fresh parse, the next chip's own
+ * dwell) must stop that flight from showing a tooltip nothing can dismiss
+ * anymore, rather than racing it to the screen.
+ */
+let openId = 0;
 
 function closePopover(): void {
   clearDwell();
+  openId += 1;
+  // Nothing shown or committed to showing means nothing for Rust to hide —
+  // the common case, and the one a momentum scroll fires this into many
+  // times a second.
+  const wasActive = keepPoll !== undefined || pendingChip !== null;
   if (keepPoll !== undefined) {
     clearInterval(keepPoll);
     keepPoll = undefined;
@@ -310,7 +330,12 @@ function closePopover(): void {
   tooltipCentre = null;
   lastCursor = null;
   pendingChip = null;
-  void invoke('hide_popover');
+  if (wasActive) {
+    // Fire-and-forget: a hide that fails to reach Rust is cosmetic (the
+    // tooltip stays visible one extra beat), not worth an unhandled
+    // rejection over.
+    void invoke('hide_popover').catch(() => {});
+  }
 }
 
 /**
@@ -325,15 +350,24 @@ function startKeepPoll(): void {
   if (keepPoll !== undefined) return;
   keepPoll = window.setInterval(() => {
     if (tooltipCentre === null) return;
-    void cursorPosition().then((position) => {
-      const next = { x: position.x, y: position.y };
-      const previous = lastCursor;
-      lastCursor = next;
-      if (previous === null || tooltipCentre === null) return;
-      // A resting cursor is not movement away, so it keeps the tooltip.
-      if (previous.x === next.x && previous.y === next.y) return;
-      if (!shouldKeep(previous, next, tooltipCentre)) closePopover();
-    });
+    void cursorPosition()
+      .then((position) => {
+        // A stale tick from a tooltip that closed while this read was in
+        // flight must not resurrect `lastCursor` out from under whatever
+        // opened next — checked first, before touching it.
+        if (tooltipCentre === null) return;
+        const next = { x: position.x, y: position.y };
+        const previous = lastCursor;
+        lastCursor = next;
+        if (previous === null) return;
+        // A resting cursor is not movement away, so it keeps the tooltip.
+        if (previous.x === next.x && previous.y === next.y) return;
+        if (!shouldKeep(previous, next, tooltipCentre)) closePopover();
+      })
+      .catch(() => {
+        // A dropped read costs this tick its comparison; the next one, 60ms
+        // later, tries again. Not worth an unhandled rejection every 60ms.
+      });
   }, KEEP_POLL_MS);
 }
 
@@ -344,7 +378,9 @@ function openFor(chip: HTMLElement): void {
   // run — neither is an error worth surfacing.
   if (entries === undefined || entries.length === 0) return;
   pendingChip = chip;
-  void emit('popover-content', entries);
+  // Fire-and-forget: a failed emit just leaves the tooltip unshown, no worse
+  // than the user never having hovered at all.
+  void emit('popover-content', entries).catch(() => {});
 }
 
 /**
@@ -355,8 +391,13 @@ function openFor(chip: HTMLElement): void {
  * invisible on a 1x display and doubles every offset on a Retina one.
  */
 async function placeFor(chip: HTMLElement, size: { width: number; height: number }): Promise<void> {
+  // Captured once, re-checked after every await below: a dismissal that
+  // lands mid-flight must stop this round trip from showing a tooltip
+  // nothing can dismiss anymore, rather than racing it to the screen.
+  const generation = openId;
   const current = getCurrentWindow();
   const [origin, scale] = await Promise.all([current.outerPosition(), current.scaleFactor()]);
+  if (openId !== generation || !chip.isConnected) return;
   const box = chip.getBoundingClientRect();
   const left = origin.x / scale + box.left;
   const top = origin.y / scale + box.top;
@@ -365,6 +406,7 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
   // The monitor under the WORD, not the app's own — a window straddling two
   // screens must clamp against the one the user is looking at.
   const monitor = await monitorFromPoint(left * scale, top * scale);
+  if (openId !== generation) return;
   if (monitor === null) return;
   const work: Rect = {
     left: monitor.workArea.position.x / scale,
@@ -375,9 +417,14 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
 
   // Never taller than the work area allows: past that it scrolls, as ta-old
   // does, rather than being placed off-screen.
-  const height = Math.min(size.height, work.bottom - work.top - 16);
+  const height = Math.min(size.height, work.bottom - work.top - 2 * MARGIN);
   const placed = placePopover(rect, { width: size.width, height }, work);
-  tooltipCentre = { x: placed.left + size.width / 2, y: placed.top + height / 2 };
+  // Physical px, matching `cursorPosition()` — see `tooltipCentre`'s own
+  // declaration for why this one field isn't CSS px like everything above it.
+  tooltipCentre = {
+    x: (placed.left + size.width / 2) * scale,
+    y: (placed.top + height / 2) * scale,
+  };
   lastCursor = null;
   await invoke('place_popover', {
     x: Math.round(placed.left),
@@ -385,6 +432,11 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
     width: Math.round(size.width),
     height: Math.round(height),
   });
+  // A dismissal that lands during this last await still shows the window
+  // (the command was already in flight) but must not arm a poll for it: the
+  // dismissal's own `closePopover` already reset `tooltipCentre` to `null`,
+  // and a poll armed on top of that would just early-return forever.
+  if (openId !== generation) return;
   startKeepPoll();
 }
 
@@ -430,8 +482,19 @@ document.addEventListener('keydown', (e) => {
 // new this phase: a DOM popover travelled with its parent for free, a separate
 // window does not, and would be stranded on the desktop.
 panes.addEventListener('scroll', closePopover);
-void listen('tauri://move', closePopover);
-void listen('tauri://resize', closePopover);
+// A bare `listen(event, handler)` defaults to `{ target: { kind: 'Any' } }`,
+// which Tauri's window-event dispatch never matches against a `Window`-kind
+// emit — left unscoped, both listeners below register but are never invoked,
+// and the tooltip strands on the desktop the first time this window moves.
+const windowTarget = { kind: 'Window', label: getCurrentWindow().label } as const;
+void listen('tauri://move', closePopover, { target: windowTarget }).catch(() => {
+  // Unlike the parse/dictionary listeners below, losing this one doesn't
+  // break parsing — the tooltip just stops following window moves, a step
+  // back to the old DOM-popover behaviour rather than a functional failure.
+});
+void listen('tauri://resize', closePopover, { target: windowTarget }).catch(() => {
+  // Same reasoning as the `move` listener above.
+});
 
 function show(result: ParseResult): void {
   // Before anything is replaced: a popover left open would be anchored to a
@@ -485,7 +548,9 @@ void Promise.all([
     // A chip removed by a parse that landed mid-round-trip has nothing to
     // anchor to; dropping the measurement is the correct outcome.
     if (chip === null || !chip.isConnected) return;
-    void placeFor(chip, e.payload);
+    // Fire-and-forget: a placement failure should leave the tooltip unshown,
+    // not surface as an unhandled rejection over a single failed hover.
+    void placeFor(chip, e.payload).catch(() => {});
   }),
 ]).then(() => {
   invoke('frontend_ready').catch(() => {

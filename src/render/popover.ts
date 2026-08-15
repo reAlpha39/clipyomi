@@ -1,7 +1,7 @@
 /** Distance between the word and the tooltip, in px. ta-old's `rAvoid.top-2`. */
 const GAP = 2;
 /** Closest the tooltip may sit to a work-area edge, in px. */
-const MARGIN = 8;
+export const MARGIN = 8;
 
 /** A rectangle in screen coordinates. */
 export interface Rect {

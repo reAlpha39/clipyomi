@@ -23,6 +23,30 @@ vi.mock('@tauri-apps/api/event', () => ({
 const invoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
+// `main.ts` now reads the current window's label (to scope its move/resize
+// listeners) and, via `placeFor`, its geometry. Controllable stubs rather
+// than a fixed object: the round-trip test below overrides `scaleFactor` for
+// a single call; every other describe here never reaches `placeFor` at all
+// and gets these harmless 1x/zero defaults without needing to know this
+// module exists.
+/** Just the shape `placeFor` actually reads off a Tauri `Monitor`. */
+interface MonitorStub {
+  workArea: { position: { x: number; y: number }; size: { width: number; height: number } };
+}
+
+const outerPosition = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
+const scaleFactor = vi.fn(() => Promise.resolve(1));
+const cursorPositionMock = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
+const monitorFromPointMock = vi.fn(
+  (_x: number, _y: number): Promise<MonitorStub | null> => Promise.resolve(null),
+);
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({ label: 'main', outerPosition, scaleFactor }),
+  cursorPosition: () => cursorPositionMock(),
+  monitorFromPoint: (x: number, y: number) => monitorFromPointMock(x, y),
+}));
+
 function emit(event: string, payload: unknown): void {
   const handler = listeners.get(event);
   if (handler === undefined) throw new Error(`nothing listening for ${event}`);
@@ -128,6 +152,29 @@ describe('the hover tooltip', () => {
     ],
   };
 
+  // Three separate chips (distinct `start`s): a single-chip fixture cannot
+  // distinguish "re-armed per chip" from "just works because there's only
+  // one chip to hover" — the sweep problem the dwell exists to solve.
+  const SWEEP_SEGMENTS = {
+    segments: [0, 2, 4].map((start) => ({
+      start,
+      len: 2,
+      surface: '東京',
+      reading: 'とうきょう',
+      matched: true,
+      entries: [
+        {
+          headword: '東京',
+          reading: 'とうきょう',
+          conjugation: null,
+          pos: ['n'],
+          senses: [{ pos: ['n'], glosses: ['Tokyo'], xrefs: [], misc: [], info: [] }],
+          flags: ['primary'],
+        },
+      ],
+    })),
+  };
+
   function chip(): HTMLButtonElement {
     const el = document.querySelector<HTMLButtonElement>('.chip');
     if (el === null) throw new Error('.chip missing');
@@ -195,6 +242,7 @@ describe('the hover tooltip', () => {
     const target = chip();
     target.focus();
     target.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    invoke.mockClear();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
     expect(calls()).toContain('hide_popover');
@@ -224,6 +272,30 @@ describe('the hover tooltip', () => {
     invoke.mockClear();
     emit('tauri://resize', {});
     expect(calls()).toContain('hide_popover');
+  });
+
+  // Design §3.1: "re-armed per chip, with no sticky swap" — the rule the
+  // dwell was introduced to enforce, and the one the single-chip "leaves
+  // before the dwell completes" test above cannot exercise, since there is
+  // nothing to re-arm against with only one chip in play. Each `mouseover`
+  // below is well inside the previous chip's 350ms dwell, so a sweep that
+  // sent content for every chip touched — instead of re-arming and
+  // cancelling — would leave `popover-content` among the events at the end.
+  test('a sweep across several chips sends nothing, including from the last one it touched', () => {
+    emit('parse-result', SWEEP_SEGMENTS);
+    const chips = Array.from(document.querySelectorAll<HTMLButtonElement>('.chip'));
+    expect(chips).toHaveLength(3);
+
+    for (const c of chips) {
+      c.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      vi.advanceTimersByTime(20);
+    }
+    // The cursor kept moving past the last chip too, not stopping on it.
+    chips[chips.length - 1].dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+
+    // Past DWELL_MS for every chip touched, including the last.
+    vi.advanceTimersByTime(350);
+    expect(events()).not.toContain('popover-content');
   });
 });
 
@@ -762,5 +834,94 @@ describe('the first-run download screen', () => {
     await Promise.resolve();
 
     expect(downloadCalls).toBe(2);
+  });
+});
+
+// Closes a coverage gap: no other describe in this file ever reaches
+// `placeFor` — the whole measure -> place -> show half of the tooltip
+// architecture was unexercised, which is exactly why a physical/CSS pixel
+// mixup could sit in it undetected (see `tooltipCentre`'s own comment in
+// `main.ts`). One round-trip test, not a suite for the geometry itself —
+// `popover.test.ts` already owns `placePopover`'s arithmetic.
+describe('the tooltip round trip', () => {
+  const SEGMENTS = {
+    segments: [
+      {
+        start: 0,
+        len: 2,
+        surface: '東京',
+        reading: 'とうきょう',
+        matched: true,
+        entries: [
+          {
+            headword: '東京',
+            reading: 'とうきょう',
+            conjugation: null,
+            pos: ['n'],
+            senses: [{ pos: ['n'], glosses: ['Tokyo'], xrefs: [], misc: [], info: [] }],
+            flags: ['primary'],
+          },
+        ],
+      },
+    ],
+  };
+
+  function chip(): HTMLButtonElement {
+    const el = document.querySelector<HTMLButtonElement>('.chip');
+    if (el === null) throw new Error('.chip missing');
+    return el;
+  }
+
+  beforeEach(async () => {
+    // Fake timers purely so `startKeepPoll`'s real `setInterval` (armed once
+    // `place_popover` resolves, below) can't keep firing with real timers in
+    // the background after this test ends.
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    // A 1000x800 CSS-px work area at the origin (2000x1600 physical, at the
+    // scale of 2 the test below pins).
+    monitorFromPointMock.mockResolvedValue({
+      workArea: { position: { x: 0, y: 0 }, size: { width: 2000, height: 1600 } },
+    });
+    vi.resetModules();
+    await import('./main');
+    emit('parse-result', SEGMENTS);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Scale is pinned at 2, not 1: at 1x, a `placeFor` that forgot to convert
+  // physical <-> CSS px anywhere produces the same numbers as one that
+  // didn't, so the test would pass either way. This is the load-bearing
+  // choice that actually exercises the conversion.
+  test('measuring a chip places the popover with rounded, scale-corrected coordinates', async () => {
+    scaleFactor.mockResolvedValueOnce(2);
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    emit('popover-measured', { width: 200, height: 60 });
+
+    // Flushes the `Promise.all` for outerPosition/scaleFactor, the
+    // `monitorFromPoint` await, and the `place_popover` invoke in turn.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // happy-dom's `getBoundingClientRect()` is all zeros, so the chip sits at
+    // the window origin: below-the-chip placement (top=2) clamps to the
+    // 8px margin on both axes, landing at (8,8).
+    expect(invoke).toHaveBeenCalledWith('place_popover', { x: 8, y: 8, width: 200, height: 60 });
   });
 });
