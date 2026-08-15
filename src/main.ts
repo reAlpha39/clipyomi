@@ -619,6 +619,52 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closePopover();
 });
 
+let lastUnfocusedChip: HTMLElement | null = null;
+
+void listen<{ x: number; y: number; screen_x: number; screen_y: number }>(
+  'unfocused-mouse-move',
+  (e) => {
+    if (document.hasFocus()) {
+      lastUnfocusedChip = null;
+      return;
+    }
+    const el = document.elementFromPoint(e.payload.x, e.payload.y);
+    const chip = chipFrom(el);
+    if (chip === null) {
+      if (lastUnfocusedChip !== null) {
+        lastUnfocusedChip = null;
+        clearDwell();
+        closePopover();
+      }
+      return;
+    }
+    viewportOrigin = {
+      x: e.payload.screen_x - e.payload.x,
+      y: e.payload.screen_y - e.payload.y,
+    };
+    if (lastUnfocusedChip === chip) return;
+    lastUnfocusedChip = chip;
+    closePopover();
+    dwell = window.setTimeout(() => openFor(chip), DWELL_MS);
+  },
+);
+
+void listen('unfocused-mouse-leave', async () => {
+  if (document.hasFocus()) return;
+  lastUnfocusedChip = null;
+  clearDwell();
+  if (tooltipRect !== null) {
+    try {
+      const pos = await cursorPosition();
+      if (!contains(tooltipRect, pos)) {
+        closePopover();
+      }
+    } catch {
+      closePopover();
+    }
+  }
+});
+
 // The tooltip is placed from a rectangle all of these invalidate. `move` is
 // new this phase: a DOM popover travelled with its parent for free, a separate
 // window does not, and would be stranded on the desktop.

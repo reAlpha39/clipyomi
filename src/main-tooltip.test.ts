@@ -11,6 +11,8 @@ const emitted: [string, unknown][] = [];
 /** The `target` option each `listen()` call registered with, keyed by event. */
 const listenTargets = new Map<string, unknown>();
 
+let autoMeasure = false;
+
 vi.mock('@tauri-apps/api/event', () => ({
   listen: (
     event: string,
@@ -23,6 +25,12 @@ vi.mock('@tauri-apps/api/event', () => ({
   },
   emit: (event: string, payload: unknown) => {
     emitted.push([event, payload]);
+    if (autoMeasure && event === 'popover-content') {
+      const handler = listeners.get('popover-measured');
+      if (handler) {
+        handler({ payload: { width: 200, height: 60 } });
+      }
+    }
     return Promise.resolve();
   },
 }));
@@ -683,3 +691,128 @@ describe('the tooltip round trip', () => {
     expect(invoke.mock.calls.map((c) => c[0])).toContain('hide_popover');
   });
 });
+
+describe('unfocused background hover', () => {
+  beforeEach(async () => {
+    autoMeasure = true;
+    vi.useFakeTimers();
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    innerPosition.mockResolvedValue({ x: 0, y: 0 });
+    outerPosition.mockResolvedValue({
+      x: 0,
+      y: 0,
+      toLogical: (_factor: number) => ({ x: 0, y: 0 }),
+    });
+    scaleFactor.mockResolvedValue(1);
+    availableMonitorsMock.mockResolvedValue([retina()]);
+    vi.resetModules();
+    await import('./main');
+
+    emit('parse-result', {
+      segments: [
+        {
+          start: 0,
+          len: 2,
+          surface: '東京',
+          reading: 'とうきょう',
+          matched: true,
+          entries: [
+            {
+              headword: '東京',
+              reading: 'とうきょう',
+              conjugation: null,
+              pos: ['n'],
+              senses: [{ pos: ['n'], glosses: ['Tokyo'], xrefs: [], misc: [], info: [] }],
+              flags: ['primary'],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    autoMeasure = false;
+    vi.useRealTimers();
+  });
+
+  test('unfocused-mouse-move over a chip opens popover after 350ms dwell when window is unfocused', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    expect(chip).not.toBeNull();
+
+    // Stub elementFromPoint to return the chip for the event coordinates
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+
+    // Dwell has not completed yet
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(false);
+
+    // Advance dwell timer by 350ms
+    await vi.advanceTimersByTimeAsync(350);
+
+    // place_popover should have been called
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(true);
+  });
+
+  test('unfocused-mouse-move over non-chip area cancels pending dwell', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+
+    // Advance 200ms (mid-dwell)
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Move to non-chip element (e.g. background)
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(document.body);
+    emit('unfocused-mouse-move', { x: 10, y: 10, screen_x: 110, screen_y: 110 });
+
+    // Complete remaining dwell time
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(false);
+  });
+
+  test('unfocused-mouse-leave closes popover when cursor is outside tooltip rect', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+    await vi.advanceTimersByTimeAsync(350);
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(true);
+
+    invoke.mockClear();
+    // Cursor position far away on desktop
+    cursorPositionMock.mockResolvedValue({ x: 1000, y: 1000 });
+
+    emit('unfocused-mouse-leave', null);
+    await Promise.resolve();
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'hide_popover')).toBe(true);
+  });
+
+  test('unfocused-mouse-move is ignored when window has focus', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const chip = document.querySelector<HTMLElement>('.chip');
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(chip);
+
+    emit('unfocused-mouse-move', { x: 50, y: 50, screen_x: 150, screen_y: 150 });
+    await vi.advanceTimersByTimeAsync(350);
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'place_popover')).toBe(false);
+  });
+});
+
