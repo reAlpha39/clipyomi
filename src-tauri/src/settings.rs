@@ -31,6 +31,8 @@ pub struct Settings {
     #[serde(default = "default_true")]
     pub decorations: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub furigana_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_height: Option<u32>,
@@ -50,6 +52,7 @@ impl Default for Settings {
             always_on_top: false,
             clipboard_monitoring: true,
             decorations: true,
+            furigana_mode: None,
             window_width: None,
             window_height: None,
             window_x: None,
@@ -180,7 +183,7 @@ mod tests {
         let path = scratch("unknown").join("settings.json");
         std::fs::write(
             &path,
-            br#"{"always_on_top":true,"clipboard_monitoring":true,"furigana_mode":"all","font_size":18}"#,
+            br#"{"always_on_top":true,"clipboard_monitoring":true,"unknown_key":"all","font_size":18}"#,
         )
         .expect("write");
 
@@ -189,7 +192,7 @@ mod tests {
 
         let raw = std::fs::read_to_string(&path).expect("read");
         let json: serde_json::Value = serde_json::from_str(&raw).expect("parse");
-        assert_eq!(json["furigana_mode"], "all", "unknown string key dropped");
+        assert_eq!(json["unknown_key"], "all", "unknown string key dropped");
         assert_eq!(json["font_size"], 18, "unknown number key dropped");
         assert_eq!(json["always_on_top"], true, "known key lost");
     }
@@ -204,6 +207,7 @@ mod tests {
     fn default_decorations_is_true() {
         let s = Settings::default();
         assert!(s.decorations);
+        assert_eq!(s.furigana_mode, None);
         assert_eq!(s.window_width, None);
         assert_eq!(s.window_height, None);
         assert_eq!(s.window_x, None);
@@ -228,5 +232,25 @@ mod tests {
         assert_eq!(s.window_x, Some(100));
         assert_eq!(s.window_y, Some(200));
     }
+
+    #[test]
+    fn settings_roundtrips_furigana_mode() {
+        let settings = Settings {
+            always_on_top: true,
+            clipboard_monitoring: true,
+            decorations: false,
+            furigana_mode: Some("hiragana".to_string()),
+            window_width: Some(400),
+            window_height: Some(300),
+            window_x: None,
+            window_y: None,
+            extra: serde_json::Map::new(),
+        };
+        let json = serde_json::to_string(&settings).expect("serialization succeeds");
+        assert!(json.contains("\"furigana_mode\":\"hiragana\""));
+        let deserialized: Settings = serde_json::from_str(&json).expect("deserialization succeeds");
+        assert_eq!(deserialized.furigana_mode, Some("hiragana".to_string()));
+    }
 }
+
 

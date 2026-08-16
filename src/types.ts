@@ -42,10 +42,13 @@ export interface ParseResult {
   segments: Segment[];
 }
 
+export type FuriganaMode = 'none' | 'hiragana' | 'katakana' | 'romaji';
+
 export interface Settings {
   always_on_top: boolean;
   clipboard_monitoring: boolean;
   decorations: boolean;
+  furigana_mode?: FuriganaMode;
   window_width?: number;
   window_height?: number;
   window_x?: number;
