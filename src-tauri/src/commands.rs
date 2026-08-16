@@ -185,6 +185,15 @@ pub fn save_settings(
             if settings.furigana_mode.is_some() {
                 s.furigana_mode = settings.furigana_mode;
             }
+            if settings.hide_pos.is_some() {
+                s.hide_pos = settings.hide_pos;
+            }
+            if settings.hide_xrefs.is_some() {
+                s.hide_xrefs = settings.hide_xrefs;
+            }
+            if settings.hide_usage.is_some() {
+                s.hide_usage = settings.hide_usage;
+            }
         })
         .map_err(|e| e.to_string())
 }
@@ -595,6 +604,29 @@ mod tests {
         save_settings(settings, state_arg).unwrap();
         let s = state.snapshot();
         assert_eq!(s.furigana_mode, Some("romaji".to_string()));
+    }
+
+    #[test]
+    fn save_settings_updates_gloss_filters_in_settings_state() {
+        let dir = scratch("save-settings-filters");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings::default(),
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
+        let settings = Settings {
+            hide_pos: Some(true),
+            hide_xrefs: Some(true),
+            hide_usage: Some(false),
+            ..Default::default()
+        };
+        save_settings(settings, state_arg).unwrap();
+        let s = state.snapshot();
+        assert_eq!(s.hide_pos, Some(true));
+        assert_eq!(s.hide_xrefs, Some(true));
+        assert_eq!(s.hide_usage, Some(false));
     }
 }
 
