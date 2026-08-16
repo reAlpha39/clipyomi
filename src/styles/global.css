@@ -55,7 +55,8 @@ body {
   cursor: pointer;
 }
 
-.controls button[aria-pressed='true'] {
+.controls button[aria-pressed='true'],
+.controls button[aria-expanded='true'] {
   color: var(--color-text);
   border-color: var(--color-text);
 }
@@ -209,3 +210,70 @@ rt.romaji {
   .segmented-control button { transition: none; }
   .spinner { animation: none; }
 }
+
+/* --- Settings Menu & Gloss Filters --- */
+.settings-container {
+  position: relative;
+  display: inline-flex;
+  margin-left: auto;
+}
+
+#settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1000;
+  background: var(--color-bg);
+  border: 1px solid var(--color-rule);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 4px 12px var(--color-shadow);
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-menu[hidden] {
+  display: none;
+}
+
+.settings-section-title {
+  font-family: var(--font-ui);
+  font-size: var(--text-tag, 11px);
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-rule);
+  margin-bottom: 4px;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.settings-item input[type='checkbox'] {
+  cursor: pointer;
+  accent-color: var(--color-kanji);
+  margin: 0;
+}
+

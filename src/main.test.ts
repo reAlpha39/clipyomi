@@ -945,3 +945,300 @@ describe('furigana segmented control', () => {
   });
 });
 
+describe('settings menu and gloss filters', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    vi.resetModules();
+  });
+
+  test('settings menu renders toggle button and hidden menu', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const toggle = document.querySelector<HTMLButtonElement>('#settings-toggle');
+    const menu = document.querySelector<HTMLElement>('#settings-menu');
+    const hidePos = document.querySelector<HTMLInputElement>('#filter-hide-pos');
+    const hideXrefs = document.querySelector<HTMLInputElement>('#filter-hide-xrefs');
+    const hideUsage = document.querySelector<HTMLInputElement>('#filter-hide-usage');
+
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-haspopup')).toBe('true');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(menu).not.toBeNull();
+    expect(menu?.hidden).toBe(true);
+
+    expect(hidePos).not.toBeNull();
+    expect(hidePos?.checked).toBe(false);
+    expect(hideXrefs).not.toBeNull();
+    expect(hideXrefs?.checked).toBe(false);
+    expect(hideUsage).not.toBeNull();
+    expect(hideUsage?.checked).toBe(false);
+  });
+
+  test('clicking toggle button opens and closes the menu and updates aria-expanded', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const toggle = document.querySelector<HTMLButtonElement>('#settings-toggle');
+    const menu = document.querySelector<HTMLElement>('#settings-menu');
+
+    // Click to open
+    toggle?.click();
+    expect(menu?.hidden).toBe(false);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+
+    // Click to close
+    toggle?.click();
+    expect(menu?.hidden).toBe(true);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  test('Escape key closes the settings menu', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const toggle = document.querySelector<HTMLButtonElement>('#settings-toggle');
+    const menu = document.querySelector<HTMLElement>('#settings-menu');
+
+    toggle?.click();
+    expect(menu?.hidden).toBe(false);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(menu?.hidden).toBe(true);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  test('clicking outside the settings container closes the menu, while clicking inside keeps it open', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const toggle = document.querySelector<HTMLButtonElement>('#settings-toggle');
+    const menu = document.querySelector<HTMLElement>('#settings-menu');
+    const hidePos = document.querySelector<HTMLInputElement>('#filter-hide-pos');
+
+    toggle?.click();
+    expect(menu?.hidden).toBe(false);
+
+    // Click inside the menu (e.g. on a checkbox or label)
+    hidePos?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(menu?.hidden).toBe(false);
+
+    // Click outside (e.g. document body or output)
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(menu?.hidden).toBe(true);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  test('toggling filter checkboxes updates state and persists settings', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          furigana_mode: 'hiragana',
+          hide_pos: false,
+          hide_xrefs: false,
+          hide_usage: false,
+        });
+      }
+      if (cmd === 'save_settings') {
+        return Promise.resolve(undefined);
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const hidePos = document.querySelector<HTMLInputElement>('#filter-hide-pos')!;
+    const hideXrefs = document.querySelector<HTMLInputElement>('#filter-hide-xrefs')!;
+    const hideUsage = document.querySelector<HTMLInputElement>('#filter-hide-usage')!;
+
+    // Check hide_pos
+    hidePos.checked = true;
+    hidePos.dispatchEvent(new Event('change', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('save_settings', {
+      settings: {
+        furigana_mode: 'hiragana',
+        hide_pos: true,
+        hide_xrefs: false,
+        hide_usage: false,
+      },
+    });
+
+    // Check hide_xrefs
+    hideXrefs.checked = true;
+    hideXrefs.dispatchEvent(new Event('change', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('save_settings', {
+      settings: {
+        furigana_mode: 'hiragana',
+        hide_pos: true,
+        hide_xrefs: true,
+        hide_usage: false,
+      },
+    });
+
+    // Check hide_usage
+    hideUsage.checked = true;
+    hideUsage.dispatchEvent(new Event('change', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('save_settings', {
+      settings: {
+        furigana_mode: 'hiragana',
+        hide_pos: true,
+        hide_xrefs: true,
+        hide_usage: true,
+      },
+    });
+  });
+
+  test('applySettings initializes filter checkboxes from loaded settings', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          hide_pos: true,
+          hide_xrefs: true,
+          hide_usage: false,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const hidePos = document.querySelector<HTMLInputElement>('#filter-hide-pos');
+    const hideXrefs = document.querySelector<HTMLInputElement>('#filter-hide-xrefs');
+    const hideUsage = document.querySelector<HTMLInputElement>('#filter-hide-usage');
+
+    expect(hidePos?.checked).toBe(true);
+    expect(hideXrefs?.checked).toBe(true);
+    expect(hideUsage?.checked).toBe(false);
+  });
+
+  test('openFor sends current active filters in popover-content event', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          hide_pos: true,
+          hide_xrefs: false,
+          hide_usage: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const sampleEntries = [
+      {
+        headword: '東京',
+        reading: 'とうきょう',
+        conjugation: null,
+        pos: ['n'],
+        senses: [],
+        flags: ['primary'],
+      },
+    ];
+
+    emit('parse-result', {
+      segments: [
+        {
+          start: 0,
+          len: 2,
+          surface: '東京',
+          reading: 'とうきょう',
+          matched: true,
+          entries: sampleEntries,
+        },
+      ],
+    });
+
+    const chip = document.querySelector<HTMLElement>('.chip');
+    chip?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+
+    expect(emitted).toContainEqual([
+      'popover-content',
+      {
+        entries: sampleEntries,
+        filters: {
+          hide_pos: true,
+          hide_xrefs: false,
+          hide_usage: true,
+        },
+      },
+    ]);
+  });
+});
+
+
+

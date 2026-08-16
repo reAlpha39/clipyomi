@@ -188,7 +188,13 @@ describe('the hover tooltip', () => {
     chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     expect(events()).not.toContain('popover-content');
     vi.advanceTimersByTime(350);
-    expect(emitted).toContainEqual(['popover-content', SEGMENTS.segments[0].entries]);
+    expect(emitted).toContainEqual([
+      'popover-content',
+      {
+        entries: SEGMENTS.segments[0].entries,
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false },
+      },
+    ]);
   });
 
   // Restores the coverage deleted with 2G's DOM-popover specs in Task 7: an
