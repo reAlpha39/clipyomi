@@ -8,25 +8,27 @@
 
 ## 1. Goal
 
-Implement the four Furigana display modes (`none`, `hiragana`, `katakana`, `romaji`) in ClipYomi's webview UI, selectable via a header segmented control `[— ひ カ R]` and persisted to user settings, providing immediate visual phonetic annotations over or under segmented Japanese words without altering the underlying dictionary/parser core.
+Implement the four Furigana display modes (`none`, `hiragana`, `katakana`, `romaji`) in ClipYomi's webview UI, selectable via a header segmented control `[— ひ カ R]` and persisted to user settings, providing immediate visual phonetic annotations **on top of** segmented Japanese word chips without altering the underlying dictionary/parser core.
 
 ---
 
 ## 2. Display Modes & Rendering Rules
+
+All phonetic annotations (`hiragana`, `katakana`, `romaji`) render uniformly on top of the word chips using standard HTML `<ruby><rt>...</rt></ruby>` elements.
 
 | Mode | Key | Header Label | Rendering Behavior | Example (`東京`) | Example (`これ`) |
 |---|---|---|---|---|---|
 | **None** | `none` | `—` | Standard plain text; no phonetic annotations. | `<button class="chip kanji">東京</button>` | `<button class="chip kana">これ</button>` |
 | **Hiragana** | `hiragana` | `ひ` | `<ruby>` reading annotation on kanji-bearing segments only. | `<button class="chip kanji"><ruby>東京<rt>とうきょう</rt></ruby></button>` | `<button class="chip kana">これ</button>` |
 | **Katakana** | `katakana` | `カ` | `<ruby>` reading converted to Katakana on kanji segments only. | `<button class="chip kanji"><ruby>東京<rt>トウキョウ</rt></ruby></button>` | `<button class="chip kana">これ</button>` |
-| **Romaji** | `romaji` | `R` | Phonetic romanization rendered beneath **all** segments. | `<button class="chip kanji has-romaji"><span class="chip-surface">東京</span><span class="chip-romaji">toukyou</span></button>` | `<button class="chip kana has-romaji"><span class="chip-surface">これ</span><span class="chip-romaji">kore</span></button>` |
+| **Romaji** | `romaji` | `R` | `<ruby>` phonetic romanization rendered on top of **all** segments. | `<button class="chip kanji"><ruby>東京<rt class="romaji">toukyou</rt></ruby></button>` | `<button class="chip kana"><ruby>これ<rt class="romaji">kore</rt></ruby></button>` |
 
 ### Scope Rules
 - **Hiragana / Katakana modes**:
   - Render `<ruby>` with `<rt>` only when `/[一-鿿]/.test(segment.surface)` is true and `segment.reading` is non-null.
   - Kana-only segments (e.g. `これ`, `は`) and unmatched punctuation do not generate ruby markup.
 - **Romaji mode**:
-  - Renders for all matched segments (using `segment.reading ?? segment.surface`) and unmatched kana words.
+  - Renders `<ruby>` with `<rt class="romaji">` on top of all matched segments (using `segment.reading ?? segment.surface`) and unmatched kana words.
   - Particle romanization fixups: `は` as a particle romanizes to `wa` (preserving `cha` in non-particle contexts), `へ` as a particle romanizes to `e`.
   - Double consonants (sokuon `っ`/`ッ`) double the subsequent consonant (e.g. `いった` → `itta`).
   - Syllabic `ん`/`ン` appends an apostrophe before vowels and ya-row kana (e.g. `かんい` → `kan'i`).
@@ -41,10 +43,10 @@ src/
 ├── render/
 │   ├── furigana.ts           # toKatakana, toRomaji, furiganaFor helper functions
 │   ├── furigana.test.ts      # Unit tests for transliteration & annotation rules
-│   ├── sentence.ts           # renderSentence(result, mode) with ruby/romaji layout
+│   ├── sentence.ts           # renderSentence(result, mode) with <ruby>/<rt> layout
 │   └── sentence.test.ts      # Snapshot/DOM tests across all 4 modes
 ├── styles/
-│   └── global.css            # Styles for <ruby>, <rt>, .chip-romaji, .segmented-control
+│   └── global.css            # Styles for <ruby>, <rt>, <rt.romaji>, .segmented-control
 ├── main.ts                   # Segmented control in header, click handlers, persistence
 └── main.test.ts              # Header control and settings round-trip integration tests
 src-tauri/
@@ -69,6 +71,12 @@ Port of `ta-old`'s `romajiTable` / `crates/jparser/src/romaji.rs`:
 - **Hatsuon (`ん` / `ン`)**: Maps to `n`, inserting `'` if immediately preceding a vowel (`a, i, u, e, o`) or y-sound (`ya, yu, yo`).
 - **Particle overrides**: If `isParticle` is true, `は` / `ハ` → `wa`, `へ` / `ヘ` → `e`.
 
+### 4.3 Annotation Resolution (`furiganaFor`)
+- If `mode === 'none'` → returns `null`.
+- If `mode === 'hiragana'` → returns `segment.reading` if `/[一-鿿]/.test(segment.surface)`, else `null`.
+- If `mode === 'katakana'` → returns `toKatakana(segment.reading)` if `/[一-鿿]/.test(segment.surface)`, else `null`.
+- If `mode === 'romaji'` → returns `toRomaji(segment.reading ?? segment.surface, isParticle)`.
+
 ---
 
 ## 5. UI Layout & Styling (`src/styles/global.css`)
@@ -86,30 +94,15 @@ rt {
   line-height: 1;
   text-align: center;
 }
-```
 
-### 5.2 Romaji Under-Chip Layout
-```css
-.chip.has-romaji {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  vertical-align: bottom;
-}
-
-.chip-romaji {
-  display: block;
-  font-size: 0.52em;
+rt.romaji {
   font-family: var(--font-mono, monospace);
-  color: var(--color-text-muted, #8e8e93);
-  line-height: 1;
-  margin-top: 2px;
-  user-select: none;
+  font-size: var(--text-furigana-romaji, 0.52em);
+  letter-spacing: -0.02em;
 }
 ```
 
-### 5.3 Segmented Control Header
+### 5.2 Segmented Control Header
 ```css
 .segmented-control {
   display: inline-flex;
@@ -157,8 +150,8 @@ rt {
    - `toRomaji`: basic kana, digraphs, sokuon doubling, hatsuon apostrophe, particle rules.
    - `furiganaFor`: correct mode resolution and kanji check.
 2. **DOM / Component Tests (`src/render/sentence.test.ts`)**:
-   - Verify `<ruby>` generated only on kanji for `hiragana`/`katakana`.
-   - Verify `.chip-romaji` generated for all segments in `romaji`.
+   - Verify `<ruby>` generated on top of kanji for `hiragana`/`katakana`.
+   - Verify `<ruby><rt class="romaji">` generated on top of all segments in `romaji`.
    - Verify `none` renders plain chips.
 3. **Integration Tests (`src/main.test.ts`)**:
    - Setting restoration on launch.
