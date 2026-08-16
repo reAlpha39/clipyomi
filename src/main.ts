@@ -27,24 +27,7 @@ app.innerHTML = `
       <button type="button" role="radio" data-mode="katakana" aria-checked="false" title="Katakana furigana">カ</button>
       <button type="button" role="radio" data-mode="romaji" aria-checked="false" title="Romaji phonetic">R</button>
     </div>
-    <div class="settings-container">
-      <button id="settings-toggle" type="button" aria-haspopup="true" aria-expanded="false" title="Settings">⚙</button>
-      <div id="settings-menu" class="settings-menu" hidden>
-        <div class="settings-section-title">Gloss Filters</div>
-        <label class="settings-item">
-          <input type="checkbox" id="filter-hide-pos">
-          <span>Hide parts of speech (POS)</span>
-        </label>
-        <label class="settings-item">
-          <input type="checkbox" id="filter-hide-xrefs">
-          <span>Hide cross-references</span>
-        </label>
-        <label class="settings-item">
-          <input type="checkbox" id="filter-hide-usage">
-          <span>Hide usage notes</span>
-        </label>
-      </div>
-    </div>
+    <button id="settings-toggle" type="button" title="Settings">⚙</button>
   </header>
   <div id="parse-error"></div>
   <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
@@ -276,52 +259,11 @@ const currentFilters: GlossFilters = {
   hide_xrefs: false,
   hide_usage: false,
 };
-let touchedHidePos = false;
-let touchedHideXrefs = false;
-let touchedHideUsage = false;
 
-const settingsContainer = app.querySelector<HTMLElement>('.settings-container');
 const settingsToggle = app.querySelector<HTMLButtonElement>('#settings-toggle');
-const settingsMenu = app.querySelector<HTMLElement>('#settings-menu');
-const filterHidePos = app.querySelector<HTMLInputElement>('#filter-hide-pos');
-const filterHideXrefs = app.querySelector<HTMLInputElement>('#filter-hide-xrefs');
-const filterHideUsage = app.querySelector<HTMLInputElement>('#filter-hide-usage');
 
-function updateSettingsMenu(open: boolean): void {
-  if (settingsMenu === null || settingsToggle === null) return;
-  settingsMenu.hidden = !open;
-  settingsToggle.setAttribute('aria-expanded', String(open));
-}
-
-settingsToggle?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const isOpen = settingsToggle.getAttribute('aria-expanded') === 'true';
-  updateSettingsMenu(!isOpen);
-});
-
-document.addEventListener('click', (e) => {
-  if (settingsContainer !== null && e.target instanceof Node && settingsContainer.contains(e.target)) {
-    return;
-  }
-  updateSettingsMenu(false);
-});
-
-filterHidePos?.addEventListener('change', () => {
-  touchedHidePos = true;
-  currentFilters.hide_pos = filterHidePos.checked;
-  void persistSettings();
-});
-
-filterHideXrefs?.addEventListener('change', () => {
-  touchedHideXrefs = true;
-  currentFilters.hide_xrefs = filterHideXrefs.checked;
-  void persistSettings();
-});
-
-filterHideUsage?.addEventListener('change', () => {
-  touchedHideUsage = true;
-  currentFilters.hide_usage = filterHideUsage.checked;
-  void persistSettings();
+settingsToggle?.addEventListener('click', () => {
+  void invoke('open_settings_window').catch(() => {});
 });
 
 const modeButtons = app.querySelectorAll<HTMLButtonElement>('.segmented-control button[data-mode]');
@@ -334,14 +276,17 @@ function updateFuriganaButtons(mode: FuriganaMode): void {
 }
 
 function persistSettings(): Promise<void> {
-  return invoke('save_settings', {
-    settings: {
-      furigana_mode: currentFuriganaMode,
-      hide_pos: currentFilters.hide_pos,
-      hide_xrefs: currentFilters.hide_xrefs,
-      hide_usage: currentFilters.hide_usage,
-    },
-  });
+  const payload: Settings = {
+    always_on_top: alwaysOnTop?.getAttribute('aria-pressed') === 'true',
+    clipboard_monitoring: monitor?.getAttribute('aria-pressed') === 'true',
+    decorations: decorations?.getAttribute('aria-pressed') === 'true',
+    furigana_mode: currentFuriganaMode,
+    hide_pos: currentFilters.hide_pos,
+    hide_xrefs: currentFilters.hide_xrefs,
+    hide_usage: currentFilters.hide_usage,
+  };
+  void emit('settings-changed', payload).catch(() => {});
+  return invoke('save_settings', { settings: payload });
 }
 
 modeButtons.forEach((btn) => {
@@ -372,19 +317,39 @@ async function applySettings(): Promise<void> {
   if (!touchedFurigana && settings.furigana_mode !== undefined) {
     updateFuriganaButtons(settings.furigana_mode);
   }
-  if (!touchedHidePos && settings.hide_pos !== undefined) {
+  if (settings.hide_pos !== undefined) {
     currentFilters.hide_pos = settings.hide_pos;
-    if (filterHidePos !== null) filterHidePos.checked = settings.hide_pos;
   }
-  if (!touchedHideXrefs && settings.hide_xrefs !== undefined) {
+  if (settings.hide_xrefs !== undefined) {
     currentFilters.hide_xrefs = settings.hide_xrefs;
-    if (filterHideXrefs !== null) filterHideXrefs.checked = settings.hide_xrefs;
   }
-  if (!touchedHideUsage && settings.hide_usage !== undefined) {
+  if (settings.hide_usage !== undefined) {
     currentFilters.hide_usage = settings.hide_usage;
-    if (filterHideUsage !== null) filterHideUsage.checked = settings.hide_usage;
   }
 }
+
+void listen<Settings>('settings-changed', (e) => {
+  const settings = e.payload;
+  if (settings.hide_pos !== undefined) currentFilters.hide_pos = settings.hide_pos;
+  if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;
+  if (settings.hide_usage !== undefined) currentFilters.hide_usage = settings.hide_usage;
+  if (settings.furigana_mode !== undefined) {
+    updateFuriganaButtons(settings.furigana_mode);
+    if (lastResult !== null) {
+      closePopover();
+      output.replaceChildren(renderSentence(lastResult, currentFuriganaMode));
+    }
+  }
+  if (alwaysOnTop !== null && settings.always_on_top !== undefined) {
+    alwaysOnTop.setAttribute('aria-pressed', String(settings.always_on_top));
+  }
+  if (monitor !== null && settings.clipboard_monitoring !== undefined) {
+    monitor.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
+  }
+  if (decorations !== null && settings.decorations !== undefined) {
+    decorations.setAttribute('aria-pressed', String(settings.decorations));
+  }
+});
 
 /** Milliseconds the cursor must rest on a chip before its popover opens. */
 const DWELL_MS = 350;
@@ -745,10 +710,7 @@ output.addEventListener('focusout', (e) => {
 document.addEventListener('keydown', (e) => {
   // Focus is deliberately not moved: the user is mid-sentence, and Escape
   // dismissing a tooltip should not cost them their place in the tab order.
-  if (e.key === 'Escape') {
-    updateSettingsMenu(false);
-    closePopover();
-  }
+  if (e.key === 'Escape') closePopover();
 });
 
 let lastUnfocusedChip: HTMLElement | null = null;

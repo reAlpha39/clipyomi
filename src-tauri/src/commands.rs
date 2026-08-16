@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::{watch, Notify};
 
 use crate::settings::Settings;
@@ -196,6 +196,29 @@ pub fn save_settings(
             }
         })
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_settings_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+        .title("ClipYomi Settings")
+        .inner_size(360.0, 480.0)
+        .min_inner_size(300.0, 400.0)
+        .resizable(false)
+        .decorations(true)
+        .always_on_top(true)
+        .visible(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -627,6 +650,16 @@ mod tests {
         assert_eq!(s.hide_pos, Some(true));
         assert_eq!(s.hide_xrefs, Some(true));
         assert_eq!(s.hide_usage, Some(false));
+    }
+
+    #[test]
+    fn open_settings_window_creates_settings_window() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle().clone();
+        assert!(open_settings_window(app_handle.clone()).is_ok());
+        assert!(app_handle.get_webview_window("settings").is_some());
+        // Second call focuses existing window without error
+        assert!(open_settings_window(app_handle).is_ok());
     }
 }
 

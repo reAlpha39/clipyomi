@@ -26,6 +26,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         popover: resolve(__dirname, 'popover.html'),
+        settings: resolve(__dirname, 'settings.html'),
       },
     },
   },

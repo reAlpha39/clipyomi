@@ -152,6 +152,7 @@ fn main() {
             commands::save_window_geometry,
             commands::save_settings,
             commands::get_settings,
+            commands::open_settings_window,
             commands::startup_error,
             commands::settings_warning,
             commands::frontend_ready,
