@@ -60,6 +60,38 @@ body {
   border-color: var(--color-text);
 }
 
+/* --- Header Segmented Control --- */
+.segmented-control {
+  display: inline-flex;
+  border-radius: 4px;
+  background: var(--surface-control, rgba(255, 255, 255, 0.08));
+  padding: 2px;
+  gap: 2px;
+  align-items: center;
+}
+
+.segmented-control button {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #8e8e93);
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.segmented-control button:hover {
+  color: var(--color-text, #ffffff);
+}
+
+.segmented-control button[aria-checked="true"] {
+  background: var(--surface-active, rgba(255, 255, 255, 0.18));
+  color: var(--color-text, #ffffff);
+}
+
 .panes { overflow-y: auto; padding: var(--space-pane); }
 
 .chip {
@@ -83,6 +115,25 @@ body {
 .chip.particle { color: var(--color-particle); }
 .chip.counter { color: var(--color-counter); }
 .unmatched { color: var(--color-muted); }
+
+/* --- Furigana Ruby Typography --- */
+ruby {
+  ruby-align: center;
+}
+
+rt {
+  font-size: var(--text-furigana, 0.58em);
+  color: var(--color-text-muted, #8e8e93);
+  user-select: none;
+  line-height: 1;
+  text-align: center;
+}
+
+rt.romaji {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-furigana-romaji, 0.52em);
+  letter-spacing: -0.02em;
+}
 
 /* :focus-visible (not :focus) so the ring shows for keyboard traversal only,
    matching how a mouse click on a native button already behaves. The ring is
@@ -155,5 +206,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .chip { transition: none; }
   .chip:hover { transform: none; }
+  .segmented-control button { transition: none; }
   .spinner { animation: none; }
 }

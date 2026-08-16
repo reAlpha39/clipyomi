@@ -1,4 +1,5 @@
-import type { ParseResult, Segment } from '../types';
+import type { FuriganaMode, ParseResult, Segment } from '../types';
+import { furiganaFor } from './furigana';
 
 /**
  * Content class for a segment's chip, from the flags the Rust side named.
@@ -12,7 +13,7 @@ function contentClass(segment: Segment): string {
   return /[一-鿿]/.test(segment.surface) ? 'kanji' : 'kana';
 }
 
-export function renderSentence(result: ParseResult): HTMLElement {
+export function renderSentence(result: ParseResult, mode: FuriganaMode = 'none'): HTMLElement {
   const root = document.createElement('div');
   root.className = 'sentence';
 
@@ -27,8 +28,23 @@ export function renderSentence(result: ParseResult): HTMLElement {
     const el = document.createElement(segment.matched ? 'button' : 'span');
     if (el instanceof HTMLButtonElement) el.type = 'button';
     el.dataset.start = String(segment.start);
-    el.textContent = segment.surface;
     el.className = segment.matched ? `chip ${contentClass(segment)}` : 'unmatched';
+
+    const annotation = furiganaFor(segment, mode);
+
+    if (annotation !== null) {
+      const ruby = document.createElement('ruby');
+      ruby.textContent = segment.surface;
+      const rt = document.createElement('rt');
+      rt.textContent = annotation;
+      if (mode === 'romaji') {
+        rt.className = 'romaji';
+      }
+      ruby.append(rt);
+      el.append(ruby);
+    } else {
+      el.textContent = segment.surface;
+    }
 
     root.append(el);
   }

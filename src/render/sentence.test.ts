@@ -46,3 +46,72 @@ describe('renderSentence', () => {
     expect(el.querySelector('[data-start="3"]')?.hasAttribute('tabindex')).toBe(false);
   });
 });
+
+describe('renderSentence with furigana modes', () => {
+  const furiganaResult: ParseResult = {
+    segments: [
+      {
+        start: 0,
+        len: 2,
+        surface: '東京',
+        reading: 'とうきょう',
+        matched: true,
+        entries: [{ headword: '東京', reading: 'とうきょう', conjugation: null, pos: ['n'], senses: [], flags: ['primary'] }],
+      },
+      {
+        start: 2,
+        len: 1,
+        surface: 'に',
+        reading: 'に',
+        matched: true,
+        entries: [{ headword: 'に', reading: 'に', conjugation: null, pos: ['prt'], senses: [], flags: ['particle'] }],
+      },
+      {
+        start: 3,
+        len: 1,
+        surface: '。',
+        reading: null,
+        matched: false,
+        entries: [],
+      },
+    ],
+  };
+
+  test('mode none renders clean text without ruby', () => {
+    const el = renderSentence(furiganaResult, 'none');
+    const chips = el.querySelectorAll('.chip');
+    expect(chips[0].textContent).toBe('東京');
+    expect(chips[0].querySelector('ruby')).toBeNull();
+    expect(chips[1].textContent).toBe('に');
+  });
+
+  test('mode hiragana renders ruby for kanji word only', () => {
+    const el = renderSentence(furiganaResult, 'hiragana');
+    const chips = el.querySelectorAll('.chip');
+    const ruby0 = chips[0].querySelector('ruby');
+    expect(ruby0).not.toBeNull();
+    expect(ruby0?.querySelector('rt')?.textContent).toBe('とうきょう');
+    expect(chips[1].querySelector('ruby')).toBeNull();
+  });
+
+  test('mode katakana renders katakana ruby for kanji word', () => {
+    const el = renderSentence(furiganaResult, 'katakana');
+    const chips = el.querySelectorAll('.chip');
+    const ruby0 = chips[0].querySelector('ruby');
+    expect(ruby0).not.toBeNull();
+    expect(ruby0?.querySelector('rt')?.textContent).toBe('トウキョウ');
+    expect(chips[1].querySelector('ruby')).toBeNull();
+  });
+
+  test('mode romaji renders romaji ruby for all matched segments', () => {
+    const el = renderSentence(furiganaResult, 'romaji');
+    const chips = el.querySelectorAll('.chip');
+    const rt0 = chips[0].querySelector('rt.romaji');
+    expect(rt0).not.toBeNull();
+    expect(rt0?.textContent).toBe('toukyou');
+
+    const rt1 = chips[1].querySelector('rt.romaji');
+    expect(rt1).not.toBeNull();
+    expect(rt1?.textContent).toBe('ni');
+  });
+});
