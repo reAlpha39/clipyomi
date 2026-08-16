@@ -33,6 +33,12 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub furigana_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide_pos: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide_xrefs: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide_usage: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_height: Option<u32>,
@@ -53,6 +59,9 @@ impl Default for Settings {
             clipboard_monitoring: true,
             decorations: true,
             furigana_mode: None,
+            hide_pos: None,
+            hide_xrefs: None,
+            hide_usage: None,
             window_width: None,
             window_height: None,
             window_x: None,
@@ -208,6 +217,9 @@ mod tests {
         let s = Settings::default();
         assert!(s.decorations);
         assert_eq!(s.furigana_mode, None);
+        assert_eq!(s.hide_pos, None);
+        assert_eq!(s.hide_xrefs, None);
+        assert_eq!(s.hide_usage, None);
         assert_eq!(s.window_width, None);
         assert_eq!(s.window_height, None);
         assert_eq!(s.window_x, None);
@@ -240,6 +252,9 @@ mod tests {
             clipboard_monitoring: true,
             decorations: false,
             furigana_mode: Some("hiragana".to_string()),
+            hide_pos: None,
+            hide_xrefs: None,
+            hide_usage: None,
             window_width: Some(400),
             window_height: Some(300),
             window_x: None,
@@ -250,6 +265,32 @@ mod tests {
         assert!(json.contains("\"furigana_mode\":\"hiragana\""));
         let deserialized: Settings = serde_json::from_str(&json).expect("deserialization succeeds");
         assert_eq!(deserialized.furigana_mode, Some("hiragana".to_string()));
+    }
+
+    #[test]
+    fn settings_roundtrips_gloss_filters() {
+        let settings = Settings {
+            always_on_top: true,
+            clipboard_monitoring: true,
+            decorations: false,
+            furigana_mode: Some("hiragana".to_string()),
+            hide_pos: Some(true),
+            hide_xrefs: Some(false),
+            hide_usage: Some(true),
+            window_width: Some(400),
+            window_height: Some(300),
+            window_x: None,
+            window_y: None,
+            extra: serde_json::Map::new(),
+        };
+        let json = serde_json::to_string(&settings).expect("serialization succeeds");
+        assert!(json.contains("\"hide_pos\":true"));
+        assert!(json.contains("\"hide_xrefs\":false"));
+        assert!(json.contains("\"hide_usage\":true"));
+        let deserialized: Settings = serde_json::from_str(&json).expect("deserialization succeeds");
+        assert_eq!(deserialized.hide_pos, Some(true));
+        assert_eq!(deserialized.hide_xrefs, Some(false));
+        assert_eq!(deserialized.hide_usage, Some(true));
     }
 }
 

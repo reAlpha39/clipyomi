@@ -44,11 +44,20 @@ export interface ParseResult {
 
 export type FuriganaMode = 'none' | 'hiragana' | 'katakana' | 'romaji';
 
+export interface GlossFilters {
+  hide_pos?: boolean;
+  hide_xrefs?: boolean;
+  hide_usage?: boolean;
+}
+
 export interface Settings {
   always_on_top: boolean;
   clipboard_monitoring: boolean;
   decorations: boolean;
   furigana_mode?: FuriganaMode;
+  hide_pos?: boolean;
+  hide_xrefs?: boolean;
+  hide_usage?: boolean;
   window_width?: number;
   window_height?: number;
   window_x?: number;
