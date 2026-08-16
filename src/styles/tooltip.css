@@ -21,9 +21,29 @@ body {
      entry's head, which spec §3.4 reverses. ta-old scrolls here too
      (`MyToolTip.cpp:492-497`). */
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tt-border) transparent;
   font-family: var(--font-ui);
   font-size: var(--text-gloss);
   line-height: 1.35;
+}
+
+#tooltip::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+#tooltip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#tooltip::-webkit-scrollbar-thumb {
+  background: var(--tt-border);
+  border-radius: 3px;
+}
+
+#tooltip::-webkit-scrollbar-thumb:hover {
+  background: var(--tt-paren);
 }
 
 .tt-line {
