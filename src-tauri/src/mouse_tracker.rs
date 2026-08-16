@@ -5,9 +5,9 @@
 //! main window when inactive and emits `unfocused-mouse-move` / `unfocused-mouse-leave`
 //! so dictionary tooltips open and close seamlessly without requiring window focus.
 
-use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
 
+#[allow(dead_code)]
 #[derive(Clone, serde::Serialize)]
 pub struct MouseMovePayload {
     pub x: f64,
@@ -19,6 +19,8 @@ pub struct MouseMovePayload {
 #[cfg(target_os = "macos")]
 pub fn start(app: AppHandle) {
     use std::ffi::c_void;
+    use std::time::Duration;
+    use tauri::{Emitter, Manager};
 
     std::thread::spawn(move || {
         extern "C" {
@@ -228,6 +230,9 @@ pub fn start(app: AppHandle) {
 
 #[cfg(target_os = "windows")]
 pub fn start(app: AppHandle) {
+    use std::time::Duration;
+    use tauri::{Emitter, Manager};
+
     #[repr(C)]
     #[derive(Copy, Clone, Default)]
     struct POINT {
