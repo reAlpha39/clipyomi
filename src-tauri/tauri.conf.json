@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Translation Aggregator",
+  "productName": "ClipYomi",
   "version": "0.1.0",
-  "identifier": "dev.jparser.translation-aggregator",
+  "identifier": "dev.jparser.clipyomi",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Translation Aggregator",
+        "title": "ClipYomi",
         "width": 720,
         "height": 480,
         "minWidth": 160,

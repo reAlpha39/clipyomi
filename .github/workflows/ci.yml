@@ -27,7 +27,7 @@ jobs:
       # src-tauri joined the workspace in Phase 2D, so every job that compiles
       # the workspace now links against webkit2gtk. Only the dev package for
       # what is actually linked is installed: `cargo tree -p
-      # translation-aggregator -e normal --target x86_64-unknown-linux-gnu`
+      # clipyomi -e normal --target x86_64-unknown-linux-gnu`
       # resolves to `gtk` + `webkit2gtk` and nothing else Tauri-related — no
       # `tray-icon`, no `libappindicator`, no `xdo`. `librsvg2-dev` and
       # `patchelf` are bundling-only tools and `bundle.active` is `false`

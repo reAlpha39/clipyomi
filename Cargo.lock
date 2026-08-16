@@ -494,6 +494,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "clipyomi"
+version = "0.1.0"
+dependencies = [
+ "jmdict-source",
+ "jparser",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4091,21 +4106,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "translation-aggregator"
-version = "0.1.0"
-dependencies = [
- "jmdict-source",
- "jparser",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "thiserror 1.0.69",
- "tokio",
 ]
 
 [[package]]
