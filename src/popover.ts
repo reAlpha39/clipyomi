@@ -1,6 +1,6 @@
 import { emit, listen } from '@tauri-apps/api/event';
 import { renderTooltip } from './render/tooltip';
-import type { Entry } from './types';
+import type { Entry, GlossFilters } from './types';
 import './styles/tooltip.css';
 
 // The tooltip window's entry point. Deliberately does not import `main.ts`:
@@ -18,8 +18,14 @@ const tooltip = document.querySelector<HTMLElement>('#tooltip')!;
  */
 const VERTICAL_PADDING = 6;
 
-void listen<Entry[]>('popover-content', (e) => {
-  const content = renderTooltip(e.payload);
+type PopoverPayload = Entry[] | { entries: Entry[]; filters?: GlossFilters };
+
+void listen<PopoverPayload>('popover-content', (e) => {
+  const payload = e.payload;
+  const entries = Array.isArray(payload) ? payload : payload.entries;
+  const filters = Array.isArray(payload) ? undefined : payload.filters;
+
+  const content = renderTooltip(entries, filters);
   tooltip.replaceChildren(content);
   tooltip.scrollTop = 0;
   // The main window cannot measure this content — it is in another webview —
