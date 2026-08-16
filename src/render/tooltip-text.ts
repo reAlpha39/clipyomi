@@ -1,4 +1,4 @@
-import type { Entry } from '../types';
+import type { Entry, GlossFilters } from '../types';
 
 /**
  * Prefix marking a line as the conjugation label.
@@ -11,7 +11,7 @@ import type { Entry } from '../types';
 export const CONJ_MARKER = '\u0001';
 
 /** One entry's block: an optional conjugation line, a headword line, then senses. */
-function entryLines(entry: Entry): string[] {
+function entryLines(entry: Entry, filters?: GlossFilters): string[] {
   const lines: string[] = [];
 
   if (entry.conjugation !== null) lines.push(`${CONJ_MARKER}${entry.conjugation}`);
@@ -24,9 +24,31 @@ function entryLines(entry: Entry): string[] {
   entry.senses.forEach((sense, i) => {
     // Glosses join with "/" — ta-old's separator. The pane uses "; "; the two
     // surfaces render differently on purpose from this phase onward.
-    const glosses = sense.glosses.join('/');
-    const tail = common && i === entry.senses.length - 1 ? '/(P)' : '';
-    lines.push(`(${sense.pos.join(',')}) (${i + 1}) ${glosses}${tail}`);
+    const parts: string[] = [...sense.glosses];
+
+    if (!filters?.hide_usage) {
+      for (const m of sense.misc) {
+        parts.push(`(${m})`);
+      }
+      for (const inf of sense.info) {
+        parts.push(`(${inf})`);
+      }
+    }
+
+    if (!filters?.hide_xrefs) {
+      for (const xr of sense.xrefs) {
+        parts.push(`(see ${xr})`);
+      }
+    }
+
+    if (common && i === entry.senses.length - 1) {
+      parts.push('(P)');
+    }
+
+    const posPrefix =
+      !filters?.hide_pos && sense.pos.length > 0 ? `(${sense.pos.join(',')}) ` : '';
+    const glosses = parts.join('/');
+    lines.push(`${posPrefix}(${i + 1}) ${glosses}`);
   });
 
   return lines;
@@ -39,6 +61,7 @@ function entryLines(entry: Entry): string[] {
  * is lexical, not semantic (see `tooltip-colour.ts`): it reads characters, so
  * what it needs is characters.
  */
-export function assembleTooltipText(entries: Entry[]): string {
-  return entries.flatMap(entryLines).join('\n');
+export function assembleTooltipText(entries: Entry[], filters?: GlossFilters): string {
+  return entries.flatMap((e) => entryLines(e, filters)).join('\n');
 }
+

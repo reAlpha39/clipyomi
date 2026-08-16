@@ -1,4 +1,4 @@
-import type { Entry } from '../types';
+import type { Entry, GlossFilters } from '../types';
 import { assembleTooltipText } from './tooltip-text';
 import { colourLine } from './tooltip-colour';
 
@@ -9,11 +9,11 @@ import { colourLine } from './tooltip-colour';
  * the popover so they could not drift; from this phase they are meant to
  * differ, so each owns its own. The pane is untouched.
  */
-export function renderTooltip(entries: Entry[]): HTMLElement {
+export function renderTooltip(entries: Entry[], filters?: GlossFilters): HTMLElement {
   const root = document.createElement('div');
   root.className = 'tt';
 
-  for (const line of assembleTooltipText(entries).split('\n')) {
+  for (const line of assembleTooltipText(entries, filters).split('\n')) {
     const el = document.createElement('div');
     el.className = 'tt-line';
     for (const run of colourLine(line)) {

@@ -72,4 +72,111 @@ describe('assembleTooltipText', () => {
   test('renders nothing for no entries', () => {
     expect(assembleTooltipText([])).toBe('');
   });
+
+  describe('GlossFilters', () => {
+    test('renders full sense metadata (pos, misc, info, xrefs, common) when unfiltered', () => {
+      const e = entry({
+        senses: [
+          {
+            pos: ['v5r'],
+            glosses: ['to say', 'to utter'],
+            misc: ['uk'],
+            info: ['usually written in kana'],
+            xrefs: ['言われる'],
+          },
+        ],
+        flags: ['primary', 'common'],
+      });
+      expect(assembleTooltipText([e])).toBe(
+        '消える【きえる】\n(v5r) (1) to say/to utter/(uk)/(usually written in kana)/(see 言われる)/(P)',
+      );
+    });
+
+    test('hide_pos strips the pos tag from sense lines', () => {
+      const e = entry({
+        senses: [
+          {
+            pos: ['v5r'],
+            glosses: ['to say'],
+            misc: [],
+            info: [],
+            xrefs: [],
+          },
+        ],
+      });
+      expect(assembleTooltipText([e], { hide_pos: true })).toBe(
+        '消える【きえる】\n(1) to say',
+      );
+    });
+
+    test('hide_xrefs strips cross references', () => {
+      const e = entry({
+        senses: [
+          {
+            pos: ['v5r'],
+            glosses: ['to say'],
+            misc: [],
+            info: [],
+            xrefs: ['言われる'],
+          },
+        ],
+      });
+      expect(assembleTooltipText([e], { hide_xrefs: true })).toBe(
+        '消える【きえる】\n(v5r) (1) to say',
+      );
+    });
+
+    test('hide_usage strips misc and s_inf usage notes', () => {
+      const e = entry({
+        senses: [
+          {
+            pos: ['v5r'],
+            glosses: ['to say'],
+            misc: ['uk'],
+            info: ['usually written in kana'],
+            xrefs: [],
+          },
+        ],
+      });
+      expect(assembleTooltipText([e], { hide_usage: true })).toBe(
+        '消える【きえる】\n(v5r) (1) to say',
+      );
+    });
+
+    test('combined filters strip pos, xrefs, and usage simultaneously', () => {
+      const e = entry({
+        senses: [
+          {
+            pos: ['v5r'],
+            glosses: ['to say', 'to utter'],
+            misc: ['uk'],
+            info: ['usually written in kana'],
+            xrefs: ['言われる'],
+          },
+        ],
+        flags: ['primary', 'common'],
+      });
+      expect(
+        assembleTooltipText([e], { hide_pos: true, hide_xrefs: true, hide_usage: true }),
+      ).toBe('消える【きえる】\n(1) to say/to utter/(P)');
+    });
+
+    test('omits pos prefix when sense pos is empty even if hide_pos is false', () => {
+      const e = entry({
+        senses: [
+          {
+            pos: [],
+            glosses: ['particle'],
+            misc: [],
+            info: [],
+            xrefs: [],
+          },
+        ],
+      });
+      expect(assembleTooltipText([e], { hide_pos: false })).toBe(
+        '消える【きえる】\n(1) particle',
+      );
+    });
+  });
 });
+
