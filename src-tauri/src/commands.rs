@@ -175,6 +175,19 @@ pub fn save_window_geometry(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn save_settings(
+    settings: Settings,
+    state: State<'_, Arc<SettingsState>>,
+) -> Result<(), String> {
+    state
+        .update(|s| {
+            if settings.furigana_mode.is_some() {
+                s.furigana_mode = settings.furigana_mode;
+            }
+        })
+        .map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 pub fn get_settings(settings: State<'_, Arc<SettingsState>>) -> Settings {
@@ -563,6 +576,25 @@ mod tests {
         assert_eq!(s.window_height, Some(200));
         assert_eq!(s.window_x, Some(50));
         assert_eq!(s.window_y, Some(80));
+    }
+
+    #[test]
+    fn save_settings_updates_furigana_mode_in_settings_state() {
+        let dir = scratch("save-settings");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings::default(),
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
+        let settings = Settings {
+            furigana_mode: Some("romaji".to_string()),
+            ..Default::default()
+        };
+        save_settings(settings, state_arg).unwrap();
+        let s = state.snapshot();
+        assert_eq!(s.furigana_mode, Some("romaji".to_string()));
     }
 }
 

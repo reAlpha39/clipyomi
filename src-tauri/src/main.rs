@@ -150,6 +150,7 @@ fn main() {
             commands::set_always_on_top,
             commands::set_decorations,
             commands::save_window_geometry,
+            commands::save_settings,
             commands::get_settings,
             commands::startup_error,
             commands::settings_warning,

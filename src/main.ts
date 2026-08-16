@@ -11,7 +11,7 @@ import {
   type Point,
   type Rect,
 } from './render/popover';
-import type { ParseResult, Segment, Settings } from './types';
+import type { FuriganaMode, ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -21,6 +21,12 @@ app.innerHTML = `
     <button id="always-on-top" type="button" aria-pressed="false">Always on top</button>
     <button id="monitor" type="button" aria-pressed="true">Monitoring</button>
     <button id="decorations" type="button" aria-pressed="true">Title bar</button>
+    <div class="segmented-control" role="radiogroup" aria-label="Furigana mode">
+      <button type="button" role="radio" data-mode="none" aria-checked="true" title="No furigana">—</button>
+      <button type="button" role="radio" data-mode="hiragana" aria-checked="false" title="Hiragana furigana">ひ</button>
+      <button type="button" role="radio" data-mode="katakana" aria-checked="false" title="Katakana furigana">カ</button>
+      <button type="button" role="radio" data-mode="romaji" aria-checked="false" title="Romaji phonetic">R</button>
+    </div>
   </header>
   <div id="parse-error"></div>
   <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
@@ -244,6 +250,40 @@ bindToggle(alwaysOnTop, 'set_always_on_top', 'always_on_top');
 bindToggle(monitor, 'set_clipboard_monitoring', 'clipboard_monitoring');
 bindToggle(decorations, 'set_decorations', 'decorations');
 
+let currentFuriganaMode: FuriganaMode = 'none';
+let touchedFurigana = false;
+
+const modeButtons = app.querySelectorAll<HTMLButtonElement>('.segmented-control button[data-mode]');
+
+function updateFuriganaButtons(mode: FuriganaMode): void {
+  currentFuriganaMode = mode;
+  modeButtons.forEach((btn) => {
+    btn.setAttribute('aria-checked', btn.dataset.mode === mode ? 'true' : 'false');
+  });
+}
+
+function persistSettings(): Promise<void> {
+  return invoke('save_settings', {
+    settings: {
+      furigana_mode: currentFuriganaMode,
+    },
+  });
+}
+
+modeButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const mode = (btn.dataset.mode as FuriganaMode) ?? 'none';
+    if (mode === currentFuriganaMode) return;
+    touchedFurigana = true;
+    updateFuriganaButtons(mode);
+    if (lastResult !== null) {
+      closePopover();
+      output.replaceChildren(renderSentence(lastResult, currentFuriganaMode));
+    }
+    void persistSettings();
+  });
+});
+
 async function applySettings(): Promise<void> {
   const settings = await invoke<Settings>('get_settings');
   if (alwaysOnTop !== null && !touchedButtons.has(alwaysOnTop) && settings.always_on_top !== undefined) {
@@ -254,6 +294,9 @@ async function applySettings(): Promise<void> {
   }
   if (decorations !== null && !touchedButtons.has(decorations) && settings.decorations !== undefined) {
     decorations.setAttribute('aria-pressed', String(settings.decorations));
+  }
+  if (!touchedFurigana && settings.furigana_mode !== undefined) {
+    updateFuriganaButtons(settings.furigana_mode);
   }
 }
 
@@ -730,7 +773,7 @@ function show(result: ParseResult): void {
   closePopover();
   lastResult = result;
 
-  const sentence = renderSentence(result);
+  const sentence = renderSentence(result, currentFuriganaMode);
 
   parseError.replaceChildren();
   output.replaceChildren(sentence);

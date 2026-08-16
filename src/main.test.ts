@@ -785,3 +785,163 @@ describe('window geometry save on resize/move', () => {
   });
 });
 
+describe('furigana segmented control', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    vi.resetModules();
+  });
+
+  test('furigana segmented control initializes from settings and toggles mode', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          furigana_mode: 'hiragana',
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const btnNone = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="none"]');
+    const btnHiragana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="hiragana"]');
+    const btnKatakana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="katakana"]');
+    const btnRomaji = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="romaji"]');
+
+    expect(btnNone?.getAttribute('aria-checked')).toBe('false');
+    expect(btnHiragana?.getAttribute('aria-checked')).toBe('true');
+    expect(btnKatakana?.getAttribute('aria-checked')).toBe('false');
+    expect(btnRomaji?.getAttribute('aria-checked')).toBe('false');
+
+    // Click Romaji button
+    btnRomaji?.click();
+    await Promise.resolve();
+
+    expect(btnRomaji?.getAttribute('aria-checked')).toBe('true');
+    expect(btnHiragana?.getAttribute('aria-checked')).toBe('false');
+
+    // Expect save_settings was called with furigana_mode: 'romaji'
+    expect(invoke).toHaveBeenCalledWith(
+      'save_settings',
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          furigana_mode: 'romaji',
+        }),
+      }),
+    );
+  });
+
+  test('re-renders sentence immediately when furigana mode changes', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('parse-result', {
+      segments: [
+        {
+          start: 0,
+          len: 2,
+          surface: '東京',
+          reading: 'とうきょう',
+          matched: true,
+          entries: [
+            {
+              headword: '東京',
+              reading: 'とうきょう',
+              conjugation: null,
+              pos: ['n'],
+              senses: [],
+              flags: ['primary'],
+            },
+          ],
+        },
+      ],
+    });
+
+    // Default mode is 'none': no ruby
+    const chip = document.querySelector('.chip');
+    expect(chip?.textContent).toBe('東京');
+    expect(chip?.querySelector('ruby')).toBeNull();
+
+    // Click Hiragana
+    const btnHiragana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="hiragana"]');
+    btnHiragana?.click();
+    await Promise.resolve();
+
+    const rubyH = document.querySelector('.chip ruby');
+    expect(rubyH).not.toBeNull();
+    expect(rubyH?.querySelector('rt')?.textContent).toBe('とうきょう');
+
+    // Click Katakana
+    const btnKatakana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="katakana"]');
+    btnKatakana?.click();
+    await Promise.resolve();
+
+    const rubyK = document.querySelector('.chip ruby');
+    expect(rubyK).not.toBeNull();
+    expect(rubyK?.querySelector('rt')?.textContent).toBe('トウキョウ');
+
+    // Click Romaji
+    const btnRomaji = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="romaji"]');
+    btnRomaji?.click();
+    await Promise.resolve();
+
+    const rubyR = document.querySelector('.chip ruby');
+    expect(rubyR).not.toBeNull();
+    const rtR = rubyR?.querySelector('rt.romaji');
+    expect(rtR).not.toBeNull();
+    expect(rtR?.textContent).toBe('toukyou');
+
+    // Click None
+    const btnNone = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="none"]');
+    btnNone?.click();
+    await Promise.resolve();
+
+    expect(document.querySelector('.chip')?.querySelector('ruby')).toBeNull();
+    expect(document.querySelector('.chip')?.textContent).toBe('東京');
+  });
+
+  test('clicking the already active mode does not trigger save_settings', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          furigana_mode: 'hiragana',
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const btnHiragana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="hiragana"]');
+    btnHiragana?.click();
+    await Promise.resolve();
+
+    expect(invoke).not.toHaveBeenCalledWith('save_settings', expect.anything());
+  });
+});
+

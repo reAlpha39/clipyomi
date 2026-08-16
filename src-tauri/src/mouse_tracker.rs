@@ -235,6 +235,7 @@ pub fn start(app: AppHandle) {
 
     #[repr(C)]
     #[derive(Copy, Clone, Default)]
+    #[allow(clippy::upper_case_acronyms)]
     struct POINT {
         x: i32,
         y: i32,
@@ -242,6 +243,7 @@ pub fn start(app: AppHandle) {
 
     #[repr(C)]
     #[derive(Copy, Clone, Default)]
+    #[allow(clippy::upper_case_acronyms)]
     struct RECT {
         left: i32,
         top: i32,
