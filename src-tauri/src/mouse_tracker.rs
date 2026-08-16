@@ -251,10 +251,9 @@ pub fn start(app: AppHandle) {
 
     extern "system" {
         fn GetCursorPos(lpPoint: *mut POINT) -> i32;
-        fn GetWindowRect(hWnd: isize, lpRect: *mut RECT) -> i32;
-        fn GetClientRect(hWnd: isize, lpRect: *mut RECT) -> i32;
-        fn ScreenToClient(hWnd: isize, lpPoint: *mut POINT) -> i32;
-        fn GetDpiForWindow(hWnd: isize) -> u32;
+        fn GetClientRect(hWnd: *mut std::ffi::c_void, lpRect: *mut RECT) -> i32;
+        fn ScreenToClient(hWnd: *mut std::ffi::c_void, lpPoint: *mut POINT) -> i32;
+        fn GetDpiForWindow(hWnd: *mut std::ffi::c_void) -> u32;
     }
 
     std::thread::spawn(move || {

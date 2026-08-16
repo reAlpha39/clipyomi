@@ -9,7 +9,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // a busy port fail loudly instead of silently serving where Tauri is not looking.
 export default defineConfig({
   clearScreen: false,
-  server: { port: 1420, strictPort: true },
+  server: {
+    port: 1420,
+    strictPort: true,
+    watch: {
+      ignored: ['**/src-tauri/**', '**/target/**'],
+    },
+  },
   build: {
     target: 'esnext',
     // Two pages: the app, and the tooltip window. Without naming both here
