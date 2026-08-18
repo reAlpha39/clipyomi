@@ -72,7 +72,8 @@ body {
   padding: 0 0 0 10px;
 }
 
-#app[data-platform='macos'] .window-controls {
+#app[data-platform='macos'] .window-controls,
+#app[data-decorations='true'] .window-controls {
   display: none;
 }
 

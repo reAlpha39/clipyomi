@@ -54,11 +54,13 @@ fn main() {
                 }
                 #[cfg(target_os = "windows")]
                 {
-                    let _ = main_window.set_decorations(false);
-                    if !loaded.decorations {
-                        commands::win32_region::setup_window_attributes(&main_window.as_ref().window());
-                        commands::win32_region::apply_clip_region(&main_window.as_ref().window(), false, 28);
-                    }
+                    let _ = main_window.set_decorations(loaded.decorations);
+                    commands::win32_region::apply_window_shape(
+                        &main_window.as_ref().window(),
+                        loaded.decorations,
+                        false,
+                        28,
+                    );
                 }
                 if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
                     #[cfg(target_os = "windows")]
