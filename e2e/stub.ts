@@ -64,8 +64,14 @@ export const STUB = `
         cmd === 'save_window_geometry'
       )
         return undefined;
-      if (cmd === 'is_macos') return false;
-      if (cmd === 'peek_grows_frame') return false;
+      // These specs run on macOS and their screenshot baselines are the darwin
+      // ones, so the stub must answer as macOS, or every baseline would pin the
+      // Windows layout (permanent band padding, in-app window controls) on a
+      // platform that never renders it. The Windows branch is covered by a spec
+      // that overrides both answers. No backticks in here: this whole block is
+      // inside a template literal.
+      if (cmd === 'is_macos') return true;
+      if (cmd === 'peek_grows_frame') return true;
       // Every existing spec exercises the parse path, so the stub's default
       // answer is "a dictionary already exists" — Task 5's own spec overrides
       // this to true for the one test that needs the download screen instead.

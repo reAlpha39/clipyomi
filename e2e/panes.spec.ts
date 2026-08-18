@@ -153,6 +153,40 @@ test('revealing the band leaves the content stationary when the frame cannot gro
   expect(after - before).toBe(0);
 });
 
+// The Windows shape, checked on this machine because the branch is pure CSS and
+// the only platform input is `is_macos`. What is NOT checked here: the Win32
+// region that clips the band away while idle, which is what makes the always-on
+// 28px band invisible on Windows. Without that clipping this layout would show a
+// permanent empty strip — see the Windows test plan.
+const WINDOWS_STUB = `
+  ${STUB}
+  const realInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+    if (cmd === 'is_macos' || cmd === 'peek_grows_frame') return Promise.resolve(false);
+    if (cmd === 'get_settings') return Promise.resolve({ decorations: false });
+    return realInvoke(cmd, args);
+  };
+`;
+
+test('the Windows shape keeps a full-height band and a permanent offset', async ({ page }) => {
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${WINDOWS_STUB}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const band = page.locator('header.controls');
+  const shell = page.locator('#app');
+  expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(28);
+  await expect(shell).toHaveCSS('padding-top', '28px');
+
+  // The frame does not grow on Windows, so the reveal must not add a second
+  // offset on top of the permanent one — that was the content-jump bug.
+  const before = await page.locator('.sentence').evaluate((el) => el.getBoundingClientRect().top);
+  await band.hover();
+  await expect(page.locator('#settings-toggle')).toHaveCSS('opacity', '1');
+  const after = await page.locator('.sentence').evaluate((el) => el.getBoundingClientRect().top);
+  expect(after).toBe(before);
+});
+
 test('the gear reveals itself when it takes keyboard focus', async ({ page }) => {
   await page.addInitScript(HIDDEN_TITLEBAR_STUB);
   await page.goto('/');
