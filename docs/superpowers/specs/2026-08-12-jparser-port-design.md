@@ -1,8 +1,12 @@
 # JParser Port — Design
 
 **Date:** 2026-08-12
-**Status:** Approved design, ready for implementation planning
+**Last amended:** 2026-08-18
+**Status:** In implementation — Phases 1 and 2 shipped, Phase 3 in progress. See
+§11 for the per-phase breakdown; sub-phase design specs amend this document
+rather than replace it.
 **Reference implementation:** `ta-old/` (Translation Aggregator, GPL v2)
+**Ships as:** ClipYomi (binary and app name, renamed during Phase 2)
 
 ## 1. Goal
 
@@ -19,7 +23,10 @@ word-by-word breakdown with readings, conjugations, and English definitions.
 - Clipboard auto-monitoring. (Manual text entry was removed in Phase 2H — see
   `docs/superpowers/specs/2026-08-15-jparser-phase2h-design.md`. The clipboard is
   the only user-facing input path.)
-- Segmented-sentence + definition-list UI with furigana modes.
+- Segmented-sentence UI with furigana modes, and definitions on hover or focus.
+  (The bottom definition-list pane was removed in Phase 2J — see
+  `docs/superpowers/specs/2026-08-15-jparser-phase2j-design.md`. A popover window
+  is the only definition surface.)
 - Light/dark/system theming, always-on-top, per-pixel background transparency,
   three window-chrome states.
 - Parse history, gloss filters, adjustable font sizes, saved layout hotkeys.
@@ -67,18 +74,32 @@ translation-aggregator/
 │   │   ├── romaji.rs             # romajiTable + ToRomaji port
 │   │   ├── conjugation.rs        # table load + Next Type resolution
 │   │   ├── jmdict.rs             # streaming XML -> headword records
+│   │   ├── record.rs             # headword record + flags
+│   │   ├── stem.rs               # verb stem generation
+│   │   ├── rank.rs               # entry ordering
 │   │   ├── index/
 │   │   │   ├── build.rs          # records -> FST + payload blob
-│   │   │   └── load.rs           # mmap + prefix query
-│   │   ├── matcher.rs            # matches at a position + verb recursion
+│   │   │   ├── load.rs           # mmap + prefix query
+│   │   │   └── generations.rs    # immutable numbered publish (2A)
+│   │   ├── matcher.rs            # matches at a position
+│   │   ├── matcher/verb.rs       # verb-conjugation recursion
 │   │   ├── segment.rs            # DP segmenter
-│   │   └── morph.rs              # Vibrato -> BoundaryHints
+│   │   ├── hints.rs              # Vibrato -> BoundaryHints (feature `mecab`)
+│   │   └── bin/jparser-cli.rs    # index build, dump, parse
 │   ├── assets/conjugations.json
 │   └── tests/
+├── crates/jmdict-source/         # JMdict acquisition: HTTP + gunzip (2B)
 ├── src-tauri/                    # thin shell
-│   └── src/{clipboard,parse,commands,settings,window}.rs
+│   └── src/{main,state,clipboard,parse,commands,settings,popover,
+│            mouse_tracker}.rs
 └── src/                          # web UI (Vite + TypeScript)
+    ├── main.ts, popover.ts, settings.ts
+    ├── render/                   # sentence, furigana, tooltip text + colour
+    └── styles/
 ```
+
+The tree names the files that exist today; the sub-phase that introduced a
+non-obvious one is noted in parentheses.
 
 **Hard rule:** `crates/jparser` has no Tauri dependency and no I/O beyond
 reading its index and asset files. It must be testable, benchmarkable, and
@@ -87,12 +108,16 @@ fuzzable without a window. This is the boundary that makes the port verifiable.
 **Data flow** is one-directional:
 
 ```
-clipboard poll ─┐
-manual input  ─┴→ parse worker → ParseResult → JSON event → webview
+clipboard poll → watch channel → parse worker → ParseResult
+                                              → `parse-result` event → webview
 ```
 
-ta-old's mid-parse `PostMessage(WMA_JPARSER_STATE)` progress pings become a
-plain event emit (`parse:progress`).
+Manual input was the second source into that channel until Phase 2H deleted it;
+the clipboard is now the only one.
+
+ta-old's mid-parse `PostMessage(WMA_JPARSER_STATE)` progress pings were to become
+a plain event emit (`parse:progress`). **Not built** — a parse finishes fast
+enough that nothing has needed to observe it mid-flight.
 
 ## 4. Data assets
 
@@ -625,31 +650,89 @@ something that means nothing.
 
 ## 11. Phasing
 
-Scope roughly doubled during design, so the implementation plan should sequence
-rather than treat this as one pile.
+The six themes below still describe the work, but the unit that actually ships is
+the **lettered sub-phase**. Phase 1 split in two, Phase 2 ran to twelve letters
+and absorbed both MeCab hints and most of the window behaviour, and Phase 3
+started before Phase 2's tail was finished.
 
-**Phase 1 — Parser core.** Conjugation table + `Next Type`, kana/romaji, JMdict
-streaming, index build with stem generation, FST, matcher, DP segmenter. Unit
-tests and snapshots. No UI. Verifiable via a CLI harness.
+Every sub-phase has a design spec in `docs/superpowers/specs/` and a plan in
+`docs/superpowers/plans/`, named `<date>-jparser-phase<N><L>[-design].md`; some
+also have a handoff in `docs/superpowers/`.
 
-**Phase 2 — Minimum viable app.** Tauri shell, first-run download, clipboard
-monitor, sentence + definition panes, light/dark, always-on-top. Usable end to
-end.
+### Phase 1 — Parser core (shipped)
 
-**Phase 3 — Reading aids.** Furigana modes (all four), font sizes, gloss
-filters, settings popover.
+| Sub-phase | Delivered |
+|---|---|
+| **1A** (08-12) | Character handling, romaji, conjugation table + `Next Type`, JMdict streaming, verb stem generation, mmap FST index. CLI dumps every record matching a query. |
+| **1B** (08-13) | Matcher with verb-conjugation recursion, min-cost DP segmenter with ta-old's scoring, conjugation labels, reading reconstruction, public `parse()`. |
 
-**Phase 4 — Window behaviour.** Three chrome states, per-pixel transparency,
-layout hotkeys, parse history.
+### Phase 2 — Minimum viable app (shipped)
 
-**Phase 5 — MeCab.** Vibrato integration, on-demand dictionary download,
-boundary hints, toggle.
+Scope grew well past "minimum": MeCab hints arrived here instead of Phase 5, and
+so did the chrome and geometry work originally filed under Phase 4.
 
-**Phase 6 — Verification.** Differential run against ta-old, Playwright suite,
-per-platform manual checklist, Windows + macOS builds.
+| Sub-phase | Delivered |
+|---|---|
+| **2A** (08-13) | Dictionary lifecycle: immutable numbered index generations, headless `ensure_dictionary`, CLI driver. An interrupted rebuild cannot serve well-formed wrong data. |
+| **2B** (08-13) | JMdict acquisition in `crates/jmdict-source` — hand-placed file, else download + verify + publish. No HTTP client or decompressor in `crates/jparser`. |
+| **2C** (08-14) | MeCab boundary hints: `VibratoTokenizer` behind the optional `mecab` feature, IPADIC field 7 marking token interiors, `jparser-cli parse --hints`. |
+| **2D** (08-14) | Tauri shell: `src-tauri` workspace member, `parse_text` on `spawn_blocking`, Vite + vanilla-TS webview, sentence and definition panes. First user-facing surface. |
+| **2E** (08-14) | Autonomy: 200 ms clipboard poll into a `watch` channel, one worker, `parse-result` events, always-on-top and clipboard-pause persisted to `settings.json`. |
+| **2F** (08-14) | First-run download screen. `AppState` travels to the worker by a second `watch`, so an arriving index starts serving without a restart. |
+| **2G** (08-14) | Hover-to-preview popover inside the webview: reused `renderEntry`, `pointer-events: none`, placement as a pure function. |
+| **2H** (08-15) | Manual text box deleted — the clipboard becomes the only user-facing input. The Rust command stays as a test and debug entry point. |
+| **2I** (08-15) | The popover becomes a real OS window, able to extend past the main window onto the desktop, with ta-old's `MyDrawText` colouring and a cursor-poll keep rule. |
+| **2J** (08-15) | Bottom definitions pane removed; the popover window is the only definition surface, and the segmented sentence is the sole output child. |
+| **2K** (08-15) | Title-bar (decorations) toggle with native frameless dragging; window size and position persisted across launches. |
+| **2L** (08-16) | Hover popovers while the window is unfocused, driven by a native cursor-tracking thread, without stealing focus from the foreground app. |
 
-MeCab lands late deliberately: it is a ±10 tiebreaker on a 100/500 baseline, so
-it cannot be validated until the DP it nudges is known-good.
+### Phase 3 — Reading aids (in progress)
+
+| Sub-phase | Status |
+|---|---|
+| **3A** (08-16) | Shipped. Four furigana modes (`none`/`hiragana`/`katakana`/`romaji`) rendered as `<ruby>` over the chips, header segmented control, persisted. |
+| **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8. |
+| **3C** | Remaining. Font sizes (§7.7): `--text-cjk` and `--text-furigana` bound to two persisted inputs. The last reading aid still unbuilt. |
+
+### Phase 4 — Window behaviour (remaining, minus what 2K took)
+
+2K already shipped the header + resize-edges state and geometry persistence.
+Four sub-phases are left, and their order is a dependency chain, not a
+preference: **4C first** because it depends on nothing and is the one users feel;
+**4D last** because a slot captures the state 4A, 4B and 3C introduce.
+
+| Sub-phase | Scope | Depends on |
+|---|---|---|
+| **4C** | Parse history (§7.8): ring buffer of 50 full `ParseResult`s, consecutive duplicates deduped, back/forward in the header. What makes clipboard monitoring safe to leave running. | — |
+| **4A** | The other two chrome states (§7.4): content-only, with the toggles moving to a right-click menu, and native frame. Three-way control, persisted alongside `decorations`. | 2K |
+| **4B** | Per-pixel background alpha (§7.5): `"transparent": true`, a `--surface-alpha` token and its control, `macos-private-api` on macOS. Native frame forces alpha to 100 %, so 4A defines the state 4B must clamp. | 4A |
+| **4D** | Layout hotkeys (§7.9): global-shortcut plugin, `Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha, always-on-top, font sizes, furigana mode. | 3C, 4A, 4B |
+
+### Phase 5 — MeCab (remaining, minus what 2C took)
+
+The hints themselves are done. What is left is the plumbing that makes them
+reachable without a terminal — and it mirrors work already done for JMdict, so
+both sub-phases have a shape to copy.
+
+| Sub-phase | Scope | Precedent to copy |
+|---|---|---|
+| **5A** | On-demand download of the compiled Vibrato dictionary (§4.4), verified and published like an index generation, paid for only when MeCab is switched on. `TA_HINTS_DICT` survives as a test and debug override, no longer the only source. | 2B (acquisition), 2A (immutable publish) |
+| **5B** | The toggle: a persisted setting, and hints reaching the running worker over a `watch` so enabling them does not need a restart. Absent dictionary means hints off, not a fatal — 2C's fatal was correct only while the env var was an explicit request. | 2F (`watch` into a live worker), 2E (persisted toggle) |
+
+### Phase 6 — Verification (remaining)
+
+The Playwright suite is not a Phase 6 deliverable: `e2e/` already carries
+`panes.spec.ts` and `popover.spec.ts` and grows with each phase, so 6B completes
+it rather than starting it.
+
+| Sub-phase | Scope |
+|---|---|
+| **6A** | Differential run against ta-old (§10): ~200 sentences through both binaries, segmentations diffed, divergences triaged into port bugs vs legitimate JMdict/EDICT2 disagreement. Run once, deliberately, not a CI gate. |
+| **6B** | Suite completion: the 80 % line on `crates/jparser` held as a real number, and Playwright coverage extended to what Phases 3–4 added — furigana modes, gloss filters, history navigation — at 320 / 768 / 1024, both themes, reduced-motion, against a fixed fixture. |
+| **6C** | Release: Windows and macOS bundles, the per-platform manual checklist for the three things §10 declines to automate (always-on-top, transparency, chrome switching), and an attribution check — EDRDG in-app, GPL v2 (§14). |
+
+6A can run as soon as 3C lands; it tests the parser, which stops changing after
+Phase 1. 6C is the last thing that happens.
 
 ## 12. Deliberate deviations from ta-old
 
