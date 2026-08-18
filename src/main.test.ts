@@ -281,283 +281,6 @@ describe('main: a startup failure reports itself', () => {
   });
 });
 
-describe('the header controls', () => {
-  beforeEach(async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    emitted.length = 0;
-    invoke.mockReset();
-    // Deliberately the INVERSE of the markup's hardcoded aria-pressed
-    // defaults ('false' on #always-on-top, 'true' on #monitor): if these
-    // matched the markup, "reflects loaded settings" would still pass with
-    // `applySettings` deleted entirely, since the DOM would already show the
-    // right values before it ever ran.
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') {
-        return Promise.resolve({ always_on_top: true, clipboard_monitoring: false });
-      }
-      if (cmd === 'set_always_on_top' || cmd === 'set_clipboard_monitoring') {
-        return Promise.resolve(undefined);
-      }
-      // startup_error / settings_warning: nothing to report in these tests.
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
-    // let the get_settings promise resolve
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  test('reflects loaded settings in aria-pressed', () => {
-    expect(document.querySelector('#monitor')?.getAttribute('aria-pressed')).toBe('false');
-    expect(document.querySelector('#always-on-top')?.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  test('toggling monitoring flips aria-pressed', async () => {
-    const button = document.querySelector<HTMLButtonElement>('#monitor');
-    if (button === null) throw new Error('#monitor missing');
-    button.click();
-    await Promise.resolve();
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  // Regression 2 (focus preservation) used to live here as a
-  // `document.activeElement` assertion. Deleted: happy-dom 20.0.0 does not
-  // blur a focused element when `.disabled` is set, so that assertion could
-  // never fail in this environment regardless of what `bindToggle` does — a
-  // test that cannot fail is not coverage. The real Chromium behaviour is
-  // proven for real by `e2e/panes.spec.ts`'s
-  // "activating a toggle keeps keyboard focus".
-});
-
-describe('overlapping toggle requests', () => {
-  beforeEach(() => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    emitted.length = 0;
-    invoke.mockReset();
-    vi.resetModules();
-  });
-
-  // Finding 2: without some guard against a second click landing before the
-  // first settles, two in-flight requests could arrive out of order.
-  // Guarded with a closure-local `pending` flag, not `button.disabled` — see
-  // the focus-preservation test above for why not.
-  test('a button suppresses overlapping clicks while its request is in flight, without disabling the element', async () => {
-    let resolveSet: (() => void) | undefined;
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') {
-        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
-      }
-      if (cmd === 'set_clipboard_monitoring') {
-        return new Promise<void>((resolve) => {
-          resolveSet = resolve;
-        });
-      }
-      return Promise.resolve(null);
-    });
-
-    await import('./main');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const button = document.querySelector<HTMLButtonElement>('#monitor');
-    if (button === null) throw new Error('#monitor missing');
-
-    button.click();
-    // Never disabled — disabling a focused button would blur it (Regression 2).
-    expect(button.disabled).toBe(false);
-
-    // A second click while the first request is still in flight must not
-    // start a second, overlapping request.
-    button.click();
-    expect(
-      invoke.mock.calls.filter(([cmd]) => cmd === 'set_clipboard_monitoring'),
-    ).toHaveLength(1);
-
-    resolveSet?.();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // Settled: a further click now goes through as a new request.
-    button.click();
-    expect(
-      invoke.mock.calls.filter(([cmd]) => cmd === 'set_clipboard_monitoring'),
-    ).toHaveLength(2);
-  });
-
-  // Important 1 (final review): a rejected setter doesn't say *which* of two
-  // things happened. `state.rs`'s `SettingsState::update` applies a change in
-  // memory before it tries to persist it, so a write failure can still mean
-  // the change is genuinely in effect — reverting to the naive inverse would
-  // then show the opposite of backend reality. This mock's second
-  // `get_settings` answer (`clipboard_monitoring: false`) simulates exactly
-  // that case, and is deliberately NOT the naive inverse of the click below
-  // ('true') — a revert-blindly implementation fails the assertion after the
-  // rejection; only a resync-from-`get_settings` implementation passes it.
-  test('a rejected toggle resyncs aria-pressed from get_settings rather than the naive inverse, and accepts the next click', async () => {
-    let rejectFirst: ((reason: unknown) => void) | undefined;
-    let setCalls = 0;
-    let getSettingsCalls = 0;
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') {
-        getSettingsCalls += 1;
-        if (getSettingsCalls === 1) {
-          // The initial load, matching #monitor's markup default so the
-          // click below starts from a known, predictable state.
-          return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
-        }
-        // Queried again after the rejection below: the backend's in-memory
-        // value already flipped to what the user asked for, even though the
-        // write that would have persisted it failed.
-        return Promise.resolve({ always_on_top: false, clipboard_monitoring: false });
-      }
-      if (cmd === 'set_clipboard_monitoring') {
-        setCalls += 1;
-        if (setCalls === 1) {
-          return new Promise((_resolve, reject) => {
-            rejectFirst = reject;
-          });
-        }
-        return Promise.resolve(undefined);
-      }
-      return Promise.resolve(null);
-    });
-
-    await import('./main');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const button = document.querySelector<HTMLButtonElement>('#monitor');
-    if (button === null) throw new Error('#monitor missing');
-
-    button.click(); // markup/loaded default 'true' -> flips to 'false'
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-
-    rejectFirst?.('backend refused');
-    // Flushes: the rejection, the catch handler's `await get_settings`, and
-    // the attribute write that follows it.
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // NOT '!next' ('true') — the backend's own reported truth, fetched fresh
-    // rather than assumed. This is where a revert-blindly implementation
-    // fails: it would show 'true' here.
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(document.querySelector('#parse-error')?.textContent).toContain('backend refused');
-
-    // `pending` must have cleared even on rejection, or this click would be
-    // silently swallowed exactly like an overlapping one.
-    button.click();
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  // Residual 1 (re-review, final wave): the original fix awaited the
-  // `get_settings` resync *before* rendering the setter's own error, so a
-  // resync that itself failed left the user with no message at all and an
-  // unhandled rejection past the `void` at the top of `bindToggle`'s click
-  // handler. Vitest fails a test on an unhandled rejection by default, so
-  // this test failing to complete at all (rather than a clean assertion
-  // failure) was the actual signature of the bug this guards against.
-  test('a rejected setter still shows its error message when the resync itself also fails, and clears pending', async () => {
-    let rejectFirst: ((reason: unknown) => void) | undefined;
-    let getSettingsCalls = 0;
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') {
-        getSettingsCalls += 1;
-        if (getSettingsCalls === 1) {
-          return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
-        }
-        // The resync itself fails this time — the scenario Residual 1 covers.
-        return Promise.reject('get_settings unavailable');
-      }
-      if (cmd === 'set_clipboard_monitoring') {
-        return new Promise((_resolve, reject) => {
-          rejectFirst = reject;
-        });
-      }
-      return Promise.resolve(null);
-    });
-
-    await import('./main');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const button = document.querySelector<HTMLButtonElement>('#monitor');
-    if (button === null) throw new Error('#monitor missing');
-
-    button.click(); // 'true' -> flips to 'false'
-    rejectFirst?.('backend refused');
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // The original error is shown regardless of the resync's own outcome.
-    expect(document.querySelector('#parse-error')?.textContent).toContain('backend refused');
-    // The resync failed, so the button keeps its optimistic value rather
-    // than throwing or freezing on an unverified state.
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-
-    // `pending` cleared even though the resync itself rejected.
-    button.click();
-    expect(
-      invoke.mock.calls.filter(([cmd]) => cmd === 'set_clipboard_monitoring'),
-    ).toHaveLength(2);
-  });
-
-  // Finding 3 (a click before settings load must survive the late response)
-  // AND Regression 1 (that must not come at the cost of freezing the
-  // sibling control the user never touched).
-  test('a click before settings load survives the late response, and the untouched sibling still updates', async () => {
-    let resolveGetSettings: ((value: unknown) => void) | undefined;
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') {
-        return new Promise((resolve) => {
-          resolveGetSettings = resolve;
-        });
-      }
-      if (cmd === 'set_always_on_top') return Promise.resolve(undefined);
-      return Promise.resolve(null);
-    });
-
-    await import('./main');
-
-    const alwaysOnTopButton = document.querySelector<HTMLButtonElement>('#always-on-top');
-    const monitorButton = document.querySelector<HTMLButtonElement>('#monitor');
-    if (alwaysOnTopButton === null) throw new Error('#always-on-top missing');
-    if (monitorButton === null) throw new Error('#monitor missing');
-
-    // Markup default is 'false'; the click flips it before get_settings has
-    // resolved at all. #monitor is never clicked.
-    alwaysOnTopButton.click();
-    expect(alwaysOnTopButton.getAttribute('aria-pressed')).toBe('true');
-
-    // Both values differ from their own control's markup default (false and
-    // true respectively). If `touched` were a single flag shared by both
-    // buttons — the actual regression found in review — #monitor would stay
-    // frozen at its 'true' markup default instead of picking up 'false'
-    // here, which is exactly what the second assertion below would catch.
-    resolveGetSettings?.({ always_on_top: true, clipboard_monitoring: false });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // The clicked control keeps the user's value...
-    expect(alwaysOnTopButton.getAttribute('aria-pressed')).toBe('true');
-    // ...and the untouched sibling still receives its real loaded value.
-    expect(monitorButton.getAttribute('aria-pressed')).toBe('false');
-  });
-});
-
-// Carried forward from Task 4: `settings_warning` exists but, until now,
-// nothing rendered it. Deliberately not colocated with the fatal
-// `startup_error` tests above: that path is fatal and writes its message into
-// `#output`, this one is cosmetic and writes into `#parse-error` instead.
 describe('the settings warning', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
@@ -740,36 +463,6 @@ describe('the input surface', () => {
   });
 });
 
-describe('the decorations toggle', () => {
-  beforeEach(async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') {
-        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, decorations: true });
-      }
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
-  });
-
-  test('renders in the header with initial state from get_settings', () => {
-    const button = document.querySelector<HTMLButtonElement>('#decorations');
-    expect(button).not.toBeNull();
-    expect(button?.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  test('clicking toggles aria-pressed and invokes set_decorations with negated state', async () => {
-    const button = document.querySelector<HTMLButtonElement>('#decorations')!;
-    button.click();
-    await Promise.resolve();
-    expect(invoke).toHaveBeenCalledWith('set_decorations', { enabled: false });
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-  });
-});
-
 describe('the header drag region', () => {
   beforeEach(async () => {
     document.body.innerHTML = '<main id="app"></main>';
@@ -788,6 +481,220 @@ describe('the header drag region', () => {
   test('header carries data-tauri-drag-region attribute', () => {
     const header = document.querySelector<HTMLElement>('header.controls');
     expect(header?.hasAttribute('data-tauri-drag-region')).toBe(true);
+  });
+});
+
+describe('the titlebar band', () => {
+  function load(decorations: boolean) {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ decorations });
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    return import('./main');
+  }
+
+  // The reveal trigger is the whole window: the cursor anywhere inside it
+  // shows the title bar, and only leaving hides it.
+  function shell(): HTMLElement {
+    const el = document.querySelector<HTMLElement>('#app');
+    if (el === null) throw new Error('#app missing');
+    return el;
+  }
+
+  // The attribute is the whole state machine: CSS keys the reserved row, the
+  // overlay, and the reveal off it, and the pointer handlers below read it to
+  // decide whether the native chrome is theirs to peek at.
+  test('mirrors the loaded decorations flag onto #app', async () => {
+    await load(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.querySelector('#app')?.getAttribute('data-decorations')).toBe('false');
+  });
+
+  test('a settings-changed event moves the attribute with it', async () => {
+    await load(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.querySelector('#app')?.getAttribute('data-decorations')).toBe('true');
+
+    emit('settings-changed', { decorations: false });
+
+    expect(document.querySelector('#app')?.getAttribute('data-decorations')).toBe('false');
+  });
+
+  test('hovering the band peeks the native chrome while the title bar is hidden', async () => {
+    await load(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    shell().dispatchEvent(new Event('pointerenter'));
+    expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: true, height: 28 });
+
+    vi.useFakeTimers();
+    try {
+      shell().dispatchEvent(new Event('pointerleave'));
+      vi.advanceTimersByTime(1000);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
+  });
+
+  test('a peek never rewrites the persisted setting', async () => {
+    await load(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    vi.useFakeTimers();
+    try {
+      shell().dispatchEvent(new Event('pointerenter'));
+      shell().dispatchEvent(new Event('pointerleave'));
+      vi.advanceTimersByTime(1000);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(invoke).not.toHaveBeenCalledWith('save_settings', expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith('set_decorations', expect.anything());
+  });
+
+  // With the title bar shown there is nothing to reveal — the chrome is
+  // already there, and peeking would hide it on the way out.
+  test('hovering does nothing while the title bar is shown', async () => {
+    await load(true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    shell().dispatchEvent(new Event('pointerenter'));
+    shell().dispatchEvent(new Event('pointerleave'));
+
+    expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', expect.anything());
+  });
+
+  // `pointerenter` fires once per crossing in a real browser, but a stray
+  // repeat (or a settings change mid-hover) must not queue a second objc
+  // round-trip: only transitions talk to the backend.
+  test('repeated enters do not re-invoke the peek', async () => {
+    await load(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    shell().dispatchEvent(new Event('pointerenter'));
+    shell().dispatchEvent(new Event('pointerenter'));
+
+    const peeks = invoke.mock.calls.filter((c: unknown[]) => c[0] === 'peek_titlebar');
+    expect(peeks).toHaveLength(1);
+  });
+
+  // The blink this replaced: peeking used to hand the strip to the OS, whose
+  // traffic lights then swallowed the pointer, firing `pointerleave` and
+  // undoing the peek at pointer rate. Ownership no longer moves, but the
+  // lights still sit over the band's left edge, so the hide is delayed and
+  // cancelled by a re-entry — one crossing over a button can no longer
+  // collapse the reveal.
+  test('a re-entry within the grace period cancels the hide entirely', async () => {
+    vi.useFakeTimers();
+    try {
+      await load(false);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      shell().dispatchEvent(new Event('pointerenter'));
+      shell().dispatchEvent(new Event('pointerleave'));
+      vi.advanceTimersByTime(400);
+      shell().dispatchEvent(new Event('pointerenter'));
+      vi.advanceTimersByTime(3000);
+
+      expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
+      const peeks = invoke.mock.calls.filter((c: unknown[]) => c[0] === 'peek_titlebar');
+      expect(peeks).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('leaving for good hides the chrome once the grace period elapses', async () => {
+    vi.useFakeTimers();
+    try {
+      await load(false);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      shell().dispatchEvent(new Event('pointerenter'));
+      shell().dispatchEvent(new Event('pointerleave'));
+      expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
+
+      vi.advanceTimersByTime(1000);
+
+      expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // CSS reveals the band on `:hover`, but the pointer sitting on a traffic
+  // light is NOT hovering the band as far as the webview is concerned. The
+  // class is what keeps the strip open across that gap.
+  test('#app carries a peeked class for as long as the chrome is up', async () => {
+    vi.useFakeTimers();
+    try {
+      await load(false);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      shell().dispatchEvent(new Event('pointerenter'));
+      expect(shell().classList.contains('peeked')).toBe(true);
+
+      shell().dispatchEvent(new Event('pointerleave'));
+      expect(shell().classList.contains('peeked')).toBe(true);
+
+      vi.advanceTimersByTime(1000);
+      expect(shell().classList.contains('peeked')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The peek grows the window by 28px. The geometry debounce watches
+  // `tauri://resize`, so without this the persisted height would creep a band
+  // taller on every hover and the window would grow across launches.
+  test('a resize seen while peeked is not persisted', async () => {
+    vi.useFakeTimers();
+    try {
+      await load(false);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      shell().dispatchEvent(new Event('pointerenter'));
+      emit('tauri://resize', {});
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(invoke).not.toHaveBeenCalledWith('save_window_geometry', expect.anything());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Leaving the band hides the chrome again; if the user then turns the title
+  // bar back on, the shown state must not stay stuck behind a stale peek.
+  test('turning the title bar back on while hovered leaves the chrome shown', async () => {
+    await load(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    shell().dispatchEvent(new Event('pointerenter'));
+    emit('settings-changed', { decorations: true });
+    shell().dispatchEvent(new Event('pointerleave'));
+
+    expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
   });
 });
 
@@ -830,7 +737,7 @@ describe('window geometry save on resize/move', () => {
   });
 });
 
-describe('furigana segmented control', () => {
+describe('furigana mode reaching the render', () => {
   beforeEach(() => {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
@@ -839,59 +746,13 @@ describe('furigana segmented control', () => {
     vi.resetModules();
   });
 
-  test('furigana segmented control initializes from settings and toggles mode', async () => {
+  // The picker itself lives in the settings window (settings.test.ts covers
+  // it); what the main window still owns is redrawing the sentence when the
+  // mode changes under it, and honouring a mode restored at startup.
+  test('re-renders the sentence when a settings-changed event switches mode', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
-        return Promise.resolve({
-          always_on_top: false,
-          clipboard_monitoring: true,
-          decorations: true,
-          furigana_mode: 'hiragana',
-        });
-      }
-      return Promise.resolve(null);
-    });
-
-    await import('./main');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const btnNone = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="none"]');
-    const btnHiragana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="hiragana"]');
-    const btnKatakana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="katakana"]');
-    const btnRomaji = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="romaji"]');
-
-    expect(btnNone?.getAttribute('aria-checked')).toBe('false');
-    expect(btnHiragana?.getAttribute('aria-checked')).toBe('true');
-    expect(btnKatakana?.getAttribute('aria-checked')).toBe('false');
-    expect(btnRomaji?.getAttribute('aria-checked')).toBe('false');
-
-    // Click Romaji button
-    btnRomaji?.click();
-    await Promise.resolve();
-
-    expect(btnRomaji?.getAttribute('aria-checked')).toBe('true');
-    expect(btnHiragana?.getAttribute('aria-checked')).toBe('false');
-
-    // Expect save_settings was called with furigana_mode: 'romaji'
-    expect(invoke).toHaveBeenCalledWith(
-      'save_settings',
-      expect.objectContaining({
-        settings: expect.objectContaining({
-          furigana_mode: 'romaji',
-        }),
-      }),
-    );
-  });
-
-  test('re-renders sentence immediately when furigana mode changes', async () => {
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') {
-        return Promise.resolve({
-          always_on_top: false,
-          clipboard_monitoring: true,
-          decorations: true,
-        });
+        return Promise.resolve({ furigana_mode: 'none' });
       }
       return Promise.resolve(null);
     });
@@ -922,58 +783,27 @@ describe('furigana segmented control', () => {
       ],
     });
 
-    // Default mode is 'none': no ruby
-    const chip = document.querySelector('.chip');
-    expect(chip?.textContent).toBe('東京');
-    expect(chip?.querySelector('ruby')).toBeNull();
+    expect(document.querySelector('.chip ruby')).toBeNull();
 
-    // Click Hiragana
-    const btnHiragana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="hiragana"]');
-    btnHiragana?.click();
-    await Promise.resolve();
-
+    emit('settings-changed', { furigana_mode: 'hiragana' });
     const rubyH = document.querySelector('.chip ruby');
-    expect(rubyH).not.toBeNull();
     expect(rubyH?.querySelector('rt')?.textContent).toBe('とうきょう');
 
-    // Click Katakana
-    const btnKatakana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="katakana"]');
-    btnKatakana?.click();
-    await Promise.resolve();
+    emit('settings-changed', { furigana_mode: 'katakana' });
+    expect(document.querySelector('.chip ruby rt')?.textContent).toBe('トウキョウ');
 
-    const rubyK = document.querySelector('.chip ruby');
-    expect(rubyK).not.toBeNull();
-    expect(rubyK?.querySelector('rt')?.textContent).toBe('トウキョウ');
+    emit('settings-changed', { furigana_mode: 'romaji' });
+    expect(document.querySelector('.chip ruby rt.romaji')?.textContent).toBe('toukyou');
 
-    // Click Romaji
-    const btnRomaji = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="romaji"]');
-    btnRomaji?.click();
-    await Promise.resolve();
-
-    const rubyR = document.querySelector('.chip ruby');
-    expect(rubyR).not.toBeNull();
-    const rtR = rubyR?.querySelector('rt.romaji');
-    expect(rtR).not.toBeNull();
-    expect(rtR?.textContent).toBe('toukyou');
-
-    // Click None
-    const btnNone = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="none"]');
-    btnNone?.click();
-    await Promise.resolve();
-
-    expect(document.querySelector('.chip')?.querySelector('ruby')).toBeNull();
+    emit('settings-changed', { furigana_mode: 'none' });
+    expect(document.querySelector('.chip ruby')).toBeNull();
     expect(document.querySelector('.chip')?.textContent).toBe('東京');
   });
 
-  test('clicking the already active mode does not trigger save_settings', async () => {
+  test('a mode restored by get_settings is used by the first render', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
-        return Promise.resolve({
-          always_on_top: false,
-          clipboard_monitoring: true,
-          decorations: true,
-          furigana_mode: 'hiragana',
-        });
+        return Promise.resolve({ furigana_mode: 'katakana' });
       }
       return Promise.resolve(null);
     });
@@ -982,11 +812,20 @@ describe('furigana segmented control', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const btnHiragana = document.querySelector<HTMLButtonElement>('.segmented-control button[data-mode="hiragana"]');
-    btnHiragana?.click();
-    await Promise.resolve();
+    emit('parse-result', {
+      segments: [
+        {
+          start: 0,
+          len: 2,
+          surface: '東京',
+          reading: 'とうきょう',
+          matched: true,
+          entries: [],
+        },
+      ],
+    });
 
-    expect(invoke).not.toHaveBeenCalledWith('save_settings', expect.anything());
+    expect(document.querySelector('.chip ruby rt')?.textContent).toBe('トウキョウ');
   });
 });
 
@@ -1022,14 +861,13 @@ describe('settings window and gloss filters', () => {
     expect(invoke).toHaveBeenCalledWith('open_settings_window');
   });
 
-  test('settings-changed event updates active filters and buttons in main window', async () => {
+  test('settings-changed event updates the filters the main window sends onward', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
         return Promise.resolve({
-          always_on_top: false,
-          clipboard_monitoring: true,
-          decorations: true,
-          furigana_mode: 'none',
+          hide_pos: false,
+          hide_xrefs: false,
+          hide_usage: false,
         });
       }
       return Promise.resolve(null);
@@ -1039,27 +877,40 @@ describe('settings window and gloss filters', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const hiraBtn = document.querySelector<HTMLButtonElement>('button[data-mode="hiragana"]');
-    const aotBtn = document.querySelector<HTMLButtonElement>('#always-on-top');
-    const monitorBtn = document.querySelector<HTMLButtonElement>('#monitor');
-
-    expect(hiraBtn?.getAttribute('aria-checked')).toBe('false');
-    expect(aotBtn?.getAttribute('aria-pressed')).toBe('false');
-
     // Simulate settings-changed event from Settings Window
     emit('settings-changed', {
-      always_on_top: true,
-      clipboard_monitoring: false,
-      decorations: true,
-      furigana_mode: 'hiragana',
+      furigana_mode: 'none',
       hide_pos: true,
       hide_xrefs: true,
       hide_usage: false,
     });
 
-    expect(hiraBtn?.getAttribute('aria-checked')).toBe('true');
-    expect(aotBtn?.getAttribute('aria-pressed')).toBe('true');
-    expect(monitorBtn?.getAttribute('aria-pressed')).toBe('false');
+    const entries = [
+      {
+        headword: '東京',
+        reading: 'とうきょう',
+        conjugation: null,
+        pos: ['n'],
+        senses: [],
+        flags: ['primary'],
+      },
+    ];
+    emit('parse-result', {
+      segments: [
+        { start: 0, len: 2, surface: '東京', reading: 'とうきょう', matched: true, entries },
+      ],
+    });
+
+    // The filters are not observable directly; the popover payload is what
+    // carries them, so that is what proves the event was applied.
+    document
+      .querySelector<HTMLElement>('.chip')
+      ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+
+    expect(emitted).toContainEqual([
+      'popover-content',
+      { entries, filters: { hide_pos: true, hide_xrefs: true, hide_usage: false } },
+    ]);
   });
 
   test('openFor sends current active filters in popover-content event', async () => {

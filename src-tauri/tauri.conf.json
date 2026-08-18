@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "ClipYomi",
+      "titleBarStyle": "Overlay",
         "visible": false,
         "width": 720,
         "height": 480,

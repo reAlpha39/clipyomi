@@ -62,31 +62,75 @@ test('an unmatched run is not in the tab order', async ({ page }) => {
   expect(await page.locator('.unmatched').evaluate((el) => (el as HTMLElement).tabIndex)).toBe(-1);
 });
 
-// The header toggles don't need a parse result to exist, so no fixture here
-// — just the STUB, since `#monitor` still calls the real (stubbed)
-// `set_clipboard_monitoring` command on activation. Real Chromium implements
-// the spec's disabled-blurs-focus behaviour that happy-dom does not (see the
-// task report), so this is the one place that can actually prove activating
-// a toggle never drops keyboard focus — the closure-local `pending` guard in
-// `bindToggle` is what makes that true without ever touching `.disabled`.
-test('activating a toggle keeps keyboard focus', async ({ page }) => {
-  await page.addInitScript(STUB);
-  await page.goto('/');
+// The titlebar band. With `decorations: false` the band leaves the grid, so
+// these tests are the ones that prove the promise the design rests on: the
+// sentence sits at the window's top edge and does NOT move when the reveal
+// happens. happy-dom resolves no layout, so this can only be checked here.
+// The OS traffic lights fading in alongside the gear is a real `peek_titlebar`
+// round-trip that Playwright cannot see — that stays a manual macOS check.
+const HIDDEN_TITLEBAR_STUB = `
+  ${STUB}
+  const realInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+    if (cmd === 'get_settings') return Promise.resolve({ decorations: false });
+    return realInvoke(cmd, args);
+  };
+`;
 
-  const monitor = page.locator('#monitor');
-  await monitor.focus();
-  await page.keyboard.press('Enter');
-  await expect(monitor).toBeFocused();
+test('a hidden title bar leaves the gear invisible until the band is hovered', async ({
+  page,
+}) => {
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${HIDDEN_TITLEBAR_STUB}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const gear = page.locator('#settings-toggle');
+  const band = page.locator('header.controls');
+  // Asserted on resolved opacity, not visibility: the button stays in the DOM
+  // and in the tab order, which is the point of revealing it on focus too.
+  await expect(gear).toHaveCSS('opacity', '0');
+  // The idle band is the 6px sliver, thin enough to leave the chips beneath it
+  // clickable.
+  expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(6);
+
+  await band.hover();
+
+  await expect(gear).toHaveCSS('opacity', '1');
+  expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(28);
 });
 
-test('activating decorations toggle keeps keyboard focus', async ({ page }) => {
-  await page.addInitScript(STUB);
+test('revealing the band offsets the content by exactly the band height', async ({ page }) => {
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${HIDDEN_TITLEBAR_STUB}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const sentence = page.locator('.sentence');
+  const before = await sentence.evaluate((el) => el.getBoundingClientRect().top);
+  await page.locator('header.controls').hover();
+  await expect(page.locator('#settings-toggle')).toHaveCSS('opacity', '1');
+  const after = await sentence.evaluate((el) => el.getBoundingClientRect().top);
+
+  // Inside the window the content moves DOWN by the band's height; the window
+  // simultaneously grows upward by the same amount, so on screen the sentence
+  // does not move at all. Only the first half is checkable here — a browser tab
+  // has no frame to grow — so this pins the offset that the growth cancels.
+  // The two halves matching is a manual macOS check.
+  expect(after - before).toBe(28);
+});
+
+test('the gear reveals itself when it takes keyboard focus', async ({ page }) => {
+  await page.addInitScript(HIDDEN_TITLEBAR_STUB);
   await page.goto('/');
 
-  const decorations = page.locator('#decorations');
-  await decorations.focus();
-  await page.keyboard.press('Enter');
-  await expect(decorations).toBeFocused();
+  const gear = page.locator('#settings-toggle');
+  await expect(gear).toHaveCSS('opacity', '0');
+
+  // First stop from a fresh load: an invisible tab stop would be a trap, so
+  // `:focus-within` reveals the band the same way `:hover` does.
+  await page.keyboard.press('Tab');
+
+  await expect(gear).toBeFocused();
+  await expect(gear).toHaveCSS('opacity', '1');
 });
 
 // STUB's default `needs_dictionary` answer is `false` so every other spec in
@@ -204,10 +248,8 @@ test('a focused chip resolves a real outline', async ({ page }) => {
 
   // :focus-visible needs real keyboard traversal, and this test asserts a
   // ring the keyboard produces. There is no `#parse` to click into focus any
-  // more, so all five stops from a fresh load are walked by hand.
-  await page.keyboard.press('Tab'); // -> #always-on-top
-  await page.keyboard.press('Tab'); // -> #monitor
-  await page.keyboard.press('Tab'); // -> #decorations
+  // more, so every stop from a fresh load is walked by hand.
+  await page.keyboard.press('Tab'); // -> #settings-toggle
   await page.keyboard.press('Tab'); // -> 東京
   await page.keyboard.press('Tab'); // 東京 -> は
   const chip = page.locator('.chip[data-start="2"]');
@@ -233,9 +275,7 @@ for (const theme of THEMES) {
     await page.goto('/');
     await emitFixtureResult(page);
 
-    await page.keyboard.press('Tab'); // -> #always-on-top
-    await page.keyboard.press('Tab'); // -> #monitor
-    await page.keyboard.press('Tab'); // -> #decorations
+    await page.keyboard.press('Tab'); // -> #settings-toggle
     await page.keyboard.press('Tab'); // -> 東京
     await page.keyboard.press('Tab'); // 東京 -> は
     await page.keyboard.press('Enter');

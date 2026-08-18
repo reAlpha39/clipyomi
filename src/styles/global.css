@@ -31,17 +31,81 @@ body {
   color: var(--color-text);
 }
 
-#app {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  height: 100vh;
+:root {
+  /* the titlebar band, and the frame growth a peek adds above the window —
+     `BAND_HEIGHT` in `main.ts` is the same number, sent with each peek */
+  --band-h: 28px;
 }
 
+#app {
+  display: grid;
+  /* the titlebar band, the parse-error slot, the panes */
+  grid-template-rows: auto auto 1fr;
+  height: 100vh;
+  /* the anchor for the band once it leaves the flow, below */
+  position: relative;
+}
+
+/* Title bar hidden: the band drops out of the grid entirely, so the sentence
+   starts at the window's top edge and never moves again — the chrome a hover
+   reveals floats OVER it rather than pushing it down. Two tracks left. */
+#app[data-decorations='false'] {
+  grid-template-rows: auto 1fr;
+}
+
+/* The band IS the title bar: 28px to match the one macOS draws in the same
+   space (the window keeps `FullSizeContentView`, so the webview owns this strip
+   in both states). The OS puts its buttons at the left; our only child is the
+   gear, pushed to the right by its own `margin-left: auto`. */
 .controls {
+  height: var(--band-h);
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 8px var(--space-pane);
+  /* The window is `titleBarStyle: "Overlay"`, so the OS draws its buttons over
+     this strip rather than above it. 78px keeps the band's own contents clear of
+     close/minimise/zoom; the gear is right-aligned anyway, so this only matters
+     if anything is ever added on the left. */
+  padding: 0 10px 0 78px;
   border-bottom: 1px solid var(--color-rule);
+}
+
+#app[data-decorations='false'] .controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* A 6px sliver while idle, not the full 28px: an invisible full-height band
+     would swallow the hovers and clicks meant for any chip sitting in the top
+     28px of the sentence. 6px is thinner than the pane's own top padding, so
+     nothing reachable hides under it — and it stays a drag region, so the top
+     edge still drags the frameless window. */
+  height: 6px;
+  border-bottom: 0;
+}
+
+#app[data-decorations='false'] #settings-toggle {
+  opacity: 0;
+}
+
+/* Driven by the `peeked` class rather than `:hover`/`:focus-within`: only the
+   backend can grow the frame, so the strip must light up in step with that call
+   — a CSS-only reveal would show the bar while the window was still the old
+   height, i.e. over the sentence. `main.ts` owns both. */
+#app[data-decorations='false'].peeked {
+  /* Exactly what the frame gains above, so the content stays where it was on
+     screen: the revealed bar is added ON TOP of the window, not laid over it. */
+  padding-top: var(--band-h);
+}
+
+#app[data-decorations='false'].peeked .controls {
+  height: var(--band-h);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+#app[data-decorations='false'].peeked #settings-toggle {
+  opacity: 1;
 }
 
 .controls button {
@@ -53,12 +117,6 @@ body {
   border-radius: 3px;
   padding: 3px 8px;
   cursor: pointer;
-}
-
-.controls button[aria-pressed='true'],
-.controls button[aria-expanded='true'] {
-  color: var(--color-text);
-  border-color: var(--color-text);
 }
 
 /* --- Header Segmented Control --- */
@@ -208,6 +266,7 @@ rt.romaji {
   .chip { transition: none; }
   .chip:hover { transform: none; }
   .segmented-control button { transition: none; }
+  #settings-toggle { transition: none; }
   .spinner { animation: none; }
 }
 
@@ -220,6 +279,7 @@ rt.romaji {
   padding: 3px 6px;
   font-size: 12px;
   line-height: 1;
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 

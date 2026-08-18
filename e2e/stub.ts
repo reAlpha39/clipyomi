@@ -56,6 +56,7 @@ export const STUB = `
         cmd === 'set_always_on_top' ||
         cmd === 'set_clipboard_monitoring' ||
         cmd === 'set_decorations' ||
+        cmd === 'peek_titlebar' ||
         cmd === 'save_window_geometry'
       )
         return undefined;

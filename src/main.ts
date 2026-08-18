@@ -18,15 +18,6 @@ const app = document.querySelector<HTMLElement>('#app')!;
 
 app.innerHTML = `
   <header class="controls" data-tauri-drag-region>
-    <button id="always-on-top" type="button" aria-pressed="false">Always on top</button>
-    <button id="monitor" type="button" aria-pressed="true">Monitoring</button>
-    <button id="decorations" type="button" aria-pressed="true">Title bar</button>
-    <div class="segmented-control" role="radiogroup" aria-label="Furigana mode">
-      <button type="button" role="radio" data-mode="none" aria-checked="true" title="No furigana">—</button>
-      <button type="button" role="radio" data-mode="hiragana" aria-checked="false" title="Hiragana furigana">ひ</button>
-      <button type="button" role="radio" data-mode="katakana" aria-checked="false" title="Katakana furigana">カ</button>
-      <button type="button" role="radio" data-mode="romaji" aria-checked="false" title="Romaji phonetic">R</button>
-    </div>
     <button id="settings-toggle" type="button" title="Settings">⚙</button>
   </header>
   <div id="parse-error"></div>
@@ -148,9 +139,7 @@ function renderDictionary(status: string | null): void {
 
   // Closure-local, not `button.disabled`: disabling a focused element blurs
   // it and drops it from the tab order, which nothing here restores (design
-  // §3). Unlike the header toggles' `pending` (`bindToggle`, below), where
-  // the same button really does stay in the DOM across the whole in-flight
-  // request, this one is belt-and-braces behind an immediate re-render:
+  // §3). This one is belt-and-braces behind an immediate re-render:
   // `renderDictionary('downloading')` replaces this button synchronously,
   // before `invoke` even starts, so the node a second click would need to
   // land on is already gone by the time anyone could click it again. That
@@ -183,76 +172,9 @@ export async function showDictionaryScreen(): Promise<void> {
   // `ready` event clears it.
   renderDictionary(null);
 }
-
-const alwaysOnTop = app.querySelector<HTMLButtonElement>('#always-on-top');
-const monitor = app.querySelector<HTMLButtonElement>('#monitor');
-const decorations = app.querySelector<HTMLButtonElement>('#decorations');
-
-// Populated with a button the instant it's clicked, before its request even
-// starts: `applySettings` below skips writing to a button that's in this
-// set, so a settings response that resolves after the user has already
-// acted can never clobber what they just set. Per-button (not a single
-// shared flag) so clicking one control doesn't also freeze its sibling out
-// of ever receiving its real persisted value.
-const touchedButtons = new Set<HTMLButtonElement>();
-
-function bindToggle(
-  button: HTMLButtonElement | null,
-  command: string,
-  settingsKey: keyof Settings,
-): void {
-  if (button === null) return;
-  // Closure-local, not `button.disabled`: disabling a focused element blurs
-  // it and drops it from the tab order, which a `finally` re-enable does not
-  // undo. This guard gives the same exclusion — a click while one is
-  // already in flight is a no-op — without touching the DOM or focus at all.
-  let pending = false;
-  button.addEventListener('click', () => {
-    if (pending) return;
-    pending = true;
-    touchedButtons.add(button);
-    const next = button.getAttribute('aria-pressed') !== 'true';
-    // Flip first so the control feels immediate; a rejected command corrects it below.
-    button.setAttribute('aria-pressed', String(next));
-    void invoke(command, { enabled: next })
-      .catch(async (e) => {
-        // Rendered first and unconditionally: the user must see *some*
-        // message, even if the resync below also fails. Doing this before
-        // the `await` means it never depends on that second call succeeding.
-        parseError.replaceChildren(errorBlock(String(e)));
-        // A rejected setter doesn't say which of two things happened:
-        // `state.rs`'s `SettingsState::update` applies a change in memory
-        // *before* it tries to persist it, so a write failure (e.g. a
-        // read-only config dir) still leaves the new value in effect
-        // (design §5) — reverting to the naive inverse would then show the
-        // opposite of what the backend actually did. Re-reading
-        // `get_settings` shows whichever outcome really happened instead of
-        // guessing from the shape of the error.
-        try {
-          const settings = await invoke<Settings>('get_settings');
-          const val = settings[settingsKey];
-          if (val !== undefined) {
-            button.setAttribute('aria-pressed', String(val));
-          }
-        } catch {
-          // Best-effort only: if even this fails, the button keeps its
-          // optimistic (possibly wrong) value, but the error above is
-          // already visible — degrading silently here is better than an
-          // unhandled rejection with no message shown at all.
-        }
-      })
-      .finally(() => {
-        pending = false;
-      });
-  });
-}
-
-bindToggle(alwaysOnTop, 'set_always_on_top', 'always_on_top');
-bindToggle(monitor, 'set_clipboard_monitoring', 'clipboard_monitoring');
-bindToggle(decorations, 'set_decorations', 'decorations');
-
+// Owned by the settings window now; the main window only reads it to decide
+// how `renderSentence` draws ruby.
 let currentFuriganaMode: FuriganaMode = 'none';
-let touchedFurigana = false;
 
 const currentFilters: GlossFilters = {
   hide_pos: false,
@@ -266,56 +188,108 @@ settingsToggle?.addEventListener('click', () => {
   void invoke('open_settings_window').catch(() => {});
 });
 
-const modeButtons = app.querySelectorAll<HTMLButtonElement>('.segmented-control button[data-mode]');
+/**
+ * Whether the OS is drawing its title bar. The control for it lives in the
+ * settings window; the main window still needs the flag, because it decides
+ * both shapes of the band — a reserved 28px row when the title bar is shown,
+ * a floating overlay over the sentence when it is hidden — and the CSS keys
+ * every one of those rules off `#app[data-decorations]`.
+ */
+let titlebarShown = true;
 
-function updateFuriganaButtons(mode: FuriganaMode): void {
-  currentFuriganaMode = mode;
-  modeButtons.forEach((btn) => {
-    btn.setAttribute('aria-checked', btn.dataset.mode === mode ? 'true' : 'false');
-  });
+/**
+ * True while a hover is showing chrome that `decorations: false` normally
+ * hides. Tracked rather than derived from the event, so only *crossings* reach
+ * the backend: each peek is an objc round-trip on the main thread, and a
+ * duplicate `pointerenter` (or one arriving while the reveal is already up)
+ * should cost nothing.
+ */
+let peeking = false;
+
+/**
+ * Grace period before a peek is undone, once the cursor has left the window.
+ *
+ * Long enough (a second) to be forgiving of a cursor that clips the edge on its
+ * way somewhere else, and of the reach for a traffic light: those buttons are
+ * real NSViews over the band, so touching one reads as a `pointerleave` here.
+ * A short delay made that collapse the reveal mid-reach, and the re-entry
+ * re-showed it — the same oscillation the transparency flip used to cause,
+ * localised to the buttons.
+ */
+const PEEK_HIDE_MS = 1000;
+
+/**
+ * Height of the titlebar band, in logical pixels, and the amount the window
+ * grows *upward* while peeking so the revealed bar is added ON TOP of the
+ * window rather than covering the first line of the sentence. Sent to the
+ * backend with each peek: layout owns this number, and `--band-h` in
+ * `global.css` is the same value for the padding that keeps the content
+ * stationary while the frame is taller.
+ */
+const BAND_HEIGHT = 28;
+
+/** Pending un-peek, or `undefined` when none is armed. */
+let peekHide: number | undefined;
+
+function showPeek(): void {
+  // A re-entry inside the grace period cancels the pending hide outright, so a
+  // trip across a traffic light costs no backend calls at all.
+  window.clearTimeout(peekHide);
+  peekHide = undefined;
+  if (titlebarShown || peeking) return;
+  peeking = true;
+  // On `#app`, because it drives two things at once: the band's reveal and the
+  // `padding-top` that offsets the content by exactly what the frame gains.
+  app.classList.add('peeked');
+  void invoke('peek_titlebar', { visible: true, height: BAND_HEIGHT }).catch(() => {});
 }
 
-function persistSettings(): Promise<void> {
-  const payload: Settings = {
-    always_on_top: alwaysOnTop?.getAttribute('aria-pressed') === 'true',
-    clipboard_monitoring: monitor?.getAttribute('aria-pressed') === 'true',
-    decorations: decorations?.getAttribute('aria-pressed') === 'true',
-    furigana_mode: currentFuriganaMode,
-    hide_pos: currentFilters.hide_pos,
-    hide_xrefs: currentFilters.hide_xrefs,
-    hide_usage: currentFilters.hide_usage,
-  };
-  void emit('settings-changed', payload).catch(() => {});
-  return invoke('save_settings', { settings: payload });
+function hidePeek(): void {
+  if (!peeking || peekHide !== undefined) return;
+  peekHide = window.setTimeout(() => {
+    peekHide = undefined;
+    peeking = false;
+    app.classList.remove('peeked');
+    void invoke('peek_titlebar', { visible: false, height: BAND_HEIGHT }).catch(() => {});
+  }, PEEK_HIDE_MS);
 }
 
-modeButtons.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const mode = (btn.dataset.mode as FuriganaMode) ?? 'none';
-    if (mode === currentFuriganaMode) return;
-    touchedFurigana = true;
-    updateFuriganaButtons(mode);
-    if (lastResult !== null) {
-      closePopover();
-      output.replaceChildren(renderSentence(lastResult, currentFuriganaMode));
-    }
-    void persistSettings();
-  });
-});
+function applyDecorations(shown: boolean): void {
+  titlebarShown = shown;
+  app.setAttribute('data-decorations', String(shown));
+  // A peek still notionally in flight when the user turns the title bar back
+  // ON is now redundant — `set_decorations` has shown the chrome for real. The
+  // flag has to drop here or the `pointerleave` that follows would hide the
+  // chrome the user just asked to keep.
+  if (shown) {
+    window.clearTimeout(peekHide);
+    peekHide = undefined;
+    peeking = false;
+    app.classList.remove('peeked');
+  }
+}
+
+applyDecorations(true);
+
+// The cursor anywhere inside the window reveals the bar; only leaving the
+// window hides it. `#app` fills the viewport, so its own enter/leave is the
+// window's — and unlike the 6px band it cannot be missed by a fast pointer.
+app.addEventListener('pointerenter', showPeek);
+app.addEventListener('pointerleave', hidePeek);
+
+// Keyboard parity: the gear is a tab stop even while invisible, and only the
+// backend can grow the frame, so focus has to drive the same path as hover
+// rather than leaning on a CSS `:focus-within` rule.
+settingsToggle?.addEventListener('focus', showPeek);
+settingsToggle?.addEventListener('blur', hidePeek);
 
 async function applySettings(): Promise<void> {
   const settings = await invoke<Settings>('get_settings');
-  if (alwaysOnTop !== null && !touchedButtons.has(alwaysOnTop) && settings.always_on_top !== undefined) {
-    alwaysOnTop.setAttribute('aria-pressed', String(settings.always_on_top));
+  if (settings.decorations !== undefined) {
+    applyDecorations(settings.decorations);
   }
-  if (monitor !== null && !touchedButtons.has(monitor) && settings.clipboard_monitoring !== undefined) {
-    monitor.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
-  }
-  if (decorations !== null && !touchedButtons.has(decorations) && settings.decorations !== undefined) {
-    decorations.setAttribute('aria-pressed', String(settings.decorations));
-  }
-  if (!touchedFurigana && settings.furigana_mode !== undefined) {
-    updateFuriganaButtons(settings.furigana_mode);
+  if (settings.furigana_mode !== undefined) {
+    currentFuriganaMode = settings.furigana_mode;
   }
   if (settings.hide_pos !== undefined) {
     currentFilters.hide_pos = settings.hide_pos;
@@ -333,21 +307,13 @@ void listen<Settings>('settings-changed', (e) => {
   if (settings.hide_pos !== undefined) currentFilters.hide_pos = settings.hide_pos;
   if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;
   if (settings.hide_usage !== undefined) currentFilters.hide_usage = settings.hide_usage;
-  if (settings.furigana_mode !== undefined) {
-    updateFuriganaButtons(settings.furigana_mode);
+  if (settings.decorations !== undefined) applyDecorations(settings.decorations);
+  if (settings.furigana_mode !== undefined && settings.furigana_mode !== currentFuriganaMode) {
+    currentFuriganaMode = settings.furigana_mode;
     if (lastResult !== null) {
       closePopover();
       output.replaceChildren(renderSentence(lastResult, currentFuriganaMode));
     }
-  }
-  if (alwaysOnTop !== null && settings.always_on_top !== undefined) {
-    alwaysOnTop.setAttribute('aria-pressed', String(settings.always_on_top));
-  }
-  if (monitor !== null && settings.clipboard_monitoring !== undefined) {
-    monitor.setAttribute('aria-pressed', String(settings.clipboard_monitoring));
-  }
-  if (decorations !== null && settings.decorations !== undefined) {
-    decorations.setAttribute('aria-pressed', String(settings.decorations));
   }
 });
 
@@ -777,6 +743,12 @@ const windowTarget = { kind: 'Window', label: getCurrentWindow().label } as cons
 
 let geometrySaveTimer: number | null = null;
 function scheduleGeometrySave(): void {
+  // The peek grows the frame by `BAND_HEIGHT`, which arrives here as an
+  // ordinary `tauri://resize`. Persisting it would add a band to the stored
+  // height on every hover. Nothing is lost by skipping: leaving the window
+  // shrinks the frame back, and that resize — with `peeking` already false —
+  // saves whatever size the user actually left it at.
+  if (peeking) return;
   if (geometrySaveTimer !== null) window.clearTimeout(geometrySaveTimer);
   geometrySaveTimer = window.setTimeout(async () => {
     try {

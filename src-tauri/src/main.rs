@@ -151,6 +151,7 @@ fn main() {
             commands::set_clipboard_monitoring,
             commands::set_always_on_top,
             commands::set_decorations,
+            commands::peek_titlebar,
             commands::save_window_geometry,
             commands::save_settings,
             commands::get_settings,

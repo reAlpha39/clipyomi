@@ -96,10 +96,20 @@ pub fn set_always_on_top(
 }
 
 #[cfg(target_os = "macos")]
-pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<(), String> {
+/// Shows or hides the two visible halves of the title bar: the title text and
+/// the standard window buttons.
+///
+/// Deliberately narrow. It does NOT touch `setStyleMask:` or
+/// `setTitlebarAppearsTransparent:` — those decide *who owns the titlebar
+/// strip*, and the window is created `titleBarStyle: "Overlay"` so the answer
+/// is always "the webview". Flipping transparency here is what caused the blink
+/// loop: the OS took the strip mid-hover, the webview stopped receiving pointer
+/// events in it, `pointerleave` fired, the frontend undid the peek, the strip
+/// came back, `pointerenter` fired, and round it went at pointer rate (measured
+/// at five full cycles from a single hover).
+fn set_titlebar_chrome(window: &tauri::Window, visible: bool) -> Result<(), String> {
     use std::ffi::c_void;
     let ptr_addr = window.ns_window().map_err(|e| e.to_string())? as usize;
-    let win = window.clone();
     window
         .run_on_main_thread(move || {
             let ptr = ptr_addr as *mut c_void;
@@ -108,32 +118,17 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
                 fn sel_registerName(name: *const std::ffi::c_char) -> *const c_void;
             }
             unsafe {
-                let sel_set_style_mask = sel_registerName(c"setStyleMask:".as_ptr());
                 let sel_set_title_visibility = sel_registerName(c"setTitleVisibility:".as_ptr());
                 let sel_standard_window_button =
                     sel_registerName(c"standardWindowButton:".as_ptr());
                 let sel_set_hidden = sel_registerName(c"setHidden:".as_ptr());
-                let sel_set_titlebar_transparent =
-                    sel_registerName(c"setTitlebarAppearsTransparent:".as_ptr());
 
-                // Maintain Titled + FullSizeContentView mask so WebKit retains key window status,
-                // first responder, and continuous mouse tracking (hover).
-                let mask: usize = 1 | 2 | 4 | 8 | 32768;
-                let set_mask_fn: unsafe extern "C" fn(*mut c_void, *const c_void, usize) =
-                    std::mem::transmute(objc_msgSend as *const ());
-                set_mask_fn(ptr, sel_set_style_mask, mask);
-
-                // Set title visibility: 0 = Visible, 1 = Hidden
-                let title_visibility: isize = if enabled { 0 } else { 1 };
+                // 0 = Visible, 1 = Hidden
+                let title_visibility: isize = if visible { 0 } else { 1 };
                 let set_title_vis_fn: unsafe extern "C" fn(*mut c_void, *const c_void, isize) =
                     std::mem::transmute(objc_msgSend as *const ());
                 set_title_vis_fn(ptr, sel_set_title_visibility, title_visibility);
 
-                let set_transparent_fn: unsafe extern "C" fn(*mut c_void, *const c_void, bool) =
-                    std::mem::transmute(objc_msgSend as *const ());
-                set_transparent_fn(ptr, sel_set_titlebar_transparent, !enabled);
-
-                // Hide or show standard window buttons:
                 // 0 = Close, 1 = Miniaturize, 2 = Zoom, 7 = FullScreen
                 let get_btn_fn: unsafe extern "C" fn(
                     *mut c_void,
@@ -146,10 +141,24 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
                 for button_type in [0usize, 1, 2, 7] {
                     let btn = get_btn_fn(ptr, sel_standard_window_button, button_type);
                     if !btn.is_null() {
-                        set_hidden_fn(btn, sel_set_hidden, !enabled);
+                        set_hidden_fn(btn, sel_set_hidden, !visible);
                     }
                 }
             }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<(), String> {
+    set_titlebar_chrome(window, enabled)?;
+    // Kept for the *setting* only (9e6d01b: a decorations toggle used to leave
+    // the webview on a stale theme). A repaint is invisible against a
+    // deliberate toggle, and `peek_titlebar` skips it — repainting on every
+    // hover crossing is the flash half of the blink.
+    let win = window.clone();
+    window
+        .run_on_main_thread(move || {
             let _ = win.set_theme(win.theme().ok());
         })
         .map_err(|e| e.to_string())
@@ -171,6 +180,60 @@ pub fn set_decorations(
     settings
         .update(|s| s.decorations = enabled)
         .map_err(|e| e.to_string())
+}
+
+/// Shows or hides the native chrome *without* touching the persisted flag.
+/// `set_decorations` cannot serve the hover reveal: it writes
+/// `settings.decorations`, so resting the pointer on the titlebar band would
+/// quietly turn the title bar back on for the next launch.
+/// Whether a peek is currently showing chrome the persisted setting hides.
+///
+/// Kept here rather than only in the webview because the frame growth below is
+/// relative: a duplicate show would grow the window twice, and a webview reload
+/// mid-peek would otherwise leave the frontend's copy of the flag out of step
+/// with the real frame. One main window, so one flag.
+static PEEKED: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Result<(), String> {
+    // Idempotent by contract: only a real transition touches the window.
+    if PEEKED.swap(visible, Ordering::SeqCst) == visible {
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let window = chrome_target(&app)?;
+        set_titlebar_chrome(&window, visible)?;
+        // The bar is added ON TOP of the window: the frame grows upward by the
+        // band's height while the webview offsets its content by the same
+        // amount, so what the user was reading does not move. The bottom edge
+        // stays put — only the top edge travels.
+        let scale = window.scale_factor().map_err(|e| e.to_string())?;
+        let size = window
+            .outer_size()
+            .map_err(|e| e.to_string())?
+            .to_logical::<f64>(scale);
+        let pos = window
+            .outer_position()
+            .map_err(|e| e.to_string())?
+            .to_logical::<f64>(scale);
+        let delta = if visible { height } else { -height };
+        window
+            .set_size(tauri::LogicalSize::new(size.width, size.height + delta))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(tauri::LogicalPosition::new(pos.x, pos.y - delta))
+            .map_err(|e| e.to_string())
+    }
+    // Off macOS the caption is non-client area outside the client rect, so
+    // toggling it resizes the content by its height on every hover in and out
+    // — and the debounced geometry save would persist those hover-induced
+    // sizes. There the CSS reveal of the gear is the whole feature.
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (visible, height, app);
+        Ok(())
+    }
 }
 
 #[tauri::command]

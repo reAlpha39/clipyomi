@@ -531,6 +531,73 @@ chrome mode, dictionary update.
 Placement rule: **frequency decides.** Mid-session controls live in the header;
 set-once controls live in the popover.
 
+As shipped (3B onward) every persisted toggle — always-on-top, clipboard
+monitoring, title bar, furigana mode, gloss filters — lives in the dedicated
+settings window instead. The main header keeps only the drag region and the
+gear that opens that window; the duplicate header controls were removed once
+the settings window owned them, so a setting has exactly one control.
+
+**The header is the titlebar band.** 28px, matching what macOS draws in the
+same strip (the window keeps `Titled + FullSizeContentView` in both states, so
+the webview owns it either way). The OS puts its buttons at the left; the gear
+sits at the right. `#app[data-decorations]`, mirrored from the setting by
+`main.ts`, picks between two shapes:
+
+| `decorations` | Band | Gear | Divider |
+|---|---|---|---|
+| `true` | reserved 28px grid row | always visible | visible |
+| `false` | out of the grid, absolute overlay, 6px idle → 28px while `#app.peeked`, opaque `--color-bg` fill | fades in with the band | only while revealed |
+
+Hidden means the sentence starts at the window's top edge, and the revealed bar
+is **added on top of the window** rather than laid over the content: the frame
+grows upward by the band height (bottom edge fixed) while `#app` takes an equal
+`padding-top`, so what the user was reading does not move on screen. The idle
+band is a 6px sliver rather than a transparent 28px one so it cannot swallow
+hovers and clicks aimed at chips at the top of the sentence, and it stays a drag
+region so the top edge still drags the frameless window.
+
+**The reveal trigger is the whole window**, not the strip: `pointerenter` /
+`pointerleave` on `#app`, so the cursor anywhere inside shows the bar and only
+leaving hides it. The gear's `focus`/`blur` drive the same path — CSS
+`:hover`/`:focus-within` cannot be used at all here, because only the backend can
+grow the frame and a CSS-only reveal would light the strip up while the window
+was still the old height, i.e. over the sentence. `main.ts` owns both halves and
+`BAND_HEIGHT` (28) is the number it sends; `--band-h` is the CSS twin.
+
+The window is created **`titleBarStyle: "Overlay"`** (macOS), which is what
+makes any of this possible: the webview owns the titlebar strip in *both*
+states, so the gear can sit inside the title bar and the strip's ownership never
+changes at runtime. The first cut of this feature had no such flag — the webview
+only got `FullSizeContentView` when `decorations` was false — which produced two
+defects: the gear rendered *below* the OS title bar whenever the title bar was
+shown, and hovering blinked. The blink was a genuine feedback loop:
+`setTitlebarAppearsTransparent(false)` handed the strip to the OS mid-hover, the
+webview stopped receiving pointer events there, `pointerleave` fired, the
+frontend undid the peek, the strip returned, `pointerenter` fired — measured at
+five full cycles from one hover.
+
+The OS chrome follows the reveal through `peek_titlebar(visible)`, which calls
+the narrow `set_titlebar_chrome` helper: title-text visibility and the four
+standard window buttons, and **nothing else** — no `setStyleMask:`, no
+transparency flip (ownership), and no `set_theme` repaint (that stays in
+`apply_decorations_macos`, where a deliberate toggle hides it). No settings write
+either, because a hover must never rewrite the persisted flag. `main.ts` fires it
+on those transitions only, and the backend keeps its own `PEEKED` flag so a
+duplicate show cannot grow the frame twice and a webview reload mid-peek cannot
+desync the frontend's copy from the real frame. The growth arrives in the webview
+as an ordinary `tauri://resize`, which the geometry debounce skips while peeking
+— otherwise the stored height would gain a band on every hover. The hide is delayed by
+`PEEK_HIDE_MS` (1s, after the cursor leaves the window) and cancelled by a
+re-entry: the revealed buttons are real
+NSViews over the band's left edge, so reaching for one reads as a
+`pointerleave`, and an instant hide would oscillate again in that small region.
+A `.peeked` class holds the band open across that gap, since CSS `:hover` cannot
+see a pointer resting on OS chrome. It is a no-op off macOS: the Windows and GTK
+caption is non-client area outside the client rect, so toggling it resizes the
+content on every hover and the debounced geometry save would persist those
+sizes. Off macOS the gear reveal is the whole feature; drawing our own caption
+buttons there is the §11 "Header + resize edges" work, still unbuilt.
+
 ### 7.3 Theming
 
 Tokens in `styles/tokens.css`. Three states — system / light / dark:
@@ -678,8 +745,9 @@ download path is tested against a `file://` URL, never the network.
 
 320 / 768 / 1024 for overflow, both themes, reduced-motion, against a **fixed
 parse fixture** so screenshots are deterministic. Keyboard navigation and
-contrast checks: five header controls plus a segmented control need real focus
-states.
+contrast checks: the header's single settings button plus the chips need real
+focus states; the settings window's own controls are covered by
+`settings.test.ts`.
 
 ### Not tested
 
@@ -735,7 +803,7 @@ so did the chrome and geometry work originally filed under Phase 4.
 
 | Sub-phase | Status |
 |---|---|
-| **3A** (08-16) | Shipped. Four furigana modes (`none`/`hiragana`/`katakana`/`romaji`) rendered as `<ruby>` over the chips, header segmented control, persisted. |
+| **3A** (08-16) | Shipped. Four furigana modes (`none`/`hiragana`/`katakana`/`romaji`) rendered as `<ruby>` over the chips, persisted. The picker moved to the settings window after 3B; the main window only reacts to `settings-changed` by redrawing. |
 | **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8 — created hidden in `setup` like the popover, see §6. |
 | **3C** | Remaining. Font sizes (§7.7): `--text-cjk` and `--text-furigana` bound to two persisted inputs. The last reading aid still unbuilt. |
 
