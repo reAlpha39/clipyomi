@@ -115,14 +115,21 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  /* A 6px sliver while idle: an invisible full-height band would swallow hovers
-     and clicks meant for any chip in the top 28px of the sentence. 6px is
-     thinner than the pane's top padding, and stays a drag region so the top edge
-     still drags the frameless window. */
+  /* A 6px sliver while idle on macOS where the frame grows on hover */
   height: 6px;
   border-bottom: 0;
   z-index: 10;
-  transition: height var(--duration-fast) var(--ease-out);
+}
+
+#app[data-platform='windows'][data-decorations='false'],
+#app:not([data-platform='macos'])[data-decorations='false'] {
+  padding-top: var(--band-h);
+}
+
+#app[data-platform='windows'][data-decorations='false'] .controls,
+#app:not([data-platform='macos'])[data-decorations='false'] .controls {
+  height: var(--band-h);
+  border-bottom: 1px solid var(--color-rule);
 }
 
 #app[data-decorations='false'] #settings-toggle,
