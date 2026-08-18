@@ -141,6 +141,8 @@ fn main() {
             // and never show it until asked", and a tooltip that flashes at
             // startup is worse than no tooltip.
             popover::create(app)?;
+            // Hidden, and for the same reason — see `create_settings_window`.
+            commands::create_settings_window(app)?;
             mouse_tracker::start(app.handle().clone());
             Ok(())
         })

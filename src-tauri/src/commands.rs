@@ -66,13 +66,28 @@ pub fn set_clipboard_monitoring(
         .map_err(|e| e.to_string())
 }
 
+/// The window the chrome controls act on, resolved by label.
+///
+/// Deliberately *not* the `tauri::Window` Tauri injects into a command, which
+/// is whichever webview invoked it. The settings window invokes these commands
+/// too, so an injected caller made the settings window pin or undecorate
+/// itself instead of the main window. `main.rs`'s startup restore already
+/// resolves `"main"` this way.
+fn chrome_target<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<tauri::Window<R>, String> {
+    app.get_webview_window("main")
+        .map(|w| w.as_ref().window())
+        .ok_or_else(|| "main window not found".to_string())
+}
+
 #[tauri::command]
 pub fn set_always_on_top(
     enabled: bool,
-    window: tauri::Window,
+    app: tauri::AppHandle,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
-    window
+    chrome_target(&app)?
         .set_always_on_top(enabled)
         .map_err(|e| e.to_string())?;
     settings
@@ -143,9 +158,10 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
 #[tauri::command]
 pub fn set_decorations(
     enabled: bool,
-    window: tauri::Window,
+    app: tauri::AppHandle,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
+    let window = chrome_target(&app)?;
     #[cfg(target_os = "macos")]
     apply_decorations_macos(&window, enabled)?;
     #[cfg(not(target_os = "macos"))]
@@ -198,27 +214,54 @@ pub fn save_settings(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn open_settings_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("settings") {
-        let _ = win.unminimize();
-        let _ = win.show();
-        let _ = win.set_focus();
-        return Ok(());
-    }
+/// The settings window's label. Named by this module and by `main`'s setup, so
+/// it lives here as one constant rather than repeated literals.
+pub const SETTINGS_LABEL: &str = "settings";
 
-    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+/// Build the hidden settings window. Called once from `main`'s `setup`.
+///
+/// Eager, hidden creation for the same reason as the popover (see that
+/// module's header): building a webview costs hundreds of milliseconds. It is
+/// worse here than a plain delay — the page's stylesheets are imported by
+/// `settings.ts`, so under the dev server they arrive as module requests
+/// *after* the document itself finishes loading. A window created per open is
+/// therefore mapped and unstyled for about a second, showing the webview's
+/// default white before the theme lands. Shown and hidden, never rebuilt,
+/// there is nothing left to load at reveal time.
+pub fn create_settings_window<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
+    let window = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
         .title("ClipYomi Settings")
         .inner_size(360.0, 480.0)
         .min_inner_size(300.0, 400.0)
         .resizable(false)
         .decorations(true)
         .always_on_top(true)
-        .visible(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+        .visible(false)
+        .build()?;
+
+    // Closing hides rather than destroys. A destroyed window would have to be
+    // rebuilt on the next open, reintroducing exactly the load this eager
+    // build exists to avoid.
+    let on_close = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = on_close.hide();
+        }
+    });
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn open_settings_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    let window = app
+        .get_webview_window(SETTINGS_LABEL)
+        .ok_or_else(|| "settings window not found".to_string())?;
+    // Not fatal if it was never minimised; the show below is what matters.
+    let _ = window.unminimize();
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -652,15 +695,56 @@ mod tests {
         assert_eq!(s.hide_usage, Some(false));
     }
 
+    /// Builds a window the way the real app labels them, so `chrome_target`
+    /// has something to resolve.
+    fn window(app: &tauri::AppHandle<tauri::test::MockRuntime>, label: &str) {
+        WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+            .build()
+            .unwrap();
+    }
+
     #[test]
-    fn open_settings_window_creates_settings_window() {
+    fn chrome_target_resolves_main_even_when_settings_window_exists() {
         let app = tauri::test::mock_app();
-        let app_handle = app.handle().clone();
-        assert!(open_settings_window(app_handle.clone()).is_ok());
-        assert!(app_handle.get_webview_window("settings").is_some());
-        // Second call focuses existing window without error
-        assert!(open_settings_window(app_handle).is_ok());
+        let h = app.handle().clone();
+        window(&h, "main");
+        window(&h, "settings");
+        // The regression: invoked from the settings webview, these commands
+        // used to act on whichever window called them.
+        assert_eq!(chrome_target(&h).unwrap().label(), "main");
+    }
+
+    #[test]
+    fn chrome_target_errors_without_a_main_window() {
+        let app = tauri::test::mock_app();
+        let h = app.handle().clone();
+        window(&h, "settings");
+        assert!(chrome_target(&h).is_err());
+    }
+
+    #[test]
+    fn create_settings_window_builds_it_before_any_open() {
+        let app = tauri::test::mock_app();
+        create_settings_window(&app).unwrap();
+        assert!(app.handle().get_webview_window(SETTINGS_LABEL).is_some());
+    }
+
+    #[test]
+    fn open_settings_window_reveals_the_pre_created_window() {
+        let app = tauri::test::mock_app();
+        create_settings_window(&app).unwrap();
+        let handle = app.handle().clone();
+        assert!(open_settings_window(handle.clone()).is_ok());
+        // Repeated opens just re-reveal it; nothing is rebuilt.
+        assert!(open_settings_window(handle).is_ok());
+    }
+
+    #[test]
+    fn open_settings_window_errors_when_setup_never_created_it() {
+        let app = tauri::test::mock_app();
+        assert!(open_settings_window(app.handle().clone()).is_err());
     }
 }
+
 
 
