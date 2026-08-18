@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "ClipYomi",
+        "visible": false,
         "width": 720,
         "height": 480,
         "minWidth": 160,

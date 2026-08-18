@@ -876,6 +876,24 @@ void Promise.all([
 });
 
 void showStartupError();
-void applySettings();
+// The window is configured hidden (`tauri.conf.json`) and reveals itself here,
+// for the reason `commands::create_settings_window` documents: a webview mapped
+// before its page has loaded shows the webview's default white, and the theme
+// lives in stylesheets that `main.ts` imports — so under the dev server they
+// arrive as module requests after the document itself finishes loading.
+//
+// After `applySettings`, not before, so the restored toggle states are in the
+// first painted frame rather than flipping into place afterwards. `finally`,
+// because a settings read that fails must still leave a visible window.
+//
+// Not in a `requestAnimationFrame`: a window that is not visible is not being
+// composited, so frame callbacks never run and it would stay hidden forever.
+// Script evaluation is part of page load and does run, which is what this
+// relies on.
+void applySettings().finally(() => {
+  void getCurrentWindow()
+    .show()
+    .catch(() => {});
+});
 void showSettingsWarning();
 void showDictionaryScreen();

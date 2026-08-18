@@ -21,6 +21,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const invoke = vi.fn();
+/** The startup reveal — `main.ts` shows the window itself, see its comment. */
+const show = vi.fn(() => Promise.resolve());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
 // `main.ts` now reads the current window's label at import time (to scope
@@ -49,6 +51,7 @@ vi.mock('@tauri-apps/api/window', () => ({
         toLogical: (factor: number) => ({ width: 800 / factor, height: 600 / factor }),
       }),
     scaleFactor: () => Promise.resolve(1),
+    show,
   }),
   cursorPosition: () => Promise.resolve({ x: 0, y: 0 }),
   availableMonitors: () => Promise.resolve([]),
@@ -179,6 +182,48 @@ describe('the frontend_ready call', () => {
     });
     expect(document.querySelector('.sentence')).not.toBeNull();
   });
+});
+
+describe('the startup reveal', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    show.mockReset();
+    show.mockImplementation(() => Promise.resolve());
+    vi.resetModules();
+  });
+
+  test('reveals the window once the restored settings have been applied', async () => {
+    let settingsResolved = false;
+    // Sampled inside `show` rather than after the await below: by then both
+    // have happened either way, which is what let an unordered reveal pass.
+    let resolvedWhenShown: boolean | null = null;
+    show.mockImplementation(() => {
+      resolvedWhenShown = settingsResolved;
+      return Promise.resolve();
+    });
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true }).then((v) => {
+          settingsResolved = true;
+          return v;
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    // The window is configured hidden, so nothing else reveals it.
+    await vi.waitFor(() => {
+      expect(show).toHaveBeenCalled();
+    });
+    // Ordering is the point: revealing first would paint the default toggle
+    // states and then flip them into place.
+    expect(resolvedWhenShown).toBe(true);
+  });
+
 });
 
 describe('main: a startup failure reports itself', () => {

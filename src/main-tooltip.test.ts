@@ -84,11 +84,19 @@ const innerSize = vi.fn(() =>
   }),
 );
 const scaleFactor = vi.fn(() => Promise.resolve(1));
+const show = vi.fn(() => Promise.resolve());
 const cursorPositionMock = vi.fn(() => Promise.resolve({ x: 0, y: 0 }));
 const availableMonitorsMock = vi.fn((): Promise<MonitorStub[]> => Promise.resolve([]));
 
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ label: 'main', innerPosition, outerPosition, innerSize, scaleFactor }),
+  getCurrentWindow: () => ({
+    label: 'main',
+    innerPosition,
+    outerPosition,
+    innerSize,
+    scaleFactor,
+    show,
+  }),
   cursorPosition: () => cursorPositionMock(),
   availableMonitors: () => availableMonitorsMock(),
 }));
