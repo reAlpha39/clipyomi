@@ -430,11 +430,48 @@ of ta-old's UTF-16 → Shift-JIS/EUC-JP round trip.
 
 | Module | Responsibility |
 |---|---|
+| `main.rs` | `setup`: settings load, geometry restore, window creation, task spawn |
+| `state.rs` | shared app state, index generations, settings state |
 | `clipboard.rs` | 200 ms poll loop |
 | `parse.rs` | single worker, latest-wins |
-| `commands.rs` | `parse_text`, toggles, `ensure_dictionary` |
+| `commands.rs` | `parse_text`, toggles, `ensure_dictionary`, settings-window lifecycle |
 | `settings.rs` | persisted JSON in the app config dir |
-| `window.rs` | chrome state, always-on-top, geometry, layout slots |
+| `popover.rs` | the tooltip window: creation, placement, hide |
+| `mouse_tracker.rs` | native cursor-tracking thread for unfocused hover (2L) |
+
+There is no `window.rs`. Chrome state, always-on-top and geometry live in
+`commands.rs` next to the other toggles, because each one is a persisted setting
+first and a window call second. Layout slots (§7.9) are unbuilt.
+
+**Three windows**: `main`, built by Tauri from the config array before `setup`
+runs, and `popover` and `settings`, built in `setup`.
+
+**No window is mapped before its page can paint itself.** A webview mapped
+earlier shows its own default white, and the theme is not available that early:
+it lives in stylesheets the pages import (§7.3), which under the dev server
+arrive as module requests *after* the document itself finishes loading. That is
+where the second-long white frame came from. A release build should be far
+better — `vite build` extracts the CSS into a `<link>` in the document head —
+but it has not been measured, so the reveal is gated the same way on both.
+
+Two mechanisms, because the windows are created differently:
+
+| Window | Reveal |
+|---|---|
+| `popover`, `settings` | Built hidden in `setup` and shown on demand. Nothing is left to load at reveal time, and it also avoids the hundreds of milliseconds a webview costs to build. Closing the settings window hides it rather than destroying it, so it is never rebuilt. |
+| `main` | Configured `"visible": false` and reveals itself from `main.ts`, since Tauri builds it from the config array before `setup` runs. Hung off the settings-restore promise so the restored control states are in the first painted frame, and off `finally` so a failed read still leaves a visible window. |
+
+Two reveal signals were tried and are wrong, recorded so they are not tried
+again: `requestAnimationFrame` in the page never fires, because a window that is
+not visible is not being composited — script evaluation is part of page load and
+does run, which is what the main window's reveal relies on. And Tauri's
+`on_page_load` `Finished` event fires at document load, before the stylesheets
+have arrived.
+
+Revealing late has a cost worth naming: if a page fails to load, its window
+stays hidden rather than appearing blank. No watchdog reveal exists — one can
+only fire early enough to show the unstyled frame this avoids, or too late to
+help.
 
 **Clipboard poll** skips work on four conditions: text unchanged, no Japanese
 characters present (kana or CJK ideograph — ta-old's rule), text this app placed
@@ -510,6 +547,9 @@ The webview follows the OS on both platforms, so `prefers-color-scheme` handles
 the system case with no Rust involvement; the shell stores only the manual
 override. No color may have its only definition inside a media query.
 
+The palette therefore arrives with the stylesheets and not before, which is why
+no window is shown until its page has loaded them — see §6.
+
 ### 7.4 Window chrome
 
 Three states, mapping onto ta-old's three (`MakeWindow`, `TranslationAggregator.cpp:542`):
@@ -521,6 +561,11 @@ Three states, mapping onto ta-old's three (`MakeWindow`, `TranslationAggregator.
 | **Native frame** | `WS_OVERLAPPEDWINDOW` | Real OS titlebar and buttons. **Forces background opacity to 100%** — a native titlebar over a transparent body is broken on macOS. |
 
 ta-old toggled by destroying and recreating the window; Tauri does it live.
+
+The chrome commands resolve the main window **by label**, never from the
+`tauri::Window` Tauri injects into a command — that is whichever webview
+invoked it, and the settings window invokes the same commands, so an injected
+caller undecorated the settings window instead.
 
 Two ta-old chrome flags are **N/A, not forgotten**: `showToolbars` (per-pane
 translate buttons — we have one pane) and `lockWindows` (locks child-pane
@@ -691,7 +736,7 @@ so did the chrome and geometry work originally filed under Phase 4.
 | Sub-phase | Status |
 |---|---|
 | **3A** (08-16) | Shipped. Four furigana modes (`none`/`hiragana`/`katakana`/`romaji`) rendered as `<ruby>` over the chips, header segmented control, persisted. |
-| **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8. |
+| **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8 — created hidden in `setup` like the popover, see §6. |
 | **3C** | Remaining. Font sizes (§7.7): `--text-cjk` and `--text-furigana` bound to two persisted inputs. The last reading aid still unbuilt. |
 
 ### Phase 4 — Window behaviour (remaining, minus what 2K took)
