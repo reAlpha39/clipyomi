@@ -54,24 +54,23 @@ fn main() {
                 }
                 #[cfg(target_os = "windows")]
                 {
-                    let _ = main_window.set_decorations(loaded.decorations);
+                    let _ = main_window.set_decorations(false);
                     commands::win32_region::apply_window_shape(
                         &main_window.as_ref().window(),
                         loaded.decorations,
-                        false,
                         28,
                     );
                 }
                 if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
                     #[cfg(target_os = "windows")]
-                    let h_actual = if !loaded.decorations { h + 28 } else { h };
+                    let h_actual = h + 28;
                     #[cfg(not(target_os = "windows"))]
                     let h_actual = h;
                     let _ = main_window.set_size(tauri::LogicalSize::new(w, h_actual));
                 }
                 if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
                     #[cfg(target_os = "windows")]
-                    let y_actual = if !loaded.decorations { y - 28 } else { y };
+                    let y_actual = y - 28;
                     #[cfg(not(target_os = "windows"))]
                     let y_actual = y;
                     let _ = main_window.set_position(tauri::LogicalPosition::new(x, y_actual));

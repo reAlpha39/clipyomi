@@ -184,9 +184,7 @@ pub mod win32_region {
 
     const DWMWA_BORDER_COLOR: u32 = 34;
     const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
-    const DWMWCP_DEFAULT: u32 = 0;
     const DWMWCP_DONOTROUND: u32 = 1;
-    const DWMWA_COLOR_DEFAULT: u32 = 0xFFFFFFFF;
     const DWMWA_COLOR_NONE: u32 = 0xFFFFFFFE;
 
     extern "system" {
@@ -220,70 +218,51 @@ pub mod win32_region {
 
     pub fn apply_window_shape(
         window: &Window,
-        decorations: bool,
-        peeked: bool,
+        band_visible: bool,
         band_height_logical: i32,
     ) {
         if let Ok(hwnd) = window.hwnd() {
             let hwnd_val = hwnd.0;
             unsafe {
-                if decorations {
-                    let border_color: u32 = DWMWA_COLOR_DEFAULT;
-                    let _ = DwmSetWindowAttribute(
-                        hwnd_val,
-                        DWMWA_BORDER_COLOR,
-                        &border_color as *const _ as *const _,
-                        std::mem::size_of::<u32>() as u32,
-                    );
-                    let corner_pref: u32 = DWMWCP_DEFAULT;
-                    let _ = DwmSetWindowAttribute(
-                        hwnd_val,
-                        DWMWA_WINDOW_CORNER_PREFERENCE,
-                        &corner_pref as *const _ as *const _,
-                        std::mem::size_of::<u32>() as u32,
-                    );
-                    SetWindowRgn(hwnd_val, std::ptr::null_mut(), 1);
-                } else {
-                    let border_color: u32 = DWMWA_COLOR_NONE;
-                    let _ = DwmSetWindowAttribute(
-                        hwnd_val,
-                        DWMWA_BORDER_COLOR,
-                        &border_color as *const _ as *const _,
-                        std::mem::size_of::<u32>() as u32,
-                    );
-                    let corner_pref: u32 = DWMWCP_DONOTROUND;
-                    let _ = DwmSetWindowAttribute(
-                        hwnd_val,
-                        DWMWA_WINDOW_CORNER_PREFERENCE,
-                        &corner_pref as *const _ as *const _,
-                        std::mem::size_of::<u32>() as u32,
-                    );
+                let border_color: u32 = DWMWA_COLOR_NONE;
+                let _ = DwmSetWindowAttribute(
+                    hwnd_val,
+                    DWMWA_BORDER_COLOR,
+                    &border_color as *const _ as *const _,
+                    std::mem::size_of::<u32>() as u32,
+                );
+                let corner_pref: u32 = DWMWCP_DONOTROUND;
+                let _ = DwmSetWindowAttribute(
+                    hwnd_val,
+                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                    &corner_pref as *const _ as *const _,
+                    std::mem::size_of::<u32>() as u32,
+                );
 
-                    let mut wr = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-                    let mut cr = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-                    if GetWindowRect(hwnd_val, &mut wr) != 0 && GetClientRect(hwnd_val, &mut cr) != 0 {
-                        let mut origin = POINT { x: 0, y: 0 };
-                        ClientToScreen(hwnd_val, &mut origin);
-                        let off_x = origin.x - wr.left;
-                        let off_y = origin.y - wr.top;
-                        let dpi = GetDpiForWindow(hwnd_val);
-                        let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
+                let mut wr = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                let mut cr = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                if GetWindowRect(hwnd_val, &mut wr) != 0 && GetClientRect(hwnd_val, &mut cr) != 0 {
+                    let mut origin = POINT { x: 0, y: 0 };
+                    ClientToScreen(hwnd_val, &mut origin);
+                    let off_x = origin.x - wr.left;
+                    let off_y = origin.y - wr.top;
+                    let dpi = GetDpiForWindow(hwnd_val);
+                    let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
 
-                        let band_px = mul_div(band_height_logical, dpi_val, 96);
-                        let radius_px = mul_div(8, dpi_val, 96);
-                        let top_offset = if peeked { off_y } else { off_y + band_px };
+                    let band_px = mul_div(band_height_logical, dpi_val, 96);
+                    let radius_px = mul_div(8, dpi_val, 96);
+                    let top_offset = if band_visible { off_y } else { off_y + band_px };
 
-                        let rgn = CreateRoundRectRgn(
-                            off_x,
-                            top_offset,
-                            off_x + cr.right,
-                            off_y + cr.bottom,
-                            2 * radius_px,
-                            2 * radius_px,
-                        );
-                        if !rgn.is_null() {
-                            SetWindowRgn(hwnd_val, rgn, 1);
-                        }
+                    let rgn = CreateRoundRectRgn(
+                        off_x,
+                        top_offset,
+                        off_x + cr.right,
+                        off_y + cr.bottom,
+                        2 * radius_px,
+                        2 * radius_px,
+                    );
+                    if !rgn.is_null() {
+                        SetWindowRgn(hwnd_val, rgn, 1);
                     }
                 }
             }
@@ -298,30 +277,11 @@ pub fn set_decorations(
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
     let window = chrome_target(&app)?;
-    let prev_decorations = settings.snapshot().decorations;
     #[cfg(target_os = "macos")]
     apply_decorations_macos(&window, enabled)?;
     #[cfg(target_os = "windows")]
     {
-        let _ = window.set_decorations(enabled);
-        if enabled != prev_decorations {
-            let size = window.inner_size().map_err(|e| e.to_string())?;
-            let pos = window.outer_position().map_err(|e| e.to_string())?;
-            let scale = window.scale_factor().map_err(|e| e.to_string())?;
-            let delta_px = (28.0 * scale).round() as i32;
-            if enabled {
-                let new_height = (size.height as i32 - delta_px).max(1) as u32;
-                let new_y = pos.y + delta_px;
-                let _ = window.set_size(tauri::PhysicalSize::new(size.width, new_height));
-                let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, new_y));
-            } else {
-                let new_height = (size.height as i32 + delta_px).max(1) as u32;
-                let new_y = pos.y - delta_px;
-                let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, new_y));
-                let _ = window.set_size(tauri::PhysicalSize::new(size.width, new_height));
-            }
-        }
-        win32_region::apply_window_shape(&window, enabled, false, 28);
+        win32_region::apply_window_shape(&window, enabled, 28);
     }
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
@@ -385,7 +345,7 @@ pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Resul
     }
     #[cfg(target_os = "windows")]
     {
-        win32_region::apply_window_shape(&window, false, visible, height.round() as i32);
+        win32_region::apply_window_shape(&window, visible, height.round() as i32);
     }
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
@@ -402,9 +362,10 @@ pub fn update_clip_region(
     #[cfg(target_os = "windows")]
     {
         let decorations = settings.snapshot().decorations;
-        let window = chrome_target(&app)?;
         let is_revealed = PEEKED.load(Ordering::SeqCst);
-        win32_region::apply_window_shape(&window, decorations, is_revealed, 28);
+        let band_visible = decorations || is_revealed;
+        let window = chrome_target(&app)?;
+        win32_region::apply_window_shape(&window, band_visible, 28);
     }
     let _ = (app, settings);
     Ok(())
@@ -438,19 +399,10 @@ pub fn save_window_geometry(
     y: i32,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
-    let current_decorations = settings.snapshot().decorations;
-    let (saved_height, saved_y) = if !current_decorations {
-        #[cfg(target_os = "windows")]
-        {
-            (height.saturating_sub(28), y + 28)
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            (height, y)
-        }
-    } else {
-        (height, y)
-    };
+    #[cfg(target_os = "windows")]
+    let (saved_height, saved_y) = (height.saturating_sub(28), y + 28);
+    #[cfg(not(target_os = "windows"))]
+    let (saved_height, saved_y) = (height, y);
 
     settings
         .update(|s| {
@@ -919,9 +871,17 @@ mod tests {
         save_window_geometry(600, 200, 50, 80, state_arg).unwrap();
         let s = state.snapshot();
         assert_eq!(s.window_width, Some(600));
-        assert_eq!(s.window_height, Some(200));
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(s.window_height, Some(172));
+            assert_eq!(s.window_y, Some(108));
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(s.window_height, Some(200));
+            assert_eq!(s.window_y, Some(80));
+        }
         assert_eq!(s.window_x, Some(50));
-        assert_eq!(s.window_y, Some(80));
     }
 
     #[test]

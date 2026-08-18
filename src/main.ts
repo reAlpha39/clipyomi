@@ -210,7 +210,7 @@ windowClose?.addEventListener('click', () => {
 });
 
 headerControls?.addEventListener('dblclick', (e) => {
-  if (e.target === headerControls) {
+  if (!(e.target as HTMLElement)?.closest('button')) {
     void invoke('toggle_maximize_window').catch(() => {});
   }
 });

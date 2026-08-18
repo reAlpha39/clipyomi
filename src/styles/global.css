@@ -47,17 +47,13 @@ body {
   position: relative;
 }
 
-/* Title bar hidden: the band drops out of the grid entirely, so the sentence
-   starts at the window's top edge and never moves again — the chrome a hover
-   reveals floats OVER it rather than pushing it down. Two tracks left. */
-#app[data-decorations='false'] {
-  grid-template-rows: auto 1fr;
+/* Windows / non-macOS: the in-app band IS the title bar permanently in both modes.
+   The frame is permanently 28px taller than content, so the root is always padded down. */
+#app[data-platform='windows'],
+#app:not([data-platform='macos']) {
+  padding-top: var(--band-h);
 }
 
-/* The band IS the title bar: 28px to match the one macOS draws in the same
-   space (the window keeps `FullSizeContentView`, so the webview owns this strip
-   in both states). On macOS, the OS draws its traffic lights at the left (78px);
-   on Windows, the webview draws its own window controls at the right. */
 .controls {
   height: var(--band-h);
   display: flex;
@@ -69,11 +65,15 @@ body {
 
 #app[data-platform='windows'] .controls,
 #app:not([data-platform='macos']) .controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   padding: 0 0 0 10px;
+  z-index: 10;
 }
 
-#app[data-platform='macos'] .window-controls,
-#app[data-decorations='true'] .window-controls {
+#app[data-platform='macos'] .window-controls {
   display: none;
 }
 
@@ -111,45 +111,37 @@ body {
   color: #ffffff;
 }
 
-#app[data-decorations='false'] .controls {
+/* macOS hidden mode: sliver hover target and frame growth on peek */
+#app[data-platform='macos'][data-decorations='false'] {
+  grid-template-rows: auto 1fr;
+}
+
+#app[data-platform='macos'][data-decorations='false'] .controls {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  /* A 6px sliver while idle on macOS where the frame grows on hover */
   height: 6px;
   border-bottom: 0;
   z-index: 10;
 }
 
-#app[data-platform='windows'][data-decorations='false'],
-#app:not([data-platform='macos'])[data-decorations='false'] {
+#app[data-platform='macos'][data-decorations='false'].peek-offset {
   padding-top: var(--band-h);
 }
 
-#app[data-platform='windows'][data-decorations='false'] .controls,
-#app:not([data-platform='macos'])[data-decorations='false'] .controls {
+#app[data-platform='macos'][data-decorations='false'].peeked .controls {
   height: var(--band-h);
+  background: var(--color-bg);
   border-bottom: 1px solid var(--color-rule);
 }
 
+/* Hidden decorations mode: idle hides controls; peek reveals them */
 #app[data-decorations='false'] #settings-toggle,
 #app[data-decorations='false'] .window-controls {
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-/* On macOS where the OS frame grows upward on peek, padding-top keeps the
-   content stationary on screen. */
-#app[data-platform='macos'][data-decorations='false'].peek-offset {
-  padding-top: var(--band-h);
-}
-
-#app[data-decorations='false'].peeked .controls {
-  height: var(--band-h);
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-rule);
 }
 
 #app[data-decorations='false'].peeked #settings-toggle,
