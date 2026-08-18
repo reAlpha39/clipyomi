@@ -830,10 +830,7 @@ void listen('tauri://move', invalidateGeometry, { target: windowTarget }).catch(
   // break parsing — the tooltip just stops following window moves, a step
   // back to the old DOM-popover behaviour rather than a functional failure.
 });
-void listen('tauri://resize', () => {
-  invalidateGeometry();
-  void invoke('update_clip_region').catch(() => {});
-}, { target: windowTarget }).catch(() => {
+void listen('tauri://resize', invalidateGeometry, { target: windowTarget }).catch(() => {
   // Same reasoning as the `move` listener above.
 });
 

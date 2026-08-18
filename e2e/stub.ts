@@ -60,7 +60,6 @@ export const STUB = `
         cmd === 'minimize_window' ||
         cmd === 'toggle_maximize_window' ||
         cmd === 'close_window' ||
-        cmd === 'update_clip_region' ||
         cmd === 'save_window_geometry'
       )
         return undefined;
