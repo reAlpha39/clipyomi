@@ -25,6 +25,7 @@
   background: var(--color-muted);
 }
 
+html,
 body {
   margin: 0;
   background: var(--color-bg);
@@ -55,19 +56,58 @@ body {
 
 /* The band IS the title bar: 28px to match the one macOS draws in the same
    space (the window keeps `FullSizeContentView`, so the webview owns this strip
-   in both states). The OS puts its buttons at the left; our only child is the
-   gear, pushed to the right by its own `margin-left: auto`. */
+   in both states). On macOS, the OS draws its traffic lights at the left (78px);
+   on Windows, the webview draws its own window controls at the right. */
 .controls {
   height: var(--band-h);
   display: flex;
   align-items: center;
   gap: 8px;
-  /* The window is `titleBarStyle: "Overlay"`, so the OS draws its buttons over
-     this strip rather than above it. 78px keeps the band's own contents clear of
-     close/minimise/zoom; the gear is right-aligned anyway, so this only matters
-     if anything is ever added on the left. */
   padding: 0 10px 0 78px;
   border-bottom: 1px solid var(--color-rule);
+}
+
+#app[data-platform='windows'] .controls,
+#app:not([data-platform='macos']) .controls {
+  padding: 0 0 0 10px;
+}
+
+#app[data-platform='macos'] .window-controls {
+  display: none;
+}
+
+.window-controls {
+  display: inline-flex;
+  height: 100%;
+  align-items: stretch;
+  margin-left: 4px;
+}
+
+.window-controls button {
+  width: 44px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--color-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+.window-controls button:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.window-controls button#window-close:hover {
+  background: #e81123;
+  color: #ffffff;
 }
 
 #app[data-decorations='false'] .controls {
@@ -82,19 +122,19 @@ body {
      edge still drags the frameless window. */
   height: 6px;
   border-bottom: 0;
+  z-index: 10;
 }
 
-#app[data-decorations='false'] #settings-toggle {
+#app[data-decorations='false'] #settings-toggle,
+#app[data-decorations='false'] .window-controls {
   opacity: 0;
+  pointer-events: none;
 }
 
-/* Driven by the `peeked` class rather than `:hover`/`:focus-within`: only the
-   backend can grow the frame, so the strip must light up in step with that call
-   — a CSS-only reveal would show the bar while the window was still the old
-   height, i.e. over the sentence. `main.ts` owns both. */
-#app[data-decorations='false'].peeked {
-  /* Exactly what the frame gains above, so the content stays where it was on
-     screen: the revealed bar is added ON TOP of the window, not laid over it. */
+/* Padding is driven by `peek-offset` rather than `peeked`: only platforms whose
+   frame grows upward on a peek add padding, so the content stays stationary
+   on screen: the revealed bar is added ON TOP of the window, not laid over it. */
+#app[data-decorations='false'].peek-offset {
   padding-top: var(--band-h);
 }
 
@@ -104,8 +144,10 @@ body {
   border-bottom: 1px solid var(--color-rule);
 }
 
-#app[data-decorations='false'].peeked #settings-toggle {
+#app[data-decorations='false'].peeked #settings-toggle,
+#app[data-decorations='false'].peeked .window-controls {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .controls button {

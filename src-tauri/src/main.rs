@@ -48,10 +48,12 @@ fn main() {
                     // the toggle can retry.
                     let _ = main_window.set_always_on_top(true);
                 }
+                #[cfg(target_os = "macos")]
                 if !loaded.decorations {
-                    #[cfg(target_os = "macos")]
                     let _ = commands::apply_decorations_macos(&main_window.as_ref().window(), false);
-                    #[cfg(not(target_os = "macos"))]
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
                     let _ = main_window.set_decorations(false);
                 }
                 if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
@@ -68,8 +70,7 @@ fn main() {
             // second, separately constructed `Arc` would mean two objects and
             // two sources of truth. One `Arc` is built once and shared by
             // both the managed state (for commands, via `State<'_,
-            // Arc<SettingsState>>`, which derefs straight through to
-            // `SettingsState`) and the poll.
+            // Arc<SettingsState>>`) and the background thread.
             let settings = Arc::new(state::SettingsState::new(settings_path, loaded));
             app.manage(Arc::clone(&settings));
 
@@ -152,6 +153,11 @@ fn main() {
             commands::set_always_on_top,
             commands::set_decorations,
             commands::peek_titlebar,
+            commands::peek_grows_frame,
+            commands::is_macos,
+            commands::minimize_window,
+            commands::toggle_maximize_window,
+            commands::close_window,
             commands::save_window_geometry,
             commands::save_settings,
             commands::get_settings,

@@ -485,12 +485,14 @@ describe('the header drag region', () => {
 });
 
 describe('the titlebar band', () => {
-  function load(decorations: boolean) {
+  function load(decorations: boolean, peekGrowsFrame = false) {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') return Promise.resolve({ decorations });
+      if (cmd === 'is_macos') return Promise.resolve(peekGrowsFrame);
+      if (cmd === 'peek_grows_frame') return Promise.resolve(peekGrowsFrame);
       return Promise.resolve(null);
     });
     vi.resetModules();
@@ -653,6 +655,73 @@ describe('the titlebar band', () => {
       shell().dispatchEvent(new Event('pointerleave'));
       expect(shell().classList.contains('peeked')).toBe(true);
 
+      vi.advanceTimersByTime(1000);
+      expect(shell().classList.contains('peeked')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('peeking adds the peek-offset class when the frame can grow', async () => {
+    vi.useFakeTimers();
+    try {
+      await load(false, true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      shell().dispatchEvent(new Event('pointerenter'));
+      expect(shell().classList.contains('peeked')).toBe(true);
+      expect(shell().classList.contains('peek-offset')).toBe(true);
+
+      shell().dispatchEvent(new Event('pointerleave'));
+      vi.advanceTimersByTime(1000);
+      expect(shell().classList.contains('peeked')).toBe(false);
+      expect(shell().classList.contains('peek-offset')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('peeking adds only peeked when the frame cannot grow', async () => {
+    vi.useFakeTimers();
+    try {
+      await load(false, false);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      shell().dispatchEvent(new Event('pointerenter'));
+      expect(shell().classList.contains('peeked')).toBe(true);
+      expect(shell().classList.contains('peek-offset')).toBe(false);
+
+      shell().dispatchEvent(new Event('pointerleave'));
+      vi.advanceTimersByTime(1000);
+      expect(shell().classList.contains('peeked')).toBe(false);
+      expect(shell().classList.contains('peek-offset')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('pointermove inside the window also reveals the band', async () => {
+    await load(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    shell().dispatchEvent(new Event('pointermove'));
+    expect(shell().classList.contains('peeked')).toBe(true);
+  });
+
+  test('unfocused-mouse-move reveals the band and unfocused-mouse-leave hides it', async () => {
+    vi.useFakeTimers();
+    try {
+      await load(false);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      emit('unfocused-mouse-move', { x: 50, y: 10, screen_x: 100, screen_y: 100 });
+      expect(shell().classList.contains('peeked')).toBe(true);
+
+      emit('unfocused-mouse-leave', {});
       vi.advanceTimersByTime(1000);
       expect(shell().classList.contains('peeked')).toBe(false);
     } finally {
@@ -970,6 +1039,40 @@ describe('settings window and gloss filters', () => {
         },
       },
     ]);
+  });
+
+  test('clicking window controls invokes corresponding commands', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const min = document.querySelector<HTMLButtonElement>('#window-minimize');
+    const max = document.querySelector<HTMLButtonElement>('#window-maximize');
+    const close = document.querySelector<HTMLButtonElement>('#window-close');
+    const header = document.querySelector<HTMLElement>('header.controls');
+
+    min?.click();
+    expect(invoke).toHaveBeenCalledWith('minimize_window');
+
+    max?.click();
+    expect(invoke).toHaveBeenCalledWith('toggle_maximize_window');
+
+    close?.click();
+    expect(invoke).toHaveBeenCalledWith('close_window');
+
+    header?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(invoke).toHaveBeenCalledWith('toggle_maximize_window');
   });
 });
 

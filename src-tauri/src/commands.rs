@@ -174,9 +174,9 @@ pub fn set_decorations(
     #[cfg(target_os = "macos")]
     apply_decorations_macos(&window, enabled)?;
     #[cfg(not(target_os = "macos"))]
-    window
-        .set_decorations(enabled)
-        .map_err(|e| e.to_string())?;
+    {
+        let _ = window.set_decorations(false);
+    }
     settings
         .update(|s| s.decorations = enabled)
         .map_err(|e| e.to_string())
@@ -195,45 +195,74 @@ pub fn set_decorations(
 static PEEKED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
+pub fn is_macos() -> bool {
+    cfg!(target_os = "macos")
+}
+
+/// Reports whether `peek_titlebar` grows the window frame upward on this
+/// platform to absorb the revealed titlebar band.
+#[tauri::command]
+pub fn peek_grows_frame() -> bool {
+    true
+}
+
+#[tauri::command]
 pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Result<(), String> {
     // Idempotent by contract: only a real transition touches the window.
     if PEEKED.swap(visible, Ordering::SeqCst) == visible {
         return Ok(());
     }
+    let window = chrome_target(&app)?;
     #[cfg(target_os = "macos")]
-    {
-        let window = chrome_target(&app)?;
-        set_titlebar_chrome(&window, visible)?;
-        // The bar is added ON TOP of the window: the frame grows upward by the
-        // band's height while the webview offsets its content by the same
-        // amount, so what the user was reading does not move. The bottom edge
-        // stays put — only the top edge travels.
-        let scale = window.scale_factor().map_err(|e| e.to_string())?;
-        let size = window
-            .outer_size()
-            .map_err(|e| e.to_string())?
-            .to_logical::<f64>(scale);
-        let pos = window
-            .outer_position()
-            .map_err(|e| e.to_string())?
-            .to_logical::<f64>(scale);
-        let delta = if visible { height } else { -height };
+    set_titlebar_chrome(&window, visible)?;
+
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let delta_px = (height * scale).round() as i32;
+
+    if visible {
+        let size = window.inner_size().map_err(|e| e.to_string())?;
+        let pos = window.outer_position().map_err(|e| e.to_string())?;
+        let new_height = (size.height as i32 + delta_px).max(1) as u32;
+        let new_y = pos.y - delta_px;
         window
-            .set_size(tauri::LogicalSize::new(size.width, size.height + delta))
+            .set_position(tauri::PhysicalPosition::new(pos.x, new_y))
             .map_err(|e| e.to_string())?;
         window
-            .set_position(tauri::LogicalPosition::new(pos.x, pos.y - delta))
-            .map_err(|e| e.to_string())
+            .set_size(tauri::PhysicalSize::new(size.width, new_height))
+            .map_err(|e| e.to_string())?;
+    } else {
+        let size = window.inner_size().map_err(|e| e.to_string())?;
+        let pos = window.outer_position().map_err(|e| e.to_string())?;
+        let new_height = (size.height as i32 - delta_px).max(1) as u32;
+        let new_y = pos.y + delta_px;
+        window
+            .set_size(tauri::PhysicalSize::new(size.width, new_height))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(tauri::PhysicalPosition::new(pos.x, new_y))
+            .map_err(|e| e.to_string())?;
     }
-    // Off macOS the caption is non-client area outside the client rect, so
-    // toggling it resizes the content by its height on every hover in and out
-    // — and the debounced geometry save would persist those hover-induced
-    // sizes. There the CSS reveal of the gear is the whole feature.
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (visible, height, app);
-        Ok(())
+    Ok(())
+}
+
+#[tauri::command]
+pub fn minimize_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    chrome_target(&app)?.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_maximize_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    let window = chrome_target(&app)?;
+    if window.is_maximized().map_err(|e| e.to_string())? {
+        window.unmaximize().map_err(|e| e.to_string())
+    } else {
+        window.maximize().map_err(|e| e.to_string())
     }
+}
+
+#[tauri::command]
+pub fn close_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    chrome_target(&app)?.close().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -244,6 +273,9 @@ pub fn save_window_geometry(
     y: i32,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
+    if PEEKED.load(Ordering::SeqCst) {
+        return Ok(());
+    }
     settings
         .update(|s| {
             s.window_width = Some(width);
@@ -806,6 +838,22 @@ mod tests {
     fn open_settings_window_errors_when_setup_never_created_it() {
         let app = tauri::test::mock_app();
         assert!(open_settings_window(app.handle().clone()).is_err());
+    }
+
+    #[test]
+    fn platform_commands_match_target_os() {
+        assert_eq!(is_macos(), cfg!(target_os = "macos"));
+        assert!(peek_grows_frame());
+    }
+
+    #[test]
+    fn window_controls_act_on_main_window() {
+        let app = tauri::test::mock_app();
+        let h = app.handle().clone();
+        window(&h, "main");
+        assert!(minimize_window(h.clone()).is_ok());
+        assert!(toggle_maximize_window(h.clone()).is_ok());
+        assert!(close_window(h).is_ok());
     }
 }
 

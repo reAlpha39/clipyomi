@@ -99,8 +99,18 @@ test('a hidden title bar leaves the gear invisible until the band is hovered', a
   expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(28);
 });
 
-test('revealing the band offsets the content by exactly the band height', async ({ page }) => {
-  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${HIDDEN_TITLEBAR_STUB}`);
+test('revealing the band offsets the content by exactly the band height when the frame can grow', async ({
+  page,
+}) => {
+  const stub = `
+    ${HIDDEN_TITLEBAR_STUB}
+    const innerInvoke = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'peek_grows_frame') return Promise.resolve(true);
+      return innerInvoke(cmd, args);
+    };
+  `;
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${stub}`);
   await page.goto('/');
   await emitFixtureResult(page);
 
@@ -116,6 +126,30 @@ test('revealing the band offsets the content by exactly the band height', async 
   // has no frame to grow — so this pins the offset that the growth cancels.
   // The two halves matching is a manual macOS check.
   expect(after - before).toBe(28);
+});
+
+test('revealing the band leaves the content stationary when the frame cannot grow', async ({
+  page,
+}) => {
+  const stub = `
+    ${HIDDEN_TITLEBAR_STUB}
+    const innerInvoke = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'peek_grows_frame') return Promise.resolve(false);
+      return innerInvoke(cmd, args);
+    };
+  `;
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${stub}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const sentence = page.locator('.sentence');
+  const before = await sentence.evaluate((el) => el.getBoundingClientRect().top);
+  await page.locator('header.controls').hover();
+  await expect(page.locator('#settings-toggle')).toHaveCSS('opacity', '1');
+  const after = await sentence.evaluate((el) => el.getBoundingClientRect().top);
+
+  expect(after - before).toBe(0);
 });
 
 test('the gear reveals itself when it takes keyboard focus', async ({ page }) => {

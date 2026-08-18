@@ -19,6 +19,11 @@ const app = document.querySelector<HTMLElement>('#app')!;
 app.innerHTML = `
   <header class="controls" data-tauri-drag-region>
     <button id="settings-toggle" type="button" title="Settings">⚙</button>
+    <div id="window-controls" class="window-controls">
+      <button id="window-minimize" type="button" title="Minimize" tabindex="-1">─</button>
+      <button id="window-maximize" type="button" title="Maximize" tabindex="-1">□</button>
+      <button id="window-close" type="button" title="Close" tabindex="-1">✕</button>
+    </div>
   </header>
   <div id="parse-error"></div>
   <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
@@ -183,9 +188,31 @@ const currentFilters: GlossFilters = {
 };
 
 const settingsToggle = app.querySelector<HTMLButtonElement>('#settings-toggle');
+const windowMinimize = app.querySelector<HTMLButtonElement>('#window-minimize');
+const windowMaximize = app.querySelector<HTMLButtonElement>('#window-maximize');
+const windowClose = app.querySelector<HTMLButtonElement>('#window-close');
+const headerControls = app.querySelector<HTMLElement>('header.controls');
 
 settingsToggle?.addEventListener('click', () => {
   void invoke('open_settings_window').catch(() => {});
+});
+
+windowMinimize?.addEventListener('click', () => {
+  void invoke('minimize_window').catch(() => {});
+});
+
+windowMaximize?.addEventListener('click', () => {
+  void invoke('toggle_maximize_window').catch(() => {});
+});
+
+windowClose?.addEventListener('click', () => {
+  void invoke('close_window').catch(() => {});
+});
+
+headerControls?.addEventListener('dblclick', (e) => {
+  if (e.target === headerControls) {
+    void invoke('toggle_maximize_window').catch(() => {});
+  }
 });
 
 /**
@@ -228,6 +255,13 @@ const PEEK_HIDE_MS = 1000;
  */
 const BAND_HEIGHT = 28;
 
+/**
+ * Whether `peek_titlebar` grows the window frame upward on this platform to
+ * absorb the revealed band (macOS). Queried once at startup so `showPeek`
+ * stays synchronous.
+ */
+let peekGrowsFrame = false;
+
 /** Pending un-peek, or `undefined` when none is armed. */
 let peekHide: number | undefined;
 
@@ -238,9 +272,13 @@ function showPeek(): void {
   peekHide = undefined;
   if (titlebarShown || peeking) return;
   peeking = true;
-  // On `#app`, because it drives two things at once: the band's reveal and the
-  // `padding-top` that offsets the content by exactly what the frame gains.
+  // `peeked` expands the band and fades the gear in on every platform.
+  // `peek-offset` adds `padding-top` only when the OS frame grows upward to
+  // absorb it (macOS), keeping the content stationary on screen.
   app.classList.add('peeked');
+  if (peekGrowsFrame) {
+    app.classList.add('peek-offset');
+  }
   void invoke('peek_titlebar', { visible: true, height: BAND_HEIGHT }).catch(() => {});
 }
 
@@ -249,7 +287,7 @@ function hidePeek(): void {
   peekHide = window.setTimeout(() => {
     peekHide = undefined;
     peeking = false;
-    app.classList.remove('peeked');
+    app.classList.remove('peeked', 'peek-offset');
     void invoke('peek_titlebar', { visible: false, height: BAND_HEIGHT }).catch(() => {});
   }, PEEK_HIDE_MS);
 }
@@ -265,7 +303,7 @@ function applyDecorations(shown: boolean): void {
     window.clearTimeout(peekHide);
     peekHide = undefined;
     peeking = false;
-    app.classList.remove('peeked');
+    app.classList.remove('peeked', 'peek-offset');
   }
 }
 
@@ -275,6 +313,7 @@ applyDecorations(true);
 // window hides it. `#app` fills the viewport, so its own enter/leave is the
 // window's — and unlike the 6px band it cannot be missed by a fast pointer.
 app.addEventListener('pointerenter', showPeek);
+app.addEventListener('pointermove', showPeek);
 app.addEventListener('pointerleave', hidePeek);
 
 // Keyboard parity: the gear is a tab stop even while invisible, and only the
@@ -284,6 +323,9 @@ settingsToggle?.addEventListener('focus', showPeek);
 settingsToggle?.addEventListener('blur', hidePeek);
 
 async function applySettings(): Promise<void> {
+  const isMac = await invoke<boolean>('is_macos').catch(() => false);
+  peekGrowsFrame = await invoke<boolean>('peek_grows_frame').catch(() => false);
+  app.setAttribute('data-platform', isMac ? 'macos' : 'windows');
   const settings = await invoke<Settings>('get_settings');
   if (settings.decorations !== undefined) {
     applyDecorations(settings.decorations);
@@ -684,6 +726,7 @@ let lastUnfocusedChip: HTMLElement | null = null;
 void listen<{ x: number; y: number; screen_x: number; screen_y: number }>(
   'unfocused-mouse-move',
   (e) => {
+    showPeek();
     if (document.hasFocus()) {
       lastUnfocusedChip = null;
       return;
@@ -711,6 +754,7 @@ void listen<{ x: number; y: number; screen_x: number; screen_y: number }>(
 );
 
 void listen('unfocused-mouse-leave', async () => {
+  hidePeek();
   if (document.hasFocus()) return;
   lastUnfocusedChip = null;
   clearDwell();
