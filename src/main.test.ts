@@ -1058,15 +1058,11 @@ describe('settings window and gloss filters', () => {
     await Promise.resolve();
 
     const min = document.querySelector<HTMLButtonElement>('#window-minimize');
-    const max = document.querySelector<HTMLButtonElement>('#window-maximize');
     const close = document.querySelector<HTMLButtonElement>('#window-close');
     const header = document.querySelector<HTMLElement>('header.controls');
 
     min?.click();
     expect(invoke).toHaveBeenCalledWith('minimize_window');
-
-    max?.click();
-    expect(invoke).toHaveBeenCalledWith('toggle_maximize_window');
 
     close?.click();
     expect(invoke).toHaveBeenCalledWith('close_window');

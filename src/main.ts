@@ -30,11 +30,6 @@ app.innerHTML = `
           <path d="M0,5 L10,5" stroke="currentColor" stroke-width="1" />
         </svg>
       </button>
-      <button id="window-maximize" type="button" title="Maximize" aria-label="Maximize" tabindex="-1">
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
-        </svg>
-      </button>
       <button id="window-close" type="button" title="Close" aria-label="Close" tabindex="-1">
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
           <path d="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5" stroke="currentColor" stroke-width="1" />
@@ -206,7 +201,6 @@ const currentFilters: GlossFilters = {
 
 const settingsToggle = app.querySelector<HTMLButtonElement>('#settings-toggle');
 const windowMinimize = app.querySelector<HTMLButtonElement>('#window-minimize');
-const windowMaximize = app.querySelector<HTMLButtonElement>('#window-maximize');
 const windowClose = app.querySelector<HTMLButtonElement>('#window-close');
 const headerControls = app.querySelector<HTMLElement>('header.controls');
 
@@ -216,10 +210,6 @@ settingsToggle?.addEventListener('click', () => {
 
 windowMinimize?.addEventListener('click', () => {
   void invoke('minimize_window').catch(() => {});
-});
-
-windowMaximize?.addEventListener('click', () => {
-  void invoke('toggle_maximize_window').catch(() => {});
 });
 
 windowClose?.addEventListener('click', () => {
