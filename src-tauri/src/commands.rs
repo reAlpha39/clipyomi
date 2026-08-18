@@ -164,6 +164,52 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
         .map_err(|e| e.to_string())
 }
 
+#[cfg(target_os = "windows")]
+pub mod win32_region {
+    use tauri::Window;
+
+    #[repr(C)]
+    struct RECT {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    extern "system" {
+        fn CreateRectRgn(x1: i32, y1: i32, x2: i32, y2: i32) -> *mut std::ffi::c_void;
+        fn SetWindowRgn(hWnd: *mut std::ffi::c_void, hRgn: *mut std::ffi::c_void, bRedraw: i32) -> i32;
+        fn GetClientRect(hWnd: *mut std::ffi::c_void, lpRect: *mut RECT) -> i32;
+        fn GetDpiForWindow(hWnd: *mut std::ffi::c_void) -> u32;
+    }
+
+    pub fn apply_clip_region(window: &Window, top_offset_logical: f64) {
+        if let Ok(hwnd) = window.hwnd() {
+            let hwnd_val = hwnd.0;
+            unsafe {
+                let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                if GetClientRect(hwnd_val, &mut rect) != 0 {
+                    let dpi = GetDpiForWindow(hwnd_val);
+                    let scale = if dpi == 0 { 1.0 } else { dpi as f64 / 96.0 };
+                    let top_offset_px = (top_offset_logical * scale).round() as i32;
+                    let rgn = CreateRectRgn(0, top_offset_px, rect.right, rect.bottom);
+                    if !rgn.is_null() {
+                        SetWindowRgn(hwnd_val, rgn, 1);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn clear_clip_region(window: &Window) {
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                SetWindowRgn(hwnd.0, std::ptr::null_mut(), 1);
+            }
+        }
+    }
+}
+
 #[tauri::command]
 pub fn set_decorations(
     enabled: bool,
@@ -173,9 +219,30 @@ pub fn set_decorations(
     let window = chrome_target(&app)?;
     #[cfg(target_os = "macos")]
     apply_decorations_macos(&window, enabled)?;
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
         let _ = window.set_decorations(false);
+        if enabled {
+            win32_region::clear_clip_region(&window);
+            let size = window.inner_size().map_err(|e| e.to_string())?;
+            let pos = window.outer_position().map_err(|e| e.to_string())?;
+            let scale = window.scale_factor().map_err(|e| e.to_string())?;
+            let delta_px = (28.0 * scale).round() as i32;
+            let new_height = (size.height as i32 - delta_px).max(1) as u32;
+            let new_y = pos.y + delta_px;
+            let _ = window.set_size(tauri::PhysicalSize::new(size.width, new_height));
+            let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, new_y));
+        } else {
+            let size = window.inner_size().map_err(|e| e.to_string())?;
+            let pos = window.outer_position().map_err(|e| e.to_string())?;
+            let scale = window.scale_factor().map_err(|e| e.to_string())?;
+            let delta_px = (28.0 * scale).round() as i32;
+            let new_height = (size.height as i32 + delta_px).max(1) as u32;
+            let new_y = pos.y - delta_px;
+            let _ = window.set_position(tauri::PhysicalPosition::new(pos.x, new_y));
+            let _ = window.set_size(tauri::PhysicalSize::new(size.width, new_height));
+            win32_region::apply_clip_region(&window, 28.0);
+        }
     }
     settings
         .update(|s| s.decorations = enabled)
@@ -203,7 +270,7 @@ pub fn is_macos() -> bool {
 /// platform to absorb the revealed titlebar band.
 #[tauri::command]
 pub fn peek_grows_frame() -> bool {
-    true
+    cfg!(target_os = "macos")
 }
 
 #[tauri::command]
@@ -214,34 +281,50 @@ pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Resul
     }
     let window = chrome_target(&app)?;
     #[cfg(target_os = "macos")]
-    set_titlebar_chrome(&window, visible)?;
-
-    let scale = window.scale_factor().map_err(|e| e.to_string())?;
-    let delta_px = (height * scale).round() as i32;
-
-    if visible {
-        let size = window.inner_size().map_err(|e| e.to_string())?;
-        let pos = window.outer_position().map_err(|e| e.to_string())?;
-        let new_height = (size.height as i32 + delta_px).max(1) as u32;
-        let new_y = pos.y - delta_px;
+    {
+        set_titlebar_chrome(&window, visible)?;
+        let scale = window.scale_factor().map_err(|e| e.to_string())?;
+        let size = window
+            .outer_size()
+            .map_err(|e| e.to_string())?
+            .to_logical::<f64>(scale);
+        let pos = window
+            .outer_position()
+            .map_err(|e| e.to_string())?
+            .to_logical::<f64>(scale);
+        let delta = if visible { height } else { -height };
         window
-            .set_position(tauri::PhysicalPosition::new(pos.x, new_y))
+            .set_size(tauri::LogicalSize::new(size.width, size.height + delta))
             .map_err(|e| e.to_string())?;
         window
-            .set_size(tauri::PhysicalSize::new(size.width, new_height))
-            .map_err(|e| e.to_string())?;
-    } else {
-        let size = window.inner_size().map_err(|e| e.to_string())?;
-        let pos = window.outer_position().map_err(|e| e.to_string())?;
-        let new_height = (size.height as i32 - delta_px).max(1) as u32;
-        let new_y = pos.y + delta_px;
-        window
-            .set_size(tauri::PhysicalSize::new(size.width, new_height))
-            .map_err(|e| e.to_string())?;
-        window
-            .set_position(tauri::PhysicalPosition::new(pos.x, new_y))
+            .set_position(tauri::LogicalPosition::new(pos.x, pos.y - delta))
             .map_err(|e| e.to_string())?;
     }
+    #[cfg(target_os = "windows")]
+    {
+        if visible {
+            win32_region::clear_clip_region(&window);
+        } else {
+            win32_region::apply_clip_region(&window, height);
+        }
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = (visible, height);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_clip_region(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if !PEEKED.load(Ordering::SeqCst) {
+            let window = chrome_target(&app)?;
+            win32_region::apply_clip_region(&window, 28.0);
+        }
+    }
+    let _ = app;
     Ok(())
 }
 
@@ -273,15 +356,26 @@ pub fn save_window_geometry(
     y: i32,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
-    if PEEKED.load(Ordering::SeqCst) {
-        return Ok(());
-    }
+    let current_decorations = settings.snapshot().decorations;
+    let (saved_height, saved_y) = if !current_decorations {
+        #[cfg(target_os = "windows")]
+        {
+            (height.saturating_sub(28), y + 28)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            (height, y)
+        }
+    } else {
+        (height, y)
+    };
+
     settings
         .update(|s| {
             s.window_width = Some(width);
-            s.window_height = Some(height);
+            s.window_height = Some(saved_height);
             s.window_x = Some(x);
-            s.window_y = Some(y);
+            s.window_y = Some(saved_y);
         })
         .map_err(|e| e.to_string())
 }
@@ -843,7 +937,7 @@ mod tests {
     #[test]
     fn platform_commands_match_target_os() {
         assert_eq!(is_macos(), cfg!(target_os = "macos"));
-        assert!(peek_grows_frame());
+        assert_eq!(peek_grows_frame(), cfg!(target_os = "macos"));
     }
 
     #[test]

@@ -106,6 +106,7 @@ test('revealing the band offsets the content by exactly the band height when the
     ${HIDDEN_TITLEBAR_STUB}
     const innerInvoke = window.__TAURI_INTERNALS__.invoke;
     window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+      if (cmd === 'is_macos') return Promise.resolve(true);
       if (cmd === 'peek_grows_frame') return Promise.resolve(true);
       return innerInvoke(cmd, args);
     };

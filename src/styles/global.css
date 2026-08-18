@@ -115,26 +115,33 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  /* A 6px sliver while idle, not the full 28px: an invisible full-height band
-     would swallow the hovers and clicks meant for any chip sitting in the top
-     28px of the sentence. 6px is thinner than the pane's own top padding, so
-     nothing reachable hides under it — and it stays a drag region, so the top
-     edge still drags the frameless window. */
+  /* A 6px sliver while idle on macOS where the frame grows on hover */
   height: 6px;
   border-bottom: 0;
   z-index: 10;
+}
+
+#app[data-platform='windows'][data-decorations='false'],
+#app:not([data-platform='macos'])[data-decorations='false'] {
+  padding-top: var(--band-h);
+}
+
+#app[data-platform='windows'][data-decorations='false'] .controls,
+#app:not([data-platform='macos'])[data-decorations='false'] .controls {
+  height: var(--band-h);
+  border-bottom: 1px solid var(--color-rule);
 }
 
 #app[data-decorations='false'] #settings-toggle,
 #app[data-decorations='false'] .window-controls {
   opacity: 0;
   pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-/* Padding is driven by `peek-offset` rather than `peeked`: only platforms whose
-   frame grows upward on a peek add padding, so the content stays stationary
-   on screen: the revealed bar is added ON TOP of the window, not laid over it. */
-#app[data-decorations='false'].peek-offset {
+/* Padding on macOS is driven by `peek-offset`: when the frame grows upward on
+   peek, padding-top keeps the content stationary on screen. */
+#app[data-platform='macos'][data-decorations='false'].peek-offset {
   padding-top: var(--band-h);
 }
 

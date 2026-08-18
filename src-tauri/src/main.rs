@@ -52,15 +52,26 @@ fn main() {
                 if !loaded.decorations {
                     let _ = commands::apply_decorations_macos(&main_window.as_ref().window(), false);
                 }
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(target_os = "windows")]
                 {
                     let _ = main_window.set_decorations(false);
+                    if !loaded.decorations {
+                        commands::win32_region::apply_clip_region(&main_window.as_ref().window(), 28.0);
+                    }
                 }
                 if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
-                    let _ = main_window.set_size(tauri::LogicalSize::new(w, h));
+                    #[cfg(target_os = "windows")]
+                    let h_actual = if !loaded.decorations { h + 28 } else { h };
+                    #[cfg(not(target_os = "windows"))]
+                    let h_actual = h;
+                    let _ = main_window.set_size(tauri::LogicalSize::new(w, h_actual));
                 }
                 if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
-                    let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
+                    #[cfg(target_os = "windows")]
+                    let y_actual = if !loaded.decorations { y - 28 } else { y };
+                    #[cfg(not(target_os = "windows"))]
+                    let y_actual = y;
+                    let _ = main_window.set_position(tauri::LogicalPosition::new(x, y_actual));
                 }
             }
 
@@ -154,6 +165,7 @@ fn main() {
             commands::set_decorations,
             commands::peek_titlebar,
             commands::peek_grows_frame,
+            commands::update_clip_region,
             commands::is_macos,
             commands::minimize_window,
             commands::toggle_maximize_window,
