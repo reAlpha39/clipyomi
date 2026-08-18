@@ -18,11 +18,28 @@ const app = document.querySelector<HTMLElement>('#app')!;
 
 app.innerHTML = `
   <header class="controls" data-tauri-drag-region>
-    <button id="settings-toggle" type="button" title="Settings">⚙</button>
+    <button id="settings-toggle" type="button" title="Settings" aria-label="Settings">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
     <div id="window-controls" class="window-controls">
-      <button id="window-minimize" type="button" title="Minimize" tabindex="-1">─</button>
-      <button id="window-maximize" type="button" title="Maximize" tabindex="-1">□</button>
-      <button id="window-close" type="button" title="Close" tabindex="-1">✕</button>
+      <button id="window-minimize" type="button" title="Minimize" aria-label="Minimize" tabindex="-1">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M0,5 L10,5" stroke="currentColor" stroke-width="1" />
+        </svg>
+      </button>
+      <button id="window-maximize" type="button" title="Maximize" aria-label="Maximize" tabindex="-1">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
+        </svg>
+      </button>
+      <button id="window-close" type="button" title="Close" aria-label="Close" tabindex="-1">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5" stroke="currentColor" stroke-width="1" />
+        </svg>
+      </button>
     </div>
   </header>
   <div id="parse-error"></div>

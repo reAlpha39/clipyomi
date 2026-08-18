@@ -155,10 +155,31 @@ body {
   font-size: var(--text-tag);
   color: var(--color-muted);
   background: none;
-  border: 1px solid var(--color-rule);
+  border: 0;
   border-radius: 3px;
   padding: 3px 8px;
   cursor: pointer;
+}
+
+#settings-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+#settings-toggle:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 /* --- Header Segmented Control --- */
