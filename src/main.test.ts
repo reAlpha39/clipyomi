@@ -25,15 +25,8 @@ const invoke = vi.fn();
 const show = vi.fn(() => Promise.resolve());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
-// `main.ts` now reads the current window's label at import time (to scope
-// its move/resize listeners), so every test that imports it needs this
-// mocked too, even though nothing in this file ever reaches `placeFor` or
-// the keep poll — that coverage, and the fuller controllable stubs it needs,
-// lives in `main-tooltip.test.ts`.
-// All three exports `main.ts` imports, even though no describe in this file
-// reaches the last two: a factory that omits an export fails any future test
-// that does touch it with an opaque "No export is defined on the mock".
-// `src/main-tooltip.test.ts` owns the describes that actually drive these.
+const startResizeDragging = vi.fn((_dir: string) => Promise.resolve());
+
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     label: 'main',
@@ -52,6 +45,7 @@ vi.mock('@tauri-apps/api/window', () => ({
       }),
     scaleFactor: () => Promise.resolve(1),
     show,
+    startResizeDragging,
   }),
   cursorPosition: () => Promise.resolve({ x: 0, y: 0 }),
   availableMonitors: () => Promise.resolve([]),
@@ -485,7 +479,7 @@ describe('the header drag region', () => {
 });
 
 describe('the titlebar band', () => {
-  function load(decorations: boolean, peekGrowsFrame = false) {
+  function load(decorations: boolean, peekGrowsFrame = false, platformName?: string) {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
     invoke.mockReset();
@@ -493,6 +487,7 @@ describe('the titlebar band', () => {
       if (cmd === 'get_settings') return Promise.resolve({ decorations });
       if (cmd === 'is_macos') return Promise.resolve(peekGrowsFrame);
       if (cmd === 'peek_grows_frame') return Promise.resolve(peekGrowsFrame);
+      if (cmd === 'platform') return Promise.resolve(platformName ?? (peekGrowsFrame ? 'macos' : 'windows'));
       return Promise.resolve(null);
     });
     vi.resetModules();
@@ -506,6 +501,13 @@ describe('the titlebar band', () => {
     if (el === null) throw new Error('#app missing');
     return el;
   }
+
+  test('mirrors platform returned from backend onto #app', async () => {
+    await load(true, false, 'linux');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.querySelector('#app')?.getAttribute('data-platform')).toBe('linux');
+  });
 
   // The attribute is the whole state machine: CSS keys the reserved row, the
   // overlay, and the reveal off it, and the pointer handlers below read it to
@@ -804,6 +806,23 @@ describe('window geometry save on resize/move', () => {
       y: 100,
     });
   });
+
+  test('scale-change event invokes update_clip_region and schedules geometry save', async () => {
+    emit('tauri://scale-change', {});
+    expect(invoke).toHaveBeenCalledWith('update_clip_region');
+
+    vi.advanceTimersByTime(300);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('save_window_geometry', {
+      width: 800,
+      height: 600,
+      x: 100,
+      y: 100,
+    });
+  });
 });
 
 describe('furigana mode reaching the render', () => {
@@ -1069,6 +1088,40 @@ describe('settings window and gloss filters', () => {
 
     header?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     expect(invoke).toHaveBeenCalledWith('toggle_maximize_window');
+    expect(min).not.toBeNull();
+    expect(close).not.toBeNull();
+  });
+
+  test('pressing mouse on resize handles triggers startResizeDragging with direction', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    startResizeDragging.mockClear();
+    const southHandle = document.querySelector<HTMLElement>('.resize-bottom');
+    southHandle?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    expect(startResizeDragging).toHaveBeenCalledWith('South');
+
+    startResizeDragging.mockClear();
+    const eastHandle = document.querySelector<HTMLElement>('.resize-right');
+    eastHandle?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    expect(startResizeDragging).toHaveBeenCalledWith('East');
+
+    startResizeDragging.mockClear();
+    const seHandle = document.querySelector<HTMLElement>('.resize-bottom-right');
+    seHandle?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    expect(startResizeDragging).toHaveBeenCalledWith('SouthEast');
   });
 });
 

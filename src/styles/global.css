@@ -47,11 +47,15 @@ body {
   position: relative;
 }
 
-/* Windows / non-macOS: the in-app band IS the title bar permanently in both modes.
-   The frame is permanently 28px taller than content, so the root is always padded down. */
-#app[data-platform='windows'],
-#app:not([data-platform='macos']) {
+/* Windows: the in-app band is the title bar.
+   Decorated mode reserves the top 28px row.
+   Undecorated mode lets content fill the full window; on hover, the band overlays with --color-bg. */
+#app[data-platform='windows'] {
   padding-top: var(--band-h);
+}
+
+#app[data-platform='windows'][data-decorations='false'] {
+  padding-top: 0;
 }
 
 .controls {
@@ -63,8 +67,7 @@ body {
   border-bottom: 1px solid var(--color-rule);
 }
 
-#app[data-platform='windows'] .controls,
-#app:not([data-platform='macos']) .controls {
+#app[data-platform='windows'] .controls {
   position: absolute;
   top: 0;
   left: 0;
@@ -73,7 +76,18 @@ body {
   z-index: 10;
 }
 
-#app[data-platform='macos'] .window-controls {
+#app[data-platform='windows'][data-decorations='false'] .controls {
+  background: transparent;
+  border-bottom: none;
+}
+
+#app[data-platform='windows'][data-decorations='false'].peeked .controls {
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+#app[data-platform='macos'] .window-controls,
+#app[data-platform='linux'] .window-controls {
   display: none;
 }
 
@@ -82,6 +96,8 @@ body {
   height: 100%;
   align-items: stretch;
   margin-left: 4px;
+  position: relative;
+  z-index: 60;
 }
 
 .window-controls button {
@@ -111,12 +127,87 @@ body {
   color: #ffffff;
 }
 
-/* macOS hidden mode: sliver hover target and frame growth on peek */
-#app[data-platform='macos'][data-decorations='false'] {
+/* Invisible resize edges for borderless Windows */
+.resize-handle {
+  display: none;
+  position: absolute;
+  z-index: 50;
+}
+
+#app[data-platform='windows'] .resize-handle {
+  display: block;
+}
+
+.resize-top {
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  cursor: n-resize;
+}
+
+.resize-bottom {
+  bottom: 0;
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  cursor: s-resize;
+}
+
+.resize-left {
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  cursor: w-resize;
+}
+
+.resize-right {
+  right: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 6px;
+  cursor: e-resize;
+}
+
+.resize-top-left {
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nw-resize;
+}
+
+.resize-top-right {
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: ne-resize;
+}
+
+.resize-bottom-left {
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: sw-resize;
+}
+
+.resize-bottom-right {
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: se-resize;
+}
+
+/* Non-Windows hidden mode: sliver hover target and frame growth on peek (macOS) */
+#app:not([data-platform='windows'])[data-decorations='false'] {
   grid-template-rows: auto 1fr;
 }
 
-#app[data-platform='macos'][data-decorations='false'] .controls {
+#app:not([data-platform='windows'])[data-decorations='false'] .controls {
   position: absolute;
   top: 0;
   left: 0;
@@ -130,7 +221,7 @@ body {
   padding-top: var(--band-h);
 }
 
-#app[data-platform='macos'][data-decorations='false'].peeked .controls {
+#app:not([data-platform='windows'])[data-decorations='false'].peeked .controls {
   height: var(--band-h);
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-rule);
@@ -342,6 +433,8 @@ rt.romaji {
   padding: 3px 6px;
   font-size: 12px;
   line-height: 1;
+  position: relative;
+  z-index: 60;
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 

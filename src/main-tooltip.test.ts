@@ -96,6 +96,8 @@ vi.mock('@tauri-apps/api/window', () => ({
     innerSize,
     scaleFactor,
     show,
+    startDragging: vi.fn(() => Promise.resolve()),
+    startResizeDragging: vi.fn((_dir: string) => Promise.resolve()),
   }),
   cursorPosition: () => cursorPositionMock(),
   availableMonitors: () => availableMonitorsMock(),

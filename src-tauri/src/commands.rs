@@ -165,10 +165,16 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
 }
 
 #[cfg(target_os = "windows")]
-pub mod win32_region {
+pub mod win32_frameless {
     use tauri::Window;
 
+    use std::ffi::c_void;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static SUBCLASSED: AtomicBool = AtomicBool::new(false);
+
     #[repr(C)]
+    #[derive(Clone, Copy, Default)]
     struct RECT {
         left: i32,
         top: i32,
@@ -177,36 +183,104 @@ pub mod win32_region {
     }
 
     #[repr(C)]
-    struct POINT {
-        x: i32,
-        y: i32,
+    #[allow(non_snake_case)]
+    struct MARGINS {
+        cxLeftWidth: i32,
+        cxRightWidth: i32,
+        cyTopHeight: i32,
+        cyBottomHeight: i32,
     }
 
-    const DWMWA_BORDER_COLOR: u32 = 34;
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct NCCALCSIZE_PARAMS {
+        rgrc: [RECT; 3],
+        lppos: *mut c_void,
+    }
+
+    const WM_NCCALCSIZE: u32 = 0x0083;
+    const WM_NCHITTEST: u32 = 0x0084;
+    const WM_ERASEBKGND: u32 = 0x0014;
+    const WM_DPICHANGED: u32 = 0x02E0;
+
+    const HTCLIENT: isize = 1;
+    const HTCAPTION: isize = 2;
+    const HTLEFT: isize = 10;
+    const HTRIGHT: isize = 11;
+    const HTTOP: isize = 12;
+    const HTTOPLEFT: isize = 13;
+    const HTTOPRIGHT: isize = 14;
+    const HTBOTTOM: isize = 15;
+    const HTBOTTOMLEFT: isize = 16;
+    const HTBOTTOMRIGHT: isize = 17;
+
     const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
-    const DWMWCP_DONOTROUND: u32 = 1;
+    const DWMWCP_ROUND: u32 = 2;
+    const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
+    const DWMWA_BORDER_COLOR: u32 = 34;
+    const DWMWA_CAPTION_COLOR: u32 = 35;
     const DWMWA_COLOR_NONE: u32 = 0xFFFFFFFE;
 
+    const SM_CXSIZEFRAME: i32 = 32;
+    const SM_CYSIZEFRAME: i32 = 33;
+    const SM_CXPADDEDBORDER: i32 = 92;
+
+    const GWL_STYLE: i32 = -16;
+    const WS_THICKFRAME: u32 = 0x00040000;
+    const SWP_NOMOVE: u32 = 0x0002;
+    const SWP_NOSIZE: u32 = 0x0001;
+    const SWP_NOZORDER: u32 = 0x0004;
+    const SWP_FRAMECHANGED: u32 = 0x0020;
+
+    #[allow(non_snake_case)]
+    type SUBCLASSPROC = unsafe extern "system" fn(
+        hWnd: *mut c_void,
+        uMsg: u32,
+        wParam: usize,
+        lParam: isize,
+        uIdSubclass: usize,
+        dwRefData: usize,
+    ) -> isize;
+
+    #[allow(non_snake_case)]
     extern "system" {
-        fn CreateRoundRectRgn(
-            x1: i32,
-            y1: i32,
-            x2: i32,
-            y2: i32,
-            w: i32,
-            h: i32,
-        ) -> *mut std::ffi::c_void;
-        fn SetWindowRgn(hWnd: *mut std::ffi::c_void, hRgn: *mut std::ffi::c_void, bRedraw: i32) -> i32;
-        fn GetWindowRect(hWnd: *mut std::ffi::c_void, lpRect: *mut RECT) -> i32;
-        fn GetClientRect(hWnd: *mut std::ffi::c_void, lpRect: *mut RECT) -> i32;
-        fn ClientToScreen(hWnd: *mut std::ffi::c_void, lpPoint: *mut POINT) -> i32;
-        fn GetDpiForWindow(hWnd: *mut std::ffi::c_void) -> u32;
+        fn GetWindowRect(hWnd: *mut c_void, lpRect: *mut RECT) -> i32;
+        fn GetDpiForWindow(hWnd: *mut c_void) -> u32;
+        fn GetSystemMetricsForDpi(nIndex: i32, dpi: u32) -> i32;
+        fn IsZoomed(hWnd: *mut c_void) -> i32;
+        fn GetWindowLongPtrW(hWnd: *mut c_void, nIndex: i32) -> isize;
+        fn SetWindowLongPtrW(hWnd: *mut c_void, nIndex: i32, dwNewLong: isize) -> isize;
+        fn SetWindowPos(
+            hWnd: *mut c_void,
+            hWndInsertAfter: *mut c_void,
+            X: i32,
+            Y: i32,
+            cx: i32,
+            cy: i32,
+            uFlags: u32,
+        ) -> i32;
         fn DwmSetWindowAttribute(
-            hWnd: *mut std::ffi::c_void,
+            hWnd: *mut c_void,
             dwAttribute: u32,
-            pvAttribute: *const std::ffi::c_void,
+            pvAttribute: *const c_void,
             cbAttribute: u32,
         ) -> i32;
+        fn DwmExtendFrameIntoClientArea(
+            hWnd: *mut c_void,
+            pMarInset: *const MARGINS,
+        ) -> i32;
+        fn SetWindowSubclass(
+            hWnd: *mut c_void,
+            pfnSubclass: SUBCLASSPROC,
+            uIdSubclass: usize,
+            dwRefData: usize,
+        ) -> i32;
+        fn DefSubclassProc(
+            hWnd: *mut c_void,
+            uMsg: u32,
+            wParam: usize,
+            lParam: isize,
+        ) -> isize;
     }
 
     fn mul_div(n_number: i32, n_numerator: i32, n_denominator: i32) -> i32 {
@@ -216,59 +290,175 @@ pub mod win32_region {
         ((n_number as i64 * n_numerator as i64) / n_denominator as i64) as i32
     }
 
-    pub fn apply_window_shape(
-        window: &Window,
-        band_visible: bool,
-        band_height_logical: i32,
-    ) {
-        if let Ok(hwnd) = window.hwnd() {
-            let hwnd_val = hwnd.0;
-            unsafe {
-                let border_color: u32 = DWMWA_COLOR_NONE;
-                let _ = DwmSetWindowAttribute(
-                    hwnd_val,
-                    DWMWA_BORDER_COLOR,
-                    &border_color as *const _ as *const _,
-                    std::mem::size_of::<u32>() as u32,
-                );
-                let corner_pref: u32 = DWMWCP_DONOTROUND;
-                let _ = DwmSetWindowAttribute(
-                    hwnd_val,
-                    DWMWA_WINDOW_CORNER_PREFERENCE,
-                    &corner_pref as *const _ as *const _,
-                    std::mem::size_of::<u32>() as u32,
-                );
+    fn get_system_metrics(index: i32, dpi: u32) -> i32 {
+        unsafe {
+            GetSystemMetricsForDpi(index, dpi)
+        }
+    }
 
-                let mut wr = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-                let mut cr = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-                if GetWindowRect(hwnd_val, &mut wr) != 0 && GetClientRect(hwnd_val, &mut cr) != 0 {
-                    let mut origin = POINT { x: 0, y: 0 };
-                    ClientToScreen(hwnd_val, &mut origin);
-                    let off_x = origin.x - wr.left;
-                    let off_y = origin.y - wr.top;
-                    let dpi = GetDpiForWindow(hwnd_val);
-                    let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
+    pub fn apply_dwm_attributes(hwnd: *mut c_void) {
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+            let _ = SetWindowLongPtrW(hwnd, GWL_STYLE, (style | WS_THICKFRAME) as isize);
+            let _ = SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+            );
 
-                    let band_px = mul_div(band_height_logical, dpi_val, 96);
-                    let radius_px = mul_div(8, dpi_val, 96);
-                    let top_offset = if band_visible { off_y } else { off_y + band_px };
+            let margins = MARGINS {
+                cxLeftWidth: 0,
+                cxRightWidth: 0,
+                cyTopHeight: 1,
+                cyBottomHeight: 0,
+            };
+            let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
 
-                    let rgn = CreateRoundRectRgn(
-                        off_x,
-                        top_offset,
-                        off_x + cr.right,
-                        off_y + cr.bottom,
-                        2 * radius_px,
-                        2 * radius_px,
-                    );
-                    if !rgn.is_null() {
-                        SetWindowRgn(hwnd_val, rgn, 1);
+            let corner_pref: u32 = DWMWCP_ROUND;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                &corner_pref as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+
+            let dark_mode: u32 = 1;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &dark_mode as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+
+            let color_none: u32 = DWMWA_COLOR_NONE;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                &color_none as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+
+            let bg_color: u32 = 0x001B1818;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_CAPTION_COLOR,
+                &bg_color as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+        }
+    }
+
+    unsafe extern "system" fn frameless_subclass_proc(
+        hwnd: *mut c_void,
+        msg: u32,
+        wparam: usize,
+        lparam: isize,
+        _uid: usize,
+        _ref_data: usize,
+    ) -> isize {
+        match msg {
+            WM_NCCALCSIZE => {
+                if wparam != 0 {
+                    let params = &mut *(lparam as *mut NCCALCSIZE_PARAMS);
+                    if IsZoomed(hwnd) != 0 {
+                        let dpi = GetDpiForWindow(hwnd);
+                        let dpi_val = if dpi == 0 { 96 } else { dpi };
+                        let frame_x = get_system_metrics(SM_CXSIZEFRAME, dpi_val)
+                            + get_system_metrics(SM_CXPADDEDBORDER, dpi_val);
+                        let frame_y = get_system_metrics(SM_CYSIZEFRAME, dpi_val)
+                            + get_system_metrics(SM_CXPADDEDBORDER, dpi_val);
+
+                        params.rgrc[0].left += frame_x;
+                        params.rgrc[0].top += frame_y;
+                        params.rgrc[0].right -= frame_x;
+                        params.rgrc[0].bottom -= frame_y;
                     }
+                    return 0;
                 }
             }
+            WM_NCHITTEST => {
+                let dpi = GetDpiForWindow(hwnd);
+                let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
+
+                let mut wr = RECT::default();
+                if GetWindowRect(hwnd, &mut wr) != 0 {
+                    let x = (lparam as i32) as i16 as i32;
+                    let y = ((lparam >> 16) as i32) as i16 as i32;
+
+                    let border_px = mul_div(6, dpi_val, 96);
+                    let corner_px = mul_div(12, dpi_val, 96);
+                    let band_px = mul_div(super::BAND_HEIGHT_LOGICAL as i32, dpi_val, 96);
+                    let buttons_width_px = mul_div(120, dpi_val, 96);
+
+                    let is_maximized = IsZoomed(hwnd) != 0;
+
+                    if !is_maximized {
+                        if y < wr.top + corner_px && x < wr.left + corner_px {
+                            return HTTOPLEFT;
+                        }
+                        if y < wr.top + corner_px && x >= wr.right - corner_px {
+                            return HTTOPRIGHT;
+                        }
+                        if y >= wr.bottom - corner_px && x < wr.left + corner_px {
+                            return HTBOTTOMLEFT;
+                        }
+                        if y >= wr.bottom - corner_px && x >= wr.right - corner_px {
+                            return HTBOTTOMRIGHT;
+                        }
+
+                        if y < wr.top + border_px {
+                            return HTTOP;
+                        }
+                        if y >= wr.bottom - border_px {
+                            return HTBOTTOM;
+                        }
+                        if x < wr.left + border_px {
+                            return HTLEFT;
+                        }
+                        if x >= wr.right - border_px {
+                            return HTRIGHT;
+                        }
+                    }
+
+                    if y < wr.top + band_px {
+                        if x >= wr.right - buttons_width_px {
+                            return HTCLIENT;
+                        }
+                        return HTCAPTION;
+                    }
+                }
+                return HTCLIENT;
+            }
+            WM_ERASEBKGND => {
+                return 1;
+            }
+            WM_DPICHANGED => {
+                apply_dwm_attributes(hwnd);
+            }
+            _ => {}
+        }
+        DefSubclassProc(hwnd, msg, wparam, lparam)
+    }
+
+    pub fn init_window(window: &Window) {
+        if let Ok(hwnd) = window.hwnd() {
+            let hwnd_val = hwnd.0;
+            if !SUBCLASSED.swap(true, Ordering::SeqCst) {
+                unsafe {
+                    SetWindowSubclass(hwnd_val, frameless_subclass_proc, 1, 0);
+                }
+            }
+            apply_dwm_attributes(hwnd_val);
         }
     }
 }
+
+/// The logical height in pixels of the titlebar band on Windows.
+pub const BAND_HEIGHT_LOGICAL: u32 = 28;
 
 #[tauri::command]
 pub fn set_decorations(
@@ -281,7 +471,7 @@ pub fn set_decorations(
     apply_decorations_macos(&window, enabled)?;
     #[cfg(target_os = "windows")]
     {
-        win32_region::apply_window_shape(&window, enabled, 28);
+        win32_frameless::init_window(&window);
     }
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
@@ -303,6 +493,17 @@ pub fn set_decorations(
 /// mid-peek would otherwise leave the frontend's copy of the flag out of step
 /// with the real frame. One main window, so one flag.
 static PEEKED: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn platform() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
+}
 
 #[tauri::command]
 pub fn is_macos() -> bool {
@@ -345,7 +546,7 @@ pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Resul
     }
     #[cfg(target_os = "windows")]
     {
-        win32_region::apply_window_shape(&window, visible, height.round() as i32);
+        let _ = (window, height);
     }
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
@@ -361,11 +562,8 @@ pub fn update_clip_region(
 ) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        let decorations = settings.snapshot().decorations;
-        let is_revealed = PEEKED.load(Ordering::SeqCst);
-        let band_visible = decorations || is_revealed;
         let window = chrome_target(&app)?;
-        win32_region::apply_window_shape(&window, band_visible, 28);
+        win32_frameless::init_window(&window);
     }
     let _ = (app, settings);
     Ok(())
@@ -399,17 +597,12 @@ pub fn save_window_geometry(
     y: i32,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    let (saved_height, saved_y) = (height.saturating_sub(28), y + 28);
-    #[cfg(not(target_os = "windows"))]
-    let (saved_height, saved_y) = (height, y);
-
     settings
         .update(|s| {
             s.window_width = Some(width);
-            s.window_height = Some(saved_height);
+            s.window_height = Some(height);
             s.window_x = Some(x);
-            s.window_y = Some(saved_y);
+            s.window_y = Some(y);
         })
         .map_err(|e| e.to_string())
 }
@@ -871,17 +1064,9 @@ mod tests {
         save_window_geometry(600, 200, 50, 80, state_arg).unwrap();
         let s = state.snapshot();
         assert_eq!(s.window_width, Some(600));
-        #[cfg(target_os = "windows")]
-        {
-            assert_eq!(s.window_height, Some(172));
-            assert_eq!(s.window_y, Some(108));
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            assert_eq!(s.window_height, Some(200));
-            assert_eq!(s.window_y, Some(80));
-        }
+        assert_eq!(s.window_height, Some(200));
         assert_eq!(s.window_x, Some(50));
+        assert_eq!(s.window_y, Some(80));
     }
 
     #[test]
@@ -980,6 +1165,66 @@ mod tests {
     fn platform_commands_match_target_os() {
         assert_eq!(is_macos(), cfg!(target_os = "macos"));
         assert_eq!(peek_grows_frame(), cfg!(target_os = "macos"));
+        #[cfg(target_os = "macos")]
+        assert_eq!(platform(), "macos");
+        #[cfg(target_os = "windows")]
+        assert_eq!(platform(), "windows");
+        #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+        assert_eq!(platform(), "linux");
+    }
+
+    #[test]
+    fn geometry_round_trip_is_a_fixed_point_including_at_min_height() {
+        let dir = scratch("geometry-round-trip");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings::default(),
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+
+        // Test cases: (runtime_w, runtime_h, runtime_x, runtime_y)
+        // 1. Standard default window
+        // 2. Minimum content height (80) -> runtime height 108
+        // 3. Raw min height boundary (80)
+        // 4. Zero and negative coordinates
+        let test_cases = vec![
+            (720, 508, 100, 100),
+            (160, 108, 0, 0),
+            (160, 80, -50, -20),
+            (800, 600, -100, 200),
+        ];
+
+        for (w, h, x, y) in test_cases {
+            let state_arg = app.state::<Arc<SettingsState>>();
+            save_window_geometry(w, h, x, y, state_arg).unwrap();
+            let first_saved = state.snapshot();
+
+            let loaded_w = first_saved.window_width.unwrap();
+            let loaded_h = first_saved.window_height.unwrap();
+            let loaded_x = first_saved.window_x.unwrap();
+            let loaded_y = first_saved.window_y.unwrap();
+
+            let runtime_h = loaded_h;
+            let runtime_y = loaded_y;
+
+            let state_arg2 = app.state::<Arc<SettingsState>>();
+            save_window_geometry(loaded_w, runtime_h, loaded_x, runtime_y, state_arg2).unwrap();
+            let second_saved = state.snapshot();
+
+            assert_eq!(second_saved.window_width, first_saved.window_width);
+            assert_eq!(
+                second_saved.window_height,
+                first_saved.window_height,
+                "height fixed point for case ({w},{h},{x},{y})"
+            );
+            assert_eq!(second_saved.window_x, first_saved.window_x);
+            assert_eq!(
+                second_saved.window_y,
+                first_saved.window_y,
+                "y fixed point for case ({w},{h},{x},{y})"
+            );
+        }
     }
 
     #[test]

@@ -1,6 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
-import { availableMonitors, cursorPosition, getCurrentWindow } from '@tauri-apps/api/window';
+import {
+  availableMonitors,
+  cursorPosition,
+  getCurrentWindow,
+  type ResizeDirection,
+} from '@tauri-apps/api/window';
 import { renderSentence } from './render/sentence';
 import {
   MARGIN,
@@ -17,6 +22,14 @@ import './styles/global.css';
 const app = document.querySelector<HTMLElement>('#app')!;
 
 app.innerHTML = `
+  <div class="resize-handle resize-top" data-direction="North"></div>
+  <div class="resize-handle resize-bottom" data-direction="South"></div>
+  <div class="resize-handle resize-left" data-direction="West"></div>
+  <div class="resize-handle resize-right" data-direction="East"></div>
+  <div class="resize-handle resize-top-left" data-direction="NorthWest"></div>
+  <div class="resize-handle resize-top-right" data-direction="NorthEast"></div>
+  <div class="resize-handle resize-bottom-left" data-direction="SouthWest"></div>
+  <div class="resize-handle resize-bottom-right" data-direction="SouthEast"></div>
   <header class="controls" data-tauri-drag-region>
     <button id="settings-toggle" type="button" title="Settings" aria-label="Settings">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -216,6 +229,18 @@ windowClose?.addEventListener('click', () => {
   void invoke('close_window').catch(() => {});
 });
 
+app.querySelectorAll<HTMLElement>('.resize-handle').forEach((handle) => {
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button === 0) {
+      e.preventDefault();
+      const dir = handle.dataset.direction as ResizeDirection;
+      if (dir) {
+        void getCurrentWindow().startResizeDragging(dir).catch(() => {});
+      }
+    }
+  });
+});
+
 headerControls?.addEventListener('dblclick', (e) => {
   if (!(e.target as HTMLElement)?.closest('button')) {
     void invoke('toggle_maximize_window').catch(() => {});
@@ -330,9 +355,12 @@ settingsToggle?.addEventListener('focus', showPeek);
 settingsToggle?.addEventListener('blur', hidePeek);
 
 async function applySettings(): Promise<void> {
-  const isMac = await invoke<boolean>('is_macos').catch(() => false);
+  const currentPlatform = await invoke<string>('platform').catch(async () => {
+    const isMac = await invoke<boolean>('is_macos').catch(() => false);
+    return isMac ? 'macos' : 'windows';
+  });
   peekGrowsFrame = await invoke<boolean>('peek_grows_frame').catch(() => false);
-  app.setAttribute('data-platform', isMac ? 'macos' : 'windows');
+  app.setAttribute('data-platform', currentPlatform);
   const settings = await invoke<Settings>('get_settings');
   if (settings.decorations !== undefined) {
     applyDecorations(settings.decorations);
@@ -837,7 +865,10 @@ void listen('tauri://move', invalidateGeometry, { target: windowTarget }).catch(
   // break parsing — the tooltip just stops following window moves, a step
   // back to the old DOM-popover behaviour rather than a functional failure.
 });
-void listen('tauri://resize', () => {
+void listen('tauri://resize', invalidateGeometry, { target: windowTarget }).catch(() => {
+  // Same reasoning as the `move` listener above.
+});
+void listen('tauri://scale-change', () => {
   invalidateGeometry();
   void invoke('update_clip_region').catch(() => {});
 }, { target: windowTarget }).catch(() => {

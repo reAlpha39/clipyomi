@@ -163,6 +163,7 @@ const WINDOWS_STUB = `
   const realInvoke = window.__TAURI_INTERNALS__.invoke;
   window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
     if (cmd === 'is_macos' || cmd === 'peek_grows_frame') return Promise.resolve(false);
+    if (cmd === 'platform') return Promise.resolve('windows');
     if (cmd === 'get_settings') return Promise.resolve({ decorations: false });
     return realInvoke(cmd, args);
   };

@@ -72,6 +72,7 @@ export const STUB = `
       // inside a template literal.
       if (cmd === 'is_macos') return true;
       if (cmd === 'peek_grows_frame') return true;
+      if (cmd === 'platform') return 'macos';
       // Every existing spec exercises the parse path, so the stub's default
       // answer is "a dictionary already exists" — Task 5's own spec overrides
       // this to true for the one test that needs the download screen instead.

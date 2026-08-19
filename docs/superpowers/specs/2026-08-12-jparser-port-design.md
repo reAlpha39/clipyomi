@@ -592,11 +592,11 @@ re-entry: the revealed buttons are real
 NSViews over the band's left edge, so reaching for one reads as a
 `pointerleave`, and an instant hide would oscillate again in that small region.
 A `.peeked` class holds the band open across that gap, since CSS `:hover` cannot
-see a pointer resting on OS chrome. It is a no-op off macOS: the Windows and GTK
-caption is non-client area outside the client rect, so toggling it resizes the
-content on every hover and the debounced geometry save would persist those
-sizes. Off macOS the gear reveal is the whole feature; drawing our own caption
-buttons there is the §11 "Header + resize edges" work, still unbuilt.
+see a pointer resting on OS chrome.
+
+**Per-platform peek distinction**:
+- On **macOS**: Cocoa coalesces frame resizes in a single run-loop turn, so `peek_titlebar` grows the window frame upward by 28px (`size.height + delta`, `pos.y - delta`) while `.peek-offset` adds `padding-top: 28px` to keep content stationary on screen.
+- On **Windows**: Region clipping and frame size mutations during live interactions cause composition lag and DWM flicker. Hidden mode lets content occupy the full window from top: 0, and the in-app band smoothly overlays the top 28px on hover, painted with `--color-bg`. Content never moves, nothing resizes, and nothing clips.
 
 ### 7.3 Theming
 
@@ -623,7 +623,7 @@ Three states, mapping onto ta-old's three (`MakeWindow`, `TranslationAggregator.
 
 | State | ta-old equivalent | Implementation |
 |---|---|---|
-| **Header + resize edges** (default) | `WS_POPUP \| WS_THICKFRAME` | `decorations: false`; our header is the titlebar; invisible CSS edges call `startResizeDragging` |
+| **Header + resize edges** (default) | `WS_THICKFRAME \| WS_CAPTION` with `WM_NCCALCSIZE` | Frameless custom chrome via `WM_NCCALCSIZE` & `WM_NCHITTEST`. Native DWM rounded corners (`DWMWCP_ROUND`) and 1px frame extension for hardware drop shadows. Zero GDI regions. |
 | **Content only** | Setsumi's `borderlessWindow` (`WS_POPUP`) | Also hide our header; toggles move to a right-click menu. Maximum real estate over a game. |
 | **Native frame** | `WS_OVERLAPPEDWINDOW` | Real OS titlebar and buttons. **Forces background opacity to 100%** — a native titlebar over a transparent body is broken on macOS. |
 
