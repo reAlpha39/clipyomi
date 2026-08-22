@@ -184,15 +184,6 @@ pub mod win32_frameless {
 
     #[repr(C)]
     #[allow(non_snake_case)]
-    struct MARGINS {
-        cxLeftWidth: i32,
-        cxRightWidth: i32,
-        cyTopHeight: i32,
-        cyBottomHeight: i32,
-    }
-
-    #[repr(C)]
-    #[allow(non_snake_case)]
     struct NCCALCSIZE_PARAMS {
         rgrc: [RECT; 3],
         lppos: *mut c_void,
@@ -227,6 +218,7 @@ pub mod win32_frameless {
 
     const GWL_STYLE: i32 = -16;
     const WS_THICKFRAME: u32 = 0x00040000;
+    const WS_CAPTION: u32 = 0x00C00000;
     const SWP_NOMOVE: u32 = 0x0002;
     const SWP_NOSIZE: u32 = 0x0001;
     const SWP_NOZORDER: u32 = 0x0004;
@@ -265,10 +257,6 @@ pub mod win32_frameless {
             pvAttribute: *const c_void,
             cbAttribute: u32,
         ) -> i32;
-        fn DwmExtendFrameIntoClientArea(
-            hWnd: *mut c_void,
-            pMarInset: *const MARGINS,
-        ) -> i32;
         fn SetWindowSubclass(
             hWnd: *mut c_void,
             pfnSubclass: SUBCLASSPROC,
@@ -298,8 +286,16 @@ pub mod win32_frameless {
 
     pub fn apply_dwm_attributes(hwnd: *mut c_void) {
         unsafe {
+            // WS_THICKFRAME keeps the resize border; WS_CAPTION has to go. DWM
+            // draws its drop shadow for any window that still carries a caption,
+            // and WM_NCCALCSIZE only hides that frame — it does not unregister
+            // it. Dropping the bit is what actually removes the shadow.
             let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
-            let _ = SetWindowLongPtrW(hwnd, GWL_STYLE, (style | WS_THICKFRAME) as isize);
+            let _ = SetWindowLongPtrW(
+                hwnd,
+                GWL_STYLE,
+                ((style | WS_THICKFRAME) & !WS_CAPTION) as isize,
+            );
             let _ = SetWindowPos(
                 hwnd,
                 std::ptr::null_mut(),
@@ -309,14 +305,6 @@ pub mod win32_frameless {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
             );
-
-            let margins = MARGINS {
-                cxLeftWidth: 0,
-                cxRightWidth: 0,
-                cyTopHeight: 1,
-                cyBottomHeight: 0,
-            };
-            let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
 
             let corner_pref: u32 = DWMWCP_ROUND;
             let _ = DwmSetWindowAttribute(
