@@ -664,6 +664,22 @@ describe('the titlebar band', () => {
     }
   });
 
+  // The colour the Windows frame growth erases newly exposed pixels with. A
+  // wrong one is visible as a coloured strip for the frame or two before the
+  // webview paints, which is why the renderer reports its own.
+  test('startup reports the background colour the page renders', async () => {
+    document.body.style.backgroundColor = 'rgb(18, 18, 18)';
+    try {
+      await load(false, true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(invoke).toHaveBeenCalledWith('set_window_background', { r: 18, g: 18, b: 18 });
+    } finally {
+      document.body.style.backgroundColor = '';
+    }
+  });
+
   test('peeking adds the peek-offset class when the frame can grow', async () => {
     vi.useFakeTimers();
     try {
@@ -687,7 +703,8 @@ describe('the titlebar band', () => {
   test('peeking adds only peeked when the frame cannot grow', async () => {
     vi.useFakeTimers();
     try {
-      await load(false, false);
+      // Linux: the only platform left whose frame does not grow on peek.
+      await load(false, false, 'linux');
       await Promise.resolve();
       await Promise.resolve();
 

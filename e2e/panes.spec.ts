@@ -154,38 +154,46 @@ test('revealing the band leaves the content stationary when the frame cannot gro
 });
 
 // The Windows shape, checked on this machine because the branch is pure CSS and
-// the only platform input is `is_macos`. What is NOT checked here: the Win32
-// region that clips the band away while idle, which is what makes the always-on
-// 28px band invisible on Windows. Without that clipping this layout would show a
-// permanent empty strip — see the Windows test plan.
+// the platform inputs are `platform` and `peek_grows_frame`. Windows grows the
+// frame on peek like macOS does, so `is_macos` stays false while
+// `peek_grows_frame` is true. What is NOT checked here: the frame actually
+// growing 28px upward, which is what cancels the offset asserted below — a
+// browser tab has no frame to grow, so that half stays a manual Windows check.
 const WINDOWS_STUB = `
   ${STUB}
   const realInvoke = window.__TAURI_INTERNALS__.invoke;
   window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
-    if (cmd === 'is_macos' || cmd === 'peek_grows_frame') return Promise.resolve(false);
+    if (cmd === 'is_macos') return Promise.resolve(false);
+    if (cmd === 'peek_grows_frame') return Promise.resolve(true);
     if (cmd === 'platform') return Promise.resolve('windows');
     if (cmd === 'get_settings') return Promise.resolve({ decorations: false });
     return realInvoke(cmd, args);
   };
 `;
 
-test('the Windows shape keeps a full-height band and a permanent offset', async ({ page }) => {
+test('the Windows shape grows the band onto the top of the window on peek', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${WINDOWS_STUB}`);
   await page.goto('/');
   await emitFixtureResult(page);
 
   const band = page.locator('header.controls');
   const shell = page.locator('#app');
+  // The band is full height on Windows even while idle — the 6px sliver is the
+  // non-Windows shape — but it reserves no row, so the sentence starts at the
+  // window's top edge.
   expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(28);
-  await expect(shell).toHaveCSS('padding-top', '28px');
+  await expect(shell).toHaveCSS('padding-top', '0px');
 
-  // The frame does not grow on Windows, so the reveal must not add a second
-  // offset on top of the permanent one — that was the content-jump bug.
   const before = await page.locator('.sentence').evaluate((el) => el.getBoundingClientRect().top);
   await band.hover();
   await expect(page.locator('#settings-toggle')).toHaveCSS('opacity', '1');
   const after = await page.locator('.sentence').evaluate((el) => el.getBoundingClientRect().top);
-  expect(after).toBe(before);
+
+  // Same contract as the macOS case: the content moves DOWN by the band height
+  // inside the window while the frame grows upward by the same amount, so the
+  // band is added on top of the window rather than covering the first line.
+  await expect(shell).toHaveCSS('padding-top', '28px');
+  expect(after - before).toBe(28);
 });
 
 test('the gear reveals itself when it takes keyboard focus', async ({ page }) => {

@@ -164,6 +164,7 @@ fn main() {
             commands::peek_titlebar,
             commands::peek_grows_frame,
             commands::update_clip_region,
+            commands::set_window_background,
             commands::platform,
             commands::is_macos,
             commands::minimize_window,

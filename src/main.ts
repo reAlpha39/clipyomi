@@ -289,8 +289,8 @@ const BAND_HEIGHT = 28;
 
 /**
  * Whether `peek_titlebar` grows the window frame upward on this platform to
- * absorb the revealed band (macOS). Queried once at startup so `showPeek`
- * stays synchronous.
+ * absorb the revealed band (macOS, Windows). Queried once at startup so
+ * `showPeek` stays synchronous.
  */
 let peekGrowsFrame = false;
 
@@ -306,7 +306,7 @@ function showPeek(): void {
   peeking = true;
   // `peeked` expands the band and fades the gear in on every platform.
   // `peek-offset` adds `padding-top` only when the OS frame grows upward to
-  // absorb it (macOS), keeping the content stationary on screen.
+  // absorb it (macOS, Windows), keeping the content stationary on screen.
   app.classList.add('peeked');
   if (peekGrowsFrame) {
     app.classList.add('peek-offset');
@@ -354,6 +354,50 @@ app.addEventListener('pointerleave', hidePeek);
 settingsToggle?.addEventListener('focus', showPeek);
 settingsToggle?.addEventListener('blur', hidePeek);
 
+/**
+ * Tells the backend the background colour this page renders.
+ *
+ * Windows erases the pixels a peek newly exposes before the webview has painted
+ * them, and it can only do that in a colour it was given. Read from the live
+ * computed style rather than passed as a constant: `--color-bg` is an `oklch()`
+ * token with a `prefers-color-scheme` branch and a `data-theme` override, and
+ * the browser is the only thing that resolves all three to the sRGB triple the
+ * strip has to match.
+ */
+function reportBackground(): void {
+  const rendered = getComputedStyle(document.body).backgroundColor;
+  const rgb = resolveColor(rendered);
+  if (rgb === null) return;
+  void invoke('set_window_background', { r: rgb[0], g: rgb[1], b: rgb[2] }).catch(() => {});
+}
+
+/**
+ * A CSS colour as an sRGB triple, whatever syntax it arrives in.
+ *
+ * Painted onto a 1x1 canvas and read back rather than parsed: Chromium
+ * serializes a computed colour in the space it was authored in, so the
+ * `oklch()` tokens come back as `oklch(0.18 0 0)` and string parsing silently
+ * gave up on every one of them — the erase kept a colour guessed from the
+ * system theme, and a peek showed a strip of the wrong theme.
+ *
+ * The regex is the fallback for environments with no canvas backend, which
+ * includes the test DOM.
+ */
+function resolveColor(css: string): [number, number, number] | null {
+  const ctx = document.createElement('canvas').getContext('2d');
+  if (ctx !== null) {
+    ctx.fillStyle = css;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return [r, g, b];
+  }
+  const rgb = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(css);
+  return rgb === null ? null : [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+}
+
+// The token flips with the OS theme, and the erase colour has to flip with it.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', reportBackground);
+
 async function applySettings(): Promise<void> {
   const currentPlatform = await invoke<string>('platform').catch(async () => {
     const isMac = await invoke<boolean>('is_macos').catch(() => false);
@@ -361,6 +405,7 @@ async function applySettings(): Promise<void> {
   });
   peekGrowsFrame = await invoke<boolean>('peek_grows_frame').catch(() => false);
   app.setAttribute('data-platform', currentPlatform);
+  reportBackground();
   const settings = await invoke<Settings>('get_settings');
   if (settings.decorations !== undefined) {
     applyDecorations(settings.decorations);
