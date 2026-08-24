@@ -169,9 +169,13 @@ pub mod win32_frameless {
     use tauri::Window;
 
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
     static SUBCLASSED: AtomicBool = AtomicBool::new(false);
+
+    /// The window's background, as a COLORREF, kept in step with the theme the
+    /// webview renders. `WM_ERASEBKGND` paints it.
+    static BACKGROUND: AtomicU32 = AtomicU32::new(BACKGROUND_DARK);
 
     #[repr(C)]
     #[derive(Clone, Copy, Default)]
@@ -189,10 +193,48 @@ pub mod win32_frameless {
         lppos: *mut c_void,
     }
 
+    #[repr(C)]
+    struct STYLESTRUCT {
+        style_old: u32,
+        style_new: u32,
+    }
+
+    /// `WVR_HREDRAW | WVR_VREDRAW`: redraw the whole client area on resize
+    /// rather than blitting the old one. The fallback for a move that keeps no
+    /// pixels at all — see `WVR_VALIDRECTS`.
+    const WVR_REDRAW: isize = 0x0300;
+
+    /// `rgrc[1]` and `rgrc[2]` carry the destination and the source of the blit
+    /// Windows performs across the resize, instead of it choosing.
+    const WVR_VALIDRECTS: isize = 0x0400;
+
+    const WM_STYLECHANGING: u32 = 0x007C;
     const WM_NCCALCSIZE: u32 = 0x0083;
     const WM_NCHITTEST: u32 = 0x0084;
     const WM_ERASEBKGND: u32 = 0x0014;
+    const WM_WINDOWPOSCHANGING: u32 = 0x0046;
+
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct WINDOWPOS {
+        hwnd: *mut c_void,
+        hwndInsertAfter: *mut c_void,
+        x: i32,
+        y: i32,
+        cx: i32,
+        cy: i32,
+        flags: u32,
+    }
     const WM_DPICHANGED: u32 = 0x02E0;
+
+    /// `--color-bg` from `tokens.css`, as COLORREF (0x00BBGGRR). Both themes
+    /// are neutral greys, so the byte order reorders nothing.
+    const BACKGROUND_DARK: u32 = 0x0012_1212;
+    const BACKGROUND_LIGHT: u32 = 0x00FC_FCFC;
+
+    /// The corner radius, in logical pixels, of the window region. Matches the
+    /// radius Win11 itself rounds a window to.
+    const CORNER_RADIUS_LOGICAL: i32 = 8;
 
     const HTCLIENT: isize = 1;
     const HTCAPTION: isize = 2;
@@ -206,7 +248,7 @@ pub mod win32_frameless {
     const HTBOTTOMRIGHT: isize = 17;
 
     const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
-    const DWMWCP_ROUND: u32 = 2;
+    const DWMWCP_DONOTROUND: u32 = 1;
     const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
     const DWMWA_BORDER_COLOR: u32 = 34;
     const DWMWA_CAPTION_COLOR: u32 = 35;
@@ -223,6 +265,7 @@ pub mod win32_frameless {
     const SWP_NOSIZE: u32 = 0x0001;
     const SWP_NOZORDER: u32 = 0x0004;
     const SWP_FRAMECHANGED: u32 = 0x0020;
+    const SWP_NOACTIVATE: u32 = 0x0010;
 
     #[allow(non_snake_case)]
     type SUBCLASSPROC = unsafe extern "system" fn(
@@ -237,6 +280,12 @@ pub mod win32_frameless {
     #[allow(non_snake_case)]
     extern "system" {
         fn GetWindowRect(hWnd: *mut c_void, lpRect: *mut RECT) -> i32;
+        fn CreateRoundRectRgn(x1: i32, y1: i32, x2: i32, y2: i32, w: i32, h: i32) -> *mut c_void;
+        fn SetWindowRgn(hWnd: *mut c_void, hRgn: *mut c_void, bRedraw: i32) -> i32;
+        fn GetClientRect(hWnd: *mut c_void, lpRect: *mut RECT) -> i32;
+        fn CreateSolidBrush(color: u32) -> *mut c_void;
+        fn FillRect(hDC: *mut c_void, lprc: *const RECT, hbr: *mut c_void) -> i32;
+        fn DeleteObject(ho: *mut c_void) -> i32;
         fn GetDpiForWindow(hWnd: *mut c_void) -> u32;
         fn GetSystemMetricsForDpi(nIndex: i32, dpi: u32) -> i32;
         fn IsZoomed(hWnd: *mut c_void) -> i32;
@@ -284,18 +333,139 @@ pub mod win32_frameless {
         }
     }
 
+    /// The pixels that survive a move-or-resize: what the old and the new
+    /// client areas have in common, in screen coordinates.
+    ///
+    /// Handed to Windows as BOTH the source and the destination of its blit, so
+    /// the survivors keep their screen position and the only invalid area is
+    /// what the resize newly exposed. The default (a zero return) anchors the
+    /// blit at the client top-left instead, which shifts every pixel on screen
+    /// when the top edge moves and leaves the unfilled strip at the opposite
+    /// edge.
+    ///
+    /// May be empty — a window can be moved further than its own size in one
+    /// step. The caller falls back to `WVR_REDRAW` then.
+    fn valid_rect(old_client: RECT, new_client: RECT) -> RECT {
+        RECT {
+            left: old_client.left.max(new_client.left),
+            top: old_client.top.max(new_client.top),
+            right: old_client.right.min(new_client.right),
+            bottom: old_client.bottom.min(new_client.bottom),
+        }
+    }
+
+    /// The style bits a frameless main window must carry.
+    ///
+    /// `WS_THICKFRAME` stays: `DefWindowProc` refuses to resize a window
+    /// without it, whatever `WM_NCHITTEST` answers, and dropping it was
+    /// measured not to remove the shadow. `WS_CAPTION` goes — `WM_NCCALCSIZE`
+    /// only hides that frame, it does not unregister it.
+    fn frameless_style(style: u32) -> u32 {
+        (style | WS_THICKFRAME) & !WS_CAPTION
+    }
+
+    /// Rounds the window by clipping it to a round-rect region.
+    ///
+    /// `DWMWCP_ROUND` would be the one-line version, but Win11 draws that
+    /// rounded visual together with a drop shadow that no style bit or
+    /// non-client rendering policy turns off. A region has no shadow. The cost
+    /// is a hard-clipped, unantialiased corner, and having to re-apply the
+    /// region on every resize — the `WM_WINDOWPOSCHANGING` arm below does that.
+    ///
+    /// `width` and `height` are the size the window is *about to* have, taken
+    /// from the incoming `WINDOWPOS`. Reading the size back off the window
+    /// instead left the region a step behind a top-edge drag — that drag moves
+    /// the origin and grows the window in one operation, and a region sized
+    /// for the previous frame clipped a see-through strip off the bottom.
+    ///
+    /// A maximized window gets no region: its corners meet the work area, and
+    /// rounding them there would show the desktop through the gap.
+    fn apply_round_region(hwnd: *mut c_void, width: i32, height: i32) {
+        unsafe {
+            if IsZoomed(hwnd) != 0 {
+                SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
+                return;
+            }
+
+            let dpi = GetDpiForWindow(hwnd);
+            let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
+            let diameter = 2 * mul_div(CORNER_RADIUS_LOGICAL, dpi_val, 96);
+
+            // `CreateRoundRectRgn` treats the lower-right corner as exclusive,
+            // so the rect runs one past the window's width and height.
+            let rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, diameter, diameter);
+            if !rgn.is_null() {
+                // The window owns the region from here — deleting it would
+                // free memory the system is still clipping against.
+                //
+                // `bRedraw: 0`: a redraw here invalidates the WHOLE window,
+                // which is the one thing the `WVR_VALIDRECTS` return above
+                // exists to avoid — every resize would repaint the client and
+                // flash the desktop through it. The region still clips from
+                // this call on, and the corners it changes fall inside what the
+                // resize repaints anyway.
+                SetWindowRgn(hwnd, rgn, 0);
+            }
+        }
+    }
+
+    /// The window rect a top-edge grow of `delta` physical pixels produces, as
+    /// `(x, y, width, height)`.
+    ///
+    /// The top edge moves by `-delta` and the height grows by `delta`, so the
+    /// BOTTOM edge does not move: the band is added on top of the window, and
+    /// nothing below it shifts.
+    fn top_grown(rect: RECT, delta: i32) -> (i32, i32, i32, i32) {
+        (
+            rect.left,
+            rect.top - delta,
+            rect.right - rect.left,
+            rect.bottom - rect.top + delta,
+        )
+    }
+
+    /// Grows the window upward by `logical_delta` logical pixels (negative
+    /// shrinks it back), leaving the bottom edge where it is.
+    ///
+    /// Done here rather than through `Window::set_size` and `set_position`,
+    /// which is what the macOS arm of `peek_titlebar` uses: `set_size` sets the
+    /// *inner* size, and this window keeps `WS_THICKFRAME`, so tao runs
+    /// `AdjustWindowRect` over the value and adds a frame's worth of height
+    /// that a matching `set_position` of the same delta cannot cancel. The
+    /// leftover landed at the bottom edge and accumulated over peek/unpeek
+    /// cycles. Window coordinates are also the coordinates the region is in, so
+    /// there is no logical/physical rounding step to lose a pixel in.
+    ///
+    /// One `SetWindowPos`: move and resize land in the same frame, where two
+    /// calls showed the bottom edge dropping and coming back.
+    pub fn grow_top(window: &Window, logical_delta: f64) {
+        let Ok(hwnd) = window.hwnd() else { return };
+        let hwnd = hwnd.0;
+        unsafe {
+            let dpi = GetDpiForWindow(hwnd);
+            let dpi = if dpi == 0 { 96 } else { dpi as i32 };
+            let delta = mul_div(logical_delta.round() as i32, dpi, 96);
+            let mut wr = RECT::default();
+            if GetWindowRect(hwnd, &mut wr) == 0 {
+                return;
+            }
+            let (x, y, w, h) = top_grown(wr, delta);
+            let _ = SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                x,
+                y,
+                w,
+                h,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+    }
+
     pub fn apply_dwm_attributes(hwnd: *mut c_void) {
         unsafe {
-            // WS_THICKFRAME keeps the resize border; WS_CAPTION has to go. DWM
-            // draws its drop shadow for any window that still carries a caption,
-            // and WM_NCCALCSIZE only hides that frame — it does not unregister
-            // it. Dropping the bit is what actually removes the shadow.
             let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
-            let _ = SetWindowLongPtrW(
-                hwnd,
-                GWL_STYLE,
-                ((style | WS_THICKFRAME) & !WS_CAPTION) as isize,
-            );
+            let _ = SetWindowLongPtrW(hwnd, GWL_STYLE, frameless_style(style) as isize);
             let _ = SetWindowPos(
                 hwnd,
                 std::ptr::null_mut(),
@@ -306,13 +476,24 @@ pub mod win32_frameless {
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
             );
 
-            let corner_pref: u32 = DWMWCP_ROUND;
+            // Win11 draws the rounded-window visual together with its own drop
+            // shadow, and that shadow outlives the loss of every frame style
+            // bit. Opting out of the rounding is what removes it.
+            let corner_pref: u32 = DWMWCP_DONOTROUND;
             let _ = DwmSetWindowAttribute(
                 hwnd,
                 DWMWA_WINDOW_CORNER_PREFERENCE,
                 &corner_pref as *const _ as *const _,
                 std::mem::size_of::<u32>() as u32,
             );
+
+            // Rounding is ours to draw once DWM has been told not to. Every
+            // later resize goes through WM_WINDOWPOSCHANGING; this is the
+            // window's first region.
+            let mut wr = RECT::default();
+            if GetWindowRect(hwnd, &mut wr) != 0 {
+                apply_round_region(hwnd, wr.right - wr.left, wr.bottom - wr.top);
+            }
 
             let dark_mode: u32 = 1;
             let _ = DwmSetWindowAttribute(
@@ -340,6 +521,38 @@ pub mod win32_frameless {
         }
     }
 
+    // ponytail: KNOWN GLITCH, accepted. Moving the top edge — a drag, or a
+    // titlebar peek growing the frame — shows the desktop through the newly
+    // exposed strip for one presented frame. DWM presents the new geometry
+    // before ANY paint of ours reaches the surface.
+    //
+    // Kept because each one removes a real part of it: the WVR_VALIDRECTS
+    // return from WM_NCCALCSIZE (content keeps its screen position, so the old
+    // pixels no longer slide and only the added strip is invalid), `bRedraw: 0`
+    // on SetWindowRgn (a region redraw invalidates the whole window and undoes
+    // that), and the --color-bg fill in WM_ERASEBKGND, whose colour the webview
+    // itself reports through `set_window_background`.
+    //
+    // Ruled out BY MEASUREMENT, do not retry:
+    //  - the round-rect region: the strip is there with SetWindowRgn removed
+    //    entirely, and it predates the region;
+    //  - the erase colour: traced as 0x121212 against a page rendering
+    //    rgb(18, 18, 18) — it already matches, a magenta erase proved the fill
+    //    lands, and the desktop frame precedes it regardless;
+    //  - the WebView2 surface: an opaque cyan webview background never showed,
+    //    so the gap is parent client area, not webview content;
+    //  - a scoped InvalidateRect + UpdateWindow of the exposed strip: the
+    //    second invalidate flickered the text as well.
+    //
+    // Why LunaTranslator does not have it, for anyone comparing: it hosts
+    // WebView2 as a child of a Qt widget, so its top-level paints its own
+    // opaque background through Qt's backing store in the same present as the
+    // geometry change. Here the webview owns the whole client and
+    // WM_ERASEBKGND is the only parent-side painter. The structural fixes are
+    // therefore to stop resizing on hover (shift the content, or reserve the
+    // band row permanently) or to put an opaque filler child behind the
+    // webview; DwmExtendFrameIntoClientArea, which LunaTranslator also
+    // exposes, brings back the drop shadow e45d55f removed.
     unsafe extern "system" fn frameless_subclass_proc(
         hwnd: *mut c_void,
         msg: u32,
@@ -349,6 +562,17 @@ pub mod win32_frameless {
         _ref_data: usize,
     ) -> isize {
         match msg {
+            // tao keeps its own model of the window flags and rewrites
+            // GWL_STYLE wholesale whenever one of them changes — showing the
+            // window is enough — which puts WS_CAPTION and WS_THICKFRAME back
+            // and the DWM shadow with them. Editing the incoming style is what
+            // makes `frameless_style` stick for the window's whole life.
+            WM_STYLECHANGING => {
+                if wparam as isize == GWL_STYLE as isize {
+                    let styles = &mut *(lparam as *mut STYLESTRUCT);
+                    styles.style_new = frameless_style(styles.style_new);
+                }
+            }
             WM_NCCALCSIZE => {
                 if wparam != 0 {
                     let params = &mut *(lparam as *mut NCCALCSIZE_PARAMS);
@@ -365,7 +589,22 @@ pub mod win32_frameless {
                         params.rgrc[0].right -= frame_x;
                         params.rgrc[0].bottom -= frame_y;
                     }
-                    return 0;
+                    // Pin the blit rather than let Windows anchor it at the
+                    // client top-left: with the top edge moving — every
+                    // titlebar peek, every top-edge drag — that anchor drags
+                    // the whole client upward on screen and leaves the pixels
+                    // it could not fill along the bottom, where the desktop
+                    // shows through until WebView2 repaints. Naming the
+                    // surviving rect as both source and destination keeps the
+                    // content still and invalidates only the added strip.
+                    let old_client = params.rgrc[2];
+                    let valid = valid_rect(old_client, params.rgrc[0]);
+                    if valid.right <= valid.left || valid.bottom <= valid.top {
+                        return WVR_REDRAW;
+                    }
+                    params.rgrc[1] = valid;
+                    params.rgrc[2] = valid;
+                    return WVR_VALIDRECTS;
                 }
             }
             WM_NCHITTEST => {
@@ -421,8 +660,32 @@ pub mod win32_frameless {
                 }
                 return HTCLIENT;
             }
+            // A frameless window's client area starts out transparent and the
+            // webview paints it a frame or two later, which a resize makes
+            // visible. Painting the theme background here fills that gap with
+            // the colour the webview is about to draw anyway. It does not
+            // remove the top-edge glitch, only shrink it.
             WM_ERASEBKGND => {
+                let mut cr = RECT::default();
+                if GetClientRect(hwnd, &mut cr) != 0 {
+                    let brush = CreateSolidBrush(BACKGROUND.load(Ordering::Relaxed));
+                    if !brush.is_null() {
+                        FillRect(wparam as *mut c_void, &cr, brush);
+                        DeleteObject(brush);
+                    }
+                }
                 return 1;
+            }
+            // The region is in window coordinates, so it goes stale the moment
+            // the window changes size. This arm runs *before* the new size is
+            // applied and sizes the region from the pending WINDOWPOS, so the
+            // region and the window change together in one frame — WM_SIZE and
+            // WM_WINDOWPOSCHANGED both arrive too late for that.
+            WM_WINDOWPOSCHANGING => {
+                let pos = &*(lparam as *const WINDOWPOS);
+                if pos.flags & SWP_NOSIZE == 0 {
+                    apply_round_region(hwnd, pos.cx, pos.cy);
+                }
             }
             WM_DPICHANGED => {
                 apply_dwm_attributes(hwnd);
@@ -432,7 +695,30 @@ pub mod win32_frameless {
         DefSubclassProc(hwnd, msg, wparam, lparam)
     }
 
+    /// Overrides the erase colour with what the webview actually renders.
+    ///
+    /// The `window.theme()` guess in `init_window` is only a starting value: it
+    /// reads the *system* theme, while the page can be on the other one — a
+    /// `data-theme` override, or simply a theme change the backend never saw.
+    /// A strip erased in the wrong theme's colour is the whole visible glitch,
+    /// so the renderer gets to name its own background.
+    pub fn set_background(colorref: u32) {
+        BACKGROUND.store(colorref, Ordering::Relaxed);
+    }
+
     pub fn init_window(window: &Window) {
+        // A theme read that fails leaves the dark default: this app forces the
+        // dark immersive title bar below, so dark is the safer guess. Either
+        // way `set_background` replaces it as soon as the page has painted.
+        if let Ok(theme) = window.theme() {
+            BACKGROUND.store(
+                match theme {
+                    tauri::Theme::Light => BACKGROUND_LIGHT,
+                    _ => BACKGROUND_DARK,
+                },
+                Ordering::Relaxed,
+            );
+        }
         if let Ok(hwnd) = window.hwnd() {
             let hwnd_val = hwnd.0;
             if !SUBCLASSED.swap(true, Ordering::SeqCst) {
@@ -441,6 +727,100 @@ pub mod win32_frameless {
                 }
             }
             apply_dwm_attributes(hwnd_val);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn the_valid_rect_is_what_the_old_and_new_client_share() {
+            let old = RECT {
+                left: 100,
+                top: 200,
+                right: 700,
+                bottom: 600,
+            };
+
+            // A 28px grow at the top: every old pixel survives, so the blit
+            // keeps all of them and only the added strip is left invalid.
+            let grown = RECT {
+                top: old.top - 28,
+                ..old
+            };
+            let valid = valid_rect(old, grown);
+            assert_eq!(
+                (valid.left, valid.top, valid.right, valid.bottom),
+                (old.left, old.top, old.right, old.bottom)
+            );
+
+            // The shrink back: the survivors are the smaller new client, so
+            // nothing is left invalid at all.
+            let valid = valid_rect(grown, old);
+            assert_eq!(
+                (valid.left, valid.top, valid.right, valid.bottom),
+                (old.left, old.top, old.right, old.bottom)
+            );
+
+            // A move further than the window's own width keeps nothing, and the
+            // caller falls back to a full redraw.
+            let far = RECT {
+                left: old.left + 2000,
+                right: old.right + 2000,
+                ..old
+            };
+            let valid = valid_rect(old, far);
+            assert!(valid.right <= valid.left, "no pixel survives");
+        }
+
+        #[test]
+        fn a_top_grow_leaves_the_bottom_edge_where_it_is() {
+            let rect = RECT {
+                left: 100,
+                top: 200,
+                right: 700,
+                bottom: 600,
+            };
+
+            let (x, y, w, h) = top_grown(rect, 28);
+
+            assert_eq!(y, rect.top - 28, "the band is added above the window");
+            assert_eq!(
+                y + h,
+                rect.bottom,
+                "the bottom edge must not move — that was the growth bug"
+            );
+            assert_eq!((x, w), (rect.left, rect.right - rect.left));
+
+            // And the shrink is its exact inverse, so a peek/unpeek cycle is a
+            // fixed point rather than a creep.
+            let grown = RECT {
+                left: x,
+                top: y,
+                right: x + w,
+                bottom: y + h,
+            };
+            assert_eq!(top_grown(grown, -28), (rect.left, rect.top, w, h - 28));
+        }
+
+        #[test]
+        fn frameless_style_drops_the_caption_and_keeps_the_sizing_frame() {
+            // The style Tauri hands us on a decorated main window.
+            let decorated = 0x04CF_0000u32;
+            let frameless = frameless_style(decorated);
+
+            assert_eq!(frameless & WS_CAPTION, 0, "caption draws native chrome");
+            assert_eq!(
+                frameless & WS_THICKFRAME,
+                WS_THICKFRAME,
+                "DefWindowProc refuses to resize a window without a sizing frame"
+            );
+            assert_eq!(
+                frameless & !(WS_CAPTION | WS_THICKFRAME),
+                decorated & !(WS_CAPTION | WS_THICKFRAME),
+                "no other style bit may change"
+            );
         }
     }
 }
@@ -502,7 +882,7 @@ pub fn is_macos() -> bool {
 /// platform to absorb the revealed titlebar band.
 #[tauri::command]
 pub fn peek_grows_frame() -> bool {
-    cfg!(target_os = "macos")
+    cfg!(any(target_os = "macos", target_os = "windows"))
 }
 
 #[tauri::command]
@@ -512,6 +892,13 @@ pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Resul
         return Ok(());
     }
     let window = chrome_target(&app)?;
+    // Both platforms grow the frame upward so the band is added ON TOP of the
+    // window instead of covering the first line, and the frontend's
+    // `peek-offset` padding keeps the content stationary on screen. The two
+    // arms differ in how: macOS moves the window through Tauri, where inner and
+    // outer size are the same box; Windows cannot (see `grow_top`).
+    #[cfg(target_os = "windows")]
+    win32_frameless::grow_top(&window, if visible { height } else { -height });
     #[cfg(target_os = "macos")]
     {
         set_titlebar_chrome(&window, visible)?;
@@ -532,15 +919,27 @@ pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Resul
             .set_position(tauri::LogicalPosition::new(pos.x, pos.y - delta))
             .map_err(|e| e.to_string())?;
     }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = (window, height);
-    }
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
         let _ = (window, height);
     }
     Ok(())
+}
+
+/// A COLORREF (0x00BBGGRR) for an sRGB triple.
+fn colorref(r: u8, g: u8, b: u8) -> u32 {
+    (b as u32) << 16 | (g as u32) << 8 | r as u32
+}
+
+/// The webview reporting the background colour it renders, so the frame growth
+/// on a peek erases newly exposed pixels in that colour rather than in a colour
+/// guessed from the system theme.
+#[tauri::command]
+pub fn set_window_background(r: u8, g: u8, b: u8) {
+    let color = colorref(r, g, b);
+    #[cfg(target_os = "windows")]
+    win32_frameless::set_background(color);
+    let _ = color;
 }
 
 #[tauri::command]
@@ -1150,9 +1549,21 @@ mod tests {
     }
 
     #[test]
+    fn a_colorref_puts_blue_in_the_high_byte() {
+        // 0x00BBGGRR, not RGB: the byte order is the whole point of the helper.
+        assert_eq!(colorref(0x12, 0x34, 0x56), 0x0056_3412);
+        // The theme colours are neutral greys, which is why the order went
+        // unnoticed while they were the only callers.
+        assert_eq!(colorref(0x12, 0x12, 0x12), 0x0012_1212);
+    }
+
+    #[test]
     fn platform_commands_match_target_os() {
         assert_eq!(is_macos(), cfg!(target_os = "macos"));
-        assert_eq!(peek_grows_frame(), cfg!(target_os = "macos"));
+        assert_eq!(
+            peek_grows_frame(),
+            cfg!(any(target_os = "macos", target_os = "windows"))
+        );
         #[cfg(target_os = "macos")]
         assert_eq!(platform(), "macos");
         #[cfg(target_os = "windows")]

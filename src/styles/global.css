@@ -49,7 +49,8 @@ body {
 
 /* Windows: the in-app band is the title bar.
    Decorated mode reserves the top 28px row.
-   Undecorated mode lets content fill the full window; on hover, the band overlays with --color-bg. */
+   Undecorated mode lets content fill the full window; on hover the frame grows
+   28px upward and `peek-offset` below reserves the row the band lands in. */
 #app[data-platform='windows'] {
   padding-top: var(--band-h);
 }
@@ -217,7 +218,11 @@ body {
   z-index: 10;
 }
 
-#app[data-platform='macos'][data-decorations='false'].peek-offset {
+/* Every platform whose frame grows upward on peek (macOS, Windows): the band is
+   added above the window, so the content shifts down by exactly the amount the
+   frame grew and stays put on screen. Wins the specificity tie against the
+   Windows `padding-top: 0` above by coming later. */
+#app[data-decorations='false'].peek-offset {
   padding-top: var(--band-h);
 }
 
