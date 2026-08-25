@@ -133,4 +133,17 @@ number inputs; `settings.rs` and `commands.rs` persist the keys.
 - [x] `npm run test:e2e` — 21 passed, 1 failed: `e2e/popover.spec.ts:72`.
       Pre-existing on Windows; reproduced with every `src` and `src-tauri`
       change stashed. Not this phase's, not fixed here.
-- [ ] Manual check under `npm run tauri dev`. Not run.
+- [x] Manual check in a debug build (2026-08-25). Port 1420 was held by an
+      older vite server, so the Rust half ran directly against it with `cargo
+      run --no-default-features`. The three boxes read 24 / 14 / 58 on a profile
+      with nothing persisted, confirmed by the user.
+- [x] Follow-up shipped as `e7dee55`: the boxes opened empty on a first run.
+      `stylesheetDefault` reads the value back from the token, which needed
+      `--text-furigana` stated in `tokens.css` rather than living only as the
+      fallback arm of `var(--text-furigana, 0.58em)`.
+
+> Note for anyone testing a frontend change against a running debug build: the
+> settings window is created hidden in `setup` and only shown and hidden after
+> that, so it never navigates again. A CSS edit that lands after launch can miss
+> it while a JS edit has already been picked up — which shows up as some boxes
+> filled and others empty. Restart the app rather than debugging the symptom.
