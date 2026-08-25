@@ -38,6 +38,15 @@ pub struct Settings {
     pub hide_xrefs: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_usage: Option<bool>,
+    /// Sentence pane size in px. `None` leaves `tokens.css` owning the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_sentence: Option<u32>,
+    /// Definition and tooltip size in px.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_gloss: Option<u32>,
+    /// Furigana size as a percentage of the sentence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub furigana_scale: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,6 +71,9 @@ impl Default for Settings {
             hide_pos: None,
             hide_xrefs: None,
             hide_usage: None,
+            font_sentence: None,
+            font_gloss: None,
+            furigana_scale: None,
             window_width: None,
             window_height: None,
             window_x: None,
@@ -146,6 +158,35 @@ mod tests {
         let s = Settings::default();
         assert!(s.clipboard_monitoring);
         assert!(!s.always_on_top);
+    }
+
+    /// The three sizes phase 3C added, through the file and back. They are
+    /// `Option` so that "never set" stays distinguishable from a value equal to
+    /// the stylesheet default, which is what keeps `tokens.css` the one place a
+    /// default lives.
+    #[test]
+    fn font_sizes_round_trip_through_the_file() {
+        let path = scratch("font-sizes").join("settings.json");
+        let written = Settings {
+            font_sentence: Some(30),
+            font_gloss: Some(18),
+            furigana_scale: Some(70),
+            ..Default::default()
+        };
+
+        save(&path, &written).expect("save");
+        let (read_back, warning) = load(&path);
+        assert_eq!(read_back, written);
+        assert!(warning.is_none(), "got {warning:?}");
+    }
+
+    #[test]
+    fn an_unset_font_size_is_left_out_of_the_file() {
+        let path = scratch("font-sizes-unset").join("settings.json");
+        save(&path, &Settings::default()).expect("save");
+
+        let raw = std::fs::read_to_string(&path).expect("read back");
+        assert!(!raw.contains("font_sentence"), "got {raw}");
     }
 
     /// First run is not an error state.
@@ -255,6 +296,9 @@ mod tests {
             hide_pos: None,
             hide_xrefs: None,
             hide_usage: None,
+            font_sentence: None,
+            font_gloss: None,
+            furigana_scale: None,
             window_width: Some(400),
             window_height: Some(300),
             window_x: None,
@@ -277,6 +321,9 @@ mod tests {
             hide_pos: Some(true),
             hide_xrefs: Some(false),
             hide_usage: Some(true),
+            font_sentence: None,
+            font_gloss: None,
+            furigana_scale: None,
             window_width: Some(400),
             window_height: Some(300),
             window_x: None,

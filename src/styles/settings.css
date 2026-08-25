@@ -67,3 +67,35 @@
   margin-top: 4px;
   align-self: flex-start;
 }
+
+.settings-number-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--color-text);
+  padding: 2px 0;
+}
+
+/* The label takes the slack so the three inputs line up as a column. */
+.settings-number-row .label-text {
+  flex: 1;
+}
+
+.settings-number-row input[type='number'] {
+  width: 64px;
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  accent-color: var(--color-kanji);
+}
+
+.settings-number-row .unit {
+  color: var(--color-muted);
+  font-size: var(--text-tag, 11px);
+  min-width: 76px;
+}

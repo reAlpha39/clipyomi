@@ -226,4 +226,133 @@ describe('Settings Window', () => {
     expect(hidePos.checked).toBe(true);
     expect(romajiBtn.getAttribute('aria-checked')).toBe('true');
   });
+
+  test('initializes the size inputs from the get_settings snapshot', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          font_sentence: 30,
+          font_gloss: 18,
+          furigana_scale: 70,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector<HTMLInputElement>('#setting-font-sentence')?.value).toBe('30');
+    expect(container.querySelector<HTMLInputElement>('#setting-font-gloss')?.value).toBe('18');
+    expect(container.querySelector<HTMLInputElement>('#setting-furigana-scale')?.value).toBe('70');
+  });
+
+  test('changing a size input saves it and broadcasts the change', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          font_sentence: 24,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const sentence = container.querySelector<HTMLInputElement>('#setting-font-sentence')!;
+    sentence.value = '32';
+    sentence.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(invoke).toHaveBeenCalledWith('save_settings', {
+      settings: expect.objectContaining({ font_sentence: 32 }),
+    });
+    expect(emitted).toContainEqual([
+      'settings-changed',
+      expect.objectContaining({ font_sentence: 32 }),
+    ]);
+  });
+
+  // `min`/`max` on a number input stop the steppers, not typing or a paste.
+  test('pins a size typed past the limit back into range', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const gloss = container.querySelector<HTMLInputElement>('#setting-font-gloss')!;
+    gloss.value = '400';
+    gloss.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(gloss.value).toBe('28');
+    expect(invoke).toHaveBeenCalledWith('save_settings', {
+      settings: expect.objectContaining({ font_gloss: 28 }),
+    });
+  });
+
+  // An emptied box means "use the stylesheet default", not "size zero".
+  test('sends no size for an emptied input', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          font_sentence: 24,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const sentence = container.querySelector<HTMLInputElement>('#setting-font-sentence')!;
+    sentence.value = '';
+    sentence.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const [, payload] = emitted.find(([event]) => event === 'settings-changed')!;
+    expect((payload as Settings).font_sentence).toBeUndefined();
+  });
+
+  test('mirrors a size arriving on a settings-changed event', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          font_gloss: 14,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('settings-changed', { font_gloss: 20 });
+
+    expect(container.querySelector<HTMLInputElement>('#setting-font-gloss')?.value).toBe('20');
+  });
 });

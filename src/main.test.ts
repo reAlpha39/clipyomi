@@ -1144,3 +1144,181 @@ describe('settings window and gloss filters', () => {
 
 
 
+
+describe('font sizes reaching the root element', () => {
+  function load(settings: Record<string, unknown>) {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve(settings);
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    return import('./main');
+  }
+
+  function token(name: string): string {
+    return document.documentElement.style.getPropertyValue(name);
+  }
+
+  beforeEach(() => {
+    // The root element outlives module resets, so a size set by one test would
+    // otherwise be read back as a pass by the next.
+    document.documentElement.removeAttribute('style');
+  });
+
+  test('applies the persisted sizes on load', async () => {
+    await load({ font_sentence: 30, font_gloss: 18, furigana_scale: 70 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(token('--text-sentence')).toBe('30px');
+    expect(token('--text-gloss')).toBe('18px');
+    expect(token('--text-furigana')).toBe('0.7em');
+    expect(token('--text-furigana-romaji')).toBe('0.63em');
+  });
+
+  // Absent means "whatever the stylesheet says", so the app must not write a
+  // second copy of the default over the top of `tokens.css`.
+  test('leaves the tokens alone when no size is persisted', async () => {
+    await load({ decorations: true });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(token('--text-sentence')).toBe('');
+    expect(token('--text-gloss')).toBe('');
+  });
+
+  test('a settings-changed event restyles the root', async () => {
+    await load({ font_sentence: 24 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(token('--text-sentence')).toBe('24px');
+
+    emit('settings-changed', { font_sentence: 36, furigana_scale: 50 });
+
+    expect(token('--text-sentence')).toBe('36px');
+    expect(token('--text-furigana')).toBe('0.5em');
+  });
+
+  // Clearing a size box in the settings window sends a snapshot with the key
+  // absent. That has to put the token back to the stylesheet default, not
+  // leave the last value stuck on the root until the next restart.
+  test('a settings-changed event that drops a size clears the token', async () => {
+    await load({ font_sentence: 36, furigana_scale: 70 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(token('--text-sentence')).toBe('36px');
+
+    emit('settings-changed', { furigana_scale: 70 });
+
+    expect(token('--text-sentence')).toBe('');
+    expect(token('--text-furigana')).toBe('0.7em');
+  });
+
+  test('clamps a size a hand-edited settings file put out of range', async () => {
+    await load({ font_sentence: 900 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(token('--text-sentence')).toBe('48px');
+  });
+});
+
+describe('the gloss size reaching the popover window', () => {
+  const sampleEntries = [
+    {
+      headword: '東京',
+      reading: 'とうきょう',
+      conjugation: null,
+      pos: ['n'],
+      senses: [],
+      flags: ['primary'],
+    },
+  ];
+
+  async function hoverChip(settings: Record<string, unknown>) {
+    document.body.innerHTML = '<main id="app"></main>';
+    document.documentElement.removeAttribute('style');
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve(settings);
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('parse-result', {
+      segments: [
+        {
+          start: 0,
+          len: 2,
+          surface: '東京',
+          reading: 'とうきょう',
+          matched: true,
+          entries: sampleEntries,
+        },
+      ],
+    });
+    document
+      .querySelector<HTMLElement>('.chip')
+      ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+  }
+
+  // The popover is a second webview with its own `:root`, so the size has to
+  // travel with the content — and it has to arrive before the render, because
+  // the window sizes itself off what that render measures.
+  test('carries the persisted gloss size in the payload', async () => {
+    await hoverChip({ font_gloss: 18 });
+
+    expect(emitted).toContainEqual([
+      'popover-content',
+      expect.objectContaining({ gloss: 18 }),
+    ]);
+  });
+
+  test('clamps the gloss size before sending it', async () => {
+    await hoverChip({ font_gloss: 400 });
+
+    expect(emitted).toContainEqual([
+      'popover-content',
+      expect.objectContaining({ gloss: 28 }),
+    ]);
+  });
+
+  // No size persisted means the popover's own stylesheet decides, so the key
+  // must be absent rather than carrying a duplicated default.
+  test('stops sending the size once it is cleared', async () => {
+    await hoverChip({ font_gloss: 18 });
+    expect(emitted).toContainEqual(['popover-content', expect.objectContaining({ gloss: 18 })]);
+
+    emitted.length = 0;
+    emit('settings-changed', { hide_pos: false });
+    document
+      .querySelector<HTMLElement>('.chip')
+      ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+
+    expect(emitted).toContainEqual([
+      'popover-content',
+      { entries: sampleEntries, filters: { hide_pos: false, hide_xrefs: false, hide_usage: false } },
+    ]);
+  });
+
+  test('omits the size when none is persisted', async () => {
+    await hoverChip({ decorations: true });
+
+    expect(emitted).toContainEqual([
+      'popover-content',
+      {
+        entries: sampleEntries,
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false },
+      },
+    ]);
+  });
+});

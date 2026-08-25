@@ -1,4 +1,5 @@
 import { emit, listen } from '@tauri-apps/api/event';
+import { clampFont } from './font-sizes';
 import { renderTooltip } from './render/tooltip';
 import type { Entry, GlossFilters } from './types';
 import './styles/tooltip.css';
@@ -18,12 +19,21 @@ const tooltip = document.querySelector<HTMLElement>('#tooltip')!;
  */
 const VERTICAL_PADDING = 6;
 
-type PopoverPayload = Entry[] | { entries: Entry[]; filters?: GlossFilters };
+type PopoverPayload =
+  | Entry[]
+  | { entries: Entry[]; filters?: GlossFilters; gloss?: number };
 
 void listen<PopoverPayload>('popover-content', (e) => {
   const payload = e.payload;
   const entries = Array.isArray(payload) ? payload : payload.entries;
   const filters = Array.isArray(payload) ? undefined : payload.filters;
+
+  // This webview has its own `:root`, so the main window's token write never
+  // reached it. Applied before the render below, whose measurement is what
+  // sizes the window — a size arriving afterwards would size it to the old
+  // text. An absent size leaves `tooltip.css` owning the default.
+  const gloss = Array.isArray(payload) ? null : clampFont('gloss', payload.gloss);
+  if (gloss !== null) document.documentElement.style.setProperty('--text-gloss', `${gloss}px`);
 
   const content = renderTooltip(entries, filters);
   tooltip.replaceChildren(content);
