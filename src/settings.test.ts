@@ -67,7 +67,6 @@ describe('Settings Window', () => {
     const hideUsage = container.querySelector<HTMLInputElement>('#setting-hide-usage');
     const alwaysOnTop = container.querySelector<HTMLInputElement>('#setting-always-on-top');
     const monitoring = container.querySelector<HTMLInputElement>('#setting-clipboard-monitoring');
-    const decorations = container.querySelector<HTMLInputElement>('#setting-decorations');
     const kataBtn = container.querySelector<HTMLButtonElement>('button[data-mode="katakana"]');
 
     expect(hidePos?.checked).toBe(true);
@@ -75,7 +74,6 @@ describe('Settings Window', () => {
     expect(hideUsage?.checked).toBe(false);
     expect(alwaysOnTop?.checked).toBe(true);
     expect(monitoring?.checked).toBe(false);
-    expect(decorations?.checked).toBe(true);
     expect(kataBtn?.getAttribute('aria-checked')).toBe('true');
   });
 
@@ -186,27 +184,69 @@ describe('Settings Window', () => {
     monitoring.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(invoke).toHaveBeenCalledWith('set_clipboard_monitoring', { enabled: false });
-
-    const decorations = container.querySelector<HTMLInputElement>('#setting-decorations')!;
-    decorations.checked = false;
-    decorations.dispatchEvent(new Event('change', { bubbles: true }));
-
-    expect(invoke).toHaveBeenCalledWith('set_chrome_mode', { mode: 'header' });
   });
 
-  test('the title bar checkbox reflects and writes the chrome mode', async () => {
+  test('the chrome control reflects the persisted mode', async () => {
     invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' } as Settings);
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'content' } as Settings);
+      if (cmd === 'platform') return Promise.resolve('macos');
       return Promise.resolve(undefined);
     });
     initSettingsApp(container);
-    const box = container.querySelector<HTMLInputElement>('#setting-decorations')!;
-    await vi.waitFor(() => expect(box.checked).toBe(false));
 
-    box.checked = true;
-    box.dispatchEvent(new Event('change'));
-    expect(invoke).toHaveBeenCalledWith('set_chrome_mode', { mode: 'native' });
-    expect(emitted.at(-1)?.[1]).toMatchObject({ chrome_mode: 'native' });
+    const checked = () =>
+      container.querySelector<HTMLButtonElement>('[data-chrome-mode][aria-checked="true"]')
+        ?.dataset.chromeMode;
+    await vi.waitFor(() => expect(checked()).toBe('content'));
+  });
+
+  test('picking a mode invokes set_chrome_mode and broadcasts it', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'native' } as Settings);
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(undefined);
+    });
+    initSettingsApp(container);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('get_settings'));
+
+    container.querySelector<HTMLButtonElement>('[data-chrome-mode="header"]')!.click();
+
+    expect(invoke).toHaveBeenCalledWith('set_chrome_mode', { mode: 'header' });
+    expect(emitted.at(-1)?.[1]).toMatchObject({ chrome_mode: 'header' });
+    expect(
+      container
+        .querySelector<HTMLButtonElement>('[data-chrome-mode="header"]')!
+        .getAttribute('aria-checked'),
+    ).toBe('true');
+  });
+
+  // Windows has no native-frame state (spec §4), so offering it would name a
+  // shape the platform cannot draw — and the backend would resolve it back to
+  // `header` anyway, leaving the control showing a mode the window is not in.
+  test('the native option is absent on Windows', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' } as Settings);
+      if (cmd === 'platform') return Promise.resolve('windows');
+      return Promise.resolve(undefined);
+    });
+    initSettingsApp(container);
+
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-chrome-mode="native"]')).toBeNull(),
+    );
+    expect(container.querySelector('[data-chrome-mode="header"]')).not.toBeNull();
+    expect(container.querySelector('[data-chrome-mode="content"]')).not.toBeNull();
+  });
+
+  test('the native option survives on macOS', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'native' } as Settings);
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(undefined);
+    });
+    initSettingsApp(container);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('platform'));
+    expect(container.querySelector('[data-chrome-mode="native"]')).not.toBeNull();
   });
 
   test('reacts to incoming settings-changed events from other windows', async () => {
