@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { FONT_LIMITS, clampFont, stylesheetDefault, type FontKind } from './font-sizes';
-import type { FuriganaMode, Settings } from './types';
+import type { ChromeMode, FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
 
@@ -92,6 +92,10 @@ export function initSettingsApp(container: HTMLElement) {
   );
 
   let currentMode: FuriganaMode = 'none';
+  // Task 5 replaces the checkbox with a three-way control. Until then this
+  // maps the two states it can express, so the phase has no commit where the
+  // title-bar toggle does nothing.
+  let currentChrome: ChromeMode = 'native';
 
   function updateFuriganaButtons(mode: FuriganaMode) {
     currentMode = mode;
@@ -121,7 +125,7 @@ export function initSettingsApp(container: HTMLElement) {
     return {
       always_on_top: alwaysOnTop.checked,
       clipboard_monitoring: monitoring.checked,
-      decorations: decorations.checked,
+      chrome_mode: currentChrome,
       furigana_mode: currentMode,
       hide_pos: hidePos.checked,
       hide_xrefs: hideXrefs.checked,
@@ -144,7 +148,10 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.hide_usage !== undefined) hideUsage.checked = s.hide_usage;
     if (s.always_on_top !== undefined) alwaysOnTop.checked = s.always_on_top;
     if (s.clipboard_monitoring !== undefined) monitoring.checked = s.clipboard_monitoring;
-    if (s.decorations !== undefined) decorations.checked = s.decorations;
+    if (s.chrome_mode !== undefined) {
+      currentChrome = s.chrome_mode;
+      decorations.checked = s.chrome_mode === 'native';
+    }
     if (s.furigana_mode !== undefined) updateFuriganaButtons(s.furigana_mode);
     if (s.font_sentence !== undefined) fontSentence.value = String(s.font_sentence);
     if (s.font_gloss !== undefined) fontGloss.value = String(s.font_gloss);
@@ -170,7 +177,8 @@ export function initSettingsApp(container: HTMLElement) {
   });
 
   decorations.addEventListener('change', () => {
-    void invoke('set_decorations', { enabled: decorations.checked }).catch(() => {});
+    currentChrome = decorations.checked ? 'native' : 'header';
+    void invoke('set_chrome_mode', { mode: currentChrome }).catch(() => {});
     saveAndBroadcast();
   });
 

@@ -19,7 +19,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::{watch, Notify};
 
-use crate::settings::Settings;
+use crate::settings::{ChromeMode, Settings};
 use crate::state::{AppState, NeedsDictionary, SettingsState, SettingsWarning, StartupFailure};
 
 /// The sending half of the input channel, managed so commands can reach it.
@@ -892,8 +892,9 @@ pub mod win32_frameless {
             // A single round trip passing is not enough: the bug this guards
             // against was a frame's worth of height added per toggle, which only
             // shows up as accumulation. It reached production once, from
-            // `set_decorations` using `set_size`/`set_position` (an INNER size
-            // run through `AdjustWindowRect`) instead of this arithmetic — the
+            // the pre-4A decorations toggle using `set_size`/`set_position`
+            // (an INNER size run through `AdjustWindowRect`) instead of this
+            // arithmetic — the
             // window grew on every titlebar check/uncheck.
             let start = RECT {
                 left: 100,
@@ -955,47 +956,38 @@ pub const DEFAULT_WINDOW_WIDTH: u32 = 720;
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 480;
 
 #[tauri::command]
-pub fn set_decorations(
-    enabled: bool,
+pub fn set_chrome_mode(
+    mode: ChromeMode,
     app: tauri::AppHandle,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
+    // Resolved before it is applied or persisted, so an out-of-date webview
+    // cannot write a mode this platform will not honour.
+    let mode = crate::settings::supported(mode, crate::settings::native_supported());
     let window = chrome_target(&app)?;
     #[cfg(target_os = "macos")]
-    apply_decorations_macos(&window, enabled)?;
-
-    // Windows reserves the band's row only while undecorated. Turning the OS
-    // title bar on hands that row back to the OS, so the window has to shed the
-    // height it was carrying for it — and regain it on the way back — or the
-    // visible box would jump by a band on every toggle.
-    //
-    // Through `grow_top`, NOT `set_size`/`set_position`. That pair was tried
-    // here and grew the window a frame's worth on every toggle, which is exactly
-    // what `grow_top`'s own comment warns about: `set_size` takes an INNER size,
-    // this window keeps `WS_THICKFRAME`, and tao runs `AdjustWindowRect` over the
-    // value, so a matching `set_position` cannot cancel the difference and the
-    // leftover accumulates. `grow_top` moves the window rect directly.
+    apply_decorations_macos(&window, mode == ChromeMode::Native)?;
     #[cfg(target_os = "windows")]
     {
-        let band = BAND_HEIGHT_LOGICAL as f64;
-        win32_frameless::grow_top(&window, if enabled { -band } else { band });
-    }
-    #[cfg(target_os = "windows")]
-    {
+        // No `grow_top` here any more. It existed to shed and regain the
+        // reserved row across the native boundary, and `supported` above means
+        // Windows never crosses it — `header` and `content` reserve the row
+        // identically, so switching between them must move nothing. Task 4
+        // deletes the function itself.
         win32_frameless::init_window(&window);
     }
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
-        let _ = window.set_decorations(enabled);
+        let _ = window.set_decorations(mode == ChromeMode::Native);
     }
     settings
-        .update(|s| s.decorations = enabled)
+        .update(|s| s.chrome_mode = Some(mode))
         .map_err(|e| e.to_string())
 }
 
 /// Shows or hides the native chrome *without* touching the persisted flag.
-/// `set_decorations` cannot serve the hover reveal: it writes
-/// `settings.decorations`, so resting the pointer on the titlebar band would
+/// `set_chrome_mode` cannot serve the hover reveal: it writes
+/// `settings.chrome_mode`, so resting the pointer on the titlebar band would
 /// quietly turn the title bar back on for the next launch.
 /// Whether a peek is currently showing chrome the persisted setting hides.
 ///

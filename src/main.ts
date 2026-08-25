@@ -17,7 +17,7 @@ import {
 } from './render/popover';
 import { clampFont, fontVars } from './font-sizes';
 import { createHistory } from './history';
-import type { FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
+import type { ChromeMode, FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
 
 /**
@@ -279,13 +279,13 @@ headerControls?.addEventListener('dblclick', (e) => {
 });
 
 /**
- * Whether the OS is drawing its title bar. The control for it lives in the
- * settings window; the main window still needs the flag, because it decides
- * both shapes of the band — a reserved 28px row when the title bar is shown,
- * a floating overlay over the sentence when it is hidden — and the CSS keys
- * every one of those rules off `#app[data-decorations]`.
+ * Which chrome shape the window is wearing. The control for it lives in the
+ * settings window and in the right-click menu; the main window still needs the
+ * value, because it decides both shapes of the band — a reserved 28px row in
+ * `native`, a floating overlay over the sentence in the other two — and the CSS
+ * keys every one of those rules off `#app[data-chrome]`.
  */
-let titlebarShown = true;
+let chromeMode: ChromeMode = 'native';
 
 /**
  * True while a hover is showing chrome that `decorations: false` normally
@@ -333,7 +333,9 @@ function showPeek(): void {
   // trip across a traffic light costs no backend calls at all.
   window.clearTimeout(peekHide);
   peekHide = undefined;
-  if (titlebarShown || peeking) return;
+  // Only `header` reveals. `native` has nothing to reveal — the chrome is
+  // already there — and `content` deliberately never shows it (spec §3).
+  if (chromeMode !== 'header' || peeking) return;
   peeking = true;
   // `peeked` expands the band and fades the gear in on every platform.
   // `peek-offset` adds `padding-top` only when the OS frame grows upward to
@@ -355,14 +357,14 @@ function hidePeek(): void {
   }, PEEK_HIDE_MS);
 }
 
-function applyDecorations(shown: boolean): void {
-  titlebarShown = shown;
-  app.setAttribute('data-decorations', String(shown));
-  // A peek still notionally in flight when the user turns the title bar back
-  // ON is now redundant — `set_decorations` has shown the chrome for real. The
-  // flag has to drop here or the `pointerleave` that follows would hide the
-  // chrome the user just asked to keep.
-  if (shown) {
+function applyChromeMode(mode: ChromeMode): void {
+  chromeMode = mode;
+  app.setAttribute('data-chrome', mode);
+  // A peek still notionally in flight when the user leaves `header` is now
+  // wrong either way: `native` has shown the chrome for real, and `content`
+  // wants none. The flag has to drop here or the `pointerleave` that follows
+  // would undo chrome the user just asked for.
+  if (mode !== 'header') {
     window.clearTimeout(peekHide);
     peekHide = undefined;
     peeking = false;
@@ -370,7 +372,7 @@ function applyDecorations(shown: boolean): void {
   }
 }
 
-applyDecorations(true);
+applyChromeMode('native');
 
 // The cursor anywhere inside the window reveals the bar; only leaving the
 // window hides it. `#app` fills the viewport, so its own enter/leave is the
@@ -466,8 +468,8 @@ async function applySettings(): Promise<void> {
   app.setAttribute('data-platform', currentPlatform);
   reportBackground();
   const settings = await invoke<Settings>('get_settings');
-  if (settings.decorations !== undefined) {
-    applyDecorations(settings.decorations);
+  if (settings.chrome_mode !== undefined) {
+    applyChromeMode(settings.chrome_mode);
   }
   if (settings.furigana_mode !== undefined) {
     currentFuriganaMode = settings.furigana_mode;
@@ -490,7 +492,7 @@ void listen<Settings>('settings-changed', (e) => {
   if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;
   if (settings.hide_usage !== undefined) currentFilters.hide_usage = settings.hide_usage;
   applyFontSizes(settings);
-  if (settings.decorations !== undefined) applyDecorations(settings.decorations);
+  if (settings.chrome_mode !== undefined) applyChromeMode(settings.chrome_mode);
   if (settings.furigana_mode !== undefined && settings.furigana_mode !== currentFuriganaMode) {
     currentFuriganaMode = settings.furigana_mode;
     // `display` is the single writer of `lastResult` (§6.2) and already does

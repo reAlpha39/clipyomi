@@ -50,10 +50,13 @@ export interface GlossFilters {
   hide_usage?: boolean;
 }
 
+/** Which of the three window chrome shapes the main window wears (spec §7.4). */
+export type ChromeMode = 'native' | 'header' | 'content';
+
 export interface Settings {
   always_on_top: boolean;
   clipboard_monitoring: boolean;
-  decorations: boolean;
+  chrome_mode?: ChromeMode;
   furigana_mode?: FuriganaMode;
   hide_pos?: boolean;
   hide_xrefs?: boolean;

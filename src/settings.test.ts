@@ -48,7 +48,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: true,
           clipboard_monitoring: false,
-          decorations: true,
+          chrome_mode: 'native',
           furigana_mode: 'katakana',
           hide_pos: true,
           hide_xrefs: true,
@@ -85,7 +85,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           furigana_mode: 'none',
           hide_pos: false,
           hide_xrefs: false,
@@ -125,7 +125,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           furigana_mode: 'none',
         });
       }
@@ -160,7 +160,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
         });
       }
       return Promise.resolve(null);
@@ -191,7 +191,22 @@ describe('Settings Window', () => {
     decorations.checked = false;
     decorations.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(invoke).toHaveBeenCalledWith('set_decorations', { enabled: false });
+    expect(invoke).toHaveBeenCalledWith('set_chrome_mode', { mode: 'header' });
+  });
+
+  test('the title bar checkbox reflects and writes the chrome mode', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' } as Settings);
+      return Promise.resolve(undefined);
+    });
+    initSettingsApp(container);
+    const box = container.querySelector<HTMLInputElement>('#setting-decorations')!;
+    await vi.waitFor(() => expect(box.checked).toBe(false));
+
+    box.checked = true;
+    box.dispatchEvent(new Event('change'));
+    expect(invoke).toHaveBeenCalledWith('set_chrome_mode', { mode: 'native' });
+    expect(emitted.at(-1)?.[1]).toMatchObject({ chrome_mode: 'native' });
   });
 
   test('reacts to incoming settings-changed events from other windows', async () => {
@@ -200,7 +215,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           furigana_mode: 'none',
           hide_pos: false,
         });
@@ -233,7 +248,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           font_sentence: 30,
           font_gloss: 18,
           furigana_scale: 70,
@@ -257,7 +272,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           font_sentence: 24,
         });
       }
@@ -288,7 +303,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
         });
       }
       return Promise.resolve(null);
@@ -315,7 +330,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           font_sentence: 24,
         });
       }
@@ -340,7 +355,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           font_gloss: 14,
         });
       }
@@ -368,7 +383,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
         });
       }
       return Promise.resolve(null);
@@ -390,7 +405,7 @@ describe('Settings Window', () => {
         return Promise.resolve<Settings>({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           font_sentence: 36,
         });
       }

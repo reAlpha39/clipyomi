@@ -79,12 +79,12 @@ body {
   z-index: 10;
 }
 
-#app[data-platform='windows'][data-decorations='false'] .controls {
+#app[data-platform='windows']:not([data-chrome='native']) .controls {
   background: transparent;
   border-bottom: none;
 }
 
-#app[data-platform='windows'][data-decorations='false'].peeked .controls {
+#app[data-platform='windows']:not([data-chrome='native']).peeked .controls {
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-rule);
 }
@@ -206,11 +206,11 @@ body {
 }
 
 /* Non-Windows hidden mode: sliver hover target and frame growth on peek (macOS) */
-#app:not([data-platform='windows'])[data-decorations='false'] {
+#app:not([data-platform='windows']):not([data-chrome='native']) {
   grid-template-rows: auto 1fr;
 }
 
-#app:not([data-platform='windows'])[data-decorations='false'] .controls {
+#app:not([data-platform='windows']):not([data-chrome='native']) .controls {
   position: absolute;
   top: 0;
   left: 0;
@@ -225,28 +225,30 @@ body {
    stays put on screen. `peek_grows_frame()` reports false on Windows, so the
    class never lands there — and it must not, since the Windows row is reserved
    permanently and this padding would shift the content a second time. */
-#app:not([data-platform='windows'])[data-decorations='false'].peek-offset {
+#app:not([data-platform='windows']):not([data-chrome='native']).peek-offset {
   padding-top: var(--band-h);
 }
 
-#app:not([data-platform='windows'])[data-decorations='false'].peeked .controls {
+#app:not([data-platform='windows']):not([data-chrome='native']).peeked .controls {
   height: var(--band-h);
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-rule);
 }
 
-/* Hidden decorations mode: idle hides controls; peek reveals them */
-#app[data-decorations='false'] .history-controls,
-#app[data-decorations='false'] #settings-toggle,
-#app[data-decorations='false'] .window-controls {
+/* Frameless modes: idle hides the controls; a peek reveals them. `header` and
+   `content` share this rule — `content` simply never gets `.peeked`, and Task 4
+   takes its controls out of the tab order on top of this. */
+#app:not([data-chrome='native']) .history-controls,
+#app:not([data-chrome='native']) #settings-toggle,
+#app:not([data-chrome='native']) .window-controls {
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-#app[data-decorations='false'].peeked .history-controls,
-#app[data-decorations='false'].peeked #settings-toggle,
-#app[data-decorations='false'].peeked .window-controls {
+#app:not([data-chrome='native']).peeked .history-controls,
+#app:not([data-chrome='native']).peeked #settings-toggle,
+#app:not([data-chrome='native']).peeked .window-controls {
   opacity: 1;
   pointer-events: auto;
 }

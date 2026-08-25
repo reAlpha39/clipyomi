@@ -62,7 +62,7 @@ test('an unmatched run is not in the tab order', async ({ page }) => {
   expect(await page.locator('.unmatched').evaluate((el) => (el as HTMLElement).tabIndex)).toBe(-1);
 });
 
-// The titlebar band. With `decorations: false` the band leaves the grid, so
+// The titlebar band. In `header` mode the band leaves the grid, so
 // these tests are the ones that prove the promise the design rests on: the
 // sentence sits at the window's top edge and does NOT move when the reveal
 // happens. happy-dom resolves no layout, so this can only be checked here.
@@ -72,7 +72,7 @@ const HIDDEN_TITLEBAR_STUB = `
   ${STUB}
   const realInvoke = window.__TAURI_INTERNALS__.invoke;
   window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
-    if (cmd === 'get_settings') return Promise.resolve({ decorations: false });
+    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
     return realInvoke(cmd, args);
   };
 `;
@@ -90,7 +90,7 @@ test('a hidden title bar leaves the gear invisible until the band is hovered', a
   // Asserted on resolved opacity, not visibility: the button stays in the DOM
   // and in the tab order, which is the point of revealing it on focus too.
   await expect(gear).toHaveCSS('opacity', '0');
-  // The history nav rides the same #app[data-decorations='false'] rule as the
+  // The history nav rides the same #app:not([data-chrome='native']) rule as the
   // gear (design §7), so this is proof of the shared CSS rule, not a second
   // one.
   await expect(history).toHaveCSS('opacity', '0');
@@ -174,7 +174,7 @@ const WINDOWS_STUB = `
     if (cmd === 'is_macos') return Promise.resolve(false);
     if (cmd === 'peek_grows_frame') return Promise.resolve(false);
     if (cmd === 'platform') return Promise.resolve('windows');
-    if (cmd === 'get_settings') return Promise.resolve({ decorations: false });
+    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
     return realInvoke(cmd, args);
   };
 `;

@@ -51,11 +51,11 @@ export const STUB = `
       // some other stubbed state: it gives the visual baselines a stable,
       // non-default-looking set of buttons without depending on
       // a toggle actually round-tripping through this stub.
-      if (cmd === 'get_settings') return { always_on_top: false, clipboard_monitoring: true, decorations: true };
+      if (cmd === 'get_settings') return { always_on_top: false, clipboard_monitoring: true, chrome_mode: 'native' };
       if (
         cmd === 'set_always_on_top' ||
         cmd === 'set_clipboard_monitoring' ||
-        cmd === 'set_decorations' ||
+        cmd === 'set_chrome_mode' ||
         cmd === 'peek_titlebar' ||
         cmd === 'minimize_window' ||
         cmd === 'toggle_maximize_window' ||
