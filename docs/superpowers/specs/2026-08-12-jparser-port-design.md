@@ -808,16 +808,17 @@ so did the chrome and geometry work originally filed under Phase 4.
 | **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8 — created hidden in `setup` like the popover, see §6. |
 | **3C** (08-25) | Shipped. Font sizes (§7.7), as **three** persisted inputs rather than two: `--text-sentence` and `--text-gloss` in px, `--text-furigana` (and the derived `--text-furigana-romaji`) as a percentage of the sentence. §7.7's `--text-cjk`/`--text-furigana` pair never existed in this port — see the 3C design doc §2. |
 
-### Phase 4 — Window behaviour (remaining, minus what 2K took)
+### Phase 4 — Window behaviour (4C shipped; 4A/4B/4D remaining)
 
-2K already shipped the header + resize-edges state and geometry persistence.
-Four sub-phases are left, and their order is a dependency chain, not a
-preference: **4C first** because it depends on nothing and is the one users feel;
-**4D last** because a slot captures the state 4A, 4B and 3C introduce.
+2K already shipped the header + resize-edges state and geometry persistence,
+and 4C — first in the chain because it depended on nothing and was the
+sub-phase users feel most directly — has now shipped too. Three sub-phases are
+left, and their order is still a dependency chain, not a preference: **4D
+last** because a slot captures the state 4A, 4B and 3C introduce.
 
 | Sub-phase    | Scope                                                                                                                                                                                                               | Depends on |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| **4C** | Parse history (§7.8): ring buffer of 50 full`ParseResult`s, consecutive duplicates deduped, back/forward in the header. What makes clipboard monitoring safe to leave running.                                   | —         |
+| **4C** (08-25) | Shipped. Parse history (§7.8): ring buffer of 50 full`ParseResult`s, consecutive duplicates deduped, back/forward in the header — what makes clipboard monitoring safe to leave running. Session-only, disk persistence still deferred (deviation #9); a new parse arriving mid-read keeps every entry ahead of the cursor rather than truncating them browser-style. | —         |
 | **4A** | The other two chrome states (§7.4): content-only, with the toggles moving to a right-click menu, and native frame. Three-way control, persisted alongside`decorations`.                                          | 2K         |
 | **4B** | Per-pixel background alpha (§7.5):`"transparent": true`, a `--surface-alpha` token and its control, `macos-private-api` on macOS. Native frame forces alpha to 100 %, so 4A defines the state 4B must clamp. | 4A         |
 | **4D** | Layout hotkeys (§7.9): global-shortcut plugin,`Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha, always-on-top, font sizes, furigana mode.                  | 3C, 4A, 4B |

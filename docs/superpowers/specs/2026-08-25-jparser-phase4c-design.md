@@ -232,13 +232,20 @@ second parse.
 done. No Rust changes, so `cargo test` and `cargo clippy` are untouched by 4C and
 are run only to confirm that.
 
-**Known flake, not caused by 4C:** the Playwright suite fails exactly one test per
-full run, and *which* test moves between runs — a first-navigation race against a
-cold Vite dev server, where the fixture is emitted before `main.ts` has
-registered its listener. A baseline run with 4C's changes stashed failed
-`popover.spec.ts:72`; the run with them applied failed `panes.spec.ts:31`; both
-runs passed 21. Every one of these passes in isolation. Out of scope here — it
-belongs with 6B, which owns the suite.
+**Known flake, not caused by 4C:** two early runs, each against a cold Vite dev
+server, failed exactly one test — a first-navigation race, where the fixture is
+emitted before `main.ts` has registered its listener. A baseline run with 4C's
+changes stashed failed `popover.spec.ts:72`; the run with them applied failed
+`panes.spec.ts:31`; both runs passed the other 21. Every one of these passes in
+isolation.
+
+Task 4 later ran the full suite twice more and got 22/22 both times. The likely
+variable is warmth, not the code: `playwright.config.ts` sets
+`reuseExistingServer`, so a run following earlier runs does not pay the
+cold-start cost the race needs. That is a strong inference from the pattern,
+not a proven diagnosis — nobody has forced a cold run since to confirm it.
+Either way, this predates 4C and is out of scope here; it belongs with 6B,
+which owns the suite.
 
 ---
 
