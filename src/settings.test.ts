@@ -355,4 +355,52 @@ describe('Settings Window', () => {
 
     expect(container.querySelector<HTMLInputElement>('#setting-font-gloss')?.value).toBe('20');
   });
+
+  // A first run has nothing persisted. Empty boxes give the user nothing to
+  // adjust from, so the stylesheet's own defaults are shown instead — read
+  // from the tokens, not restated here.
+  test('shows the stylesheet defaults when no size is persisted', async () => {
+    document.documentElement.style.setProperty('--text-sentence', '24px');
+    document.documentElement.style.setProperty('--text-gloss', '14px');
+    document.documentElement.style.setProperty('--text-furigana', '0.58em');
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector<HTMLInputElement>('#setting-font-sentence')?.value).toBe('24');
+    expect(container.querySelector<HTMLInputElement>('#setting-font-gloss')?.value).toBe('14');
+    expect(container.querySelector<HTMLInputElement>('#setting-furigana-scale')?.value).toBe('58');
+  });
+
+  test('a persisted size wins over the stylesheet default', async () => {
+    document.documentElement.style.setProperty('--text-sentence', '24px');
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          decorations: true,
+          font_sentence: 36,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.querySelector<HTMLInputElement>('#setting-font-sentence')?.value).toBe('36');
+  });
 });

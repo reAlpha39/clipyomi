@@ -32,6 +32,13 @@ const PER_MILLE = 1000;
 /** Percent to the em ratio the stylesheet wants. */
 const PERCENT = 100;
 
+/** The token each kind is bound to. */
+const TOKENS: Record<FontKind, string> = {
+  sentence: '--text-sentence',
+  gloss: '--text-gloss',
+  furigana: '--text-furigana',
+};
+
 /** VALUE pinned into KIND's range, or `null` if it is not a finite number. */
 export function clampFont(kind: FontKind, value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
@@ -61,4 +68,20 @@ export function fontVars(settings: Partial<Settings>): Array<[string, string]> {
       furigana === null ? '' : `${(furigana * ROMAJI_PER_MILLE) / PER_MILLE}em`,
     ],
   ];
+}
+
+/**
+ * KIND's default as the stylesheet states it, or `null` if it states none.
+ *
+ * The settings window shows these in its boxes on a first run, when nothing is
+ * persisted yet. Read back rather than restated so `tokens.css` stays the one
+ * place a default lives — a copy in TypeScript would drift the first time
+ * somebody retunes the stylesheet.
+ */
+export function stylesheetDefault(kind: FontKind): number | null {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(TOKENS[kind]);
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value)) return null;
+  // The furigana token is an em ratio; its control is a percentage.
+  return clampFont(kind, kind === 'furigana' ? value * PERCENT : value);
 }
