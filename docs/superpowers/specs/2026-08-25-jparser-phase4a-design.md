@@ -26,6 +26,10 @@ right-click menu as the reach that mode removes, a three-way control in the
 settings window in place of today's checkbox, and the removal of the
 Windows-only dead ends the boolean left behind.
 
+**Hard constraint:** the hidden-title-bar mode and its hover reveal are out of
+scope and must come out of this phase behaving exactly as they do now. §4.5 is
+the invariance argument and the gate that proves it.
+
 Out of scope, and why:
 
 | Not doing | Reason |
@@ -201,6 +205,50 @@ rather than sit there drifting:
 `docs/superpowers/2026-08-18-windows-titlebar-test-plan.md` check 1 ("the gear
 will sit below the Windows caption") becomes moot for the same reason. Left as
 the historical record it is.
+
+### 4.5 Header mode is invariant
+
+The hidden-title-bar mode and its hover reveal are **not in this phase's scope
+and must come out of it unchanged**. That holds by construction rather than by
+care, and each of the deletions above is safe for a specific reason:
+
+| Change | Why header mode cannot notice |
+| --- | --- |
+| `showPeek`'s gate becomes `chromeMode !== 'header'` | Logically identical to the old `titlebarShown` gate for this mode — only the *other* blocking side gains a member |
+| `grow_top` and its call deleted | Not on the peek path. `1671a77` moved the reveal to `set_strip_shown`; `grow_top`'s only caller was the native toggle |
+| `region_top_inset`'s `decorated` read deleted | It already returns `strip_px` unconditionally on Windows, because `WS_CAPTION` is never set (§4.1). No returned value changes |
+| `initial_height` loses its mode parameter | Header mode on Windows already gets `DEFAULT_WINDOW_HEIGHT + BAND_HEIGHT_LOGICAL`; the collapsed form returns the same number |
+| `data-decorations` → `data-chrome` | `header` and `content` share every band rule, so header's computed styles are identical. A mechanical swap, verifiable with `git grep data-decorations` returning nothing |
+| Task 0's probe removal | `probe_note_paint` only pushed a tick and fell through; the `WM_PAINT` arm did the same. `WM_ERASEBKGND` keeps its fill. `probe_autotoggle` ran only under `CLIPYOMI_PROBE` |
+
+Untouched entirely: `peek_titlebar`, `set_strip_shown`, `apply_round_region`,
+`WM_NCHITTEST`, `WM_NCCALCSIZE`, `apply_decorations_macos`,
+`set_titlebar_chrome`, `PEEK_HIDE_MS`, `BAND_HEIGHT`, `--band-h`,
+`peek_grows_frame`, and the geometry debounce that skips a resize while peeking.
+
+**The acceptance gate is the existing suite, not a new one.** `e2e/panes.spec.ts`
+already carries both halves of this mode: `HIDDEN_TITLEBAR_STUB` (macOS — the
+6px idle sliver, gear and history nav at `opacity: 0`, the sentence not moving
+when the band reveals) and `WINDOWS_STUB` (the reserved row, nothing moving on
+peek). Those tests must pass **with zero screenshot baseline updates**, their
+stubs changing only the settings key: `decorations: false` → `chrome_mode:
+'header'`. A baseline that needs regenerating is a regression in this mode, not a
+rebase — treat it as a failure and find out why.
+
+`e2e/stub.ts` keeps answering `native` (today's `decorations: true`) and
+`platform: 'macos'`, so every other committed baseline stays valid too. The stub
+is a CSS harness, not a platform simulator; it deliberately reports a state real
+Windows no longer reaches, and the new `e2e/chrome.spec.ts` is where per-platform
+mode combinations get their own baselines.
+
+One real, disclosed consequence, on Windows only: a settings file with
+`decorations: true` was written while `grow_top(-band)` had shrunk the window by
+28px, and `save_window_geometry` persisted that smaller box. Migrating to
+`header` restores the saved box verbatim, so the content area is 28px shorter
+until the window is next resized. One-time and cosmetic. No migration fixup: the
+bundle is inactive at 0.1.0, so the affected population is the developer, and a
+height-adjusting special case in `load` would re-apply on any launch that
+crashed before the first save.
 
 ---
 
@@ -437,6 +485,13 @@ documented where it happens.
   overflows both, and a menu larger than the viewport;
 - the settings window's segmented control reflects and writes the mode, and
   drops its `native` button on Windows.
+
+**Playwright — `e2e/panes.spec.ts` first, as the regression gate (§4.5)**
+
+- the whole existing suite green with **no baseline regenerated**, both existing
+  hidden-title-bar tests included, their stubs changed only from
+  `decorations: false` to `chrome_mode: 'header'`;
+- `git grep data-decorations` returns nothing.
 
 **Playwright — `e2e/chrome.spec.ts`**
 
