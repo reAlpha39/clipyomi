@@ -1501,4 +1501,46 @@ describe('the header history buttons', () => {
 
     expect(document.querySelector('.chip ruby rt')?.textContent).toBe('とうきょう');
   });
+
+  // Design §6.2: `parseError` is cleared in `show` only, never in `display`,
+  // so navigating leaves a standing error banner alone — this app already
+  // keeps a failure message above the last good parse on purpose, and nav
+  // must not be an exception to that.
+  test('navigating with Back leaves a standing parse-error banner on screen', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+    emit('parse-error', 'the parser panicked on an input of 4096 characters');
+
+    historyBack().click();
+
+    expect(document.querySelectorAll('.startup-error')).toHaveLength(1);
+    expect(document.querySelector('.chip')?.textContent).toBe('猫');
+  });
+
+  test('a new parse-result clears a standing parse-error banner', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+    emit('parse-error', 'the parser panicked on an input of 4096 characters');
+    expect(document.querySelectorAll('.startup-error')).toHaveLength(1);
+
+    emit('parse-result', parse('鳥'));
+
+    expect(document.querySelectorAll('.startup-error')).toHaveLength(0);
+  });
+
+  test('a parse-error event leaves the history buffer untouched', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+    historyBack().click(); // viewing 猫, with 犬 ahead of the cursor
+
+    emit('parse-error', 'the parser panicked on an input of 4096 characters');
+
+    // Neither button's disabled state moved...
+    expect(historyBack().disabled).toBe(true);
+    expect(historyForward().disabled).toBe(false);
+    // ...and Forward still reaches the same 犬 that was ahead of the cursor
+    // before the error arrived — the buffer was never touched by it.
+    historyForward().click();
+    expect(document.querySelector('.chip')?.textContent).toBe('犬');
+  });
 });

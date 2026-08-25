@@ -493,10 +493,13 @@ void listen<Settings>('settings-changed', (e) => {
   if (settings.decorations !== undefined) applyDecorations(settings.decorations);
   if (settings.furigana_mode !== undefined && settings.furigana_mode !== currentFuriganaMode) {
     currentFuriganaMode = settings.furigana_mode;
-    if (lastResult !== null) {
-      closePopover();
-      output.replaceChildren(renderSentence(lastResult, currentFuriganaMode));
-    }
+    // `display` is the single writer of `lastResult` (§6.2) and already does
+    // exactly what this used to duplicate by hand: `closePopover()`, then
+    // `renderSentence` into `#output`. Routing through it here means this
+    // path gets every future change to `display` — the scroll reset above
+    // included — for free, instead of silently missing it. `display(null)`
+    // is already a no-op, so no `lastResult !== null` guard is needed here.
+    display(lastResult);
   }
 });
 
@@ -1012,6 +1015,12 @@ function display(result: ParseResult | null): void {
 
   const sentence = renderSentence(result, currentFuriganaMode);
   output.replaceChildren(sentence);
+  // `.panes` is the scroll container (up to 10,000 clipboard characters can
+  // far exceed a viewport), and replacing `#output`'s children never touches
+  // it on its own — every render therefore lands the reader at the top of
+  // whatever it just rendered, rather than wherever a previous, longer parse
+  // happened to leave the scroll position.
+  panes.scrollTop = 0;
   syncHistoryButtons();
 }
 
