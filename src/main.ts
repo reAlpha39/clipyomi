@@ -17,6 +17,7 @@ import {
 } from './render/popover';
 import { clampFont, fontVars } from './font-sizes';
 import { createHistory } from './history';
+import { openContextMenu, type MenuEntry } from './context-menu';
 import type { ChromeMode, FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
 
@@ -288,6 +289,15 @@ headerControls?.addEventListener('dblclick', (e) => {
 let chromeMode: ChromeMode = 'native';
 
 /**
+ * The platform, as the backend reports it. Module-scope because the right-click
+ * menu needs it too, and it decides whether the native-frame item exists.
+ * Defaults to `macos` for the window between import and the first `platform`
+ * answer — a right-click inside those few milliseconds is the only thing that
+ * could see the wrong answer.
+ */
+let currentPlatform = 'macos';
+
+/**
  * True while a hover is showing chrome that `decorations: false` normally
  * hides. Tracked rather than derived from the event, so only *crossings* reach
  * the backend: each peek is an objc round-trip on the main thread, and a
@@ -373,6 +383,71 @@ function applyChromeMode(mode: ChromeMode): void {
 }
 
 applyChromeMode('native');
+
+/** The label shown for each mode, in the order the menu lists them. */
+const CHROME_LABELS: ReadonlyArray<[ChromeMode, string]> = [
+  ['native', 'Native frame'],
+  ['header', 'Header + resize edges'],
+  ['content', 'Content only'],
+];
+
+/**
+ * Apply a mode the user picked from the menu.
+ *
+ * Applied locally as well as sent: the `emit` round-trip is asynchronous and
+ * comes back to this same listener, so without the local call the window would
+ * change a frame or two after the click. `applyChromeMode` is idempotent, so
+ * handling the echo costs nothing.
+ */
+function selectChromeMode(mode: ChromeMode): void {
+  applyChromeMode(mode);
+  void invoke('set_chrome_mode', { mode }).catch(() => {});
+  void emit('settings-changed', { chrome_mode: mode }).catch(() => {});
+}
+
+function chromeMenuEntries(): MenuEntry[] {
+  const entries: MenuEntry[] = CHROME_LABELS
+    // Windows has no native-frame state (spec §4), so offering it would name a
+    // shape the platform cannot draw.
+    .filter(([mode]) => mode !== 'native' || currentPlatform !== 'windows')
+    .map(([mode, label]) => ({
+      kind: 'radio' as const,
+      label,
+      checked: chromeMode === mode,
+      onSelect: () => selectChromeMode(mode),
+    }));
+  entries.push({ kind: 'separator' });
+  entries.push({
+    kind: 'action',
+    label: 'Settings…',
+    onSelect: () => {
+      void invoke('open_settings_window').catch(() => {});
+    },
+  });
+  entries.push({
+    kind: 'action',
+    label: 'Quit',
+    onSelect: () => {
+      void invoke('close_window').catch(() => {});
+    },
+  });
+  return entries;
+}
+
+/**
+ * Bound to `document`, not `#app`.
+ *
+ * A keyboard-invoked context menu (Shift+F10, or the Menu key) targets the
+ * focused element, which in content mode is `<body>` — an ancestor of `#app`,
+ * so the event would never reach a listener bound there. Content mode has no
+ * tab stops at all, so this is the only binding that keeps the menu reachable
+ * without a pointer. `preventDefault` also suppresses the WebView2 default
+ * menu.
+ */
+document.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  openContextMenu(chromeMenuEntries(), event.clientX, event.clientY);
+});
 
 // The cursor anywhere inside the window reveals the bar; only leaving the
 // window hides it. `#app` fills the viewport, so its own enter/leave is the
@@ -460,7 +535,7 @@ function applyFontSizes(settings: Partial<Settings>): void {
 let currentGloss: number | null = null;
 
 async function applySettings(): Promise<void> {
-  const currentPlatform = await invoke<string>('platform').catch(async () => {
+  currentPlatform = await invoke<string>('platform').catch(async () => {
     const isMac = await invoke<boolean>('is_macos').catch(() => false);
     return isMac ? 'macos' : 'windows';
   });
