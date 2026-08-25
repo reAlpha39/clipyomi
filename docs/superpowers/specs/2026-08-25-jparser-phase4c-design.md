@@ -117,7 +117,7 @@ src/
 ├── main.ts             # header buttons; show() splits into push + display
 └── styles/global.css   # .history-controls
 e2e/
-└── panes.spec.ts       # band-reveal assertion; six baselines regenerate
+└── panes.spec.ts       # band-reveal assertion; ten baselines regenerate
 ```
 
 No Rust, no `types.ts` change, no new dependency.
@@ -226,7 +226,7 @@ second parse.
 | --- | --- |
 | `src/history.test.ts` | Empty state; a single entry offers no navigation; the two-entry walk; both ends hold; `current()` before, after, and across a skip; consecutive dedup; a non-consecutive repeat *is* stored; the key is segmentation-independent; a skip leaves the cursor; nav model A keeps the entries ahead; eviction at `HISTORY_CAP`; the cursor survives eviction |
 | `src/main.test.ts` | Buttons start disabled; one parse leaves them disabled; a second enables Back; Back and Forward render and re-sync; a hover after navigating finds the *displayed* parse's entries; a new parse takes over and keeps what was ahead; a duplicate leaves the view put; an old step honours the current furigana mode; focusing either button peeks the band and blurring hides it |
-| `e2e/panes.spec.ts` | `nav.history-controls` hides and reveals with the gear off the shared CSS rule; six full-page baselines regenerate for the new header content |
+| `e2e/panes.spec.ts` | `nav.history-controls` hides and reveals with the gear off the shared CSS rule; ten full-page baselines regenerate for the new header content |
 
 `npx tsc --noEmit`, `npm test` and the Playwright suite green before the phase is
 done. No Rust changes, so `cargo test` and `cargo clippy` are untouched by 4C and
