@@ -15,6 +15,7 @@ import {
   type Point,
   type Rect,
 } from './render/popover';
+import { clampFont, fontVars } from './font-sizes';
 import type { FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
 
@@ -410,6 +411,27 @@ function resolveColor(css: string): [number, number, number] | null {
 // The token flips with the OS theme, and the erase colour has to flip with it.
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', reportBackground);
 
+/**
+ * Push the font-size tokens SETTINGS carries onto the root element.
+ *
+ * Custom properties only — no re-render. Every size in the design derives from
+ * these four tokens, so the ruby, the chips and the definition pane all reflow
+ * themselves off one style write.
+ */
+function applyFontSizes(settings: Partial<Settings>): void {
+  for (const [token, value] of fontVars(settings)) {
+    if (value === '') document.documentElement.style.removeProperty(token);
+    else document.documentElement.style.setProperty(token, value);
+  }
+  currentGloss = clampFont('gloss', settings.font_gloss);
+}
+
+/**
+ * The gloss size to send with popover content, or `null` while none is
+ * persisted and the tooltip's own stylesheet owns the default.
+ */
+let currentGloss: number | null = null;
+
 async function applySettings(): Promise<void> {
   const currentPlatform = await invoke<string>('platform').catch(async () => {
     const isMac = await invoke<boolean>('is_macos').catch(() => false);
@@ -434,6 +456,7 @@ async function applySettings(): Promise<void> {
   if (settings.hide_usage !== undefined) {
     currentFilters.hide_usage = settings.hide_usage;
   }
+  applyFontSizes(settings);
 }
 
 void listen<Settings>('settings-changed', (e) => {
@@ -441,6 +464,7 @@ void listen<Settings>('settings-changed', (e) => {
   if (settings.hide_pos !== undefined) currentFilters.hide_pos = settings.hide_pos;
   if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;
   if (settings.hide_usage !== undefined) currentFilters.hide_usage = settings.hide_usage;
+  applyFontSizes(settings);
   if (settings.decorations !== undefined) applyDecorations(settings.decorations);
   if (settings.furigana_mode !== undefined && settings.furigana_mode !== currentFuriganaMode) {
     currentFuriganaMode = settings.furigana_mode;
@@ -657,7 +681,14 @@ function openFor(chip: HTMLElement): void {
   pendingChip = chip;
   // Fire-and-forget: a failed emit just leaves the tooltip unshown, no worse
   // than the user never having hovered at all.
-  void emit('popover-content', { entries, filters: currentFilters }).catch(() => {});
+  // The size rides along with the content because the popover is a second
+  // webview with its own `:root`, and it must be applied before that render:
+  // the window sizes itself off what the render measures.
+  const payload =
+    currentGloss === null
+      ? { entries, filters: currentFilters }
+      : { entries, filters: currentFilters, gloss: currentGloss };
+  void emit('popover-content', payload).catch(() => {});
 }
 
 /**

@@ -48,15 +48,15 @@ profiles, and the standalone MeCab display pane.
 
 ## 2. What "the jparser module" is in ta-old
 
-| File | Role |
-|---|---|
-| `exe/util/Dictionary.cpp` (1468 lines) | **Everything.** Conjugation table loader, dictionary compiler, matcher, segmenter, sorting, entry lookup, POS parsing, conjugation-label rendering. |
-| `exe/util/Dictionary.h` | `Match`, `JapString`, `ConjInfo`, `EntryData`, `POSData`, flag constants. |
-| `dictionaries/Conjugations.txt` | UTF-16LE JSON. 32 verb/adjective types, 29 tenses, 223 chained conjugations. |
-| `exe/util/Mecab.cpp` | `libmecab.dll` dynamic loader + `MecabParseString`. |
-| `Shared/StringUtil.cpp` | `wcsijcmp`/`wcsnijcmp` (kana-insensitive compare), `ToRomaji`/`ChunkToRomaji` + `romajiTable`. |
-| `exe/TranslationWindows/LocalWindows/JParseWindow.cpp` | Win32 glue: threading, config dialog. Not portable. |
-| `exe/TranslationWindows/LocalWindows/FuriganaWindow.cpp` | GDI rendering, `characterType` furigana modes. Not portable; behaviour is. |
+| File                                                       | Role                                                                                                                                                      |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exe/util/Dictionary.cpp` (1468 lines)                   | **Everything.** Conjugation table loader, dictionary compiler, matcher, segmenter, sorting, entry lookup, POS parsing, conjugation-label rendering. |
+| `exe/util/Dictionary.h`                                  | `Match`, `JapString`, `ConjInfo`, `EntryData`, `POSData`, flag constants.                                                                       |
+| `dictionaries/Conjugations.txt`                          | UTF-16LE JSON. 32 verb/adjective types, 29 tenses, 223 chained conjugations.                                                                              |
+| `exe/util/Mecab.cpp`                                     | `libmecab.dll` dynamic loader + `MecabParseString`.                                                                                                   |
+| `Shared/StringUtil.cpp`                                  | `wcsijcmp`/`wcsnijcmp` (kana-insensitive compare), `ToRomaji`/`ChunkToRomaji` + `romajiTable`.                                                  |
+| `exe/TranslationWindows/LocalWindows/JParseWindow.cpp`   | Win32 glue: threading, config dialog. Not portable.                                                                                                       |
+| `exe/TranslationWindows/LocalWindows/FuriganaWindow.cpp` | GDI rendering,`characterType` furigana modes. Not portable; behaviour is.                                                                               |
 
 Everything else in `ta-old/` is other translators, hooking, or Win32
 infrastructure.
@@ -173,12 +173,12 @@ Downloaded on first run from EDRDG, gzipped XML, cached in the app data dir.
 Chosen over ta-old's EDICT2 because it carries structured data where ta-old was
 doing string surgery on English glosses:
 
-| ta-old | Now |
-|---|---|
-| `(P)` substring in the gloss | `<ke_pri>` / `<re_pri>` = news1/ichi1/spec1/gai1 |
-| `strncmp` of `"prt"`/`"conj"` vs gloss prefix | `<pos>` tag |
-| `(ctr)`/`(suf)` present and `(arch)` absent | `<pos>` + `<misc>` |
-| verb type matched by name against gloss text | `<pos>` tag → conjugation type name |
+| ta-old                                              | Now                                                  |
+| --------------------------------------------------- | ---------------------------------------------------- |
+| `(P)` substring in the gloss                      | `<ke_pri>` / `<re_pri>` = news1/ichi1/spec1/gai1 |
+| `strncmp` of `"prt"`/`"conj"` vs gloss prefix | `<pos>` tag                                        |
+| `(ctr)`/`(suf)` present and `(arch)` absent   | `<pos>` + `<misc>`                               |
+| verb type matched by name against gloss text        | `<pos>` tag → conjugation type name               |
 
 This is the one deliberate deviation from ta-old's data source, and it makes the
 port both simpler and more accurate.
@@ -428,16 +428,16 @@ of ta-old's UTF-16 → Shift-JIS/EUC-JP round trip.
 
 ## 6. App shell (`src-tauri`)
 
-| Module | Responsibility |
-|---|---|
-| `main.rs` | `setup`: settings load, geometry restore, window creation, task spawn |
-| `state.rs` | shared app state, index generations, settings state |
-| `clipboard.rs` | 200 ms poll loop |
-| `parse.rs` | single worker, latest-wins |
-| `commands.rs` | `parse_text`, toggles, `ensure_dictionary`, settings-window lifecycle |
-| `settings.rs` | persisted JSON in the app config dir |
-| `popover.rs` | the tooltip window: creation, placement, hide |
-| `mouse_tracker.rs` | native cursor-tracking thread for unfocused hover (2L) |
+| Module               | Responsibility                                                            |
+| -------------------- | ------------------------------------------------------------------------- |
+| `main.rs`          | `setup`: settings load, geometry restore, window creation, task spawn   |
+| `state.rs`         | shared app state, index generations, settings state                       |
+| `clipboard.rs`     | 200 ms poll loop                                                          |
+| `parse.rs`         | single worker, latest-wins                                                |
+| `commands.rs`      | `parse_text`, toggles, `ensure_dictionary`, settings-window lifecycle |
+| `settings.rs`      | persisted JSON in the app config dir                                      |
+| `popover.rs`       | the tooltip window: creation, placement, hide                             |
+| `mouse_tracker.rs` | native cursor-tracking thread for unfocused hover (2L)                    |
 
 There is no `window.rs`. Chrome state, always-on-top and geometry live in
 `commands.rs` next to the other toggles, because each one is a persisted setting
@@ -456,10 +456,10 @@ but it has not been measured, so the reveal is gated the same way on both.
 
 Two mechanisms, because the windows are created differently:
 
-| Window | Reveal |
-|---|---|
-| `popover`, `settings` | Built hidden in `setup` and shown on demand. Nothing is left to load at reveal time, and it also avoids the hundreds of milliseconds a webview costs to build. Closing the settings window hides it rather than destroying it, so it is never rebuilt. |
-| `main` | Configured `"visible": false` and reveals itself from `main.ts`, since Tauri builds it from the config array before `setup` runs. Hung off the settings-restore promise so the restored control states are in the first painted frame, and off `finally` so a failed read still leaves a visible window. |
+| Window                    | Reveal                                                                                                                                                                                                                                                                                                          |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `popover`, `settings` | Built hidden in`setup` and shown on demand. Nothing is left to load at reveal time, and it also avoids the hundreds of milliseconds a webview costs to build. Closing the settings window hides it rather than destroying it, so it is never rebuilt.                                                         |
+| `main`                  | Configured`"visible": false` and reveals itself from `main.ts`, since Tauri builds it from the config array before `setup` runs. Hung off the settings-restore promise so the restored control states are in the first painted frame, and off `finally` so a failed read still leaves a visible window. |
 
 Two reveal signals were tried and are wrong, recorded so they are not tried
 again: `requestAnimationFrame` in the page never fires, because a window that is
@@ -543,10 +543,10 @@ the webview owns it either way). The OS puts its buttons at the left; the gear
 sits at the right. `#app[data-decorations]`, mirrored from the setting by
 `main.ts`, picks between two shapes:
 
-| `decorations` | Band | Gear | Divider |
-|---|---|---|---|
-| `true` | reserved 28px grid row | always visible | visible |
-| `false` | out of the grid, absolute overlay, 6px idle → 28px while `#app.peeked`, opaque `--color-bg` fill | fades in with the band | only while revealed |
+| `decorations` | Band                                                                                                 | Gear                   | Divider             |
+| --------------- | ---------------------------------------------------------------------------------------------------- | ---------------------- | ------------------- |
+| `true`        | reserved 28px grid row                                                                               | always visible         | visible             |
+| `false`       | out of the grid, absolute overlay, 6px idle → 28px while`#app.peeked`, opaque `--color-bg` fill | fades in with the band | only while revealed |
 
 Hidden means the sentence starts at the window's top edge, and the revealed bar
 is **added on top of the window** rather than laid over the content: the frame
@@ -595,6 +595,7 @@ A `.peeked` class holds the band open across that gap, since CSS `:hover` cannot
 see a pointer resting on OS chrome.
 
 **Per-platform peek distinction**:
+
 - On **macOS**: Cocoa coalesces frame resizes in a single run-loop turn, so `peek_titlebar` grows the window frame upward by 28px (`size.height + delta`, `pos.y - delta`) while `.peek-offset` adds `padding-top: 28px` to keep content stationary on screen.
 - On **Windows**: Region clipping and frame size mutations during live interactions cause composition lag and DWM flicker. Hidden mode lets content occupy the full window from top: 0, and the in-app band smoothly overlays the top 28px on hover, painted with `--color-bg`. Content never moves, nothing resizes, and nothing clips.
 
@@ -621,11 +622,11 @@ no window is shown until its page has loaded them — see §6.
 
 Three states, mapping onto ta-old's three (`MakeWindow`, `TranslationAggregator.cpp:542`):
 
-| State | ta-old equivalent | Implementation |
-|---|---|---|
-| **Header + resize edges** (default) | `WS_THICKFRAME \| WS_CAPTION` with `WM_NCCALCSIZE` | Frameless custom chrome via `WM_NCCALCSIZE` & `WM_NCHITTEST`. Native DWM rounded corners (`DWMWCP_ROUND`) and 1px frame extension for hardware drop shadows. Zero GDI regions. |
-| **Content only** | Setsumi's `borderlessWindow` (`WS_POPUP`) | Also hide our header; toggles move to a right-click menu. Maximum real estate over a game. |
-| **Native frame** | `WS_OVERLAPPEDWINDOW` | Real OS titlebar and buttons. **Forces background opacity to 100%** — a native titlebar over a transparent body is broken on macOS. |
+| State                                     | ta-old equivalent                                     | Implementation                                                                                                                                                                      |
+| ----------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Header + resize edges** (default) | `WS_THICKFRAME \| WS_CAPTION` with `WM_NCCALCSIZE` | Frameless custom chrome via`WM_NCCALCSIZE` & `WM_NCHITTEST`. Native DWM rounded corners (`DWMWCP_ROUND`) and 1px frame extension for hardware drop shadows. Zero GDI regions. |
+| **Content only**                    | Setsumi's`borderlessWindow` (`WS_POPUP`)          | Also hide our header; toggles move to a right-click menu. Maximum real estate over a game.                                                                                          |
+| **Native frame**                    | `WS_OVERLAPPEDWINDOW`                               | Real OS titlebar and buttons.**Forces background opacity to 100%** — a native titlebar over a transparent body is broken on macOS.                                           |
 
 ta-old toggled by destroying and recreating the window; Tauri does it live.
 
@@ -656,14 +657,14 @@ see-through effect while keeping glyphs crisp, and needs no per-platform shim.
 
 Three of ta-old's six JParser display options are real against JMdict:
 
-| ta-old option | New behaviour |
-|---|---|
-| Hide cross refs | drop `<xref>` + `<ant>` |
-| Hide usage | drop `<s_inf>` + `<misc>` |
-| Hide POS | drop `<pos>` from display |
-| No kana brackets | **N/A** — stripped `[KANA]` from EDICT2's `KANJI [KANA] /gloss/` line format. Our reading is a separate field; there are no brackets. |
-| Definition lines | **Subsumed** by the two-pane layout |
-| Japanese own line | **Subsumed** by the two-pane layout |
+| ta-old option     | New behaviour                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Hide cross refs   | drop`<xref>` + `<ant>`                                                                                                                       |
+| Hide usage        | drop`<s_inf>` + `<misc>`                                                                                                                     |
+| Hide POS          | drop`<pos>` from display                                                                                                                       |
+| No kana brackets  | **N/A** — stripped `[KANA]` from EDICT2's `KANJI [KANA] /gloss/` line format. Our reading is a separate field; there are no brackets. |
+| Definition lines  | **Subsumed** by the two-pane layout                                                                                                        |
+| Japanese own line | **Subsumed** by the two-pane layout                                                                                                        |
 
 Shipping no-op toggles would be worse than explaining their absence.
 
@@ -707,15 +708,15 @@ Persisted as JSON in the app config dir:
 
 ## 9. Error handling
 
-| Boundary | Policy |
-|---|---|
-| **Dictionary download** | Resume on retry; verify gzip integrity; build to a temp path and atomically rename. A failed update never leaves the app dictionary-less — the previous index stays live. |
-| **JMdict parse** | Skip malformed *entries* with a counted warning surfaced in the status line. **Hard-fail on an unmapped verb POS** — silently dropping conjugations degrades parsing invisibly, the worst failure mode for this app. |
-| **Conjugation table** | Committed asset, so failure is a packaging bug. Keep ta-old's strictness: fail loudly at startup naming the type whose `Next Type` could not resolve. |
-| **Index version mismatch** | Rebuild from source; never attempt a read. |
-| **Vibrato dictionary** | Missing or corrupt ⇒ MeCab toggle shows unavailable *with the reason*; parsing continues unhinted. Never blocks a parse. |
-| **Clipboard read** | Can fail transiently when another app holds it. Log-and-skip the tick — the one case deliberately not surfaced, since a poll failure is not information. |
-| **Parse panic** | The matcher does offset arithmetic. Catch at the worker boundary, report with input length, keep the previous result on screen. A panic must not kill the app. |
+| Boundary                         | Policy                                                                                                                                                                                                                       |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dictionary download**    | Resume on retry; verify gzip integrity; build to a temp path and atomically rename. A failed update never leaves the app dictionary-less — the previous index stays live.                                                   |
+| **JMdict parse**           | Skip malformed*entries* with a counted warning surfaced in the status line. **Hard-fail on an unmapped verb POS** — silently dropping conjugations degrades parsing invisibly, the worst failure mode for this app. |
+| **Conjugation table**      | Committed asset, so failure is a packaging bug. Keep ta-old's strictness: fail loudly at startup naming the type whose`Next Type` could not resolve.                                                                       |
+| **Index version mismatch** | Rebuild from source; never attempt a read.                                                                                                                                                                                   |
+| **Vibrato dictionary**     | Missing or corrupt ⇒ MeCab toggle shows unavailable*with the reason*; parsing continues unhinted. Never blocks a parse.                                                                                                   |
+| **Clipboard read**         | Can fail transiently when another app holds it. Log-and-skip the tick — the one case deliberately not surfaced, since a poll failure is not information.                                                                    |
+| **Parse panic**            | The matcher does offset arithmetic. Catch at the worker boundary, report with input length, keep the previous result on screen. A panic must not kill the app.                                                               |
 
 ## 10. Testing
 
@@ -774,38 +775,38 @@ also have a handoff in `docs/superpowers/`.
 
 ### Phase 1 — Parser core (shipped)
 
-| Sub-phase | Delivered |
-|---|---|
-| **1A** (08-12) | Character handling, romaji, conjugation table + `Next Type`, JMdict streaming, verb stem generation, mmap FST index. CLI dumps every record matching a query. |
-| **1B** (08-13) | Matcher with verb-conjugation recursion, min-cost DP segmenter with ta-old's scoring, conjugation labels, reading reconstruction, public `parse()`. |
+| Sub-phase            | Delivered                                                                                                                                                      |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1A** (08-12) | Character handling, romaji, conjugation table +`Next Type`, JMdict streaming, verb stem generation, mmap FST index. CLI dumps every record matching a query. |
+| **1B** (08-13) | Matcher with verb-conjugation recursion, min-cost DP segmenter with ta-old's scoring, conjugation labels, reading reconstruction, public`parse()`.           |
 
 ### Phase 2 — Minimum viable app (shipped)
 
 Scope grew well past "minimum": MeCab hints arrived here instead of Phase 5, and
 so did the chrome and geometry work originally filed under Phase 4.
 
-| Sub-phase | Delivered |
-|---|---|
-| **2A** (08-13) | Dictionary lifecycle: immutable numbered index generations, headless `ensure_dictionary`, CLI driver. An interrupted rebuild cannot serve well-formed wrong data. |
-| **2B** (08-13) | JMdict acquisition in `crates/jmdict-source` — hand-placed file, else download + verify + publish. No HTTP client or decompressor in `crates/jparser`. |
-| **2C** (08-14) | MeCab boundary hints: `VibratoTokenizer` behind the optional `mecab` feature, IPADIC field 7 marking token interiors, `jparser-cli parse --hints`. |
-| **2D** (08-14) | Tauri shell: `src-tauri` workspace member, `parse_text` on `spawn_blocking`, Vite + vanilla-TS webview, sentence and definition panes. First user-facing surface. |
-| **2E** (08-14) | Autonomy: 200 ms clipboard poll into a `watch` channel, one worker, `parse-result` events, always-on-top and clipboard-pause persisted to `settings.json`. |
-| **2F** (08-14) | First-run download screen. `AppState` travels to the worker by a second `watch`, so an arriving index starts serving without a restart. |
-| **2G** (08-14) | Hover-to-preview popover inside the webview: reused `renderEntry`, `pointer-events: none`, placement as a pure function. |
-| **2H** (08-15) | Manual text box deleted — the clipboard becomes the only user-facing input. The Rust command stays as a test and debug entry point. |
-| **2I** (08-15) | The popover becomes a real OS window, able to extend past the main window onto the desktop, with ta-old's `MyDrawText` colouring and a cursor-poll keep rule. |
-| **2J** (08-15) | Bottom definitions pane removed; the popover window is the only definition surface, and the segmented sentence is the sole output child. |
-| **2K** (08-15) | Title-bar (decorations) toggle with native frameless dragging; window size and position persisted across launches. |
-| **2L** (08-16) | Hover popovers while the window is unfocused, driven by a native cursor-tracking thread, without stealing focus from the foreground app. |
+| Sub-phase            | Delivered                                                                                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **2A** (08-13) | Dictionary lifecycle: immutable numbered index generations, headless`ensure_dictionary`, CLI driver. An interrupted rebuild cannot serve well-formed wrong data.     |
+| **2B** (08-13) | JMdict acquisition in`crates/jmdict-source` — hand-placed file, else download + verify + publish. No HTTP client or decompressor in `crates/jparser`.             |
+| **2C** (08-14) | MeCab boundary hints:`VibratoTokenizer` behind the optional `mecab` feature, IPADIC field 7 marking token interiors, `jparser-cli parse --hints`.                |
+| **2D** (08-14) | Tauri shell:`src-tauri` workspace member, `parse_text` on `spawn_blocking`, Vite + vanilla-TS webview, sentence and definition panes. First user-facing surface. |
+| **2E** (08-14) | Autonomy: 200 ms clipboard poll into a`watch` channel, one worker, `parse-result` events, always-on-top and clipboard-pause persisted to `settings.json`.        |
+| **2F** (08-14) | First-run download screen.`AppState` travels to the worker by a second `watch`, so an arriving index starts serving without a restart.                             |
+| **2G** (08-14) | Hover-to-preview popover inside the webview: reused`renderEntry`, `pointer-events: none`, placement as a pure function.                                            |
+| **2H** (08-15) | Manual text box deleted — the clipboard becomes the only user-facing input. The Rust command stays as a test and debug entry point.                                   |
+| **2I** (08-15) | The popover becomes a real OS window, able to extend past the main window onto the desktop, with ta-old's`MyDrawText` colouring and a cursor-poll keep rule.         |
+| **2J** (08-15) | Bottom definitions pane removed; the popover window is the only definition surface, and the segmented sentence is the sole output child.                               |
+| **2K** (08-15) | Title-bar (decorations) toggle with native frameless dragging; window size and position persisted across launches.                                                     |
+| **2L** (08-16) | Hover popovers while the window is unfocused, driven by a native cursor-tracking thread, without stealing focus from the foreground app.                               |
 
-### Phase 3 — Reading aids (in progress)
+### Phase 3 — Reading aids (complete)
 
-| Sub-phase | Status |
-|---|---|
-| **3A** (08-16) | Shipped. Four furigana modes (`none`/`hiragana`/`katakana`/`romaji`) rendered as `<ruby>` over the chips, persisted. The picker moved to the settings window after 3B; the main window only reacts to `settings-changed` by redrawing. |
+| Sub-phase            | Status                                                                                                                                                                                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **3A** (08-16) | Shipped. Four furigana modes (`none`/`hiragana`/`katakana`/`romaji`) rendered as `<ruby>` over the chips, persisted. The picker moved to the settings window after 3B; the main window only reacts to `settings-changed` by redrawing.                                        |
 | **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8 — created hidden in `setup` like the popover, see §6. |
-| **3C** | Remaining. Font sizes (§7.7): `--text-cjk` and `--text-furigana` bound to two persisted inputs. The last reading aid still unbuilt. |
+| **3C** (08-25) | Shipped. Font sizes (§7.7), as **three** persisted inputs rather than two: `--text-sentence` and `--text-gloss` in px, `--text-furigana` (and the derived `--text-furigana-romaji`) as a percentage of the sentence. §7.7's `--text-cjk`/`--text-furigana` pair never existed in this port — see the 3C design doc §2. |
 
 ### Phase 4 — Window behaviour (remaining, minus what 2K took)
 
@@ -814,12 +815,12 @@ Four sub-phases are left, and their order is a dependency chain, not a
 preference: **4C first** because it depends on nothing and is the one users feel;
 **4D last** because a slot captures the state 4A, 4B and 3C introduce.
 
-| Sub-phase | Scope | Depends on |
-|---|---|---|
-| **4C** | Parse history (§7.8): ring buffer of 50 full `ParseResult`s, consecutive duplicates deduped, back/forward in the header. What makes clipboard monitoring safe to leave running. | — |
-| **4A** | The other two chrome states (§7.4): content-only, with the toggles moving to a right-click menu, and native frame. Three-way control, persisted alongside `decorations`. | 2K |
-| **4B** | Per-pixel background alpha (§7.5): `"transparent": true`, a `--surface-alpha` token and its control, `macos-private-api` on macOS. Native frame forces alpha to 100 %, so 4A defines the state 4B must clamp. | 4A |
-| **4D** | Layout hotkeys (§7.9): global-shortcut plugin, `Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha, always-on-top, font sizes, furigana mode. | 3C, 4A, 4B |
+| Sub-phase    | Scope                                                                                                                                                                                                               | Depends on |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| **4C** | Parse history (§7.8): ring buffer of 50 full`ParseResult`s, consecutive duplicates deduped, back/forward in the header. What makes clipboard monitoring safe to leave running.                                   | —         |
+| **4A** | The other two chrome states (§7.4): content-only, with the toggles moving to a right-click menu, and native frame. Three-way control, persisted alongside`decorations`.                                          | 2K         |
+| **4B** | Per-pixel background alpha (§7.5):`"transparent": true`, a `--surface-alpha` token and its control, `macos-private-api` on macOS. Native frame forces alpha to 100 %, so 4A defines the state 4B must clamp. | 4A         |
+| **4D** | Layout hotkeys (§7.9): global-shortcut plugin,`Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha, always-on-top, font sizes, furigana mode.                  | 3C, 4A, 4B |
 
 ### Phase 5 — MeCab (remaining, minus what 2C took)
 
@@ -827,10 +828,10 @@ The hints themselves are done. What is left is the plumbing that makes them
 reachable without a terminal — and it mirrors work already done for JMdict, so
 both sub-phases have a shape to copy.
 
-| Sub-phase | Scope | Precedent to copy |
-|---|---|---|
-| **5A** | On-demand download of the compiled Vibrato dictionary (§4.4), verified and published like an index generation, paid for only when MeCab is switched on. `TA_HINTS_DICT` survives as a test and debug override, no longer the only source. | 2B (acquisition), 2A (immutable publish) |
-| **5B** | The toggle: a persisted setting, and hints reaching the running worker over a `watch` so enabling them does not need a restart. Absent dictionary means hints off, not a fatal — 2C's fatal was correct only while the env var was an explicit request. | 2F (`watch` into a live worker), 2E (persisted toggle) |
+| Sub-phase    | Scope                                                                                                                                                                                                                                                     | Precedent to copy                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **5A** | On-demand download of the compiled Vibrato dictionary (§4.4), verified and published like an index generation, paid for only when MeCab is switched on.`TA_HINTS_DICT` survives as a test and debug override, no longer the only source.               | 2B (acquisition), 2A (immutable publish)                 |
+| **5B** | The toggle: a persisted setting, and hints reaching the running worker over a`watch` so enabling them does not need a restart. Absent dictionary means hints off, not a fatal — 2C's fatal was correct only while the env var was an explicit request. | 2F (`watch` into a live worker), 2E (persisted toggle) |
 
 ### Phase 6 — Verification (remaining)
 
@@ -838,28 +839,28 @@ The Playwright suite is not a Phase 6 deliverable: `e2e/` already carries
 `panes.spec.ts` and `popover.spec.ts` and grows with each phase, so 6B completes
 it rather than starting it.
 
-| Sub-phase | Scope |
-|---|---|
-| **6A** | Differential run against ta-old (§10): ~200 sentences through both binaries, segmentations diffed, divergences triaged into port bugs vs legitimate JMdict/EDICT2 disagreement. Run once, deliberately, not a CI gate. |
-| **6B** | Suite completion: the 80 % line on `crates/jparser` held as a real number, and Playwright coverage extended to what Phases 3–4 added — furigana modes, gloss filters, history navigation — at 320 / 768 / 1024, both themes, reduced-motion, against a fixed fixture. |
-| **6C** | Release: Windows and macOS bundles, the per-platform manual checklist for the three things §10 declines to automate (always-on-top, transparency, chrome switching), and an attribution check — EDRDG in-app, GPL v2 (§14). |
+| Sub-phase    | Scope                                                                                                                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **6A** | Differential run against ta-old (§10): ~200 sentences through both binaries, segmentations diffed, divergences triaged into port bugs vs legitimate JMdict/EDICT2 disagreement. Run once, deliberately, not a CI gate.                                                   |
+| **6B** | Suite completion: the 80 % line on`crates/jparser` held as a real number, and Playwright coverage extended to what Phases 3–4 added — furigana modes, gloss filters, history navigation — at 320 / 768 / 1024, both themes, reduced-motion, against a fixed fixture. |
+| **6C** | Release: Windows and macOS bundles, the per-platform manual checklist for the three things §10 declines to automate (always-on-top, transparency, chrome switching), and an attribution check — EDRDG in-app, GPL v2 (§14).                                            |
 
 6A can run as soon as 3C lands; it tests the parser, which stops changing after
 Phase 1. 6C is the last thing that happens.
 
 ## 12. Deliberate deviations from ta-old
 
-| # | Deviation | Why |
-|---|---|---|
-| 1 | JMdict XML instead of EDICT2 | Structured `<pos>`/priority instead of string surgery on English glosses |
-| 2 | FST instead of binary search + `wcsijcmp` | Fewer lines *and* faster; deletes three copies of a custom comparator |
-| 3 | Vibrato instead of `libmecab` | Pure Rust; no per-platform native dependency, no per-parse init, no lock, no encoding round trip |
-| 4 | Per-pixel background alpha instead of uniform window alpha | ta-old dimmed the text being read; also needs no platform shim |
-| 5 | Stem dedupe actually implemented | ta-old's is dead code (`Dictionary.cpp:450`); duplicates are pure noise |
-| 6 | No-kana-brackets filter dropped | N/A against JMdict's structured reading field |
-| 7 | Definition-lines / Japanese-own-line dropped | Subsumed by the two-pane layout |
-| 8 | Settings popover instead of modal dialog | Does not block the parse behind it |
-| 9 | History session-only | ta-old persisted to disk; deferred, not refused |
+| # | Deviation                                                  | Why                                                                                              |
+| - | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1 | JMdict XML instead of EDICT2                               | Structured`<pos>`/priority instead of string surgery on English glosses                        |
+| 2 | FST instead of binary search +`wcsijcmp`                 | Fewer lines*and* faster; deletes three copies of a custom comparator                           |
+| 3 | Vibrato instead of`libmecab`                             | Pure Rust; no per-platform native dependency, no per-parse init, no lock, no encoding round trip |
+| 4 | Per-pixel background alpha instead of uniform window alpha | ta-old dimmed the text being read; also needs no platform shim                                   |
+| 5 | Stem dedupe actually implemented                           | ta-old's is dead code (`Dictionary.cpp:450`); duplicates are pure noise                        |
+| 6 | No-kana-brackets filter dropped                            | N/A against JMdict's structured reading field                                                    |
+| 7 | Definition-lines / Japanese-own-line dropped               | Subsumed by the two-pane layout                                                                  |
+| 8 | Settings popover instead of modal dialog                   | Does not block the parse behind it                                                               |
+| 9 | History session-only                                       | ta-old persisted to disk; deferred, not refused                                                  |
 
 ## 13. Deferred
 

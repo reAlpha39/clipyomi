@@ -58,6 +58,12 @@ export interface Settings {
   hide_pos?: boolean;
   hide_xrefs?: boolean;
   hide_usage?: boolean;
+  /** Sentence pane size in px, bound to `--text-sentence`. */
+  font_sentence?: number;
+  /** Definition and tooltip size in px, bound to `--text-gloss`. */
+  font_gloss?: number;
+  /** Furigana size as a percentage of the sentence, bound to `--text-furigana`. */
+  furigana_scale?: number;
   window_width?: number;
   window_height?: number;
   window_x?: number;

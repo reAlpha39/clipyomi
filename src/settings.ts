@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
+import { FONT_LIMITS, clampFont, type FontKind } from './font-sizes';
 import type { FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
@@ -38,6 +39,28 @@ export function initSettingsApp(container: HTMLElement) {
       </section>
 
       <section class="settings-group">
+        <h2 class="settings-group-title">Text Size</h2>
+        <label class="settings-number-row">
+          <span class="label-text">Sentence</span>
+          <input type="number" id="setting-font-sentence"
+                 min="${FONT_LIMITS.sentence.min}" max="${FONT_LIMITS.sentence.max}" step="1" />
+          <span class="unit">px</span>
+        </label>
+        <label class="settings-number-row">
+          <span class="label-text">Definitions</span>
+          <input type="number" id="setting-font-gloss"
+                 min="${FONT_LIMITS.gloss.min}" max="${FONT_LIMITS.gloss.max}" step="1" />
+          <span class="unit">px</span>
+        </label>
+        <label class="settings-number-row">
+          <span class="label-text">Furigana</span>
+          <input type="number" id="setting-furigana-scale"
+                 min="${FONT_LIMITS.furigana.min}" max="${FONT_LIMITS.furigana.max}" step="1" />
+          <span class="unit">% of sentence</span>
+        </label>
+      </section>
+
+      <section class="settings-group">
         <h2 class="settings-group-title">Window &amp; Behavior</h2>
         <label class="settings-checkbox-row">
           <input type="checkbox" id="setting-always-on-top" />
@@ -61,6 +84,9 @@ export function initSettingsApp(container: HTMLElement) {
   const alwaysOnTop = container.querySelector<HTMLInputElement>('#setting-always-on-top')!;
   const monitoring = container.querySelector<HTMLInputElement>('#setting-clipboard-monitoring')!;
   const decorations = container.querySelector<HTMLInputElement>('#setting-decorations')!;
+  const fontSentence = container.querySelector<HTMLInputElement>('#setting-font-sentence')!;
+  const fontGloss = container.querySelector<HTMLInputElement>('#setting-font-gloss')!;
+  const furiganaScale = container.querySelector<HTMLInputElement>('#setting-furigana-scale')!;
   const furiganaButtons = container.querySelectorAll<HTMLButtonElement>(
     '.segmented-control button[data-mode]',
   );
@@ -75,6 +101,22 @@ export function initSettingsApp(container: HTMLElement) {
     });
   }
 
+  /**
+   * The size in INPUT, pinned into range, or `undefined` for an empty box —
+   * which means "leave the stylesheet default alone", not "size zero".
+   *
+   * Clamping here as well as at the apply site is not belt and braces: `min`
+   * and `max` bound the steppers, but a typed or pasted value walks straight
+   * past them and would otherwise be what gets persisted.
+   */
+  function sizeOf(input: HTMLInputElement, kind: FontKind): number | undefined {
+    if (input.value.trim() === '') return undefined;
+    const size = clampFont(kind, input.valueAsNumber);
+    if (size === null) return undefined;
+    input.value = String(size);
+    return size;
+  }
+
   function currentSnapshot(): Settings {
     return {
       always_on_top: alwaysOnTop.checked,
@@ -84,6 +126,9 @@ export function initSettingsApp(container: HTMLElement) {
       hide_pos: hidePos.checked,
       hide_xrefs: hideXrefs.checked,
       hide_usage: hideUsage.checked,
+      font_sentence: sizeOf(fontSentence, 'sentence'),
+      font_gloss: sizeOf(fontGloss, 'gloss'),
+      furigana_scale: sizeOf(furiganaScale, 'furigana'),
     };
   }
 
@@ -101,7 +146,14 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.clipboard_monitoring !== undefined) monitoring.checked = s.clipboard_monitoring;
     if (s.decorations !== undefined) decorations.checked = s.decorations;
     if (s.furigana_mode !== undefined) updateFuriganaButtons(s.furigana_mode);
+    if (s.font_sentence !== undefined) fontSentence.value = String(s.font_sentence);
+    if (s.font_gloss !== undefined) fontGloss.value = String(s.font_gloss);
+    if (s.furigana_scale !== undefined) furiganaScale.value = String(s.furigana_scale);
   }
+
+  fontSentence.addEventListener('change', saveAndBroadcast);
+  fontGloss.addEventListener('change', saveAndBroadcast);
+  furiganaScale.addEventListener('change', saveAndBroadcast);
 
   hidePos.addEventListener('change', saveAndBroadcast);
   hideXrefs.addEventListener('change', saveAndBroadcast);

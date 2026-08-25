@@ -1621,6 +1621,13 @@ pub fn save_settings(
             if settings.hide_usage.is_some() {
                 s.hide_usage = settings.hide_usage;
             }
+            // Assigned rather than merged, unlike the toggles above: an absent
+            // size means the user cleared that box and wants the stylesheet
+            // default back, which a merge could never express. The settings
+            // window is the only caller and always sends all three.
+            s.font_sentence = settings.font_sentence;
+            s.font_gloss = settings.font_gloss;
+            s.furigana_scale = settings.furigana_scale;
         })
         .map_err(|e| e.to_string())
 }
@@ -2089,6 +2096,53 @@ mod tests {
         assert_eq!(s.window_height, Some(200));
         assert_eq!(s.window_x, Some(50));
         assert_eq!(s.window_y, Some(80));
+    }
+
+    /// Clearing a size box in the settings window sends a snapshot with the key
+    /// gone, and that has to reach disk as "unset" — otherwise the old size
+    /// comes back on the next launch and the box cannot be cleared at all.
+    /// Safe because the settings window is the only caller, and it always sends
+    /// a full snapshot of all three.
+    #[test]
+    fn save_settings_clears_a_font_size_the_payload_omits() {
+        let dir = scratch("clear-font-size");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings {
+                font_sentence: Some(30),
+                ..Default::default()
+            },
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
+
+        save_settings(Settings::default(), state_arg).unwrap();
+
+        assert_eq!(state.snapshot().font_sentence, None);
+    }
+
+    #[test]
+    fn save_settings_persists_the_font_sizes() {
+        let dir = scratch("save-font-sizes");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings::default(),
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
+        let settings = Settings {
+            font_sentence: Some(30),
+            font_gloss: Some(18),
+            furigana_scale: Some(70),
+            ..Default::default()
+        };
+        save_settings(settings, state_arg).unwrap();
+        let s = state.snapshot();
+        assert_eq!(s.font_sentence, Some(30));
+        assert_eq!(s.font_gloss, Some(18));
+        assert_eq!(s.furigana_scale, Some(70));
     }
 
     #[test]
