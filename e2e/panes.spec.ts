@@ -85,10 +85,15 @@ test('a hidden title bar leaves the gear invisible until the band is hovered', a
   await emitFixtureResult(page);
 
   const gear = page.locator('#settings-toggle');
+  const history = page.locator('nav.history-controls');
   const band = page.locator('header.controls');
   // Asserted on resolved opacity, not visibility: the button stays in the DOM
   // and in the tab order, which is the point of revealing it on focus too.
   await expect(gear).toHaveCSS('opacity', '0');
+  // The history nav rides the same #app[data-decorations='false'] rule as the
+  // gear (design §7), so this is proof of the shared CSS rule, not a second
+  // one.
+  await expect(history).toHaveCSS('opacity', '0');
   // The idle band is the 6px sliver, thin enough to leave the chips beneath it
   // clickable.
   expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(6);
@@ -96,6 +101,7 @@ test('a hidden title bar leaves the gear invisible until the band is hovered', a
   await band.hover();
 
   await expect(gear).toHaveCSS('opacity', '1');
+  await expect(history).toHaveCSS('opacity', '1');
   expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(28);
 });
 
