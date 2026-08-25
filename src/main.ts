@@ -4,7 +4,6 @@ import {
   availableMonitors,
   cursorPosition,
   getCurrentWindow,
-  type ResizeDirection,
 } from '@tauri-apps/api/window';
 import { renderSentence } from './render/sentence';
 import {
@@ -18,6 +17,19 @@ import {
 } from './render/popover';
 import type { FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
+
+/**
+ * The resize edges `startResizeDragging` accepts.
+ *
+ * Read off that method rather than imported: `@tauri-apps/api` 2.11.1 declares
+ * `ResizeDirection` in `window.d.ts` but never exports it, so importing the name
+ * fails `tsc` (TS2459) and broke `npm run build` — invisibly, because `vite dev`
+ * does not typecheck. Deriving it keeps one source of truth and follows upstream
+ * if the union changes.
+ */
+type ResizeDirection = Parameters<
+  ReturnType<typeof getCurrentWindow>['startResizeDragging']
+>[0];
 
 const app = document.querySelector<HTMLElement>('#app')!;
 
