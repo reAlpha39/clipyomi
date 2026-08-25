@@ -245,7 +245,17 @@ describe('Settings Window', () => {
       return Promise.resolve(undefined);
     });
     initSettingsApp(container);
-    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('platform'));
+
+    // `invoke('platform')` fires synchronously inside initSettingsApp, so
+    // waiting for that call (as the Windows test's DOM-polling waitFor does
+    // implicitly) proves nothing here — the button is present by default, so
+    // the assertion below would pass even if the `.then()` that would remove
+    // it never ran. Flush the microtask queue so that callback has actually
+    // run before asserting the button survived it.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('platform');
     expect(container.querySelector('[data-chrome-mode="native"]')).not.toBeNull();
   });
 

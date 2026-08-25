@@ -99,7 +99,12 @@ export function initSettingsApp(container: HTMLElement) {
 
   const chromeButtons = container.querySelectorAll<HTMLButtonElement>('[data-chrome-mode]');
 
-  let currentChrome: ChromeMode = 'native';
+  // No default mode: until `get_settings` answers, this window does not know
+  // which chrome the main window is wearing, and inventing `native` here is how
+  // a snapshot sent before that answer could name a mode the platform cannot
+  // draw. `currentSnapshot` omits the key instead, which every consumer already
+  // treats as "unchanged" — the same way an empty font-size box does.
+  let currentChrome: ChromeMode | undefined;
 
   function updateChromeButtons(mode: ChromeMode) {
     currentChrome = mode;
