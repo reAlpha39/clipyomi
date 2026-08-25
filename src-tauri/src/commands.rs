@@ -280,7 +280,6 @@ pub mod win32_frameless {
     const SWP_NOSIZE: u32 = 0x0001;
     const SWP_NOZORDER: u32 = 0x0004;
     const SWP_FRAMECHANGED: u32 = 0x0020;
-    const SWP_NOACTIVATE: u32 = 0x0010;
 
     #[allow(non_snake_case)]
     type SUBCLASSPROC = unsafe extern "system" fn(
@@ -350,16 +349,14 @@ pub mod win32_frameless {
 
     /// How much of the window's top the region clips away.
     ///
-    /// Zero while the band is peeked, and zero in decorated mode — there the OS
-    /// draws a real title bar and clipping a band off the top would cut into it.
-    /// Read from `WS_CAPTION` rather than from a flag of our own so it cannot
-    /// drift out of step with the window the user is actually looking at.
-    fn region_top_inset(hwnd: *mut c_void, dpi: i32) -> i32 {
+    /// Zero while the band is peeked, `strip_px` otherwise. There is no
+    /// decorated case to check any more: `native` does not exist on Windows
+    /// (spec §4), so the row is always reserved and always clipped at rest.
+    /// This used to read `WS_CAPTION` off the live window to answer that
+    /// question, which could only ever answer "undecorated" — the
+    /// `WM_STYLECHANGING` arm below strips the bit for the window's life.
+    fn region_top_inset(dpi: i32) -> i32 {
         if STRIP_SHOWN.load(Ordering::Relaxed) {
-            return 0;
-        }
-        let decorated = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) as u32 } & WS_CAPTION != 0;
-        if decorated {
             0
         } else {
             strip_px(dpi)
@@ -368,8 +365,8 @@ pub mod win32_frameless {
 
     /// Where the window *looks* like it starts: its own top, plus whatever the
     /// region clips off it.
-    fn visual_top(hwnd: *mut c_void, window_top: i32, dpi: i32) -> i32 {
-        window_top + region_top_inset(hwnd, dpi)
+    fn visual_top(window_top: i32, dpi: i32) -> i32 {
+        window_top + region_top_inset(dpi)
     }
 
     fn get_system_metrics(index: i32, dpi: u32) -> i32 {
@@ -435,7 +432,7 @@ pub mod win32_frameless {
         unsafe {
             let dpi = GetDpiForWindow(hwnd);
             let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
-            let top = region_top_inset(hwnd, dpi_val);
+            let top = region_top_inset(dpi_val);
 
             if IsZoomed(hwnd) != 0 {
                 let rgn = CreateRectRgn(0, top, width, height);
@@ -462,59 +459,6 @@ pub mod win32_frameless {
                 // resize repaints anyway.
                 SetWindowRgn(hwnd, rgn, 0);
             }
-        }
-    }
-
-    /// The window rect a top-edge grow of `delta` physical pixels produces, as
-    /// `(x, y, width, height)`.
-    ///
-    /// The top edge moves by `-delta` and the height grows by `delta`, so the
-    /// BOTTOM edge does not move: the band is added on top of the window, and
-    /// nothing below it shifts.
-    fn top_grown(rect: RECT, delta: i32) -> (i32, i32, i32, i32) {
-        (
-            rect.left,
-            rect.top - delta,
-            rect.right - rect.left,
-            rect.bottom - rect.top + delta,
-        )
-    }
-
-    /// Grows the window upward by `logical_delta` logical pixels (negative
-    /// shrinks it back), leaving the bottom edge where it is.
-    ///
-    /// Done here rather than through `Window::set_size` and `set_position`,
-    /// which is what the macOS arm of `peek_titlebar` uses: `set_size` sets the
-    /// *inner* size, and this window keeps `WS_THICKFRAME`, so tao runs
-    /// `AdjustWindowRect` over the value and adds a frame's worth of height
-    /// that a matching `set_position` of the same delta cannot cancel. The
-    /// leftover landed at the bottom edge and accumulated over peek/unpeek
-    /// cycles. Window coordinates are also the coordinates the region is in, so
-    /// there is no logical/physical rounding step to lose a pixel in.
-    ///
-    /// One `SetWindowPos`: move and resize land in the same frame, where two
-    /// calls showed the bottom edge dropping and coming back.
-    pub fn grow_top(window: &Window, logical_delta: f64) {
-        let Ok(hwnd) = window.hwnd() else { return };
-        let hwnd = hwnd.0;
-        unsafe {
-            let dpi = GetDpiForWindow(hwnd);
-            let dpi = if dpi == 0 { 96 } else { dpi as i32 };
-            let delta = mul_div(logical_delta.round() as i32, dpi, 96);
-            let mut wr = RECT::default();
-            if GetWindowRect(hwnd, &mut wr) == 0 {
-                return;
-            }
-            let (x, y, w, h) = top_grown(wr, delta);
-            let _ = SetWindowPos(
-                hwnd,
-                std::ptr::null_mut(),
-                x,
-                y,
-                w,
-                h,
-                SWP_NOZORDER | SWP_NOACTIVATE,
-            );
         }
     }
 
@@ -677,7 +621,7 @@ pub mod win32_frameless {
                     // the region, so it receives no input at all — the pointer
                     // goes to whatever is behind it — and the top resize edge
                     // and the drag band belong at the first visible row instead.
-                    let top = visual_top(hwnd, wr.top, dpi_val);
+                    let top = visual_top(wr.top, dpi_val);
 
                     let border_px = mul_div(6, dpi_val, 96);
                     let corner_px = mul_div(12, dpi_val, 96);
@@ -855,75 +799,6 @@ pub mod win32_frameless {
             };
             let valid = valid_rect(old, far);
             assert!(valid.right <= valid.left, "no pixel survives");
-        }
-
-        #[test]
-        fn a_top_grow_leaves_the_bottom_edge_where_it_is() {
-            let rect = RECT {
-                left: 100,
-                top: 200,
-                right: 700,
-                bottom: 600,
-            };
-
-            let (x, y, w, h) = top_grown(rect, 28);
-
-            assert_eq!(y, rect.top - 28, "the band is added above the window");
-            assert_eq!(
-                y + h,
-                rect.bottom,
-                "the bottom edge must not move — that was the growth bug"
-            );
-            assert_eq!((x, w), (rect.left, rect.right - rect.left));
-
-            // And the shrink is its exact inverse, so a peek/unpeek cycle is a
-            // fixed point rather than a creep.
-            let grown = RECT {
-                left: x,
-                top: y,
-                right: x + w,
-                bottom: y + h,
-            };
-            assert_eq!(top_grown(grown, -28), (rect.left, rect.top, w, h - 28));
-        }
-
-        #[test]
-        fn repeated_grow_and_shrink_cycles_do_not_drift() {
-            // A single round trip passing is not enough: the bug this guards
-            // against was a frame's worth of height added per toggle, which only
-            // shows up as accumulation. It reached production once, from
-            // the pre-4A decorations toggle using `set_size`/`set_position`
-            // (an INNER size run through `AdjustWindowRect`) instead of this
-            // arithmetic — the
-            // window grew on every titlebar check/uncheck.
-            let start = RECT {
-                left: 100,
-                top: 200,
-                right: 900,
-                bottom: 700,
-            };
-            let mut current = start;
-            for _ in 0..10 {
-                let (x, y, w, h) = top_grown(current, 28);
-                current = RECT {
-                    left: x,
-                    top: y,
-                    right: x + w,
-                    bottom: y + h,
-                };
-                let (x, y, w, h) = top_grown(current, -28);
-                current = RECT {
-                    left: x,
-                    top: y,
-                    right: x + w,
-                    bottom: y + h,
-                };
-            }
-            assert_eq!(
-                (current.left, current.top, current.right, current.bottom),
-                (start.left, start.top, start.right, start.bottom),
-                "ten grow/shrink cycles must land exactly where they started"
-            );
         }
 
         #[test]
@@ -1144,13 +1019,15 @@ pub fn save_window_geometry(
 /// tried first and is a drift hazard: `save_window_geometry` is a fixed point
 /// today (saving a saved value changes nothing), and subtracting a band on each
 /// save breaks that the moment anything re-saves a stored value. So the only
-/// place the band is added is here, once, when there is no saved height to honour.
-pub fn initial_height(saved: Option<u32>, decorated: bool) -> u32 {
+/// place the band is added is here, once, when there is no saved height to
+/// honour.
+///
+/// No mode parameter: the row is reserved on Windows and nowhere else, and on
+/// Windows every reachable mode reserves it (spec §4.4).
+pub fn initial_height(saved: Option<u32>) -> u32 {
     match saved {
         Some(h) => h,
-        None if cfg!(target_os = "windows") && !decorated => {
-            DEFAULT_WINDOW_HEIGHT + BAND_HEIGHT_LOGICAL
-        }
+        None if cfg!(target_os = "windows") => DEFAULT_WINDOW_HEIGHT + BAND_HEIGHT_LOGICAL,
         None => DEFAULT_WINDOW_HEIGHT,
     }
 }
@@ -1606,18 +1483,21 @@ mod tests {
         dir
     }
 
+    /// The reserved row is Windows-only and unconditional there now: `native`
+    /// does not exist on that platform, and `header` and `content` both reserve
+    /// the row (spec §4.4). Saved values are the real box already, so they pass
+    /// through untouched — that is what keeps `save_window_geometry` a fixed
+    /// point.
     #[test]
-    fn initial_height_adds_the_reserved_row_only_on_a_first_undecorated_launch() {
-        // Saved values are the real box already, so they pass through untouched —
-        // that is what keeps `save_window_geometry` a fixed point.
-        assert_eq!(initial_height(Some(508), false), 508);
-        assert_eq!(initial_height(Some(508), true), 508);
+    fn initial_height_reserves_the_band_row_only_on_a_first_windows_launch() {
+        assert_eq!(initial_height(Some(508)), 508);
         if cfg!(target_os = "windows") {
-            assert_eq!(initial_height(None, false), DEFAULT_WINDOW_HEIGHT + 28);
-            // Decorated, the OS owns that row and nothing is reserved.
-            assert_eq!(initial_height(None, true), DEFAULT_WINDOW_HEIGHT);
+            assert_eq!(
+                initial_height(None),
+                DEFAULT_WINDOW_HEIGHT + BAND_HEIGHT_LOGICAL
+            );
         } else {
-            assert_eq!(initial_height(None, false), DEFAULT_WINDOW_HEIGHT);
+            assert_eq!(initial_height(None), DEFAULT_WINDOW_HEIGHT);
         }
     }
 

@@ -253,6 +253,22 @@ body {
   pointer-events: auto;
 }
 
+/* Content-only mode (spec §3.2). The band stays — it is the drag region, and
+   on Windows its row is reserved either way — but nothing inside it is
+   reachable, and it never peeks.
+
+   `visibility`, not `opacity`: an `opacity: 0` button is still a tab stop, and
+   this band never reveals, so tabbing would move focus onto controls that can
+   never become visible. That is the trap 4C had to fix for the history nav,
+   with the difference that there the fix was to reveal and here there is
+   nothing to reveal. `visibility: hidden` takes all three out of the tab order
+   and out of hit-testing in one property. */
+#app[data-chrome='content'] .history-controls,
+#app[data-chrome='content'] #settings-toggle,
+#app[data-chrome='content'] .window-controls {
+  visibility: hidden;
+}
+
 .controls button {
   font-family: var(--font-ui);
   font-size: var(--text-tag);

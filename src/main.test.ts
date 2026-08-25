@@ -816,6 +816,67 @@ describe('the titlebar band', () => {
     expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
   });
 
+  test('content mode does not peek', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'content' });
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    const appEl = document.querySelector('#app')!;
+    await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('content'));
+
+    // The reveal is header mode's alone. happy-dom resolves no layout, so the
+    // proof here is the absent backend call and the absent class, not a height.
+    appEl.dispatchEvent(new Event('pointerenter'));
+    expect(appEl.classList.contains('peeked')).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', expect.anything());
+  });
+
+  test('header mode still peeks', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    const appEl = document.querySelector('#app')!;
+    await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('header'));
+
+    appEl.dispatchEvent(new Event('pointerenter'));
+    expect(appEl.classList.contains('peeked')).toBe(true);
+    expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: true, height: 28 });
+  });
+
+  test('switching to content mid-peek drops the peek', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    const appEl = document.querySelector('#app')!;
+    await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('header'));
+    appEl.dispatchEvent(new Event('pointerenter'));
+    expect(appEl.classList.contains('peeked')).toBe(true);
+
+    emit('settings-changed', { chrome_mode: 'content' });
+    expect(appEl.classList.contains('peeked')).toBe(false);
+    expect(appEl.classList.contains('peek-offset')).toBe(false);
+  });
+
   // The history pair sits ahead of the gear, so it is the first tab stop in
   // the band. In frameless idle mode that stop starts at opacity 0 — an
   // invisible tab stop is a WCAG 2.4.7 trap unless focus peeks the chrome the
