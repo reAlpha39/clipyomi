@@ -95,6 +95,11 @@ a user reading an older step must not be yanked forward. This is the one place
 where "skip the push" and "skip the whole event" differ, and getting it wrong is
 a visible bug.
 
+The cursor not moving does not mean nothing happens: `show` calls `display`
+unconditionally, so a skipped duplicate still tears down and rebuilds the view
+identically — closing any tooltip that was open. Only the cursor position is
+protected; the render is not skipped.
+
 The surface text rather than a deep compare of the whole result: it is the
 identity of the input, it is cheap, and two parses of the same text are
 interchangeable to a reader even if a dictionary rebuild between them changed an
@@ -200,8 +205,8 @@ gear/minimise/close cluster, where a mis-click costs the window.
   colour token, so the blend is against whatever background the theme supplies —
   `--color-rule` reads clearly on the dark background and nearly vanishes on the
   light one.
-- Both IDs join the two `[data-decorations='false']` rules, so the pair hides and
-  peeks with the rest of the chrome in frameless mode.
+- A single `.history-controls` class selector joins the two `[data-decorations='false']`
+  rules, so the pair hides and peeks with the rest of the chrome in frameless mode.
 
 ### 7.1 The focus trap this creates
 
@@ -257,3 +262,21 @@ which owns the suite.
   older sentence.
 - A history-cleared control. Nothing sensitive is stored that a restart does not
   already drop.
+- **Focus on disable.** A keyboard user pressing Back repeatedly loses focus to
+  `<body>` the moment they reach the oldest entry, because a focused control
+  that becomes `disabled` is blurred by the browser — and in frameless mode
+  that blur briefly arms the band's hide. It self-heals in one Tab (the next
+  stop is Forward, whose focus re-peeks) and the hide delay is 1 s, so the
+  damage is a flicker. `aria-disabled` plus a guarded no-op handler would keep
+  the tab position, at the cost of a focusable dead control.
+- **Navigation is silent to a screen reader.** `#output` is not a live region,
+  so Back changes the whole sentence with no announcement. Not a regression —
+  a clipboard-driven parse is equally silent — but 4C introduces the first
+  *user-initiated* content swap in that pane, which is what WCAG 4.1.3 is
+  about. No cheap fix that isn't noisy on every parse.
+- **`HISTORY_CAP` bounds entries, not bytes.** A retained `ParseResult` carries
+  every `Entry` with its full senses, glosses, xrefs and misc, and the parser
+  caps entries per segment nowhere. With a 10,000-character input limit, 50
+  retained chapter-sized parses is a materially larger webview heap than §2/§3's
+  cost analysis (which weighs only the dev-reload cost) implies. Cheap to bound
+  later by lowering the cap or dropping `entries` on older steps.
