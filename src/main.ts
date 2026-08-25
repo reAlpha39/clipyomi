@@ -381,9 +381,16 @@ app.addEventListener('pointerleave', hidePeek);
 
 // Keyboard parity: the gear is a tab stop even while invisible, and only the
 // backend can grow the frame, so focus has to drive the same path as hover
-// rather than leaning on a CSS `:focus-within` rule.
+// rather than leaning on a CSS `:focus-within` rule. The history pair sits
+// ahead of the gear in tab order, so it needs the same pair of listeners —
+// otherwise it is the first, invisible tab stop once there is history to walk
+// (spec §7.1, a WCAG 2.4.7 trap).
 settingsToggle?.addEventListener('focus', showPeek);
 settingsToggle?.addEventListener('blur', hidePeek);
+historyBackButton?.addEventListener('focus', showPeek);
+historyBackButton?.addEventListener('blur', hidePeek);
+historyForwardButton?.addEventListener('focus', showPeek);
+historyForwardButton?.addEventListener('blur', hidePeek);
 
 /**
  * Tells the backend the background colour this page renders.

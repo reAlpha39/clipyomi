@@ -784,6 +784,36 @@ describe('the titlebar band', () => {
 
     expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
   });
+
+  // The history pair sits ahead of the gear, so it is the first tab stop in
+  // the band. In frameless idle mode that stop starts at opacity 0 — an
+  // invisible tab stop is a WCAG 2.4.7 trap unless focus peeks the chrome the
+  // same way the gear already does.
+  test.each([
+    ['#history-back', () => document.querySelector<HTMLButtonElement>('#history-back')!],
+    ['#history-forward', () => document.querySelector<HTMLButtonElement>('#history-forward')!],
+  ])('focusing %s peeks the chrome, and blur hides it after the grace period', async (_name, getButton) => {
+    vi.useFakeTimers();
+    try {
+      await load(false);
+      await Promise.resolve();
+      await Promise.resolve();
+      // Disabled buttons take no focus, so a fresh launch cannot reveal the
+      // trap — it only shows once there is history to walk.
+      getButton().disabled = false;
+
+      getButton().dispatchEvent(new Event('focus'));
+      expect(shell().classList.contains('peeked')).toBe(true);
+
+      getButton().dispatchEvent(new Event('blur'));
+      expect(shell().classList.contains('peeked')).toBe(true);
+
+      vi.advanceTimersByTime(1000);
+      expect(shell().classList.contains('peeked')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('window geometry save on resize/move', () => {

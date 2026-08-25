@@ -236,6 +236,7 @@ body {
 }
 
 /* Hidden decorations mode: idle hides controls; peek reveals them */
+#app[data-decorations='false'] .history-controls,
 #app[data-decorations='false'] #settings-toggle,
 #app[data-decorations='false'] .window-controls {
   opacity: 0;
@@ -243,6 +244,7 @@ body {
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 
+#app[data-decorations='false'].peeked .history-controls,
 #app[data-decorations='false'].peeked #settings-toggle,
 #app[data-decorations='false'].peeked .window-controls {
   opacity: 1;
@@ -258,6 +260,49 @@ body {
   border-radius: 3px;
   padding: 3px 8px;
   cursor: pointer;
+}
+
+/* --- Parse History Nav ---
+   Sits ahead of the gear at the left end of the band (spec §7): the empty
+   space `margin-left: auto` on #settings-toggle leaves there, and where a
+   browser puts Back/Forward. Same drag-region stacking as the gear and
+   window buttons: `position: relative; z-index: 60` keeps the pair
+   clickable above the `data-tauri-drag-region` band. */
+.history-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+  z-index: 60;
+}
+
+.history-controls button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+.history-controls button:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+/* Disabled, not hidden, at the ends (§7): opacity against whatever background
+   the theme supplies, rather than a dimmer colour token that reads
+   differently per theme. */
+.history-controls button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 #settings-toggle {
@@ -429,6 +474,7 @@ rt.romaji {
   .chip:hover { transform: none; }
   .segmented-control button { transition: none; }
   #settings-toggle { transition: none; }
+  .history-controls button { transition: none; }
   .spinner { animation: none; }
 }
 
