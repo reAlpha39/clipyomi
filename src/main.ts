@@ -16,6 +16,7 @@ import {
   type Rect,
 } from './render/popover';
 import { clampFont, fontVars } from './font-sizes';
+import { createHistory } from './history';
 import type { FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
 
@@ -44,6 +45,18 @@ app.innerHTML = `
   <div class="resize-handle resize-bottom-left" data-direction="SouthWest"></div>
   <div class="resize-handle resize-bottom-right" data-direction="SouthEast"></div>
   <header class="controls" data-tauri-drag-region>
+    <nav class="history-controls" aria-label="Parse history">
+      <button id="history-back" type="button" title="Back" aria-label="Back" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+      <button id="history-forward" type="button" title="Forward" aria-label="Forward" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+    </nav>
     <button id="settings-toggle" type="button" title="Settings" aria-label="Settings">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
@@ -229,6 +242,11 @@ const settingsToggle = app.querySelector<HTMLButtonElement>('#settings-toggle');
 const windowMinimize = app.querySelector<HTMLButtonElement>('#window-minimize');
 const windowClose = app.querySelector<HTMLButtonElement>('#window-close');
 const headerControls = app.querySelector<HTMLElement>('header.controls');
+const historyBackButton = app.querySelector<HTMLButtonElement>('#history-back');
+const historyForwardButton = app.querySelector<HTMLButtonElement>('#history-forward');
+
+/** This session's parse history (§5, §6.1) — one buffer for this webview. */
+const history = createHistory();
 
 settingsToggle?.addEventListener('click', () => {
   void invoke('open_settings_window').catch(() => {});
@@ -963,17 +981,46 @@ void listen('tauri://scale-change', () => {
   // Same reasoning as the `move` listener above.
 });
 
-function show(result: ParseResult): void {
+/** Keeps both buttons' `disabled` state in sync with the history's cursor. */
+function syncHistoryButtons(): void {
+  if (historyBackButton) historyBackButton.disabled = !history.canBack();
+  if (historyForwardButton) historyForwardButton.disabled = !history.canForward();
+}
+
+/**
+ * Renders `result`, or does nothing for `null` — the value `history.back()`
+ * and `history.forward()` return at either end, so the click handlers below
+ * pass them straight through with no guard of their own.
+ *
+ * The only writer of `lastResult`: `segmentAt` resolves a hover against
+ * whatever this last rendered, so a chip in a parse navigated back to opens
+ * its own tooltip rather than the newest parse's (§6.2).
+ */
+function display(result: ParseResult | null): void {
+  if (result === null) return;
   // Before anything is replaced: a popover left open would be anchored to a
   // chip from the previous sentence that is about to leave the document.
   closePopover();
   lastResult = result;
 
   const sentence = renderSentence(result, currentFuriganaMode);
-
-  parseError.replaceChildren();
   output.replaceChildren(sentence);
+  syncHistoryButtons();
 }
+
+function show(result: ParseResult): void {
+  history.push(result);
+  // Cleared here, not in `display`: a new parse always clears a standing
+  // error, but navigating must not — the previous parse stays readable while
+  // the user works out what went wrong (§6.2).
+  parseError.replaceChildren();
+  // `push` may have skipped `result` as a duplicate of the newest, so the
+  // parse actually on screen has to be asked for rather than assumed.
+  display(history.current());
+}
+
+historyBackButton?.addEventListener('click', () => display(history.back()));
+historyForwardButton?.addEventListener('click', () => display(history.forward()));
 
 // `listen()`'s returned promise resolves only once its IPC round trip has
 // registered the handler on the Rust side. The clipboard poll's first tick

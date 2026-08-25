@@ -1322,3 +1322,153 @@ describe('the gloss size reaching the popover window', () => {
     ]);
   });
 });
+
+describe('the header history buttons', () => {
+  /** A parse whose surface (and, optionally, reading/entries) distinguish it. */
+  function parse(
+    surface: string,
+    opts: { reading?: string | null; entries?: unknown[] } = {},
+  ) {
+    return {
+      segments: [
+        {
+          start: 0,
+          len: surface.length,
+          surface,
+          reading: opts.reading ?? null,
+          matched: true,
+          entries: opts.entries ?? [],
+        },
+      ],
+    };
+  }
+
+  function historyBack(): HTMLButtonElement {
+    return document.querySelector<HTMLButtonElement>('#history-back')!;
+  }
+
+  function historyForward(): HTMLButtonElement {
+    return document.querySelector<HTMLButtonElement>('#history-forward')!;
+  }
+
+  beforeEach(async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({});
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  test('both buttons start disabled', () => {
+    expect(historyBack().disabled).toBe(true);
+    expect(historyForward().disabled).toBe(true);
+  });
+
+  test('a single parse leaves both buttons disabled', () => {
+    emit('parse-result', parse('猫'));
+
+    expect(historyBack().disabled).toBe(true);
+    expect(historyForward().disabled).toBe(true);
+  });
+
+  test('a second parse enables Back only', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+
+    expect(historyBack().disabled).toBe(false);
+    expect(historyForward().disabled).toBe(true);
+  });
+
+  test('Back renders the previous parse and flips both disabled states', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+
+    historyBack().click();
+
+    expect(document.querySelector('.chip')?.textContent).toBe('猫');
+    expect(historyBack().disabled).toBe(true);
+    expect(historyForward().disabled).toBe(false);
+  });
+
+  test('Forward returns to the newer parse', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+    historyBack().click();
+
+    historyForward().click();
+
+    expect(document.querySelector('.chip')?.textContent).toBe('犬');
+    expect(historyBack().disabled).toBe(false);
+    expect(historyForward().disabled).toBe(true);
+  });
+
+  // segmentAt resolves a hover against `lastResult`, which `display` — not
+  // `show` — writes. If a nav step failed to update it, this would find the
+  // newest parse's entries instead of the one actually on screen.
+  test('a hover after navigating emits popover-content for the displayed parse entries', () => {
+    const catEntries = [
+      { headword: '猫', reading: 'ねこ', conjugation: null, pos: ['n'], senses: [], flags: [] },
+    ];
+    const dogEntries = [
+      { headword: '犬', reading: 'いぬ', conjugation: null, pos: ['n'], senses: [], flags: [] },
+    ];
+    emit('parse-result', parse('猫', { entries: catEntries }));
+    emit('parse-result', parse('犬', { entries: dogEntries }));
+    historyBack().click();
+
+    document
+      .querySelector<HTMLElement>('.chip')
+      ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+
+    expect(emitted).toContainEqual([
+      'popover-content',
+      expect.objectContaining({ entries: catEntries }),
+    ]);
+  });
+
+  test('a new parse takes over the view and keeps the entries ahead of the cursor', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+    historyBack().click(); // viewing 猫, with 犬 ahead of the cursor
+
+    emit('parse-result', parse('鳥'));
+
+    expect(document.querySelector('.chip')?.textContent).toBe('鳥');
+    expect(historyBack().disabled).toBe(false);
+    expect(historyForward().disabled).toBe(true);
+
+    historyBack().click();
+    expect(document.querySelector('.chip')?.textContent).toBe('犬');
+    historyBack().click();
+    expect(document.querySelector('.chip')?.textContent).toBe('猫');
+  });
+
+  test('a duplicate of the newest leaves the view where it is', () => {
+    emit('parse-result', parse('猫'));
+    emit('parse-result', parse('犬'));
+    historyBack().click(); // viewing 猫, 犬 is the newest
+
+    emit('parse-result', parse('犬')); // repeats the newest — skipped, per design §5
+
+    expect(document.querySelector('.chip')?.textContent).toBe('猫');
+    expect(historyBack().disabled).toBe(true);
+    expect(historyForward().disabled).toBe(false);
+  });
+
+  test('a parse navigated to renders with the furigana mode current now', () => {
+    emit('parse-result', parse('東京', { reading: 'とうきょう' }));
+    emit('parse-result', parse('犬'));
+    emit('settings-changed', { furigana_mode: 'hiragana' });
+
+    historyBack().click();
+
+    expect(document.querySelector('.chip ruby rt')?.textContent).toBe('とうきょう');
+  });
+});
