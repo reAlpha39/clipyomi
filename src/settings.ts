@@ -70,10 +70,15 @@ export function initSettingsApp(container: HTMLElement) {
           <input type="checkbox" id="setting-clipboard-monitoring" />
           <span class="label-text">Clipboard monitoring</span>
         </label>
-        <label class="settings-checkbox-row">
-          <input type="checkbox" id="setting-decorations" />
-          <span class="label-text">Title bar &amp; window borders</span>
-        </label>
+      </section>
+
+      <section class="settings-group">
+        <h2 class="settings-group-title">Window Chrome</h2>
+        <div class="segmented-control" role="radiogroup" aria-label="Window chrome">
+          <button type="button" role="radio" data-chrome-mode="native" aria-checked="true" title="Native frame: the OS draws the title bar">Native</button>
+          <button type="button" role="radio" data-chrome-mode="header" aria-checked="false" title="Header: our band, revealed on hover">Header</button>
+          <button type="button" role="radio" data-chrome-mode="content" aria-checked="false" title="Content only: nothing above the sentence">Content</button>
+        </div>
       </section>
     </div>
   `;
@@ -83,7 +88,6 @@ export function initSettingsApp(container: HTMLElement) {
   const hideUsage = container.querySelector<HTMLInputElement>('#setting-hide-usage')!;
   const alwaysOnTop = container.querySelector<HTMLInputElement>('#setting-always-on-top')!;
   const monitoring = container.querySelector<HTMLInputElement>('#setting-clipboard-monitoring')!;
-  const decorations = container.querySelector<HTMLInputElement>('#setting-decorations')!;
   const fontSentence = container.querySelector<HTMLInputElement>('#setting-font-sentence')!;
   const fontGloss = container.querySelector<HTMLInputElement>('#setting-font-gloss')!;
   const furiganaScale = container.querySelector<HTMLInputElement>('#setting-furigana-scale')!;
@@ -92,10 +96,17 @@ export function initSettingsApp(container: HTMLElement) {
   );
 
   let currentMode: FuriganaMode = 'none';
-  // Task 5 replaces the checkbox with a three-way control. Until then this
-  // maps the two states it can express, so the phase has no commit where the
-  // title-bar toggle does nothing.
+
+  const chromeButtons = container.querySelectorAll<HTMLButtonElement>('[data-chrome-mode]');
+
   let currentChrome: ChromeMode = 'native';
+
+  function updateChromeButtons(mode: ChromeMode) {
+    currentChrome = mode;
+    chromeButtons.forEach((btn) => {
+      btn.setAttribute('aria-checked', String(btn.dataset.chromeMode === mode));
+    });
+  }
 
   function updateFuriganaButtons(mode: FuriganaMode) {
     currentMode = mode;
@@ -148,10 +159,7 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.hide_usage !== undefined) hideUsage.checked = s.hide_usage;
     if (s.always_on_top !== undefined) alwaysOnTop.checked = s.always_on_top;
     if (s.clipboard_monitoring !== undefined) monitoring.checked = s.clipboard_monitoring;
-    if (s.chrome_mode !== undefined) {
-      currentChrome = s.chrome_mode;
-      decorations.checked = s.chrome_mode === 'native';
-    }
+    if (s.chrome_mode !== undefined) updateChromeButtons(s.chrome_mode);
     if (s.furigana_mode !== undefined) updateFuriganaButtons(s.furigana_mode);
     if (s.font_sentence !== undefined) fontSentence.value = String(s.font_sentence);
     if (s.font_gloss !== undefined) fontGloss.value = String(s.font_gloss);
@@ -176,11 +184,29 @@ export function initSettingsApp(container: HTMLElement) {
     saveAndBroadcast();
   });
 
-  decorations.addEventListener('change', () => {
-    currentChrome = decorations.checked ? 'native' : 'header';
-    void invoke('set_chrome_mode', { mode: currentChrome }).catch(() => {});
-    saveAndBroadcast();
+  chromeButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.chromeMode as ChromeMode;
+      if (!mode) return;
+      updateChromeButtons(mode);
+      void invoke('set_chrome_mode', { mode }).catch(() => {});
+      saveAndBroadcast();
+    });
   });
+
+  /**
+   * Windows has no native-frame state (spec §4), so the button naming it goes.
+   *
+   * Removed rather than disabled: the backend resolves `native` to `header`
+   * there, so a disabled-but-present button would sit next to a control showing
+   * a mode the window is not in. `querySelectorAll` above is a static NodeList,
+   * so the removed node simply stops being found by the loops.
+   */
+  void invoke<string>('platform')
+    .then((p) => {
+      if (p === 'windows') container.querySelector('[data-chrome-mode="native"]')?.remove();
+    })
+    .catch(() => {});
 
   furiganaButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
