@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
-import { MENU_MARGIN, clampMenu } from './context-menu';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { MENU_MARGIN, clampMenu, closeContextMenu, openContextMenu, type MenuEntry } from './context-menu';
 
 const SIZE = { width: 140, height: 120 };
 const VIEWPORT = { width: 400, height: 300 };
@@ -41,5 +41,88 @@ describe('clampMenu', () => {
       left: MENU_MARGIN,
       top: MENU_MARGIN,
     });
+  });
+});
+
+describe('openContextMenu', () => {
+  const selected: string[] = [];
+
+  function entries(): MenuEntry[] {
+    return [
+      { kind: 'radio', label: 'Native frame', checked: true, onSelect: () => selected.push('native') },
+      { kind: 'radio', label: 'Content only', checked: false, onSelect: () => selected.push('content') },
+      { kind: 'separator' },
+      { kind: 'action', label: 'Quit', onSelect: () => selected.push('quit') },
+    ];
+  }
+
+  beforeEach(() => {
+    selected.length = 0;
+    document.body.innerHTML = '';
+  });
+
+  afterEach(closeContextMenu);
+
+  const menu = () => document.querySelector<HTMLElement>('.context-menu');
+
+  test('renders one button per entry, with the separator between them', () => {
+    openContextMenu(entries(), 10, 10);
+    const labels = [...menu()!.querySelectorAll('button')].map((b) => b.textContent);
+    expect(labels).toEqual(['Native frame', 'Content only', 'Quit']);
+    expect(menu()!.querySelectorAll('[role="separator"]')).toHaveLength(1);
+  });
+
+  test('marks the checked radio and leaves the actions unmarked', () => {
+    openContextMenu(entries(), 10, 10);
+    const buttons = [...menu()!.querySelectorAll('button')];
+    expect(buttons[0].getAttribute('aria-checked')).toBe('true');
+    expect(buttons[1].getAttribute('aria-checked')).toBe('false');
+    expect(buttons[2].getAttribute('role')).toBe('menuitem');
+    expect(buttons[2].hasAttribute('aria-checked')).toBe(false);
+  });
+
+  test('a click runs the entry and closes the menu', () => {
+    openContextMenu(entries(), 10, 10);
+    menu()!.querySelectorAll<HTMLButtonElement>('button')[1].click();
+    expect(selected).toEqual(['content']);
+    expect(menu()).toBeNull();
+  });
+
+  test('opening again replaces the open menu rather than stacking one', () => {
+    openContextMenu(entries(), 10, 10);
+    openContextMenu(entries(), 20, 20);
+    expect(document.querySelectorAll('.context-menu')).toHaveLength(1);
+  });
+
+  test('Escape closes it', () => {
+    openContextMenu(entries(), 10, 10);
+    menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(menu()).toBeNull();
+  });
+
+  test('the arrows wrap around the items', () => {
+    openContextMenu(entries(), 10, 10);
+    const buttons = [...menu()!.querySelectorAll<HTMLButtonElement>('button')];
+    expect(document.activeElement).toBe(buttons[0]);
+
+    menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(buttons[2]);
+    menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(buttons[0]);
+  });
+
+  test('a pointerdown outside closes it, one inside does not', () => {
+    openContextMenu(entries(), 10, 10);
+    menu()!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(menu()).not.toBeNull();
+
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    expect(menu()).toBeNull();
+  });
+
+  test('losing window focus closes it', () => {
+    openContextMenu(entries(), 10, 10);
+    window.dispatchEvent(new Event('blur'));
+    expect(menu()).toBeNull();
   });
 });

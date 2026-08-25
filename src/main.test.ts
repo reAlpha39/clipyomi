@@ -906,6 +906,121 @@ describe('the titlebar band', () => {
       vi.useRealTimers();
     }
   });
+
+  test('a right-click opens the chrome menu and suppresses the default one', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'content' });
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    await vi.waitFor(() =>
+      expect(document.querySelector('#app')!.getAttribute('data-chrome')).toBe('content'),
+    );
+
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+
+    const labels = [...document.querySelectorAll('.context-menu button')].map(
+      (b) => b.textContent,
+    );
+    expect(labels).toEqual([
+      'Native frame',
+      'Header + resize edges',
+      'Content only',
+      'Settings…',
+      'Quit',
+    ]);
+    expect(
+      document
+        .querySelector('.context-menu button[aria-checked="true"]')!
+        .textContent,
+    ).toBe('Content only');
+  });
+
+  test('the menu omits the native mode on Windows', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
+      if (cmd === 'platform') return Promise.resolve('windows');
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    await vi.waitFor(() =>
+      expect(document.querySelector('#app')!.getAttribute('data-platform')).toBe('windows'),
+    );
+
+    document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const labels = [...document.querySelectorAll('.context-menu button')].map(
+      (b) => b.textContent,
+    );
+    expect(labels).not.toContain('Native frame');
+    expect(labels).toContain('Header + resize edges');
+  });
+
+  test('picking a mode from the menu applies, persists and broadcasts it', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'native' });
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    const appEl = document.querySelector('#app')!;
+    await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('native'));
+
+    document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const item = [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')].find(
+      (b) => b.textContent === 'Content only',
+    )!;
+    item.click();
+
+    // Applied locally as well as broadcast: the emit round-trip is async, and
+    // the mode should change on the frame the user clicked.
+    expect(appEl.getAttribute('data-chrome')).toBe('content');
+    expect(invoke).toHaveBeenCalledWith('set_chrome_mode', { mode: 'content' });
+    expect(emitted.at(-1)).toEqual(['settings-changed', { chrome_mode: 'content' }]);
+  });
+
+  test('Settings… and Quit route to their existing commands', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'content' });
+      if (cmd === 'platform') return Promise.resolve('macos');
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('get_settings'));
+
+    const open = (label: string) => {
+      document.body.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+      );
+      [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')]
+        .find((b) => b.textContent === label)!
+        .click();
+    };
+
+    open('Settings…');
+    expect(invoke).toHaveBeenCalledWith('open_settings_window');
+    open('Quit');
+    expect(invoke).toHaveBeenCalledWith('close_window');
+  });
 });
 
 describe('window geometry save on resize/move', () => {
