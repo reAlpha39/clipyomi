@@ -154,24 +154,26 @@ test('revealing the band leaves the content stationary when the frame cannot gro
 });
 
 // The Windows shape, checked on this machine because the branch is pure CSS and
-// the platform inputs are `platform` and `peek_grows_frame`. Windows grows the
-// frame on peek like macOS does, so `is_macos` stays false while
-// `peek_grows_frame` is true. What is NOT checked here: the frame actually
-// growing 28px upward, which is what cancels the offset asserted below — a
-// browser tab has no frame to grow, so that half stays a manual Windows check.
+// the platform inputs are `platform` and `peek_grows_frame`. Windows no longer
+// grows the frame: it reserves the band's row permanently and the backend clips
+// that row out of the window's region until a peek, so `peek_grows_frame` is
+// false here and `peek-offset` never applies. What is NOT checked here: the
+// region clip itself, which is what makes the reserved row invisible at rest —
+// a browser tab has no window region, so that half stays a Windows-only check
+// (`tools/probe-strip.mjs` measures it).
 const WINDOWS_STUB = `
   ${STUB}
   const realInvoke = window.__TAURI_INTERNALS__.invoke;
   window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
     if (cmd === 'is_macos') return Promise.resolve(false);
-    if (cmd === 'peek_grows_frame') return Promise.resolve(true);
+    if (cmd === 'peek_grows_frame') return Promise.resolve(false);
     if (cmd === 'platform') return Promise.resolve('windows');
     if (cmd === 'get_settings') return Promise.resolve({ decorations: false });
     return realInvoke(cmd, args);
   };
 `;
 
-test('the Windows shape grows the band onto the top of the window on peek', async ({ page }) => {
+test('the Windows shape reserves the band row and moves nothing on peek', async ({ page }) => {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${WINDOWS_STUB}`);
   await page.goto('/');
   await emitFixtureResult(page);
@@ -179,21 +181,22 @@ test('the Windows shape grows the band onto the top of the window on peek', asyn
   const band = page.locator('header.controls');
   const shell = page.locator('#app');
   // The band is full height on Windows even while idle — the 6px sliver is the
-  // non-Windows shape — but it reserves no row, so the sentence starts at the
-  // window's top edge.
+  // non-Windows shape — and the row is reserved for it permanently.
   expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(28);
-  await expect(shell).toHaveCSS('padding-top', '0px');
+  await expect(shell).toHaveCSS('padding-top', '28px');
 
   const before = await page.locator('.sentence').evaluate((el) => el.getBoundingClientRect().top);
   await band.hover();
   await expect(page.locator('#settings-toggle')).toHaveCSS('opacity', '1');
   const after = await page.locator('.sentence').evaluate((el) => el.getBoundingClientRect().top);
 
-  // Same contract as the macOS case: the content moves DOWN by the band height
-  // inside the window while the frame grows upward by the same amount, so the
-  // band is added on top of the window rather than covering the first line.
+  // The point of the redesign, and this is the assertion that guards it: a peek
+  // changes NO layout. The row is already reserved, so the padding does not
+  // move and neither does the sentence. Growing the frame instead made every
+  // reveal race a page-wide reflow, measured flashing the desktop on 39% of
+  // peeks against 2.7% now.
   await expect(shell).toHaveCSS('padding-top', '28px');
-  expect(after - before).toBe(28);
+  expect(after - before).toBe(0);
 });
 
 test('the gear reveals itself when it takes keyboard focus', async ({ page }) => {

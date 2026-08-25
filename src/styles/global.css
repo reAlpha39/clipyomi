@@ -47,16 +47,18 @@ body {
   position: relative;
 }
 
-/* Windows: the in-app band is the title bar.
-   Decorated mode reserves the top 28px row.
-   Undecorated mode lets content fill the full window; on hover the frame grows
-   28px upward and `peek-offset` below reserves the row the band lands in. */
+/* Windows: the in-app band is the title bar, and BOTH modes reserve the top
+   28px row for it.
+   Undecorated mode used to reserve nothing and let content fill the window, then
+   add `peek-offset` on hover while the frame grew 28px upward. That made every
+   peek reflow the whole page against a geometry change, which was measured
+   flashing the desktop on 39% of reveals. Reserving the row permanently means a
+   peek changes no layout at all: the window is a band taller than it looks, the
+   region clips the row away at rest, and revealing it is a clip change over
+   pixels the webview has already painted. 1% of reveals, and the frontend gets
+   simpler rather than more complex. */
 #app[data-platform='windows'] {
   padding-top: var(--band-h);
-}
-
-#app[data-platform='windows'][data-decorations='false'] {
-  padding-top: 0;
 }
 
 .controls {
@@ -218,11 +220,12 @@ body {
   z-index: 10;
 }
 
-/* Every platform whose frame grows upward on peek (macOS, Windows): the band is
-   added above the window, so the content shifts down by exactly the amount the
-   frame grew and stays put on screen. Wins the specificity tie against the
-   Windows `padding-top: 0` above by coming later. */
-#app[data-decorations='false'].peek-offset {
+/* macOS, whose frame still grows upward on peek: the band is added above the
+   window, so the content shifts down by exactly the amount the frame grew and
+   stays put on screen. `peek_grows_frame()` reports false on Windows, so the
+   class never lands there — and it must not, since the Windows row is reserved
+   permanently and this padding would shift the content a second time. */
+#app:not([data-platform='windows'])[data-decorations='false'].peek-offset {
   padding-top: var(--band-h);
 }
 
