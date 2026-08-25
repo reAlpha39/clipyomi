@@ -48,7 +48,7 @@ against the sentence on screen. Nothing enters Rust.
       by incrementing** — that is what keeps the cursor off a slot the shift
       moved.
 
-**Verify:** `npx vitest run src/history.test.ts` — 16 tests green.
+**Verify:** `npx vitest run src/history.test.ts` — green, with a test for every behaviour listed in Step 1.
 
 ---
 
@@ -64,7 +64,7 @@ against the sentence on screen. Nothing enters Rust.
       and keeps the entries ahead of the cursor; a duplicate of the newest leaves
       the view where it is; a parse navigated to renders with the furigana mode
       current now.
-- [ ] **Step 2:** Run. Expect nine failures, all `Cannot read properties of null
+- [ ] **Step 2:** Run. Expect every new test to fail with `Cannot read properties of null
       (reading 'click')` — the buttons do not exist yet.
 - [ ] **Step 3:** Add the `<nav class="history-controls">` with `#history-back`
       and `#history-forward`, both `disabled`, ahead of `#settings-toggle` in the
@@ -110,7 +110,7 @@ including the pre-existing `main.test.ts` cases untouched by the split.
       `nav.history-controls` resolves to `opacity: 0` while idle and `1` after
       the band is hovered. This is the only layer that can prove the shared CSS
       rule, since happy-dom applies no stylesheets.
-- [ ] **Step 2:** Regenerate the six full-page baselines that include the header
+- [ ] **Step 2:** Regenerate the ten full-page baselines that include the header
       (`panes-default-*`, `panes-compact-*`, `panes-activated-*`,
       `panes-download-offer-*`, `panes-download-downloading-*`) with
       `--update-snapshots`, and eyeball one dark and one light before accepting
