@@ -8,12 +8,6 @@
 //! One-off asset conversion: ta-old's UTF-16LE Conjugations.txt to UTF-8 JSON.
 //!
 //! Run with: cargo run -p xtask -- convert-conjugations
-//!
-//! THROWAWAY PROBE (spike, revert me): also carries `probe-sample`, the screen
-//! sampler behind `tools/probe-strip.mjs`.
-
-#[cfg(windows)]
-mod probe;
 
 use std::fs;
 use std::path::Path;
@@ -23,31 +17,8 @@ const DEST: &str = "crates/jparser/assets/conjugations.json";
 const UTF16LE_BOM: [u8; 2] = [0xFF, 0xFE];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // THROWAWAY PROBE (spike, revert me).
-    #[cfg(windows)]
-    if std::env::args().nth(1).as_deref() == Some("probe-sample") {
-        return probe::run();
-    }
-    #[cfg(windows)]
-    if std::env::args().nth(1).as_deref() == Some("probe-grab") {
-        return probe::grab();
-    }
-    #[cfg(windows)]
-    if std::env::args().nth(1).as_deref() == Some("probe-rect") {
-        return probe::rect();
-    }
-    #[cfg(windows)]
-    if std::env::args().nth(1).as_deref() == Some("probe-move") {
-        return probe::move_to();
-    }
-    #[cfg(windows)]
-    if std::env::args().nth(1).as_deref() == Some("probe-activate") {
-        return probe::activate();
-    }
-
     if std::env::args().nth(1).as_deref() != Some("convert-conjugations") {
         eprintln!("usage: cargo run -p xtask -- convert-conjugations");
-        eprintln!("       cargo run -p xtask -- probe-sample X Y W H SECONDS");
         std::process::exit(2);
     }
 

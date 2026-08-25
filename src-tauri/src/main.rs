@@ -79,10 +79,6 @@ fn main() {
                 }
             }
 
-            // THROWAWAY PROBE (spike, revert me).
-            #[cfg(target_os = "windows")]
-            commands::probe_autotoggle(app.handle().clone());
-
             // Managed as `Arc<SettingsState>`, not bare `SettingsState`: the
             // poll below needs its own `Arc` clone to hold across `.await`
             // points, and managing the bare type while giving the poll a
@@ -175,7 +171,6 @@ fn main() {
             commands::peek_grows_frame,
             commands::update_clip_region,
             commands::set_window_background,
-            commands::probe_region_clip,
             commands::platform,
             commands::is_macos,
             commands::minimize_window,
