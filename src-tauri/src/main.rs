@@ -55,9 +55,15 @@ fn main() {
                 #[cfg(target_os = "windows")]
                 {
                     commands::win32_frameless::init_window(&main_window.as_ref().window());
-                    if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
-                        let _ = main_window.set_size(tauri::LogicalSize::new(w, h));
-                    }
+                    // The window is a band taller than it looks: the reserved
+                    // row lives above the content and the region clips it away
+                    // until a peek. That row is part of the saved box, so saved
+                    // geometry restores verbatim and only a first launch has the
+                    // band added to it.
+                    let width = loaded.window_width.unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
+                    let height =
+                        commands::initial_height(loaded.window_height, loaded.decorations);
+                    let _ = main_window.set_size(tauri::LogicalSize::new(width, height));
                     if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
                         let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
                     }
@@ -72,6 +78,10 @@ fn main() {
                     }
                 }
             }
+
+            // THROWAWAY PROBE (spike, revert me).
+            #[cfg(target_os = "windows")]
+            commands::probe_autotoggle(app.handle().clone());
 
             // Managed as `Arc<SettingsState>`, not bare `SettingsState`: the
             // poll below needs its own `Arc` clone to hold across `.await`
@@ -165,6 +175,7 @@ fn main() {
             commands::peek_grows_frame,
             commands::update_clip_region,
             commands::set_window_background,
+            commands::probe_region_clip,
             commands::platform,
             commands::is_macos,
             commands::minimize_window,

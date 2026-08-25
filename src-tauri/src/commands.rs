@@ -173,9 +173,29 @@ pub mod win32_frameless {
 
     static SUBCLASSED: AtomicBool = AtomicBool::new(false);
 
+    /// Whether the band's reserved row is currently inside the region.
+    ///
+    /// The window is permanently `BAND_HEIGHT_LOGICAL` taller than it looks and
+    /// sits that much higher; at rest the region clips that row away, so the
+    /// desktop shows through it and the window appears to start at the content.
+    /// A peek puts the row back into the region, which is the whole reveal —
+    /// nothing resizes, nothing moves, and the row's pixels were painted by the
+    /// webview all along.
+    ///
+    /// Measured against the alternative of growing the frame: 39% of reveals
+    /// flashed the desktop for a frame that way, 1% this way. The difference is
+    /// the page-wide reflow that `peek-offset` used to trigger, which this
+    /// design removes by reserving the row permanently.
+    static STRIP_SHOWN: AtomicBool = AtomicBool::new(false);
+
     /// The window's background, as a COLORREF, kept in step with the theme the
     /// webview renders. `WM_ERASEBKGND` paints it.
     static BACKGROUND: AtomicU32 = AtomicU32::new(BACKGROUND_DARK);
+
+    /// THROWAWAY PROBE (spike, revert me): whether `probe_clip` waits for the
+    /// compositor before changing the region. A switch rather than a change, so
+    /// one run measures both arms of the same build.
+    pub static PROBE_FLUSH: AtomicBool = AtomicBool::new(false);
 
     #[repr(C)]
     #[derive(Clone, Copy, Default)]
@@ -212,6 +232,8 @@ pub mod win32_frameless {
     const WM_NCCALCSIZE: u32 = 0x0083;
     const WM_NCHITTEST: u32 = 0x0084;
     const WM_ERASEBKGND: u32 = 0x0014;
+    /// THROWAWAY PROBE (spike, revert me).
+    const WM_PAINT: u32 = 0x000F;
     const WM_WINDOWPOSCHANGING: u32 = 0x0046;
 
     #[repr(C)]
@@ -234,7 +256,7 @@ pub mod win32_frameless {
 
     /// The corner radius, in logical pixels, of the window region. Matches the
     /// radius Win11 itself rounds a window to.
-    const CORNER_RADIUS_LOGICAL: i32 = 8;
+    pub const CORNER_RADIUS_LOGICAL: i32 = 8;
 
     const HTCLIENT: isize = 1;
     const HTCAPTION: isize = 2;
@@ -280,7 +302,10 @@ pub mod win32_frameless {
     #[allow(non_snake_case)]
     extern "system" {
         fn GetWindowRect(hWnd: *mut c_void, lpRect: *mut RECT) -> i32;
+        /// THROWAWAY PROBE (spike, revert me).
+        fn DwmFlush() -> i32;
         fn CreateRoundRectRgn(x1: i32, y1: i32, x2: i32, y2: i32, w: i32, h: i32) -> *mut c_void;
+        fn CreateRectRgn(x1: i32, y1: i32, x2: i32, y2: i32) -> *mut c_void;
         fn SetWindowRgn(hWnd: *mut c_void, hRgn: *mut c_void, bRedraw: i32) -> i32;
         fn GetClientRect(hWnd: *mut c_void, lpRect: *mut RECT) -> i32;
         fn CreateSolidBrush(color: u32) -> *mut c_void;
@@ -325,6 +350,35 @@ pub mod win32_frameless {
             return 0;
         }
         ((n_number as i64 * n_numerator as i64) / n_denominator as i64) as i32
+    }
+
+    /// The reserved row's height in physical pixels.
+    fn strip_px(dpi: i32) -> i32 {
+        mul_div(super::BAND_HEIGHT_LOGICAL as i32, dpi, 96)
+    }
+
+    /// How much of the window's top the region clips away.
+    ///
+    /// Zero while the band is peeked, and zero in decorated mode — there the OS
+    /// draws a real title bar and clipping a band off the top would cut into it.
+    /// Read from `WS_CAPTION` rather than from a flag of our own so it cannot
+    /// drift out of step with the window the user is actually looking at.
+    fn region_top_inset(hwnd: *mut c_void, dpi: i32) -> i32 {
+        if STRIP_SHOWN.load(Ordering::Relaxed) {
+            return 0;
+        }
+        let decorated = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) as u32 } & WS_CAPTION != 0;
+        if decorated {
+            0
+        } else {
+            strip_px(dpi)
+        }
+    }
+
+    /// Where the window *looks* like it starts: its own top, plus whatever the
+    /// region clips off it.
+    fn visual_top(hwnd: *mut c_void, window_top: i32, dpi: i32) -> i32 {
+        window_top + region_top_inset(hwnd, dpi)
     }
 
     fn get_system_metrics(index: i32, dpi: u32) -> i32 {
@@ -378,22 +432,33 @@ pub mod win32_frameless {
     /// the origin and grows the window in one operation, and a region sized
     /// for the previous frame clipped a see-through strip off the bottom.
     ///
-    /// A maximized window gets no region: its corners meet the work area, and
-    /// rounding them there would show the desktop through the gap.
+    /// A maximized window keeps a rectangular region rather than none: its
+    /// corners meet the work area so rounding them would show the desktop
+    /// through the gap, but the reserved row still has to be clipped away, and
+    /// dropping the region entirely would expose it.
+    ///
+    /// The region's top edge is the reserved row's height whenever that row is
+    /// hidden, which is what makes the window look like it starts at its
+    /// content while really extending above it.
     fn apply_round_region(hwnd: *mut c_void, width: i32, height: i32) {
         unsafe {
+            let dpi = GetDpiForWindow(hwnd);
+            let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
+            let top = region_top_inset(hwnd, dpi_val);
+
             if IsZoomed(hwnd) != 0 {
-                SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
+                let rgn = CreateRectRgn(0, top, width, height);
+                if !rgn.is_null() {
+                    SetWindowRgn(hwnd, rgn, 0);
+                }
                 return;
             }
 
-            let dpi = GetDpiForWindow(hwnd);
-            let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
             let diameter = 2 * mul_div(CORNER_RADIUS_LOGICAL, dpi_val, 96);
 
             // `CreateRoundRectRgn` treats the lower-right corner as exclusive,
             // so the rect runs one past the window's width and height.
-            let rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, diameter, diameter);
+            let rgn = CreateRoundRectRgn(0, top, width + 1, height + 1, diameter, diameter);
             if !rgn.is_null() {
                 // The window owns the region from here — deleting it would
                 // free memory the system is still clipping against.
@@ -616,6 +681,13 @@ pub mod win32_frameless {
                     let x = (lparam as i32) as i16 as i32;
                     let y = ((lparam >> 16) as i32) as i16 as i32;
 
+                    // Everything below measures from where the window LOOKS
+                    // like it starts. At rest the reserved row is clipped out of
+                    // the region, so it receives no input at all — the pointer
+                    // goes to whatever is behind it — and the top resize edge
+                    // and the drag band belong at the first visible row instead.
+                    let top = visual_top(hwnd, wr.top, dpi_val);
+
                     let border_px = mul_div(6, dpi_val, 96);
                     let corner_px = mul_div(12, dpi_val, 96);
                     let band_px = mul_div(super::BAND_HEIGHT_LOGICAL as i32, dpi_val, 96);
@@ -624,10 +696,10 @@ pub mod win32_frameless {
                     let is_maximized = IsZoomed(hwnd) != 0;
 
                     if !is_maximized {
-                        if y < wr.top + corner_px && x < wr.left + corner_px {
+                        if y < top + corner_px && x < wr.left + corner_px {
                             return HTTOPLEFT;
                         }
-                        if y < wr.top + corner_px && x >= wr.right - corner_px {
+                        if y < top + corner_px && x >= wr.right - corner_px {
                             return HTTOPRIGHT;
                         }
                         if y >= wr.bottom - corner_px && x < wr.left + corner_px {
@@ -637,7 +709,7 @@ pub mod win32_frameless {
                             return HTBOTTOMRIGHT;
                         }
 
-                        if y < wr.top + border_px {
+                        if y < top + border_px {
                             return HTTOP;
                         }
                         if y >= wr.bottom - border_px {
@@ -651,7 +723,7 @@ pub mod win32_frameless {
                         }
                     }
 
-                    if y < wr.top + band_px {
+                    if y < top + band_px {
                         if x >= wr.right - buttons_width_px {
                             return HTCLIENT;
                         }
@@ -666,6 +738,11 @@ pub mod win32_frameless {
             // the colour the webview is about to draw anyway. It does not
             // remove the top-edge glitch, only shrink it.
             WM_ERASEBKGND => {
+                // THROWAWAY PROBE (spike, revert me): whether a reveal's flash
+                // coincides with a paint cycle decides which fix is the right
+                // one, so the tick goes in a buffer here and the probe thread
+                // writes it out. A push is all this arm can afford.
+                super::probe_note_paint(1);
                 let mut cr = RECT::default();
                 if GetClientRect(hwnd, &mut cr) != 0 {
                     let brush = CreateSolidBrush(BACKGROUND.load(Ordering::Relaxed));
@@ -687,6 +764,12 @@ pub mod win32_frameless {
                     apply_round_region(hwnd, pos.cx, pos.cy);
                 }
             }
+            // THROWAWAY PROBE (spike, revert me): noted, then handed straight
+            // on — the parent rarely paints, so seeing one at all near a reveal
+            // is itself the signal.
+            WM_PAINT => {
+                super::probe_note_paint(2);
+            }
             WM_DPICHANGED => {
                 apply_dwm_attributes(hwnd);
             }
@@ -704,6 +787,104 @@ pub mod win32_frameless {
     /// so the renderer gets to name its own background.
     pub fn set_background(colorref: u32) {
         BACKGROUND.store(colorref, Ordering::Relaxed);
+    }
+
+    /// THROWAWAY PROBE (spike, revert me): clips `inset_logical` px off the
+    /// top of the window with a region change and NOTHING else - no
+    /// `SetWindowPos`, no invalidate, no erase. Answers the one open question:
+    /// does a region-only reveal present already-painted pixels in the same
+    /// frame, or does it flash like a geometry change?
+    pub fn probe_clip(window: &Window, inset_logical: f64) {
+        let Ok(hwnd) = window.hwnd() else { return };
+        let hwnd = hwnd.0;
+        unsafe {
+            let dpi = GetDpiForWindow(hwnd);
+            let dpi_val = if dpi == 0 { 96 } else { dpi as i32 };
+            let inset = mul_div(inset_logical.round() as i32, dpi_val, 96);
+            let mut wr = RECT::default();
+            if GetWindowRect(hwnd, &mut wr) == 0 {
+                return;
+            }
+            let w = wr.right - wr.left;
+            let h = wr.bottom - wr.top;
+            let diameter = 2 * mul_div(CORNER_RADIUS_LOGICAL, dpi_val, 96);
+            // Region coordinates are window-relative, so `inset` as the top
+            // edge clips exactly that many pixels off the top.
+            let rgn = CreateRoundRectRgn(0, inset, w + 1, h + 1, diameter, diameter);
+            if !rgn.is_null() {
+                // REFUTED BY MEASUREMENT, off by default, kept only so the
+                // result is reproducible.
+                //
+                // The diagnosis was right: over 1019 reveals, none of the 20
+                // that flashed had a paint within 50ms, while 9 of the 999
+                // clean ones did — so the residual is a compose boundary, not
+                // the paint path. The remedy was wrong. Over 300 reveals each,
+                // matched duration: without the flush 8/300 caught, median wait
+                // 3.6ms, worst 7.9ms; with it 89/300 caught, median 12.4ms,
+                // worst 61.3ms, and 84 of those flashes spanned two sample
+                // intervals rather than one. It also dragged the sampler itself
+                // from 144Hz to 80Hz.
+                //
+                // Why: this runs on the main thread, so blocking until DWM
+                // finishes the frame in flight stalls the message pump for up
+                // to a frame and delays the webview's own presents. Aligning to
+                // the compositor is still worth trying — but scheduled off a
+                // vblank wait on another thread, never by stalling this one.
+                if PROBE_FLUSH.load(Ordering::Relaxed) {
+                    DwmFlush();
+                }
+                SetWindowRgn(hwnd, rgn, 0);
+            }
+        }
+    }
+
+    /// THROWAWAY PROBE (spike, revert me): route 1 — align the region change to
+    /// a compose boundary WITHOUT stalling the UI thread.
+    ///
+    /// ALSO REFUTED, off by default. Matched 300s runs, sentinel band, pinned
+    /// geometry, 144Hz: without it 3/298 reveals flashed and 1 stalled; with it
+    /// 9/286 flashed and 12 stalled, median wait 3.8ms to 6.9ms. Three times
+    /// worse.
+    ///
+    /// `DwmFlush` on the main thread was refuted first (see `probe_clip`) for
+    /// holding the message pump; moving it off-thread removes that objection and
+    /// the result still gets worse, which rules out compose alignment as an
+    /// approach rather than one implementation of it. Likely because `DwmFlush`
+    /// returns when DWM *finishes* a frame, so changing the region right then
+    /// lands just after it latched — missing the frame it would have made.
+    pub fn probe_wait_compose() {
+        unsafe { DwmFlush() };
+    }
+
+    /// Shows or hides the band's reserved row by changing the region alone.
+    ///
+    /// This is the entire peek on Windows. No `SetWindowPos`, no size change, no
+    /// layout change in the page — the row is reserved permanently and the
+    /// webview has already painted it, so the reveal is a clip change over
+    /// pixels that are ready.
+    pub fn set_strip_shown(window: &Window, shown: bool) {
+        if STRIP_SHOWN.swap(shown, Ordering::SeqCst) == shown {
+            return;
+        }
+        let Ok(hwnd) = window.hwnd() else { return };
+        let hwnd = hwnd.0;
+        unsafe {
+            let mut wr = RECT::default();
+            if GetWindowRect(hwnd, &mut wr) != 0 {
+                apply_round_region(hwnd, wr.right - wr.left, wr.bottom - wr.top);
+            }
+        }
+    }
+
+    /// THROWAWAY PROBE (spike, revert me): the window's rect, for checking that
+    /// an operation left it where it started.
+    pub fn probe_window_rect(window: &Window) -> Option<(i32, i32, i32, i32)> {
+        let hwnd = window.hwnd().ok()?.0;
+        let mut wr = RECT::default();
+        if unsafe { GetWindowRect(hwnd, &mut wr) } == 0 {
+            return None;
+        }
+        Some((wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top))
     }
 
     pub fn init_window(window: &Window) {
@@ -805,6 +986,44 @@ pub mod win32_frameless {
         }
 
         #[test]
+        fn repeated_grow_and_shrink_cycles_do_not_drift() {
+            // A single round trip passing is not enough: the bug this guards
+            // against was a frame's worth of height added per toggle, which only
+            // shows up as accumulation. It reached production once, from
+            // `set_decorations` using `set_size`/`set_position` (an INNER size
+            // run through `AdjustWindowRect`) instead of this arithmetic — the
+            // window grew on every titlebar check/uncheck.
+            let start = RECT {
+                left: 100,
+                top: 200,
+                right: 900,
+                bottom: 700,
+            };
+            let mut current = start;
+            for _ in 0..10 {
+                let (x, y, w, h) = top_grown(current, 28);
+                current = RECT {
+                    left: x,
+                    top: y,
+                    right: x + w,
+                    bottom: y + h,
+                };
+                let (x, y, w, h) = top_grown(current, -28);
+                current = RECT {
+                    left: x,
+                    top: y,
+                    right: x + w,
+                    bottom: y + h,
+                };
+            }
+            assert_eq!(
+                (current.left, current.top, current.right, current.bottom),
+                (start.left, start.top, start.right, start.bottom),
+                "ten grow/shrink cycles must land exactly where they started"
+            );
+        }
+
+        #[test]
         fn frameless_style_drops_the_caption_and_keeps_the_sizing_frame() {
             // The style Tauri hands us on a decorated main window.
             let decorated = 0x04CF_0000u32;
@@ -828,6 +1047,11 @@ pub mod win32_frameless {
 /// The logical height in pixels of the titlebar band on Windows.
 pub const BAND_HEIGHT_LOGICAL: u32 = 28;
 
+/// The creation size in `tauri.conf.json`, so a first launch with no saved
+/// geometry still gets the reserved row added to its height.
+pub const DEFAULT_WINDOW_WIDTH: u32 = 720;
+pub const DEFAULT_WINDOW_HEIGHT: u32 = 480;
+
 #[tauri::command]
 pub fn set_decorations(
     enabled: bool,
@@ -837,6 +1061,23 @@ pub fn set_decorations(
     let window = chrome_target(&app)?;
     #[cfg(target_os = "macos")]
     apply_decorations_macos(&window, enabled)?;
+
+    // Windows reserves the band's row only while undecorated. Turning the OS
+    // title bar on hands that row back to the OS, so the window has to shed the
+    // height it was carrying for it — and regain it on the way back — or the
+    // visible box would jump by a band on every toggle.
+    //
+    // Through `grow_top`, NOT `set_size`/`set_position`. That pair was tried
+    // here and grew the window a frame's worth on every toggle, which is exactly
+    // what `grow_top`'s own comment warns about: `set_size` takes an INNER size,
+    // this window keeps `WS_THICKFRAME`, and tao runs `AdjustWindowRect` over the
+    // value, so a matching `set_position` cannot cancel the difference and the
+    // leftover accumulates. `grow_top` moves the window rect directly.
+    #[cfg(target_os = "windows")]
+    {
+        let band = BAND_HEIGHT_LOGICAL as f64;
+        win32_frameless::grow_top(&window, if enabled { -band } else { band });
+    }
     #[cfg(target_os = "windows")]
     {
         win32_frameless::init_window(&window);
@@ -880,9 +1121,13 @@ pub fn is_macos() -> bool {
 
 /// Reports whether `peek_titlebar` grows the window frame upward on this
 /// platform to absorb the revealed titlebar band.
+///
+/// Windows does not: it reserves the row permanently and clips it away instead,
+/// so there is nothing for `peek-offset` to compensate for and adding it would
+/// shift the content it exists to hold still.
 #[tauri::command]
 pub fn peek_grows_frame() -> bool {
-    cfg!(any(target_os = "macos", target_os = "windows"))
+    cfg!(target_os = "macos")
 }
 
 #[tauri::command]
@@ -892,13 +1137,22 @@ pub fn peek_titlebar(visible: bool, height: f64, app: tauri::AppHandle) -> Resul
         return Ok(());
     }
     let window = chrome_target(&app)?;
-    // Both platforms grow the frame upward so the band is added ON TOP of the
-    // window instead of covering the first line, and the frontend's
-    // `peek-offset` padding keeps the content stationary on screen. The two
-    // arms differ in how: macOS moves the window through Tauri, where inner and
-    // outer size are the same box; Windows cannot (see `grow_top`).
+    // The band is added ON TOP of the window rather than covering the first
+    // line, but the two platforms get there differently now. macOS still grows
+    // the frame upward and relies on the frontend's `peek-offset` padding to
+    // hold the content still. Windows reserves the row permanently and only
+    // changes the region, which took the flash from 39% of reveals to 1% —
+    // growing the frame made the reveal race a page-wide reflow.
     #[cfg(target_os = "windows")]
-    win32_frameless::grow_top(&window, if visible { height } else { -height });
+    {
+        // THROWAWAY PROBE (spike, revert me): the `real` mode drives this path
+        // rather than the window directly, so the reveal is stamped here.
+        if PROBE_ACTIVE.load(Ordering::Relaxed) {
+            probe_log_toggle(visible);
+        }
+        let _ = height;
+        win32_frameless::set_strip_shown(&window, visible);
+    }
     #[cfg(target_os = "macos")]
     {
         set_titlebar_chrome(&window, visible)?;
@@ -940,6 +1194,342 @@ pub fn set_window_background(r: u8, g: u8, b: u8) {
     #[cfg(target_os = "windows")]
     win32_frameless::set_background(color);
     let _ = color;
+}
+
+/// THROWAWAY PROBE (spike, revert me): `QueryPerformanceCounter` ticks.
+///
+/// The same system-wide clock `xtask probe-sample` stamps its samples with, so
+/// a reveal logged here and a sample taken there need no alignment at all.
+#[cfg(target_os = "windows")]
+fn probe_qpc() -> i64 {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn QueryPerformanceCounter(value: *mut i64) -> i32;
+    }
+    let mut ticks: i64 = 0;
+    unsafe { QueryPerformanceCounter(&mut ticks) };
+    ticks
+}
+
+/// THROWAWAY PROBE (spike, revert me): paint ticks, buffered.
+///
+/// Written from inside the window procedure, so it does the least it can: take
+/// a tick, push, leave. The probe thread drains it to disk between toggles.
+/// Off unless `CLIPYOMI_PROBE` is set, so an ordinary run pays one atomic load.
+#[cfg(target_os = "windows")]
+static PROBE_PAINTS: std::sync::Mutex<Vec<(i64, u8)>> = std::sync::Mutex::new(Vec::new());
+#[cfg(target_os = "windows")]
+static PROBE_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// THROWAWAY PROBE (spike, revert me): one reveal, on the shared QPC clock.
+///
+/// Called from wherever the window actually changes — the probe thread for the
+/// synthetic modes, `peek_titlebar` for the real one — so the timestamp is the
+/// moment of the change and not the moment something asked for it.
+#[cfg(target_os = "windows")]
+fn probe_log_toggle(revealed: bool) {
+    probe_log_toggle_at(probe_qpc(), revealed);
+}
+
+#[cfg(target_os = "windows")]
+fn probe_log_toggle_at(at: i64, revealed: bool) {
+    use std::io::Write;
+    let path = std::env::temp_dir().join("clipyomi-probe-toggles.csv");
+    if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(path) {
+        let _ = writeln!(f, "{at},{}", u8::from(revealed));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn probe_note_paint(kind: u8) {
+    if !PROBE_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    if let Ok(mut buf) = PROBE_PAINTS.lock() {
+        buf.push((probe_qpc(), kind));
+    }
+}
+
+/// THROWAWAY PROBE (spike, revert me): the measurement driver behind
+/// `tools/probe-strip.mjs`.
+///
+/// `CLIPYOMI_PROBE=region` toggles the region clip; `CLIPYOMI_PROBE=grow`
+/// toggles the real `grow_top` geometry change, which is the calibration
+/// baseline — it glitches on essentially every reveal, so a harness that fails
+/// to see it there is too slow to be trusted on the region numbers.
+///
+/// The two dwell times are deliberately unequal. The harness identifies the
+/// revealed state by its shorter runs, which is what lets it work without
+/// aligning the app's clock to the capture's.
+#[cfg(target_os = "windows")]
+pub fn probe_autotoggle(app: tauri::AppHandle) {
+    const REVEALED_MS: u64 = 300;
+    const CLIPPED_MS: u64 = 700;
+
+    // `grow` and `region` drive the window with the page held still, which is
+    // the easy case and not what a hover does. `real` reproduces `showPeek`
+    // exactly — classes first, then the command — so the reveal races a
+    // page-wide reflow from `peek-offset`. `fixed` is the proposed design:
+    // the row is reserved permanently and the band painted permanently, so a
+    // peek changes only opacity and the clip, and nothing reflows.
+    let mode = match std::env::var("CLIPYOMI_PROBE").as_deref() {
+        Ok("region") => "region",
+        Ok("grow") => "grow",
+        Ok("real") => "real",
+        Ok("fixed") => "fixed",
+        // Pins the window and reports its geometry, then stops: no sentinel, no
+        // toggling. `tools/probe-appearance.mjs` needs the window sitting still
+        // and looking exactly as it normally does.
+        Ok("appearance") => "appearance",
+        // Toggles the title bar the way the settings checkbox does and logs the
+        // window rect each time, so drift across cycles is visible without
+        // anyone clicking. Added after `set_decorations` grew the window a
+        // frame's worth per toggle and shipped that way.
+        Ok("decorations") => "decorations",
+        _ => return,
+    };
+    let is_region = mode == "region" || mode == "fixed";
+    let flush = std::env::var("CLIPYOMI_PROBE_FLUSH").as_deref() == Ok("1");
+    win32_frameless::PROBE_FLUSH.store(flush, Ordering::Relaxed);
+    let vblank = std::env::var("CLIPYOMI_PROBE_VBLANK").as_deref() == Ok("1");
+    eprintln!("PROBE main-thread flush: {flush}, off-thread compose wait: {vblank}");
+    let Ok(window) = chrome_target(&app) else { return };
+
+    // Pinned before the geometry is reported, so runs are commensurable. The
+    // sampler's rate turned out to depend on the blitted area and where the
+    // window sat: it drifted from 144Hz to 97Hz across runs, which changes how
+    // likely a one-frame flash is to be sampled at all and made percentages
+    // from different runs incomparable.
+    // The position matters as much as the size: at logical (300, 300) the strip
+    // sat over something as dark as the app itself and the two states differed
+    // by 0.4 in RGB — indistinguishable. This spot measured 180-280 apart.
+    // `CLIPYOMI_PROBE_AT` overrides it as "x,y" when the desktop changes.
+    let (px, py) = std::env::var("CLIPYOMI_PROBE_AT")
+        .ok()
+        .and_then(|s| {
+            let (a, b) = s.split_once(',')?;
+            Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+        })
+        .unwrap_or((1194.0, 284.0));
+    let _ = window.set_size(tauri::LogicalSize::new(800.0, 300.0));
+    let _ = window.set_position(tauri::LogicalPosition::new(px, py));
+
+    // Physical geometry, handed to the harness through a file so neither side
+    // has to parse the other's log.
+    let band = BAND_HEIGHT_LOGICAL as f64;
+    if let (Ok(pos), Ok(size), Ok(scale)) = (
+        window.outer_position(),
+        window.outer_size(),
+        window.scale_factor(),
+    ) {
+        let payload = format!(
+            "{{\"mode\":\"{}\",\"x\":{},\"y\":{},\"w\":{},\"h\":{},\"band\":{},\"radius\":{},\"revealed_ms\":{},\"clipped_ms\":{}}}",
+            mode,
+            pos.x,
+            pos.y,
+            size.width,
+            size.height,
+            (band * scale).round() as i32,
+            (win32_frameless::CORNER_RADIUS_LOGICAL as f64 * scale).round() as i32,
+            REVEALED_MS,
+            CLIPPED_MS,
+        );
+        let path = std::env::temp_dir().join("clipyomi-probe.json");
+        let _ = std::fs::write(&path, &payload);
+        eprintln!("PROBE {payload}");
+        eprintln!("PROBE geometry written to {}", path.display());
+    }
+
+    // Nothing may cover the strip: `BitBlt` reads the screen, so an overlapping
+    // window would be sampled instead of this one.
+    let _ = window.set_always_on_top(true);
+
+    if mode == "decorations" {
+        let app2 = app.clone();
+        std::thread::spawn(move || {
+            let mut enabled = false;
+            for i in 0..12 {
+                std::thread::sleep(std::time::Duration::from_millis(700));
+                enabled = !enabled;
+                let app3 = app2.clone();
+                let _ = app2.run_on_main_thread(move || {
+                    let state = app3.state::<Arc<SettingsState>>();
+                    let _ = set_decorations(enabled, app3.clone(), state);
+                    if let Ok(w) = chrome_target(&app3) {
+                        if let Some(r) = win32_frameless::probe_window_rect(&w) {
+                            eprintln!("PROBE_DECOR {i} enabled={enabled} rect={r:?}");
+                        }
+                    }
+                });
+            }
+            eprintln!("PROBE_DECOR done");
+        });
+        return;
+    }
+
+    if mode == "appearance" {
+        // Focused, because the defect being chased only appears once the window
+        // is activated. The harness cannot do this from outside — Windows
+        // refuses `SetForegroundWindow` to a background process — but the window
+        // may focus itself.
+        let _ = window.set_focus();
+        return;
+    }
+
+    let webview = app.get_webview_window("main");
+
+    // A sentinel colour in the band, for every mode.
+    //
+    // Whether the strip shows the band or shows through has to be decidable
+    // from one pixel, and relying on the app's own dark UI against whatever
+    // happens to be behind the window is not: two runs measured the states 0.4
+    // and 0.6 apart in RGB — indistinguishable — and before the classifier was
+    // fixed, k-means happily invented 160ms flashes out of that noise. Magenta
+    // appears nowhere else, so separation is guaranteed whatever is behind. The
+    // measurement is about when pixels arrive, not which pixels.
+    if let Some(wv) = &webview {
+        let _ = wv.eval(
+            "(() => { const s = document.createElement('style'); s.id = 'probe-sentinel'; \
+             s.textContent = '#app::before{content:\"\";position:fixed;top:0;left:0;right:0;' + \
+             'height:var(--band-h);background:#ff00ff;z-index:9999;pointer-events:none}'; \
+             document.head.appendChild(s); })()",
+        );
+    }
+
+    // `fixed` reserves the row and paints the band once, up front, so that a
+    // peek can no longer change layout — the whole point of the arm.
+    if mode == "fixed" {
+        if let Some(wv) = &webview {
+            let _ = wv.eval(
+                "(() => { const s = document.createElement('style'); s.id = 'probe-fixed'; \
+                 s.textContent = \"#app[data-decorations='false']{padding-top:var(--band-h)!important}\" + \
+                 \"#app[data-platform='windows'][data-decorations='false'] .controls\" + \
+                 \"{background:var(--color-bg)!important;border-bottom:1px solid var(--color-rule)!important}\"; \
+                 document.head.appendChild(s); })()",
+            );
+        }
+    }
+
+    // Start from the clipped state so the first run the harness sees is a
+    // complete one, whichever mode this is.
+    if is_region {
+        win32_frameless::probe_clip(&window, band);
+    }
+
+    // One line per transition, `qpc_ticks,revealed`. The tick is read inside
+    // the closure, immediately before the call that changes the window, so the
+    // harness measures from the moment the change was actually requested rather
+    // than from when this thread woke up.
+    let log_path = std::env::temp_dir().join("clipyomi-probe-toggles.csv");
+    let _ = std::fs::write(&log_path, "");
+    eprintln!("PROBE toggles logged to {}", log_path.display());
+
+    let paint_path = std::env::temp_dir().join("clipyomi-probe-paints.csv");
+    let _ = std::fs::write(&paint_path, "");
+    PROBE_ACTIVE.store(true, Ordering::Relaxed);
+    eprintln!("PROBE paints logged to {}", paint_path.display());
+
+    std::thread::spawn(move || {
+        let mut revealed = false;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(if revealed {
+                REVEALED_MS
+            } else {
+                CLIPPED_MS
+            }));
+            revealed = !revealed;
+
+            if mode == "real" {
+                // Byte for byte what `showPeek`/`hidePeek` do NOW — no
+                // `peek-offset`, since `peek_grows_frame()` reports false on
+                // Windows and adding it would measure a reflow production has
+                // stopped doing. The reflow
+                // and the IPC latency between the two are the real ones.
+                // `peek_titlebar` stamps the reveal when it reaches the window.
+                if let Some(wv) = &webview {
+                    let js = if revealed {
+                        "(() => { const a = document.querySelector('#app'); \
+                         a.classList.add('peeked'); \
+                         window.__TAURI_INTERNALS__.invoke('peek_titlebar', { visible: true, height: 28 }); })()"
+                    } else {
+                        "(() => { const a = document.querySelector('#app'); \
+                         a.classList.remove('peeked'); \
+                         window.__TAURI_INTERNALS__.invoke('peek_titlebar', { visible: false, height: 28 }); })()"
+                    };
+                    let _ = wv.eval(js);
+                }
+                continue;
+            }
+
+            // `fixed` still fades the controls, which is opacity only and so
+            // costs a composite rather than a layout.
+            if mode == "fixed" {
+                if let Some(wv) = &webview {
+                    let _ = wv.eval(if revealed {
+                        "document.querySelector('#app').classList.add('peeked')"
+                    } else {
+                        "document.querySelector('#app').classList.remove('peeked')"
+                    });
+                }
+            }
+
+            // Route 1: stay on this thread, wait out the frame in flight, then
+            // change the region. The UI thread never blocks, which is what made
+            // the main-thread flush worse.
+            if vblank && is_region {
+                // Wait first, stamp second: the tick has to mark when the
+                // region actually changed, not when this thread started
+                // waiting, or the flush's own block would land in the measured
+                // flash.
+                win32_frameless::probe_wait_compose();
+                let at = probe_qpc();
+                win32_frameless::probe_clip(&window, if revealed { 0.0 } else { band });
+                probe_log_toggle_at(at, revealed);
+                continue;
+            }
+
+            let w = window.clone();
+            let _ = app.run_on_main_thread(move || {
+                let at = probe_qpc();
+                if is_region {
+                    win32_frameless::probe_clip(&w, if revealed { 0.0 } else { band });
+                } else {
+                    win32_frameless::grow_top(&w, if revealed { band } else { -band });
+                }
+                probe_log_toggle_at(at, revealed);
+            });
+
+            // Drained here rather than in the window procedure: this thread is
+            // already sleeping most of the time, and the buffer only has to
+            // outlive one 300ms dwell.
+            let drained: Vec<(i64, u8)> = match PROBE_PAINTS.lock() {
+                Ok(mut buf) => std::mem::take(&mut buf),
+                Err(_) => Vec::new(),
+            };
+            if !drained.is_empty() {
+                use std::io::Write;
+                if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&paint_path) {
+                    let mut out = String::with_capacity(drained.len() * 20);
+                    for (at, kind) in drained {
+                        out.push_str(&format!("{at},{kind}\n"));
+                    }
+                    let _ = f.write_all(out.as_bytes());
+                }
+            }
+        }
+    });
+}
+
+/// THROWAWAY PROBE (spike, revert me). See `win32_frameless::probe_clip`.
+#[tauri::command]
+pub fn probe_region_clip(inset: f64, app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let window = chrome_target(&app)?;
+        win32_frameless::probe_clip(&window, inset);
+    }
+    let _ = (inset, app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -992,6 +1582,24 @@ pub fn save_window_geometry(
             s.window_y = Some(y);
         })
         .map_err(|e| e.to_string())
+}
+
+/// The height to give the window when nothing has been saved yet.
+///
+/// The reserved row is part of the window's real box and is persisted that way —
+/// converting between a "visible" and a "real" box on every save and restore was
+/// tried first and is a drift hazard: `save_window_geometry` is a fixed point
+/// today (saving a saved value changes nothing), and subtracting a band on each
+/// save breaks that the moment anything re-saves a stored value. So the only
+/// place the band is added is here, once, when there is no saved height to honour.
+pub fn initial_height(saved: Option<u32>, decorated: bool) -> u32 {
+    match saved {
+        Some(h) => h,
+        None if cfg!(target_os = "windows") && !decorated => {
+            DEFAULT_WINDOW_HEIGHT + BAND_HEIGHT_LOGICAL
+        }
+        None => DEFAULT_WINDOW_HEIGHT,
+    }
 }
 
 #[tauri::command]
@@ -1439,6 +2047,33 @@ mod tests {
     }
 
     #[test]
+    fn initial_height_adds_the_reserved_row_only_on_a_first_undecorated_launch() {
+        // Saved values are the real box already, so they pass through untouched —
+        // that is what keeps `save_window_geometry` a fixed point.
+        assert_eq!(initial_height(Some(508), false), 508);
+        assert_eq!(initial_height(Some(508), true), 508);
+        if cfg!(target_os = "windows") {
+            assert_eq!(initial_height(None, false), DEFAULT_WINDOW_HEIGHT + 28);
+            // Decorated, the OS owns that row and nothing is reserved.
+            assert_eq!(initial_height(None, true), DEFAULT_WINDOW_HEIGHT);
+        } else {
+            assert_eq!(initial_height(None, false), DEFAULT_WINDOW_HEIGHT);
+        }
+    }
+
+    #[test]
+    fn peek_does_not_grow_the_frame_on_windows() {
+        // The whole point of the redesign: the row is reserved, so the frame
+        // stays put and `peek-offset` must never be applied here.
+        if cfg!(target_os = "windows") {
+            assert!(!peek_grows_frame());
+        }
+        if cfg!(target_os = "macos") {
+            assert!(peek_grows_frame());
+        }
+    }
+
+    #[test]
     fn save_window_geometry_updates_settings_state() {
         let dir = scratch("save-geometry");
         let state = Arc::new(SettingsState::new(
@@ -1560,10 +2195,9 @@ mod tests {
     #[test]
     fn platform_commands_match_target_os() {
         assert_eq!(is_macos(), cfg!(target_os = "macos"));
-        assert_eq!(
-            peek_grows_frame(),
-            cfg!(any(target_os = "macos", target_os = "windows"))
-        );
+        // Windows reserves the band's row permanently and clips it instead of
+        // growing the frame, so it reports false here now.
+        assert_eq!(peek_grows_frame(), cfg!(target_os = "macos"));
         #[cfg(target_os = "macos")]
         assert_eq!(platform(), "macos");
         #[cfg(target_os = "windows")]
