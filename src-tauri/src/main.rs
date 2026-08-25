@@ -61,10 +61,7 @@ fn main() {
                     // geometry restores verbatim and only a first launch has the
                     // band added to it.
                     let width = loaded.window_width.unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
-                    let height = commands::initial_height(
-                        loaded.window_height,
-                        loaded.chrome_mode == Some(settings::ChromeMode::Native),
-                    );
+                    let height = commands::initial_height(loaded.window_height);
                     let _ = main_window.set_size(tauri::LogicalSize::new(width, height));
                     if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
                         let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
