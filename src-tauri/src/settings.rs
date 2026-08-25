@@ -22,6 +22,42 @@ fn default_true() -> bool {
     true
 }
 
+/// Which of §7.4's three window chrome shapes the main window wears.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChromeMode {
+    /// The OS draws the title bar and its buttons. macOS and Linux only.
+    #[default]
+    Native,
+    /// Frameless, our 28px band, revealed by a hover.
+    Header,
+    /// Frameless, our band never revealed. Maximum real estate over a game.
+    Content,
+}
+
+/// Whether this platform can present `ChromeMode::Native`.
+///
+/// Windows cannot: `apply_dwm_attributes` and the `WM_STYLECHANGING` arm in
+/// `commands.rs` strip `WS_CAPTION` for the window's whole life (`d07711f`,
+/// `e45d55f`), which makes the in-app band the title bar there. Restoring the
+/// OS caption re-opens the DWM shadow that `e45d55f` spent a commit removing,
+/// so it is its own sub-phase.
+pub fn native_supported() -> bool {
+    !cfg!(target_os = "windows")
+}
+
+/// A mode the running platform can actually draw.
+///
+/// Takes the platform answer as a parameter rather than reading `cfg!` inside,
+/// so both arms are testable wherever the suite runs — the same reason
+/// `peek_grows_frame` is a function and not a `cfg!` at each use site.
+pub fn supported(mode: ChromeMode, native_supported: bool) -> ChromeMode {
+    match mode {
+        ChromeMode::Native if !native_supported => ChromeMode::Header,
+        other => other,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -338,6 +374,62 @@ mod tests {
         assert_eq!(deserialized.hide_pos, Some(true));
         assert_eq!(deserialized.hide_xrefs, Some(false));
         assert_eq!(deserialized.hide_usage, Some(true));
+    }
+
+    /// The wire names are the strings that appear in settings.json, in
+    /// `data-chrome`, and in the `set_chrome_mode` argument. Pinned as strings
+    /// because three surfaces spell them independently.
+    #[test]
+    fn chrome_modes_serialize_as_lowercase_names() {
+        assert_eq!(
+            serde_json::to_string(&ChromeMode::Native).unwrap(),
+            "\"native\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChromeMode::Header).unwrap(),
+            "\"header\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChromeMode::Content).unwrap(),
+            "\"content\""
+        );
+        assert_eq!(
+            serde_json::from_str::<ChromeMode>("\"content\"").unwrap(),
+            ChromeMode::Content
+        );
+    }
+
+    #[test]
+    fn the_default_mode_is_native() {
+        assert_eq!(ChromeMode::default(), ChromeMode::Native);
+    }
+
+    /// Windows has no native-frame state at all, so a setting naming it has to
+    /// resolve to the nearest shape that exists rather than draw nothing.
+    /// Parameterised instead of `cfg`-gated so both arms run on both platforms.
+    #[test]
+    fn native_resolves_to_header_where_it_is_unsupported() {
+        assert_eq!(supported(ChromeMode::Native, false), ChromeMode::Header);
+        assert_eq!(supported(ChromeMode::Native, true), ChromeMode::Native);
+    }
+
+    #[test]
+    fn the_other_two_modes_are_supported_everywhere() {
+        for supported_here in [true, false] {
+            assert_eq!(
+                supported(ChromeMode::Header, supported_here),
+                ChromeMode::Header
+            );
+            assert_eq!(
+                supported(ChromeMode::Content, supported_here),
+                ChromeMode::Content
+            );
+        }
+    }
+
+    #[test]
+    fn only_windows_lacks_the_native_frame() {
+        assert_eq!(native_supported(), !cfg!(target_os = "windows"));
     }
 }
 
