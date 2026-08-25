@@ -49,7 +49,7 @@ fn main() {
                     let _ = main_window.set_always_on_top(true);
                 }
                 #[cfg(target_os = "macos")]
-                if !loaded.decorations {
+                if loaded.chrome_mode != Some(settings::ChromeMode::Native) {
                     let _ = commands::apply_decorations_macos(&main_window.as_ref().window(), false);
                 }
                 #[cfg(target_os = "windows")]
@@ -61,8 +61,10 @@ fn main() {
                     // geometry restores verbatim and only a first launch has the
                     // band added to it.
                     let width = loaded.window_width.unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
-                    let height =
-                        commands::initial_height(loaded.window_height, loaded.decorations);
+                    let height = commands::initial_height(
+                        loaded.window_height,
+                        loaded.chrome_mode == Some(settings::ChromeMode::Native),
+                    );
                     let _ = main_window.set_size(tauri::LogicalSize::new(width, height));
                     if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
                         let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
@@ -166,7 +168,7 @@ fn main() {
             commands::set_input,
             commands::set_clipboard_monitoring,
             commands::set_always_on_top,
-            commands::set_decorations,
+            commands::set_chrome_mode,
             commands::peek_titlebar,
             commands::peek_grows_frame,
             commands::update_clip_region,

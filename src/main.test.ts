@@ -464,7 +464,7 @@ describe('the header drag region', () => {
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
-        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, decorations: true });
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, chrome_mode: 'native' });
       }
       return Promise.resolve(null);
     });
@@ -479,12 +479,13 @@ describe('the header drag region', () => {
 });
 
 describe('the titlebar band', () => {
-  function load(decorations: boolean, peekGrowsFrame = false, platformName?: string) {
+  function load(nativeChrome: boolean, peekGrowsFrame = false, platformName?: string) {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ decorations });
+      if (cmd === 'get_settings')
+        return Promise.resolve({ chrome_mode: nativeChrome ? 'native' : 'header' });
       if (cmd === 'is_macos') return Promise.resolve(peekGrowsFrame);
       if (cmd === 'peek_grows_frame') return Promise.resolve(peekGrowsFrame);
       if (cmd === 'platform') return Promise.resolve(platformName ?? (peekGrowsFrame ? 'macos' : 'windows'));
@@ -512,23 +513,53 @@ describe('the titlebar band', () => {
   // The attribute is the whole state machine: CSS keys the reserved row, the
   // overlay, and the reveal off it, and the pointer handlers below read it to
   // decide whether the native chrome is theirs to peek at.
-  test('mirrors the loaded decorations flag onto #app', async () => {
+  test('mirrors the loaded chrome mode onto #app', async () => {
     await load(false);
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(document.querySelector('#app')?.getAttribute('data-decorations')).toBe('false');
+    expect(document.querySelector('#app')?.getAttribute('data-chrome')).toBe('header');
+  });
+
+  test('the chrome mode from get_settings lands on #app', async () => {
+    await load(false, false, 'macos');
+    await vi.waitFor(() =>
+      expect(document.querySelector('#app')!.getAttribute('data-chrome')).toBe('header'),
+    );
+  });
+
+  test('a settings-changed event re-applies the chrome mode', async () => {
+    await load(true);
+    await vi.waitFor(() => expect(listeners.has('settings-changed')).toBe(true));
+    emit('settings-changed', { chrome_mode: 'header' });
+    expect(document.querySelector('#app')!.getAttribute('data-chrome')).toBe('header');
+  });
+
+  // The band boots decorated and the attribute is set synchronously, before
+  // `get_settings` resolves. The CSS keys the frameless rules off
+  // `:not([data-chrome='native'])`, so an absent attribute would match them and
+  // flash the frameless shape for a frame.
+  test('#app carries a chrome mode before any settings arrive', async () => {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    // Nothing the backend is asked ever settles, so the boot call at module
+    // scope is the only thing that can have written the attribute.
+    invoke.mockImplementation(() => new Promise(() => {}));
+    vi.resetModules();
+    await import('./main');
+    expect(document.querySelector('#app')!.getAttribute('data-chrome')).toBe('native');
   });
 
   test('a settings-changed event moves the attribute with it', async () => {
     await load(true);
     await Promise.resolve();
     await Promise.resolve();
-    expect(document.querySelector('#app')?.getAttribute('data-decorations')).toBe('true');
+    expect(document.querySelector('#app')?.getAttribute('data-chrome')).toBe('native');
 
-    emit('settings-changed', { decorations: false });
+    emit('settings-changed', { chrome_mode: 'header' });
 
-    expect(document.querySelector('#app')?.getAttribute('data-decorations')).toBe('false');
+    expect(document.querySelector('#app')?.getAttribute('data-chrome')).toBe('header');
   });
 
   test('hovering the band peeks the native chrome while the title bar is hidden', async () => {
@@ -564,7 +595,7 @@ describe('the titlebar band', () => {
     }
 
     expect(invoke).not.toHaveBeenCalledWith('save_settings', expect.anything());
-    expect(invoke).not.toHaveBeenCalledWith('set_decorations', expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith('set_chrome_mode', expect.anything());
   });
 
   // With the title bar shown there is nothing to reveal — the chrome is
@@ -779,7 +810,7 @@ describe('the titlebar band', () => {
     await Promise.resolve();
 
     shell().dispatchEvent(new Event('pointerenter'));
-    emit('settings-changed', { decorations: true });
+    emit('settings-changed', { chrome_mode: 'native' });
     shell().dispatchEvent(new Event('pointerleave'));
 
     expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
@@ -824,7 +855,7 @@ describe('window geometry save on resize/move', () => {
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
-        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, decorations: true });
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, chrome_mode: 'native' });
       }
       return Promise.resolve(null);
     });
@@ -979,7 +1010,7 @@ describe('settings window and gloss filters', () => {
         return Promise.resolve({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
         });
       }
       return Promise.resolve(null);
@@ -1054,7 +1085,7 @@ describe('settings window and gloss filters', () => {
         return Promise.resolve({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
           hide_pos: true,
           hide_xrefs: false,
           hide_usage: true,
@@ -1113,7 +1144,7 @@ describe('settings window and gloss filters', () => {
         return Promise.resolve({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
         });
       }
       return Promise.resolve(null);
@@ -1145,7 +1176,7 @@ describe('settings window and gloss filters', () => {
         return Promise.resolve({
           always_on_top: false,
           clipboard_monitoring: true,
-          decorations: true,
+          chrome_mode: 'native',
         });
       }
       return Promise.resolve(null);
@@ -1213,7 +1244,7 @@ describe('font sizes reaching the root element', () => {
   // Absent means "whatever the stylesheet says", so the app must not write a
   // second copy of the default over the top of `tokens.css`.
   test('leaves the tokens alone when no size is persisted', async () => {
-    await load({ decorations: true });
+    await load({ chrome_mode: 'native' });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -1341,7 +1372,7 @@ describe('the gloss size reaching the popover window', () => {
   });
 
   test('omits the size when none is persisted', async () => {
-    await hoverChip({ decorations: true });
+    await hoverChip({ chrome_mode: 'native' });
 
     expect(emitted).toContainEqual([
       'popover-content',

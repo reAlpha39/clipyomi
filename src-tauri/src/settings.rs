@@ -7,8 +7,9 @@
 
 //! Persisted user settings.
 //!
-//! Two keys today, both toggles the header owns. Unknown keys survive a rewrite
-//! so a file written by a later version is not silently truncated by this one.
+//! Unknown keys survive a rewrite so a file written by a later version is not
+//! silently truncated by this one, and `normalize` folds the pre-4A
+//! `decorations` boolean into `chrome_mode` on the way in.
 
 use std::path::{Path, PathBuf};
 
@@ -64,8 +65,13 @@ pub struct Settings {
     pub always_on_top: bool,
     #[serde(default = "default_true")]
     pub clipboard_monitoring: bool,
-    #[serde(default = "default_true")]
-    pub decorations: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chrome_mode: Option<ChromeMode>,
+    /// Pre-4A, replaced by `chrome_mode`. Read once by `normalize` to seed the
+    /// new key, then cleared — which is what makes the migration
+    /// self-completing: it stops being written the first time anything saves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decorations: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub furigana_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -102,7 +108,8 @@ impl Default for Settings {
         Self {
             always_on_top: false,
             clipboard_monitoring: true,
-            decorations: true,
+            chrome_mode: None,
+            decorations: None,
             furigana_mode: None,
             hide_pos: None,
             hide_xrefs: None,
@@ -118,7 +125,6 @@ impl Default for Settings {
         }
     }
 }
-
 
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
@@ -136,6 +142,25 @@ pub fn settings_path(app_config_dir: &Path) -> PathBuf {
     app_config_dir.join(SETTINGS_FILE)
 }
 
+/// Fold the pre-4A `decorations` boolean into `chrome_mode`, clear it, and pin
+/// the result to a mode this platform can draw.
+///
+/// Done here, once, rather than behind an accessor: the same call
+/// `initial_height`'s comment makes for geometry — one place converts and
+/// nothing downstream has to remember to. After this runs, `chrome_mode` is
+/// always `Some`, and `decorations` is always `None`.
+fn normalize(mut settings: Settings) -> Settings {
+    let from_legacy = match settings.decorations {
+        Some(false) => ChromeMode::Header,
+        // `Some(true)` and `None` alike: the pre-4A default was a title bar.
+        _ => ChromeMode::default(),
+    };
+    let mode = settings.chrome_mode.unwrap_or(from_legacy);
+    settings.chrome_mode = Some(supported(mode, native_supported()));
+    settings.decorations = None;
+    settings
+}
+
 /// Load settings, falling back to defaults.
 ///
 /// Returns the settings and, when something was wrong with the file, a reason to
@@ -146,13 +171,13 @@ pub fn load(path: &Path) -> (Settings, Option<String>) {
         Ok(raw) => raw,
         // Any read failure is treated as absent. Distinguishing "not found" from
         // "unreadable" would change nothing: both mean we start from defaults.
-        Err(_) => return (Settings::default(), None),
+        Err(_) => return (normalize(Settings::default()), None),
     };
 
     match serde_json::from_str(&raw) {
-        Ok(settings) => (settings, None),
+        Ok(settings) => (normalize(settings), None),
         Err(e) => (
-            Settings::default(),
+            normalize(Settings::default()),
             Some(format!(
                 "{} could not be read, using defaults: {e}",
                 path.display()
@@ -212,7 +237,9 @@ mod tests {
 
         save(&path, &written).expect("save");
         let (read_back, warning) = load(&path);
-        assert_eq!(read_back, written);
+        // `load` normalizes, so what comes back is the normalized form of what
+        // went in — the round trip is over `normalize`, not over the raw value.
+        assert_eq!(read_back, normalize(written));
         assert!(warning.is_none(), "got {warning:?}");
     }
 
@@ -230,7 +257,7 @@ mod tests {
     fn a_missing_file_loads_defaults_without_a_warning() {
         let path = scratch("missing").join("settings.json");
         let (s, warning) = load(&path);
-        assert_eq!(s, Settings::default());
+        assert_eq!(s, normalize(Settings::default()));
         assert!(warning.is_none(), "got {warning:?}");
     }
 
@@ -245,7 +272,9 @@ mod tests {
 
         save(&path, &written).expect("save");
         let (read_back, warning) = load(&path);
-        assert_eq!(read_back, written);
+        // `load` normalizes, so what comes back is the normalized form of what
+        // went in — the round trip is over `normalize`, not over the raw value.
+        assert_eq!(read_back, normalize(written));
         assert!(warning.is_none(), "got {warning:?}");
     }
 
@@ -257,7 +286,7 @@ mod tests {
         std::fs::write(&path, b"{ not json").expect("write");
 
         let (s, warning) = load(&path);
-        assert_eq!(s, Settings::default());
+        assert_eq!(s, normalize(Settings::default()));
         let warning = warning.expect("a corrupt file must report a reason");
         assert!(!warning.is_empty());
     }
@@ -290,9 +319,10 @@ mod tests {
     }
 
     #[test]
-    fn default_decorations_is_true() {
+    fn defaults_leave_every_optional_key_unset() {
         let s = Settings::default();
-        assert!(s.decorations);
+        assert_eq!(s.chrome_mode, None, "only `normalize` fills this in");
+        assert_eq!(s.decorations, None);
         assert_eq!(s.furigana_mode, None);
         assert_eq!(s.hide_pos, None);
         assert_eq!(s.hide_xrefs, None);
@@ -315,7 +345,11 @@ mod tests {
             "window_y": 200
         }"#;
         let s: Settings = serde_json::from_str(json).unwrap();
-        assert!(!s.decorations);
+        assert_eq!(
+            s.decorations,
+            Some(false),
+            "read verbatim; `normalize` folds it"
+        );
         assert_eq!(s.window_width, Some(500));
         assert_eq!(s.window_height, Some(120));
         assert_eq!(s.window_x, Some(100));
@@ -327,7 +361,8 @@ mod tests {
         let settings = Settings {
             always_on_top: true,
             clipboard_monitoring: true,
-            decorations: false,
+            chrome_mode: Some(ChromeMode::Header),
+            decorations: None,
             furigana_mode: Some("hiragana".to_string()),
             hide_pos: None,
             hide_xrefs: None,
@@ -352,7 +387,8 @@ mod tests {
         let settings = Settings {
             always_on_top: true,
             clipboard_monitoring: true,
-            decorations: false,
+            chrome_mode: Some(ChromeMode::Header),
+            decorations: None,
             furigana_mode: Some("hiragana".to_string()),
             hide_pos: Some(true),
             hide_xrefs: Some(false),
@@ -431,6 +467,105 @@ mod tests {
     fn only_windows_lacks_the_native_frame() {
         assert_eq!(native_supported(), !cfg!(target_os = "windows"));
     }
+
+    /// The pre-4A boolean folds into the new key, and the mode is pinned to
+    /// what the platform can draw. `native_supported()` decides the second
+    /// column of the spec's §5 table, which is why every expectation here is
+    /// written against it rather than against a hardcoded mode.
+    #[test]
+    fn a_legacy_decorations_true_becomes_native_where_native_exists() {
+        let s: Settings = serde_json::from_str(r#"{"decorations":true}"#).unwrap();
+        let s = normalize(s);
+        assert_eq!(
+            s.chrome_mode,
+            Some(supported(ChromeMode::Native, native_supported()))
+        );
+        assert_eq!(s.decorations, None, "the legacy key must be cleared");
+    }
+
+    #[test]
+    fn a_legacy_decorations_false_becomes_header() {
+        let s: Settings = serde_json::from_str(r#"{"decorations":false}"#).unwrap();
+        assert_eq!(normalize(s).chrome_mode, Some(ChromeMode::Header));
+    }
+
+    #[test]
+    fn a_file_with_neither_key_takes_the_default_mode() {
+        let s: Settings = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            normalize(s).chrome_mode,
+            Some(supported(ChromeMode::default(), native_supported()))
+        );
+    }
+
+    /// Both keys present is what a downgrade-then-upgrade produces. The new
+    /// one wins, or the user's last choice would be overwritten by a value
+    /// this version stopped maintaining.
+    #[test]
+    fn the_new_key_wins_over_the_legacy_one() {
+        let s: Settings =
+            serde_json::from_str(r#"{"decorations":true,"chrome_mode":"content"}"#).unwrap();
+        assert_eq!(normalize(s).chrome_mode, Some(ChromeMode::Content));
+    }
+
+    /// The migration is self-completing: the legacy key stops being written
+    /// the first time anything saves, so it cannot come back and re-decide the
+    /// mode on a later launch.
+    #[test]
+    fn the_legacy_key_is_gone_from_the_file_after_a_load_and_save() {
+        let path = scratch("legacy-drop").join("settings.json");
+        std::fs::write(&path, br#"{"decorations":false,"always_on_top":true}"#).expect("write");
+
+        let (loaded, warning) = load(&path);
+        assert!(warning.is_none(), "got {warning:?}");
+        save(&path, &loaded).expect("save");
+
+        let raw = std::fs::read_to_string(&path).expect("read back");
+        assert!(!raw.contains("decorations"), "got {raw}");
+        assert!(raw.contains("\"chrome_mode\": \"header\""), "got {raw}");
+        assert!(
+            raw.contains("\"always_on_top\": true"),
+            "unrelated key lost"
+        );
+    }
+
+    #[test]
+    fn chrome_mode_round_trips_through_the_file() {
+        let path = scratch("chrome-round-trip").join("settings.json");
+        let written = Settings {
+            chrome_mode: Some(ChromeMode::Content),
+            ..Default::default()
+        };
+        save(&path, &written).expect("save");
+        let (read_back, warning) = load(&path);
+        assert!(warning.is_none(), "got {warning:?}");
+        assert_eq!(read_back.chrome_mode, Some(ChromeMode::Content));
+    }
+
+    /// An unknown mode name is a parse failure, which `load` already turns into
+    /// defaults plus a visible warning. Pinned so that fallback is deliberate
+    /// rather than something a future serde attribute silently changes.
+    #[test]
+    fn an_unknown_mode_name_falls_back_to_defaults_with_a_warning() {
+        let path = scratch("bad-mode").join("settings.json");
+        std::fs::write(&path, br#"{"chrome_mode":"borderless"}"#).expect("write");
+
+        let (s, warning) = load(&path);
+        assert_eq!(
+            s.chrome_mode,
+            Some(supported(ChromeMode::default(), native_supported()))
+        );
+        assert!(warning.expect("a reason").contains("could not be read"));
+    }
+
+    /// `load` must normalize on every path, including the ones that never see
+    /// a parsed file — otherwise a missing or corrupt file leaves `chrome_mode`
+    /// unset and every reader downstream needs its own fallback.
+    #[test]
+    fn a_missing_file_still_arrives_with_a_mode_set() {
+        let path = scratch("missing-mode").join("settings.json");
+        let (s, warning) = load(&path);
+        assert!(warning.is_none(), "got {warning:?}");
+        assert!(s.chrome_mode.is_some());
+    }
 }
-
-
