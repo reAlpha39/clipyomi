@@ -244,13 +244,18 @@ changes stashed failed `popover.spec.ts:72`; the run with them applied failed
 `panes.spec.ts:31`; both runs passed the other 21. Every one of these passes in
 isolation.
 
-Task 4 later ran the full suite twice more and got 22/22 both times. The likely
+Task 4 later ran the full suite twice more and got 22/22 both times. The
 variable is warmth, not the code: `playwright.config.ts` sets
 `reuseExistingServer`, so a run following earlier runs does not pay the
-cold-start cost the race needs. That is a strong inference from the pattern,
-not a proven diagnosis — nobody has forced a cold run since to confirm it.
-Either way, this predates 4C and is out of scope here; it belongs with 6B,
-which owns the suite.
+cold-start cost the race needs.
+
+Final verification then supplied the cold run the inference was missing. Two
+back-to-back full-suite runs: the first, against a cold server, failed
+`panes.spec.ts:31` — the first test in the file, which is exactly where a
+first-navigation race lands; the second, moments later against the now-warm
+server, passed 22/22. Four data points across two states, and the split falls
+cleanly on server warmth. Either way this predates 4C and is out of scope here;
+it belongs with 6B, which owns the suite.
 
 ---
 
