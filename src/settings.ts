@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
-import { FONT_LIMITS, clampFont, type FontKind } from './font-sizes';
+import { FONT_LIMITS, clampFont, stylesheetDefault, type FontKind } from './font-sizes';
 import type { FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
@@ -184,9 +184,31 @@ export function initSettingsApp(container: HTMLElement) {
     });
   });
 
+  /**
+   * Show the stylesheet's own size in any box the settings file left empty.
+   *
+   * First run only, not on every incoming event: a box the user cleared has to
+   * stay cleared for as long as they are looking at it. The value shown here is
+   * not persisted until the user changes something, at which point it is what
+   * they saw and agreed to.
+   */
+  function showDefaultsInEmptyBoxes() {
+    const boxes: Array<[HTMLInputElement, FontKind]> = [
+      [fontSentence, 'sentence'],
+      [fontGloss, 'gloss'],
+      [furiganaScale, 'furigana'],
+    ];
+    for (const [input, kind] of boxes) {
+      if (input.value !== '') continue;
+      const fallback = stylesheetDefault(kind);
+      if (fallback !== null) input.value = String(fallback);
+    }
+  }
+
   void invoke<Settings>('get_settings')
     .then((s) => {
       applySettings(s);
+      showDefaultsInEmptyBoxes();
     })
     .catch(() => {});
 

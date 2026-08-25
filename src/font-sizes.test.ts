@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { clampFont, fontVars } from './font-sizes';
+import { clampFont, fontVars, stylesheetDefault } from './font-sizes';
 
 describe('fontVars', () => {
   // An empty value is the instruction to remove the token, which is what
@@ -77,5 +77,27 @@ describe('clampFont', () => {
   test('returns null for anything that is not a finite number', () => {
     expect(clampFont('furigana', Number.NaN)).toBeNull();
     expect(clampFont('furigana', undefined)).toBeNull();
+  });
+});
+
+describe('stylesheetDefault', () => {
+  // The defaults belong to `tokens.css`. The settings window reads them back
+  // rather than restating them, so there is still one place a default lives.
+  test('reads a px token as a number', () => {
+    document.documentElement.style.setProperty('--text-sentence', '24px');
+
+    expect(stylesheetDefault('sentence')).toBe(24);
+  });
+
+  test('reads the furigana em ratio back as a percentage', () => {
+    document.documentElement.style.setProperty('--text-furigana', '0.58em');
+
+    expect(stylesheetDefault('furigana')).toBe(58);
+  });
+
+  test('returns null when the stylesheet does not define the token', () => {
+    document.documentElement.style.removeProperty('--text-gloss');
+
+    expect(stylesheetDefault('gloss')).toBeNull();
   });
 });
