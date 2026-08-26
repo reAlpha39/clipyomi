@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { FONT_LIMITS, clampFont, stylesheetDefault, type FontKind } from './font-sizes';
+import { ALPHA_LIMITS, clampAlpha } from './surface-alpha';
 import type { ChromeMode, FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
@@ -80,6 +81,19 @@ export function initSettingsApp(container: HTMLElement) {
           <button type="button" role="radio" data-chrome-mode="content" aria-checked="false" title="Content only: nothing above the sentence">Content</button>
         </div>
       </section>
+
+      <section class="settings-group">
+        <h2 class="settings-group-title">Background</h2>
+        <label class="settings-range-row">
+          <span class="label-text">Opacity</span>
+          <input type="range" id="setting-surface-alpha"
+                 min="${ALPHA_LIMITS.min}" max="${ALPHA_LIMITS.max}" step="1" />
+          <output class="unit" id="setting-surface-alpha-value">100%</output>
+        </label>
+        <p class="settings-note" id="setting-surface-alpha-note" hidden>
+          The native window frame is always fully opaque.
+        </p>
+      </section>
     </div>
   `;
 
@@ -94,6 +108,13 @@ export function initSettingsApp(container: HTMLElement) {
   const furiganaButtons = container.querySelectorAll<HTMLButtonElement>(
     '.segmented-control button[data-mode]',
   );
+  const surfaceAlpha = container.querySelector<HTMLInputElement>('#setting-surface-alpha')!;
+  const surfaceAlphaValue = container.querySelector<HTMLOutputElement>(
+    '#setting-surface-alpha-value',
+  )!;
+  const surfaceAlphaNote = container.querySelector<HTMLElement>(
+    '#setting-surface-alpha-note',
+  )!;
 
   let currentMode: FuriganaMode = 'none';
 
@@ -111,6 +132,14 @@ export function initSettingsApp(container: HTMLElement) {
     chromeButtons.forEach((btn) => {
       btn.setAttribute('aria-checked', String(btn.dataset.chromeMode === mode));
     });
+    // The native frame renders fully opaque whatever is stored, so the slider
+    // would move nothing there. It is disabled and the reason is stated in
+    // visible text rather than a `title`: a disabled control leaves the tab
+    // order, so a tooltip on it is reachable by mouse alone, and the wrapping
+    // label already owns the accessible name so the title is never announced.
+    const opaqueByChrome = mode === 'native';
+    surfaceAlpha.disabled = opaqueByChrome;
+    surfaceAlphaNote.hidden = !opaqueByChrome;
   }
 
   function updateFuriganaButtons(mode: FuriganaMode) {
@@ -120,6 +149,29 @@ export function initSettingsApp(container: HTMLElement) {
       btn.setAttribute('aria-checked', String(match));
     });
   }
+
+  function showAlpha(value: number) {
+    surfaceAlphaValue.textContent = `${value}%`;
+  }
+
+  /**
+   * Seed the slider from the stylesheet's own opacity.
+   *
+   * The font boxes detect "nothing persisted" by being empty and fill in the
+   * default afterwards. A range input always carries a value — the midpoint,
+   * by default — so it has to be seeded up front and overwritten if
+   * `get_settings` turns out to carry one.
+   */
+  function seedAlphaFromStylesheet() {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--surface-alpha');
+    const ratio = Number.parseFloat(raw);
+    const seeded = clampAlpha(Number.isFinite(ratio) ? ratio * 100 : ALPHA_LIMITS.max);
+    const value = seeded ?? ALPHA_LIMITS.max;
+    surfaceAlpha.value = String(value);
+    showAlpha(value);
+  }
+
+  seedAlphaFromStylesheet();
 
   /**
    * The size in INPUT, pinned into range, or `undefined` for an empty box —
@@ -149,13 +201,18 @@ export function initSettingsApp(container: HTMLElement) {
       font_sentence: sizeOf(fontSentence, 'sentence'),
       font_gloss: sizeOf(fontGloss, 'gloss'),
       furigana_scale: sizeOf(furiganaScale, 'furigana'),
+      surface_alpha: clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max,
     };
+  }
+
+  function broadcast(payload: Partial<Settings>) {
+    void emit('settings-changed', payload).catch(() => {});
   }
 
   function saveAndBroadcast() {
     const snapshot = currentSnapshot();
     void invoke('save_settings', { settings: snapshot }).catch(() => {});
-    void emit('settings-changed', snapshot).catch(() => {});
+    broadcast(snapshot);
   }
 
   function applySettings(s: Partial<Settings>) {
@@ -169,6 +226,11 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.font_sentence !== undefined) fontSentence.value = String(s.font_sentence);
     if (s.font_gloss !== undefined) fontGloss.value = String(s.font_gloss);
     if (s.furigana_scale !== undefined) furiganaScale.value = String(s.furigana_scale);
+    if (s.surface_alpha !== undefined) {
+      const value = clampAlpha(s.surface_alpha) ?? ALPHA_LIMITS.max;
+      surfaceAlpha.value = String(value);
+      showAlpha(value);
+    }
   }
 
   fontSentence.addEventListener('change', saveAndBroadcast);
@@ -222,6 +284,19 @@ export function initSettingsApp(container: HTMLElement) {
       }
     });
   });
+
+  surfaceAlpha.addEventListener('input', () => {
+    const value = clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max;
+    showAlpha(value);
+    // A partial payload, not `currentSnapshot()`: this fires once per frame
+    // during a drag, and the main window's `settings-changed` listener would
+    // otherwise re-run the gloss merge and the furigana comparison — which
+    // re-renders the whole sentence — for a value neither of them contains.
+    // `main.ts` already emits a bare `{ chrome_mode }` the same way.
+    broadcast({ surface_alpha: value });
+  });
+
+  surfaceAlpha.addEventListener('change', saveAndBroadcast);
 
   /**
    * Show the stylesheet's own size in any box the settings file left empty.

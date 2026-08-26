@@ -99,3 +99,44 @@
   font-size: var(--text-tag, 11px);
   min-width: 76px;
 }
+
+.settings-range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--color-text);
+  padding: 2px 0;
+}
+
+/* The label takes the slack, so this row's control lines up with the number
+   rows above it. */
+.settings-range-row .label-text {
+  flex: 1;
+}
+
+.settings-range-row input[type='range'] {
+  width: 120px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--color-kanji);
+}
+
+.settings-range-row input[type='range']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.settings-range-row .unit {
+  color: var(--color-muted);
+  font-size: var(--text-tag, 11px);
+  min-width: 76px;
+}
+
+.settings-note {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-tag, 11px);
+  color: var(--color-muted);
+}

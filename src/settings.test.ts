@@ -468,4 +468,86 @@ describe('Settings Window', () => {
 
     expect(container.querySelector<HTMLInputElement>('#setting-font-sentence')?.value).toBe('36');
   });
+
+  /** Boot the settings window with a given snapshot and settle its promises. */
+  async function boot(settings: Partial<Settings>) {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve(settings);
+      return Promise.resolve(null);
+    });
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  function slider(): HTMLInputElement {
+    const el = container.querySelector<HTMLInputElement>('#setting-surface-alpha');
+    if (el === null) throw new Error('#setting-surface-alpha missing');
+    return el;
+  }
+
+  test('the slider shows the persisted opacity', async () => {
+    await boot({ always_on_top: false, clipboard_monitoring: true, surface_alpha: 62 });
+    expect(slider().value).toBe('62');
+    expect(
+      container.querySelector('#setting-surface-alpha-value')?.textContent,
+    ).toBe('62%');
+  });
+
+  // A range input always has a value, so unlike an empty font box it cannot
+  // signal "unset" by being blank -- it is seeded from the stylesheet instead.
+  test('with nothing persisted the slider shows the stylesheet default', async () => {
+    await boot({ always_on_top: false, clipboard_monitoring: true });
+    expect(slider().value).toBe('100');
+  });
+
+  // A drag fires `input` per frame. Broadcasting the whole snapshot at that
+  // rate would re-run the main window's gloss merge and furigana comparison
+  // sixty times a second for a value neither of them contains.
+  test('dragging broadcasts a partial payload without persisting', async () => {
+    await boot({ always_on_top: false, clipboard_monitoring: true, surface_alpha: 100 });
+    emitted.length = 0;
+    invoke.mockClear();
+
+    slider().value = '35';
+    slider().dispatchEvent(new Event('input'));
+
+    expect(emitted).toEqual([['settings-changed', { surface_alpha: 35 }]]);
+    expect(invoke).not.toHaveBeenCalledWith('save_settings', expect.anything());
+  });
+
+  test('releasing the slider persists the full snapshot', async () => {
+    await boot({ always_on_top: false, clipboard_monitoring: true, surface_alpha: 100 });
+    invoke.mockClear();
+
+    slider().value = '35';
+    slider().dispatchEvent(new Event('change'));
+
+    const save = invoke.mock.calls.find(([cmd]) => cmd === 'save_settings');
+    expect(save).toBeDefined();
+    expect((save?.[1] as { settings: Settings }).settings.surface_alpha).toBe(35);
+  });
+
+  // The native frame renders fully opaque whatever is stored, so an enabled
+  // slider there would move nothing.
+  test('the slider is disabled in native chrome and enabled on leaving it', async () => {
+    await boot({ always_on_top: false, clipboard_monitoring: true, chrome_mode: 'native' });
+    expect(slider().disabled).toBe(true);
+
+    container.querySelector<HTMLButtonElement>('[data-chrome-mode="content"]')?.click();
+    expect(slider().disabled).toBe(false);
+  });
+
+  // A disabled control leaves the tab order, so a `title` on it can only be
+  // reached with a mouse. The reason has to be readable without focusing it.
+  test('native chrome states in visible text why the slider is inert', async () => {
+    await boot({ always_on_top: false, clipboard_monitoring: true, chrome_mode: 'native' });
+
+    const note = container.querySelector<HTMLElement>('#setting-surface-alpha-note')!;
+    expect(note.hidden).toBe(false);
+    expect(note.textContent?.trim()).not.toBe('');
+
+    container.querySelector<HTMLButtonElement>('[data-chrome-mode="content"]')?.click();
+    expect(note.hidden).toBe(true);
+  });
 });
