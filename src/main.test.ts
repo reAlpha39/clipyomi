@@ -1609,6 +1609,24 @@ describe('font sizes reaching the root element', () => {
   test('one restore snapshot moves the alpha, the sizes, the furigana and the chrome', () => {
     const root = document.documentElement;
 
+    // A stale gloss token and a rendered chip both have to be overwritten by
+    // the restore, not merely absent-by-coincidence — otherwise the
+    // assertions below would pass whether or not the listener does anything.
+    root.style.setProperty('--text-gloss', '99px');
+    emit('parse-result', {
+      segments: [
+        {
+          start: 0,
+          len: 2,
+          surface: '東京',
+          reading: 'とうきょう',
+          matched: true,
+          entries: [],
+        },
+      ],
+    });
+    expect(document.querySelector('.chip ruby')).toBeNull();
+
     // Exactly what `layout::restore` emits: a full `Settings`, with the keys a
     // slot recorded as unset simply absent.
     emit('settings-changed', {
@@ -1617,15 +1635,24 @@ describe('font sizes reaching the root element', () => {
       chrome_mode: 'content' as ChromeMode,
       surface_alpha: 35,
       font_sentence: 30,
+      furigana_scale: 70,
       furigana_mode: 'hiragana',
     });
 
     expect(root.style.getPropertyValue('--surface-alpha')).toBe('0.35');
+    // Both sizes the payload carries — the sentence box and the furigana
+    // scale — not just the one this test used to single out.
     expect(root.style.getPropertyValue('--text-sentence')).toBe('30px');
+    expect(root.style.getPropertyValue('--text-furigana')).toBe('0.7em');
     expect(document.querySelector('#app')?.getAttribute('data-chrome')).toBe('content');
-    // Absent in the payload, so the token has to be gone rather than stale —
-    // this is the half of the contract that depends on serde omitting the key.
+    // `--text-gloss` was set above, so this proves the absent key clears a
+    // real value rather than reading back a property that was never set —
+    // the half of the contract that depends on serde omitting the key.
     expect(root.style.getPropertyValue('--text-gloss')).toBe('');
+    // The mode reaches the screen through `display`'s re-render, so this is
+    // the only assertion that would actually catch `furigana_mode` silently
+    // failing to propagate on a restore snapshot.
+    expect(document.querySelector('.chip ruby rt')?.textContent).toBe('とうきょう');
   });
 });
 
