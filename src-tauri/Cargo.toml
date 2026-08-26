@@ -17,7 +17,11 @@ rust-version = "1.88"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `macos-private-api` is what `macOSPrivateApi` in tauri.conf.json requires:
+# transparency on macOS goes through a private NSWindow API. It rules out Mac
+# App Store distribution, which this self-distributed GPL v2 build already
+# accepts (spec §7.5).
+tauri = { version = "2", features = ["macos-private-api"] }
 # `mecab` is enabled here and nowhere else: the shell is the only consumer that
 # wants a tokenizer, and `jparser` itself must stay pure.
 jparser = { path = "../crates/jparser", features = ["mecab"] }
