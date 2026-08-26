@@ -540,13 +540,14 @@ the settings window owned them, so a setting has exactly one control.
 **The header is the titlebar band.** 28px, matching what macOS draws in the
 same strip (the window keeps `Titled + FullSizeContentView` in both states, so
 the webview owns it either way). The OS puts its buttons at the left; the gear
-sits at the right. `#app[data-decorations]`, mirrored from the setting by
-`main.ts`, picks between two shapes:
+sits at the right. `#app[data-chrome]`, mirrored from the `chrome_mode` setting
+by `main.ts`, picks between two band shapes (`header` and `content` share this
+one; §7.4 covers the third, content-only, state separately):
 
-| `decorations` | Band                                                                                                 | Gear                   | Divider             |
+| `chrome_mode` | Band                                                                                                 | Gear                   | Divider             |
 | --------------- | ---------------------------------------------------------------------------------------------------- | ---------------------- | ------------------- |
-| `true`        | reserved 28px grid row                                                                               | always visible         | visible             |
-| `false`       | out of the grid, absolute overlay, 6px idle → 28px while`#app.peeked`, opaque `--color-bg` fill | fades in with the band | only while revealed |
+| `native`        | reserved 28px grid row                                                                               | always visible         | visible             |
+| `header`       | out of the grid, absolute overlay, 6px idle → 28px while`#app.peeked`, opaque `--color-bg` fill | fades in with the band | only while revealed |
 
 Hidden means the sentence starts at the window's top edge, and the revealed bar
 is **added on top of the window** rather than laid over the content: the frame
@@ -808,18 +809,19 @@ so did the chrome and geometry work originally filed under Phase 4.
 | **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8 — created hidden in `setup` like the popover, see §6. |
 | **3C** (08-25) | Shipped. Font sizes (§7.7), as **three** persisted inputs rather than two: `--text-sentence` and `--text-gloss` in px, `--text-furigana` (and the derived `--text-furigana-romaji`) as a percentage of the sentence. §7.7's `--text-cjk`/`--text-furigana` pair never existed in this port — see the 3C design doc §2. |
 
-### Phase 4 — Window behaviour (4C shipped; 4A/4B/4D remaining)
+### Phase 4 — Window behaviour (4A and 4C shipped; 4B/4D remaining)
 
 2K already shipped the header + resize-edges state and geometry persistence,
-and 4C — first in the chain because it depended on nothing and was the
-sub-phase users feel most directly — has now shipped too. Three sub-phases are
-left, and their order is still a dependency chain, not a preference: **4D
-last** because a slot captures the state 4A, 4B and 3C introduce.
+4C shipped parse history, and 4A — the other two chrome states — has now
+shipped too. Two sub-phases are left: **4B**, which now has a defined state to
+clamp on macOS only (native frame forces alpha to 100 %, and 4A resolved
+Windows to never offer native at all), and **4D last**, because a slot
+captures the state 4A, 4B and 3C introduce.
 
 | Sub-phase    | Scope                                                                                                                                                                                                               | Depends on |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | **4C** (08-25) | Shipped. Parse history (§7.8): ring buffer of 50 full`ParseResult`s, consecutive duplicates deduped, back/forward in the header — what makes clipboard monitoring safe to leave running. Session-only, disk persistence still deferred (deviation #9); a new parse arriving mid-read keeps every entry ahead of the cursor rather than truncating them browser-style. | —         |
-| **4A** | The other two chrome states (§7.4): content-only, with the toggles moving to a right-click menu, and native frame. Three-way control, persisted alongside`decorations`.                                          | 2K         |
+| **4A** (08-25) | Shipped. Three-way `chrome_mode` replacing the `decorations` boolean, plus the content-only state (§7.4): the band never reveals, its controls leave the tab order, and drag and resize survive. The toggles did not move to a right-click menu — they had already moved to the settings window in 3B — so the menu carries the mode switch, Settings and Quit instead. **Native frame is macOS/Linux only**: Windows is permanently frameless (`d07711f`, `e45d55f`) and resolves `native` to `header`, which also removed a broken decorated state there. | 2K         |
 | **4B** | Per-pixel background alpha (§7.5):`"transparent": true`, a `--surface-alpha` token and its control, `macos-private-api` on macOS. Native frame forces alpha to 100 %, so 4A defines the state 4B must clamp. | 4A         |
 | **4D** | Layout hotkeys (§7.9): global-shortcut plugin,`Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha, always-on-top, font sizes, furigana mode.                  | 3C, 4A, 4B |
 
@@ -862,6 +864,9 @@ Phase 1. 6C is the last thing that happens.
 | 7 | Definition-lines / Japanese-own-line dropped               | Subsumed by the two-pane layout                                                                  |
 | 8 | Settings popover instead of modal dialog                   | Does not block the parse behind it                                                               |
 | 9 | History session-only                                       | ta-old persisted to disk; deferred, not refused                                                  |
+| 10 | Native frame is macOS/Linux only | The Windows window is permanently frameless (`d07711f`, `e45d55f`); restoring `WS_CAPTION` re-opens the DWM shadow that commit removed |
+| 11 | Default chrome mode is `native`, not §7.4's `header` | The shipped `Settings::default()` has always been the other one, and a first-run window with no title bar cannot explain itself |
+| 12 | Content-only keeps drag and resize | ta-old's `WS_POPUP` had neither; a mode that cannot be left without editing `settings.json` is a trap, and keeping them costs nothing |
 
 ## 13. Deferred
 
@@ -871,6 +876,7 @@ Phase 1. 6C is the last thing that happens.
 - Pre-translation substitution profiles.
 - Standalone MeCab comparison pane.
 - Linux build (nothing in the code should prevent it).
+- A real OS caption on Windows (the `native` chrome mode there).
 
 ## 14. Licensing
 
