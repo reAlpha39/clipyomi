@@ -192,6 +192,11 @@ pub mod win32_frameless {
     /// webview renders. `WM_ERASEBKGND` paints it.
     static BACKGROUND: AtomicU32 = AtomicU32::new(BACKGROUND_DARK);
 
+    /// Whether the page's background is fully opaque. Starts `true`: the
+    /// window is opaque until the renderer says otherwise, which is the same
+    /// direction `BACKGROUND`'s theme guess errs in.
+    static BACKGROUND_OPAQUE: AtomicBool = AtomicBool::new(true);
+
     #[repr(C)]
     #[derive(Clone, Copy, Default)]
     struct RECT {
@@ -673,6 +678,14 @@ pub mod win32_frameless {
             // the colour the webview is about to draw anyway. It does not
             // remove the top-edge glitch, only shrink it.
             WM_ERASEBKGND => {
+                // Skipped once the surface is see-through. `CreateSolidBrush`
+                // takes a COLORREF, which carries no alpha, so GDI writes zero
+                // into the alpha byte — and under the blur-behind DWM applies
+                // to a transparent window, zero is fully transparent. Filling
+                // would paint a hole rather than a background.
+                if !BACKGROUND_OPAQUE.load(Ordering::Relaxed) {
+                    return DefSubclassProc(hwnd, msg, wparam, lparam);
+                }
                 let mut cr = RECT::default();
                 if GetClientRect(hwnd, &mut cr) != 0 {
                     let brush = CreateSolidBrush(BACKGROUND.load(Ordering::Relaxed));
@@ -702,15 +715,18 @@ pub mod win32_frameless {
         DefSubclassProc(hwnd, msg, wparam, lparam)
     }
 
-    /// Overrides the erase colour with what the webview actually renders.
+    /// Overrides the erase colour with what the webview actually renders, and
+    /// whether that background is opaque.
     ///
     /// The `window.theme()` guess in `init_window` is only a starting value: it
     /// reads the *system* theme, while the page can be on the other one — a
     /// `data-theme` override, or simply a theme change the backend never saw.
     /// A strip erased in the wrong theme's colour is the whole visible glitch,
-    /// so the renderer gets to name its own background.
-    pub fn set_background(colorref: u32) {
+    /// so the renderer gets to name its own background. `opaque` is read by the
+    /// `WM_ERASEBKGND` arm to decide whether to fill at all.
+    pub fn set_background(colorref: u32, opaque: bool) {
         BACKGROUND.store(colorref, Ordering::Relaxed);
+        BACKGROUND_OPAQUE.store(opaque, Ordering::Relaxed);
     }
 
     /// Shows or hides the band's reserved row by changing the region alone.
@@ -967,15 +983,20 @@ fn colorref(r: u8, g: u8, b: u8) -> u32 {
     (b as u32) << 16 | (g as u32) << 8 | r as u32
 }
 
-/// The webview reporting the background colour it renders, so the frame growth
-/// on a peek erases newly exposed pixels in that colour rather than in a colour
-/// guessed from the system theme.
+/// The webview reporting the background colour it renders, and whether that
+/// background is fully opaque.
+///
+/// The colour is so the frame growth on a peek erases newly exposed pixels in
+/// what the page draws rather than in a colour guessed from the system theme.
+/// `opaque` is the *effective* alpha — `native` renders fully opaque whatever
+/// is persisted — and gates the fill entirely, for the reason the
+/// `WM_ERASEBKGND` arm gives.
 #[tauri::command]
-pub fn set_window_background(r: u8, g: u8, b: u8) {
+pub fn set_window_background(r: u8, g: u8, b: u8, opaque: bool) {
     let color = colorref(r, g, b);
     #[cfg(target_os = "windows")]
-    win32_frameless::set_background(color);
-    let _ = color;
+    win32_frameless::set_background(color, opaque);
+    let _ = (color, opaque);
 }
 
 #[tauri::command]

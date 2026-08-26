@@ -495,7 +495,18 @@ function reportBackground(): void {
   const rendered = getComputedStyle(document.body).backgroundColor;
   const rgb = resolveColor(rendered);
   if (rgb === null) return;
-  void invoke('set_window_background', { r: rgb[0], g: rgb[1], b: rgb[2] }).catch(() => {});
+  // The *effective* alpha, not the stored one: `native` renders fully opaque
+  // whatever `surface_alpha` holds, and that is precisely the mode whose erase
+  // fill stops the top-edge flash. An empty value means unset, which the
+  // stylesheet resolves to 1.
+  const [, effective] = surfaceAlphaVar(currentAlpha, chromeMode);
+  const opaque = effective === '' || effective === '1';
+  void invoke('set_window_background', {
+    r: rgb[0],
+    g: rgb[1],
+    b: rgb[2],
+    opaque,
+  }).catch(() => {});
 }
 
 /**
@@ -552,6 +563,11 @@ function applySurfaceAlpha(): void {
   const [token, value] = surfaceAlphaVar(currentAlpha, chromeMode);
   if (value === '') document.documentElement.style.removeProperty(token);
   else document.documentElement.style.setProperty(token, value);
+  // `reportBackground` runs at startup and on an OS theme change today. The
+  // erase gate rides on the effective alpha too, so it has to follow both of
+  // this function's inputs. Sending it unconditionally is cheaper than
+  // tracking whether the value crossed the opaque boundary.
+  reportBackground();
 }
 
 /**
