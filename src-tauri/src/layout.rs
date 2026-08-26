@@ -52,6 +52,7 @@ pub const MIN_LOGICAL_HEIGHT: u32 = 80;
 /// The area of the intersection of `box_` and `monitor`, in physical pixels.
 ///
 /// `i64` because two `i32` extents multiply straight past `i32`.
+// Temporary: Task 6's `restore` function calls `fit`, making this reachable; remove when restore lands.
 #[allow(dead_code)]
 fn overlap(box_: &PhysRect, monitor: &MonitorRect) -> i64 {
     let left = box_.x.max(monitor.x);
@@ -76,6 +77,7 @@ fn overlap(box_: &PhysRect, monitor: &MonitorRect) -> i64 {
 /// on the wrong monitor — not a window off-screen, which is what this exists
 /// to prevent. A second pass re-probing with the target's scale would narrow
 /// it and is not worth the code until someone reports it.
+// Temporary: Task 6's `restore` function calls this; remove when restore lands.
 #[allow(dead_code)]
 pub fn fit(
     slot: LogicalBox,
