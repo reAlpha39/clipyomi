@@ -240,6 +240,9 @@ describe('main: a startup failure reports itself', () => {
         return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
       }
       if (cmd === 'settings_warning') return Promise.resolve(null);
+      // Same module-level fire-and-forget hazard as `settings_warning` above,
+      // now that `showShortcutWarning` is one of the calls import triggers.
+      if (cmd === 'shortcut_warning') return Promise.resolve(null);
       // showDictionaryScreen's own invoke call, awaited before this test's
       // assertions run — without an explicit answer here it falls through to
       // the reject below and turns `void showDictionaryScreen()` into an
@@ -263,6 +266,7 @@ describe('main: a startup failure reports itself', () => {
         return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
       }
       if (cmd === 'settings_warning') return Promise.resolve(null);
+      if (cmd === 'shortcut_warning') return Promise.resolve(null);
       // Same reason as the sibling test above: showDictionaryScreen must not
       // fall through to a rejection here.
       if (cmd === 'needs_dictionary') return Promise.resolve(false);
@@ -319,6 +323,44 @@ describe('the settings warning', () => {
     await showSettingsWarning();
 
     expect(document.querySelector('#parse-error')?.children).toHaveLength(0);
+  });
+
+  test('a hotkey another app owns is reported in the window', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'shortcut_warning') {
+        return Promise.resolve('These layout hotkeys are already in use: Alt+Digit5');
+      }
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    const main = await import('./main');
+
+    await main.showShortcutWarning();
+
+    expect(document.querySelector('#parse-error')?.textContent).toContain('Alt+Digit5');
+  });
+
+  test('a settings warning and a hotkey warning both survive', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'settings_warning') return Promise.resolve('settings.json could not be read');
+      if (cmd === 'shortcut_warning') return Promise.resolve('hotkeys in use: Alt+Digit5');
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    const main = await import('./main');
+
+    await main.showSettingsWarning();
+    await main.showShortcutWarning();
+
+    const text = document.querySelector('#parse-error')?.textContent ?? '';
+    expect(text).toContain('could not be read');
+    expect(text).toContain('Alt+Digit5');
   });
 });
 

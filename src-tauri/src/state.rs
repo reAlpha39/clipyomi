@@ -65,6 +65,15 @@ pub struct NeedsDictionary(pub bool);
 /// always be there.
 pub struct SettingsWarning(pub String);
 
+/// The layout hotkeys another application already owns, as one sentence, or
+/// empty when there are none.
+///
+/// Separate from `SettingsWarning` for the reason that state's own doc gives
+/// for being separate from `StartupFailure`: one managed string per warning
+/// kind, one command each, because the messages are independent and either can
+/// be present without the other.
+pub struct ShortcutWarning(pub String);
+
 #[derive(Debug, thiserror::Error)]
 pub enum StartupError {
     #[error(

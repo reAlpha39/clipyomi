@@ -12,9 +12,10 @@
 //! past the project's file-size ceiling, and the parts carrying the real logic
 //! are pure functions that need no window at all.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use tauri::{Emitter, Manager};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::commands::BAND_HEIGHT_LOGICAL;
 use crate::settings::{supported, ChromeMode, LayoutSlot, Settings};
@@ -230,9 +231,6 @@ fn live_box(window: &tauri::Window) -> Result<LogicalBox, String> {
 /// deliberately: it is part of the window's real box and is persisted that
 /// way, and `initial_height` (`commands.rs:1099`) is the one place a band is
 /// ever *added*.
-// Temporary: Task 7's hotkey registration is `bind`'s first non-test caller;
-// remove when it lands.
-#[allow(dead_code)]
 pub fn bind(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
     let Some(key) = slot_key(index) else {
         return Err(format!("slot {index} is outside 1..9"));
@@ -263,9 +261,6 @@ pub fn slot_to_restore(settings: &Settings, index: u8) -> Option<LayoutSlot> {
 /// Matched by position and size rather than by name: `name()` is documented as
 /// returning `None` for a monitor that no longer exists, which is precisely
 /// the situation this whole path is built for.
-// Temporary: Task 7's hotkey registration is `restore`'s first non-test
-// caller; remove when it lands.
-#[allow(dead_code)]
 fn monitors(window: &tauri::Window) -> Result<(Vec<MonitorRect>, usize), String> {
     let available = window.available_monitors().map_err(|e| e.to_string())?;
     let primary = window.primary_monitor().map_err(|e| e.to_string())?;
@@ -299,9 +294,6 @@ fn monitors(window: &tauri::Window) -> Result<(Vec<MonitorRect>, usize), String>
 /// persisted value the window was never updated to match. Not fixed here —
 /// fixing it means reordering `set_chrome_mode` too — but this is now the
 /// second caller of the pattern.
-// Temporary: Task 7's hotkey registration is `restore`'s first non-test
-// caller; remove when it lands.
-#[allow(dead_code)]
 pub fn restore(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
     let state = app.state::<Arc<SettingsState>>();
     let Some(slot) = slot_to_restore(&state.snapshot(), index) else {
@@ -346,6 +338,117 @@ pub fn restore(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
     // what gets the payload past `isFullSnapshot` (`main.ts:639`).
     app.emit("settings-changed", state.snapshot())
         .map_err(|e| e.to_string())
+}
+
+/// The event a history hotkey emits to the main window, with `-1` or `1`.
+///
+/// History is session-only and lives in the webview (4C handoff §4), so this
+/// is the one action that has to leave Rust.
+pub const HISTORY_STEP_EVENT: &str = "history-step";
+
+/// What a hotkey does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    Restore(u8),
+    Bind(u8),
+    /// The step direction, `-1` back or `1` forward.
+    History(i8),
+}
+
+/// The twenty global bindings, in registration order.
+///
+/// Written out rather than generated: a `&'static str` cannot be formatted at
+/// runtime, and a table this size is worth being able to grep.
+pub const BINDINGS: [(&str, Action); 20] = [
+    ("Alt+Digit1", Action::Restore(1)),
+    ("Alt+Digit2", Action::Restore(2)),
+    ("Alt+Digit3", Action::Restore(3)),
+    ("Alt+Digit4", Action::Restore(4)),
+    ("Alt+Digit5", Action::Restore(5)),
+    ("Alt+Digit6", Action::Restore(6)),
+    ("Alt+Digit7", Action::Restore(7)),
+    ("Alt+Digit8", Action::Restore(8)),
+    ("Alt+Digit9", Action::Restore(9)),
+    ("Shift+Alt+Digit1", Action::Bind(1)),
+    ("Shift+Alt+Digit2", Action::Bind(2)),
+    ("Shift+Alt+Digit3", Action::Bind(3)),
+    ("Shift+Alt+Digit4", Action::Bind(4)),
+    ("Shift+Alt+Digit5", Action::Bind(5)),
+    ("Shift+Alt+Digit6", Action::Bind(6)),
+    ("Shift+Alt+Digit7", Action::Bind(7)),
+    ("Shift+Alt+Digit8", Action::Bind(8)),
+    ("Shift+Alt+Digit9", Action::Bind(9)),
+    ("Alt+BracketLeft", Action::History(-1)),
+    ("Alt+BracketRight", Action::History(1)),
+];
+
+/// The shortcuts that registered, paired with what they do.
+///
+/// Built once during `setup`; read by `dispatch` on every keypress. A `Vec`
+/// scanned linearly rather than a map: twenty entries, once per keystroke.
+static REGISTERED: OnceLock<Vec<(Shortcut, Action)>> = OnceLock::new();
+
+/// Register all twenty and return the names of the ones that would not take.
+pub fn register_all(app: &tauri::AppHandle) -> Vec<String> {
+    let mut registered = Vec::with_capacity(BINDINGS.len());
+    let mut taken = Vec::new();
+    for (name, action) in BINDINGS {
+        // A name this module wrote itself failing to parse is a programming
+        // error, but it must not abort startup — it is reported the same way a
+        // taken key is, and the same test would catch it.
+        let Ok(shortcut) = name.parse::<Shortcut>() else {
+            taken.push(name.to_string());
+            continue;
+        };
+        // `Shortcut` is `Copy`: the same value is passed to `register` and
+        // pushed into the table, no `.clone()` needed for either use.
+        match app.global_shortcut().register(shortcut) {
+            Ok(()) => registered.push((shortcut, action)),
+            Err(_) => taken.push(name.to_string()),
+        }
+    }
+    // `setup` runs once, so a second call would be a bug; ignoring the result
+    // keeps it from being a panic.
+    let _ = REGISTERED.set(registered);
+    taken
+}
+
+/// The user-facing text for the keys another application already owns.
+///
+/// Empty when there are none, which is how `ShortcutWarning` spells "nothing
+/// to report" — the convention `SettingsWarning` and `StartupFailure` already
+/// use.
+pub fn warning(taken: &[String]) -> String {
+    if taken.is_empty() {
+        return String::new();
+    }
+    format!(
+        "These layout hotkeys are already in use by another application and will not work: {}",
+        taken.join(", ")
+    )
+}
+
+/// Run the action a fired shortcut names.
+///
+/// Every failure is logged and dropped: a hotkey has no return channel, and a
+/// failed restore must not take the app down with it.
+pub fn dispatch(app: &tauri::AppHandle, fired: &Shortcut) {
+    let Some(table) = REGISTERED.get() else {
+        return;
+    };
+    let Some((_, action)) = table.iter().find(|(shortcut, _)| shortcut == fired) else {
+        return;
+    };
+    let outcome = match *action {
+        Action::Restore(index) => restore(app, index),
+        Action::Bind(index) => bind(app, index),
+        Action::History(delta) => app
+            .emit_to("main", HISTORY_STEP_EVENT, delta)
+            .map_err(|e| e.to_string()),
+    };
+    if let Err(e) = outcome {
+        eprintln!("the {action:?} hotkey failed: {e}");
+    }
 }
 
 #[cfg(test)]
@@ -632,5 +735,60 @@ mod tests {
         settings.layout_slots.insert("0".to_string(), slot_fixture());
 
         assert!(slot_to_restore(&settings, 0).is_none());
+    }
+
+    /// Twenty bindings, each name distinct, each action distinct. A duplicated
+    /// name would silently lose one action to the other at registration time.
+    #[test]
+    fn the_binding_table_is_twenty_distinct_keys() {
+        assert_eq!(BINDINGS.len(), 20);
+
+        let names: std::collections::BTreeSet<&str> = BINDINGS.iter().map(|(n, _)| *n).collect();
+        assert_eq!(names.len(), 20, "a shortcut name is repeated");
+
+        let actions: std::collections::BTreeSet<String> =
+            BINDINGS.iter().map(|(_, a)| format!("{a:?}")).collect();
+        assert_eq!(actions.len(), 20, "an action is repeated");
+    }
+
+    #[test]
+    fn every_slot_has_a_restore_and_a_bind() {
+        for n in 1..=9u8 {
+            assert!(
+                BINDINGS.iter().any(|(_, a)| *a == Action::Restore(n)),
+                "no restore for slot {n}"
+            );
+            assert!(
+                BINDINGS.iter().any(|(_, a)| *a == Action::Bind(n)),
+                "no bind for slot {n}"
+            );
+        }
+    }
+
+    /// `Alt+Left`/`Right` was rejected for these: a global grab takes Back and
+    /// Forward from every browser and file manager on the machine for as long
+    /// as this app runs.
+    #[test]
+    fn the_history_pair_is_the_brackets() {
+        assert!(BINDINGS.contains(&("Alt+BracketLeft", Action::History(-1))));
+        assert!(BINDINGS.contains(&("Alt+BracketRight", Action::History(1))));
+    }
+
+    /// Nothing taken means nothing to say. An empty warning is how
+    /// `shortcut_warning` reports "no problem", exactly as `SettingsWarning`
+    /// does.
+    #[test]
+    fn no_taken_keys_produces_no_warning() {
+        assert_eq!(warning(&[]), "");
+    }
+
+    /// A key another application owns is this phase's only otherwise-invisible
+    /// failure: the feature would just do nothing, with no way to tell that
+    /// from a bug in the feature.
+    #[test]
+    fn taken_keys_are_named_in_the_warning() {
+        let text = warning(&["Alt+Digit5".to_string(), "Alt+BracketLeft".to_string()]);
+        assert!(text.contains("Alt+Digit5"), "got {text}");
+        assert!(text.contains("Alt+BracketLeft"), "got {text}");
     }
 }

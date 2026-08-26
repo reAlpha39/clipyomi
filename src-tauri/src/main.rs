@@ -29,6 +29,17 @@ use tauri::Manager;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    // The handler fires for press AND release. Ungated, every
+                    // hotkey would act twice per keystroke.
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        layout::dispatch(app, shortcut);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let root = state::resolve_dict_root(&config_dir);
@@ -159,6 +170,13 @@ fn main() {
             popover::create(app)?;
             // Hidden, and for the same reason — see `create_settings_window`.
             commands::create_settings_window(app)?;
+            // After the windows exist: a hotkey pressed the instant the app
+            // starts must find a window to act on.
+            let taken = layout::register_all(app.handle());
+            app.manage(state::ShortcutWarning(layout::warning(&taken)));
+            if !taken.is_empty() {
+                eprintln!("hotkeys already in use: {}", taken.join(", "));
+            }
             mouse_tracker::start(app.handle().clone());
             Ok(())
         })
@@ -182,6 +200,7 @@ fn main() {
             commands::open_settings_window,
             commands::startup_error,
             commands::settings_warning,
+            commands::shortcut_warning,
             commands::frontend_ready,
             commands::download_dictionary,
             commands::needs_dictionary,
