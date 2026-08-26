@@ -640,7 +640,12 @@ async function applySettings(): Promise<void> {
   applySurfaceAlpha();
 }
 
-void listen<Settings>('settings-changed', (e) => {
+// `Partial<Settings>`, not `Settings`: a bare `{ chrome_mode }` from the
+// right-click menu and a `{ surface_alpha }` from a slider drag are both real
+// payloads on this event, and the `isFullSnapshot` check below is only
+// meaningful if the type admits that the keys can be missing. `settings.ts`'s
+// `applySettings` takes the same view of the same event.
+void listen<Partial<Settings>>('settings-changed', (e) => {
   const settings = e.payload;
   if (settings.hide_pos !== undefined) currentFilters.hide_pos = settings.hide_pos;
   if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;

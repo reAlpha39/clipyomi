@@ -66,7 +66,7 @@ export const STUB = `
         cmd === 'update_clip_region' ||
         cmd === 'save_window_geometry'
       )
-        return undefined;
+        return null;
       // These specs run on macOS and their screenshot baselines are the darwin
       // ones, so the stub must answer as macOS, or every baseline would pin the
       // Windows layout (permanent band padding, in-app window controls) on a
@@ -80,12 +80,18 @@ export const STUB = `
       // answer is "a dictionary already exists" — Task 5's own spec overrides
       // this to true for the one test that needs the download screen instead.
       if (cmd === 'needs_dictionary') return false;
-      if (cmd === 'download_dictionary') return undefined;
+      if (cmd === 'download_dictionary') return null;
       if (cmd === 'plugin:event|listen') {
         window.__TA_LISTENERS__[args.event] = args.handler;
         return 0;
       }
-      return undefined;
+      // A Rust command returning \`()\` serialises to JSON null, so null is the
+      // faithful default for a command this stub does not name — and the only
+      // one the frontend's null guards recognise. \`undefined\` slipped past
+      // \`showShortcutWarning\`'s guard once already and painted an invisible
+      // padded element that shifted four screenshot baselines; answering with
+      // null retires that whole class rather than one command at a time.
+      return null;
     },
   };
 `;
