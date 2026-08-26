@@ -463,3 +463,56 @@ is a design decision, not a fix, so it was left to whoever owns that
 call — `commands.rs` has been over the same ceiling at ~2000 lines since
 long before this phase, so the module is not the first offender, but it is
 now the second.
+
+---
+
+## 9. The Post-Close Wave
+
+Four changes made after the phase closed, on `develop`. Together they answer
+three of the items §8 left open and one thing real hardware said about the
+feature itself.
+
+1. **The eighteen fixed slot keys were removed.** On a real Windows desktop
+   `Alt+1`, `Alt+2`, `Alt+3` and `Shift+Alt+1` were all already owned by other
+   software, so `register_all` reported a third of its own table as taken on
+   first launch. A fixed table has no answer to that: the keys it picks are
+   the keys it is stuck with. `BINDINGS` is now the two history shortcuts,
+   `Alt+BracketLeft` and `Alt+BracketRight`, and the replacement for the rest
+   is a later remappable-bindings phase, where a key can be reassigned or
+   switched off per binding and globally.
+
+   Nothing the slot keys called was deleted. `Action::Restore` and
+   `Action::Bind` carry `#[allow(dead_code)]` on the *constructors* only —
+   `dispatch` still routes both arms, and `bind`, `restore`, `apply_slot`,
+   `slot_from`, `slot_key`, `slot_to_restore` and every test over them are
+   untouched. The remappable phase constructs the two actions from the user's
+   own key table and retires the suppression. Until it lands, `layout_slots`
+   is inert: nothing binds or restores a slot at runtime. Master spec §12 now
+   carries this as deviation #15, and the §11 4D row no longer claims twenty
+   registered shortcuts. Two new tests pin the shape — that `BINDINGS` is two
+   distinct keys, and that no slot index has a fixed key, so the parked
+   machinery cannot quietly get one back.
+
+2. **`layout.rs` was split** (§8's open ceiling). The pure geometry — `fit`,
+   `fit_and_persist`, `unpeek`, `overlap`, `to_logical`, `LogicalBox`,
+   `MonitorRect`, `PhysRect` and their tests — moved to
+   `src-tauri/src/layout/geometry.rs`, re-exported unchanged, so no caller
+   outside the module moved with it. The split is along the line the module
+   already had: the parts that need a window against the parts that need only
+   numbers. 586 and 548 lines, both under the 800 ceiling; `commands.rs`
+   remains the one file over it.
+
+3. **`core:event:allow-emit-to`** was added to `capabilities/default.json`
+   (§8 surfaced this rather than fixing it). `dispatch` emits `history-step`
+   with `emit_to("main", …)`, which that permission gates — the history keys
+   were the one shipped path through it.
+
+4. **Wording.** `ShortcutWarning`, `showShortcutWarning` and the registration
+   warning text said "layout hotkeys" while the only registered keys step
+   parse history. They say "hotkeys" now, and `slot_key`'s and
+   `register_all`'s doc comments no longer count twenty of them.
+
+**Still open after this wave**: the README's missing hotkey documentation —
+now two keys rather than twenty, and better written once the remappable phase
+settles what a key even is; the 35 pre-existing `cargo fmt` diffs outside this
+phase's Rust; and the rest of §8's deliberate list, unchanged.
