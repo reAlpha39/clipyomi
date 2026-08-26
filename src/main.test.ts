@@ -944,6 +944,127 @@ describe('the titlebar band', () => {
     open('Quit');
     expect(invoke).toHaveBeenCalledWith('close_window');
   });
+
+  /** Like `load`, but with a `surface_alpha` in the settings snapshot. */
+  function loadWithAlpha(mode: ChromeMode, alpha?: number) {
+    document.body.innerHTML = '<main id="app"></main>';
+    listeners.clear();
+    invoke.mockReset();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings')
+        return Promise.resolve({ chrome_mode: mode, surface_alpha: alpha });
+      if (cmd === 'platform') return Promise.resolve('macos');
+      if (cmd === 'is_macos') return Promise.resolve(true);
+      if (cmd === 'peek_grows_frame') return Promise.resolve(true);
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    return import('./main');
+  }
+
+  function alphaToken(): string {
+    return document.documentElement.style.getPropertyValue('--surface-alpha');
+  }
+
+  test('a persisted alpha reaches the root element as a ratio', async () => {
+    await loadWithAlpha('header', 62);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(alphaToken()).toBe('0.62');
+  });
+
+  // Zero is a real setting, and `''` would mean "unset" — the two must not
+  // collapse into each other on the way to the stylesheet.
+  test('a zero alpha is written, not treated as unset', async () => {
+    await loadWithAlpha('content', 0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(alphaToken()).toBe('0');
+  });
+
+  test('an absent alpha leaves the property off so the stylesheet owns it', async () => {
+    await loadWithAlpha('header', undefined);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(alphaToken()).toBe('');
+  });
+
+  // The clamp, half one: an opaque OS caption over a see-through body is an
+  // artifact, so native renders fully opaque whatever is stored.
+  test('native chrome clamps the applied alpha to full opacity', async () => {
+    await loadWithAlpha('native', 20);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(alphaToken()).toBe('1');
+  });
+
+  // The clamp, half two, and the reason it is applied rather than persisted:
+  // the user's value has to come back when they leave native.
+  test('leaving native restores the stored alpha', async () => {
+    await loadWithAlpha('native', 20);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(alphaToken()).toBe('1');
+
+    emit('settings-changed', { chrome_mode: 'header' });
+    await Promise.resolve();
+    expect(alphaToken()).toBe('0.2');
+  });
+
+  test('an alpha arriving by event is applied without a reload', async () => {
+    await loadWithAlpha('header', 100);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('settings-changed', { surface_alpha: 35 });
+    await Promise.resolve();
+    expect(alphaToken()).toBe('0.35');
+  });
+
+  test('a partial payload does not wipe the font-size tokens', async () => {
+    await loadWithAlpha('header', 100);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('settings-changed', {
+      always_on_top: false,
+      clipboard_monitoring: true,
+      font_sentence: 30,
+      font_gloss: 18,
+      furigana_scale: 70,
+    });
+    await Promise.resolve();
+    expect(document.documentElement.style.getPropertyValue('--text-sentence')).toBe('30px');
+
+    // The opacity slider and the right-click menu both emit one key alone.
+    emit('settings-changed', { surface_alpha: 40 });
+    await Promise.resolve();
+    expect(document.documentElement.style.getPropertyValue('--text-sentence')).toBe('30px');
+
+    emit('settings-changed', { chrome_mode: 'content' });
+    await Promise.resolve();
+    expect(document.documentElement.style.getPropertyValue('--text-sentence')).toBe('30px');
+  });
+
+  // The other half of the guard: a full snapshot with a size missing means the
+  // user cleared that box, and the token must go so `tokens.css` owns it.
+  test('a full snapshot with a cleared size still clears the token', async () => {
+    await loadWithAlpha('header', 100);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('settings-changed', {
+      always_on_top: false,
+      clipboard_monitoring: true,
+      font_sentence: 30,
+    });
+    await Promise.resolve();
+    expect(document.documentElement.style.getPropertyValue('--text-sentence')).toBe('30px');
+
+    emit('settings-changed', { always_on_top: false, clipboard_monitoring: true });
+    await Promise.resolve();
+    expect(document.documentElement.style.getPropertyValue('--text-sentence')).toBe('');
+  });
 });
 
 describe('window geometry save on resize/move', () => {
@@ -1357,7 +1478,15 @@ describe('font sizes reaching the root element', () => {
     await Promise.resolve();
     expect(token('--text-sentence')).toBe('24px');
 
-    emit('settings-changed', { font_sentence: 36, furigana_scale: 50 });
+    // A real settings-changed snapshot always carries these two non-optional
+    // `Settings` keys — that pair is what marks it a full snapshot rather
+    // than a partial payload like `{ surface_alpha }` or `{ chrome_mode }`.
+    emit('settings-changed', {
+      always_on_top: false,
+      clipboard_monitoring: true,
+      font_sentence: 36,
+      furigana_scale: 50,
+    });
 
     expect(token('--text-sentence')).toBe('36px');
     expect(token('--text-furigana')).toBe('0.5em');
@@ -1372,7 +1501,11 @@ describe('font sizes reaching the root element', () => {
     await Promise.resolve();
     expect(token('--text-sentence')).toBe('36px');
 
-    emit('settings-changed', { furigana_scale: 70 });
+    emit('settings-changed', {
+      always_on_top: false,
+      clipboard_monitoring: true,
+      furigana_scale: 70,
+    });
 
     expect(token('--text-sentence')).toBe('');
     expect(token('--text-furigana')).toBe('0.7em');
@@ -1459,7 +1592,10 @@ describe('the gloss size reaching the popover window', () => {
     expect(emitted).toContainEqual(['popover-content', expect.objectContaining({ gloss: 18 })]);
 
     emitted.length = 0;
-    emit('settings-changed', { hide_pos: false });
+    // A real settings-changed snapshot always carries these two non-optional
+    // `Settings` keys — without them the payload reads as partial and the
+    // font-size guard (see `main.ts`) would leave the cleared size untouched.
+    emit('settings-changed', { always_on_top: false, clipboard_monitoring: true, hide_pos: false });
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));

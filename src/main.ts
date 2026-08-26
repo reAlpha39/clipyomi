@@ -16,6 +16,7 @@ import {
   type Rect,
 } from './render/popover';
 import { clampFont, fontVars } from './font-sizes';
+import { clampAlpha, surfaceAlphaVar } from './surface-alpha';
 import { createHistory } from './history';
 import { openContextMenu, type MenuEntry } from './context-menu';
 import type { ChromeMode, FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
@@ -289,6 +290,14 @@ headerControls?.addEventListener('dblclick', (e) => {
 let chromeMode: ChromeMode = 'native';
 
 /**
+ * The persisted background opacity as a percentage, or `null` while none is
+ * persisted and `tokens.css` owns it. Stored raw: the `native` clamp is
+ * applied on the way to the stylesheet, never written back here, so leaving
+ * native restores exactly what the user chose.
+ */
+let currentAlpha: number | null = null;
+
+/**
  * The platform, as the backend reports it. Module-scope because the right-click
  * menu needs it too, and it decides whether the native-frame item exists.
  * Defaults to `macos` for the window between import and the first `platform`
@@ -380,6 +389,9 @@ function applyChromeMode(mode: ChromeMode): void {
     peeking = false;
     app.classList.remove('peeked', 'peek-offset');
   }
+  // The clamp reads the mode, so it has to be re-evaluated whenever the mode
+  // moves — `native` renders opaque whatever `currentAlpha` holds.
+  applySurfaceAlpha();
 }
 
 applyChromeMode('native');
@@ -529,6 +541,20 @@ function applyFontSizes(settings: Partial<Settings>): void {
 }
 
 /**
+ * Push the background-opacity token onto the root element, clamped by the
+ * chrome mode.
+ *
+ * Separate from `applyFontSizes` because it has a second input — the mode —
+ * which is also why `applyChromeMode` calls it: a mode change is itself a
+ * reason for the clamp to flip, and that path carries no alpha of its own.
+ */
+function applySurfaceAlpha(): void {
+  const [token, value] = surfaceAlphaVar(currentAlpha, chromeMode);
+  if (value === '') document.documentElement.style.removeProperty(token);
+  else document.documentElement.style.setProperty(token, value);
+}
+
+/**
  * The gloss size to send with popover content, or `null` while none is
  * persisted and the tooltip's own stylesheet owns the default.
  */
@@ -543,6 +569,7 @@ async function applySettings(): Promise<void> {
   app.setAttribute('data-platform', currentPlatform);
   reportBackground();
   const settings = await invoke<Settings>('get_settings');
+  currentAlpha = clampAlpha(settings.surface_alpha);
   if (settings.chrome_mode !== undefined) {
     applyChromeMode(settings.chrome_mode);
   }
@@ -559,6 +586,9 @@ async function applySettings(): Promise<void> {
     currentFilters.hide_usage = settings.hide_usage;
   }
   applyFontSizes(settings);
+  // Unconditional: a settings file with no `chrome_mode` never reaches
+  // `applyChromeMode`, and the token still has to be written.
+  applySurfaceAlpha();
 }
 
 void listen<Settings>('settings-changed', (e) => {
@@ -566,7 +596,19 @@ void listen<Settings>('settings-changed', (e) => {
   if (settings.hide_pos !== undefined) currentFilters.hide_pos = settings.hide_pos;
   if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;
   if (settings.hide_usage !== undefined) currentFilters.hide_usage = settings.hide_usage;
-  applyFontSizes(settings);
+  // `applyFontSizes` reads an absent size as "clear it", which is right for a
+  // full snapshot — the user emptied that box — and wrong for a partial
+  // payload. `{ chrome_mode }` from the right-click menu and
+  // `{ surface_alpha }` from a slider drag carry no sizes at all, and applying
+  // them unguarded wipes the sizes the user set. A full snapshot is the one
+  // carrying the two keys `Settings` does not mark optional.
+  const isFullSnapshot =
+    settings.always_on_top !== undefined && settings.clipboard_monitoring !== undefined;
+  if (isFullSnapshot) applyFontSizes(settings);
+  if (settings.surface_alpha !== undefined) {
+    currentAlpha = clampAlpha(settings.surface_alpha);
+    applySurfaceAlpha();
+  }
   if (settings.chrome_mode !== undefined) applyChromeMode(settings.chrome_mode);
   if (settings.furigana_mode !== undefined && settings.furigana_mode !== currentFuriganaMode) {
     currentFuriganaMode = settings.furigana_mode;
