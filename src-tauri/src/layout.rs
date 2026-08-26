@@ -90,6 +90,40 @@ pub fn fit(
     primary: usize,
     scale_hint: f64,
 ) -> PhysRect {
+    fit_and_persist(slot, monitors, primary, scale_hint).0
+}
+
+/// A physical box back in the logical pixels `window_*` and `LayoutSlot` store.
+fn to_logical(rect: PhysRect, scale: f64) -> LogicalBox {
+    LogicalBox {
+        x: (rect.x as f64 / scale).round() as i32,
+        y: (rect.y as f64 / scale).round() as i32,
+        width: (rect.width as f64 / scale).round() as u32,
+        height: (rect.height as f64 / scale).round() as u32,
+    }
+}
+
+/// `fit`'s box — the clamp itself is documented there — plus the same box in
+/// logical pixels, which is what a caller persists.
+///
+/// The conversion back uses the *target* monitor's scale rather than the
+/// current window's, because the window ends up on the target: the logical box
+/// this returns is the one `save_window_geometry` would record for the window
+/// once it is there (`main.ts:1104`), so `window_*` on disk stays in the units
+/// everything else writes them in.
+///
+/// Persisting the raw slot instead is how a restore leaves the file naming a
+/// monitor that is gone: the window lands on-screen, `settings.json` keeps the
+/// off-screen origin, and a second `Alt+N` cannot correct it — `set_position`
+/// with the coordinates the window already occupies fires no move event, so the
+/// frontend's debounced geometry save never runs. Quit in that state and the
+/// next launch opens off-screen, where no hotkey can reach it.
+pub fn fit_and_persist(
+    slot: LogicalBox,
+    monitors: &[MonitorRect],
+    primary: usize,
+    scale_hint: f64,
+) -> (PhysRect, LogicalBox) {
     let probe = PhysRect {
         x: (slot.x as f64 * scale_hint).round() as i32,
         y: (slot.y as f64 * scale_hint).round() as i32,
@@ -97,7 +131,7 @@ pub fn fit(
         height: (slot.height as f64 * scale_hint).round() as u32,
     };
     if monitors.is_empty() {
-        return probe;
+        return (probe, to_logical(probe, scale_hint));
     }
 
     let overlapping = monitors
@@ -124,7 +158,8 @@ pub fn fit(
     let y = probe
         .y
         .clamp(target.y, target.y + target.height as i32 - height as i32);
-    PhysRect { x, y, width, height }
+    let fitted = PhysRect { x, y, width, height };
+    (fitted, to_logical(fitted, target.scale))
 }
 
 /// Undo a peek's frame growth on a box just read from the live window.
@@ -261,7 +296,10 @@ pub fn slot_to_restore(settings: &Settings, index: u8) -> Option<LayoutSlot> {
 /// Matched by position and size rather than by name: `name()` is documented as
 /// returning `None` for a monitor that no longer exists, which is precisely
 /// the situation this whole path is built for.
-fn monitors(window: &tauri::Window) -> Result<(Vec<MonitorRect>, usize), String> {
+///
+/// `pub(crate)` for `main.rs`'s startup restore, which meets the same
+/// possibly-changed monitor layout and needs the same two answers.
+pub(crate) fn monitors(window: &tauri::Window) -> Result<(Vec<MonitorRect>, usize), String> {
     let available = window.available_monitors().map_err(|e| e.to_string())?;
     let primary = window.primary_monitor().map_err(|e| e.to_string())?;
     let rects = available
@@ -301,14 +339,13 @@ pub fn restore(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
     };
     let native_supported = crate::settings::native_supported();
     let mode = supported(slot.chrome_mode, native_supported);
-    state
-        .update(|s| apply_slot(s, &slot, native_supported))
-        .map_err(|e| e.to_string())?;
-
+    // The clamp runs before the persist so what reaches disk is the geometry
+    // the window is about to get. `apply_slot` writes the raw slot box; the
+    // closure below overwrites those four keys with the fitted one.
     let window = crate::commands::chrome_target(app)?;
     let (rects, primary) = monitors(&window)?;
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
-    let fitted = fit(
+    let (fitted, persisted) = fit_and_persist(
         LogicalBox {
             x: slot.window_x,
             y: slot.window_y,
@@ -319,6 +356,20 @@ pub fn restore(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
         primary,
         scale,
     );
+    state
+        .update(|s| {
+            apply_slot(s, &slot, native_supported);
+            s.window_width = Some(persisted.width);
+            s.window_height = Some(persisted.height);
+            s.window_x = Some(persisted.x);
+            s.window_y = Some(persisted.y);
+        })
+        .map_err(|e| e.to_string())?;
+
+    // Chrome before geometry: restoring a `native` slot from a frameless mode
+    // adds a title bar on macOS, and adding one after `set_size` has fixed the
+    // inner size leaves the content a title bar short.
+    crate::commands::apply_chrome(&window, mode)?;
     window
         .set_size(tauri::PhysicalSize::new(fitted.width, fitted.height))
         .map_err(|e| e.to_string())?;
@@ -328,7 +379,6 @@ pub fn restore(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
     window
         .set_always_on_top(slot.always_on_top)
         .map_err(|e| e.to_string())?;
-    crate::commands::apply_chrome(&window, mode)?;
 
     // One full snapshot carries the token-level half — alpha, the three sizes,
     // the furigana mode — to both webviews. It works because of attributes
@@ -538,6 +588,36 @@ mod tests {
             fit(slot, &[], 0, 2.0),
             PhysRect { x: 80, y: 80, width: 1440, height: 960 }
         );
+    }
+
+    /// The invariant behind `fit_and_persist`: what restore writes to disk is a
+    /// box the window actually occupied. Persisting the raw slot leaves
+    /// `settings.json` naming the monitor that went away, and the next launch
+    /// opens there — off-screen, with every key that could fix it attached to
+    /// the window that is off-screen.
+    #[test]
+    fn the_box_to_persist_is_the_fitted_one_not_the_slot() {
+        let slot = LogicalBox { x: 3000, y: 200, width: 720, height: 480 };
+
+        let (fitted, persisted) = fit_and_persist(slot, &one_monitor(), 0, 1.0);
+
+        assert_eq!(fitted, PhysRect { x: 1200, y: 200, width: 720, height: 480 });
+        assert_eq!(persisted, LogicalBox { x: 1200, y: 200, width: 720, height: 480 });
+        assert_ne!(persisted, slot, "the raw slot must not be what gets stored");
+    }
+
+    /// The conversion back is at the TARGET monitor's scale, not the window's:
+    /// the window now sits on the target, so this is the logical box
+    /// `save_window_geometry` would record for it (`main.ts:1104`).
+    #[test]
+    fn the_box_to_persist_is_logical_at_the_target_monitors_scale() {
+        let monitors = vec![MonitorRect { x: 0, y: 0, width: 2880, height: 1620, scale: 1.5 }];
+        let slot = LogicalBox { x: 0, y: 0, width: 720, height: 480 };
+
+        let (fitted, persisted) = fit_and_persist(slot, &monitors, 0, 1.0);
+
+        assert_eq!(fitted, PhysRect { x: 0, y: 0, width: 1080, height: 720 });
+        assert_eq!(persisted, slot, "a fitted box that moved nothing round-trips");
     }
 
     /// macOS grows the frame upward for a peek, so a bind pressed mid-peek
