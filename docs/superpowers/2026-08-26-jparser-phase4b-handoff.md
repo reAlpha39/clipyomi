@@ -137,6 +137,13 @@ was added, and none was needed.
 
 ## 5. What Is Unverified
 
+> **Partly superseded — read §5.1 first.** After this handoff was written, the
+> phase was run by hand on Windows for the first time. That session found a
+> real bug (fixed in `378ed8e`), answered the spike's question, and moved a
+> few items in the list below from unrun to observed. The list is left intact
+> rather than rewritten, so what was and was not known at each point stays
+> legible; §5.1 records what changed.
+
 - **The macOS arms, exactly as 4A left them.** `macos-private-api` taking
   effect, and native-mode alpha correctly forcing to 100 % under macOS's
   `titleBarStyle: "Overlay"`, were reasoned about (design spec §6) but not
@@ -196,6 +203,76 @@ was added, and none was needed.
   `transparent: true` was switched on for real (not the spike's temporary
   flag). Same class of gap as the spike: nothing in this phase's automated
   suite can substitute for it, because Playwright cannot see it (above).
+
+---
+
+## 5.1 What the First Manual Run Established
+
+A hand session on Windows (144 DPI) after this handoff was first written.
+
+### The bug it found: a classic caption painted into the band
+
+At 0 % opacity, hovering to reveal the titlebar band showed a horizontal
+grey-to-light gradient carrying faint title text and window glyphs, shifting
+as the window moved over different content.
+
+`WM_NCCALCSIZE` hands the client area the whole window, but it never stopped
+`DefWindowProc` from **painting** a non-client frame on top. `WS_CAPTION` is
+stripped for the window's life, but `WS_SYSMENU` and the min/max boxes are
+not, and what the default handler draws for those is a classic caption —
+title, buttons, and the system's `COLOR_GRADIENTACTIVECAPTION` wash — at the
+top of the window, which is exactly the reserved band row.
+
+**This predates Phase 4B.** `git log -S WM_NCPAINT` finds no prior handler,
+so it has been painting since the frameless window existed. GDI writes those
+pixels through a `COLORREF` whose alpha byte is zero — invalid premultiplied
+data — which an opaque webview covered completely. Per-pixel alpha exposed
+it; it did not cause it. It also explains why `1671a77` appeared to fix it:
+that commit changed the strip from frame growth to region clipping, which
+changed *when* the caption was exposed without stopping it being painted.
+
+Fixed in `378ed8e` by claiming `WM_NCPAINT` (draw nothing) and passing `-1`
+to `WM_NCACTIVATE` (keep the activation bookkeeping, skip the repaint that
+paints the same caption by a second route).
+
+Diagnosed by instrumenting the live window rather than guessing. The probe
+ruled out three hypotheses in turn: `caption=false` killed the DWM-caption
+theory, `layered=false`/`noredir=false` killed the compositing-class theory,
+and `region_top` flipping 42 ↔ 0 confirmed the region mechanic was correct.
+An earlier hypothesis — that the strip held stale invalid pixels needing a
+premultiplied clear — was tested and **refuted**; do not retry it.
+
+### The spike's question is answered
+
+`WM_ERASEBKGND` **still fires** under `DwmEnableBlurBehindWindow`: erase
+lines appear on every resize at 0 % opacity. So the design spec's §5.4
+"spike says the fill is dead" branch does not apply, and the premultiplied-
+DIB remedy it named is not needed for that reason.
+
+What the run did establish is narrower and was not anticipated: the message
+never fires for a **region change**. A peek calls `SetWindowRgn` with
+`bRedraw: 0` and sends no erase, so the strip it un-clips is never repainted
+on that path. That was not the cause of this bug, and no defect is currently
+attributed to it — recorded because it is a real property of the peek path
+that the next person to touch it should know.
+
+### Manual checklist, updated honestly
+
+Against §5's list of six:
+
+- **Check 4 (drag 100 → 0)** — partially observed. The slider was driven to
+  0 % and the window rendered see-through. Whether the sentence and furigana
+  stay crisp was not separately confirmed.
+- **Drag, the resize edges, and maximise/restore** — checked by hand after
+  `378ed8e` and unaffected. Not one of the six, but it is the obvious risk of
+  claiming non-client messages, so it was checked.
+- **Checks 1, 2, 3, 5 and 6 remain NOT RUN**, exactly as stated in §5. In
+  particular check 3 — ten pointer entries counting desktop-coloured flashes
+  against 4A's 1 % baseline — has still not been performed, so whether the
+  anti-flash mechanic still holds at 100 % opacity remains unmeasured.
+
+`transparent: true` is still exercised by nothing in the automated suite, and
+macOS is still entirely unrun.
 
 ---
 
