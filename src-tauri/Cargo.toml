@@ -40,6 +40,9 @@ tauri-plugin-clipboard-manager = "2.3.2"
 # purity gate guards it — but the shell is where a download belongs, and
 # `jmdict-source` already owns the retry, staging, and gzip handling.
 jmdict-source = { path = "../crates/jmdict-source" }
+# MIT OR Apache-2.0, taken under MIT: Apache-2.0 alone is incompatible with this
+# project's GPL-2.0-only. Same for its `global-hotkey` dependency.
+tauri-plugin-global-shortcut = "2.3.2"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }
