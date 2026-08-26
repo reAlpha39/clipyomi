@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-26
 **Spec:** [`docs/superpowers/specs/2026-08-25-jparser-phase4a-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-25-jparser-phase4a-design.md)
-**Commits:** `9330ff8..eee8320` on `develop` (nine commits, unpushed)
+**Commits:** `9330ff8..1caf183` on `develop` (fourteen commits, unpushed)
 
 ---
 
