@@ -231,6 +231,8 @@ pub mod win32_frameless {
     const WM_STYLECHANGING: u32 = 0x007C;
     const WM_NCCALCSIZE: u32 = 0x0083;
     const WM_NCHITTEST: u32 = 0x0084;
+    const WM_NCPAINT: u32 = 0x0085;
+    const WM_NCACTIVATE: u32 = 0x0086;
     const WM_ERASEBKGND: u32 = 0x0014;
     const WM_WINDOWPOSCHANGING: u32 = 0x0046;
 
@@ -677,6 +679,29 @@ pub mod win32_frameless {
             // visible. Painting the theme background here fills that gap with
             // the colour the webview is about to draw anyway. It does not
             // remove the top-edge glitch, only shrink it.
+            // `WM_NCCALCSIZE` above hands the client area the whole window, but
+            // it does not stop `DefWindowProc` from PAINTING a non-client frame
+            // on top. `WS_CAPTION` is gone, yet `WS_SYSMENU` and the min/max
+            // boxes remain, and what the default handler draws for that is a
+            // classic caption — title text, buttons, and the system's
+            // horizontal `COLOR_GRADIENTACTIVECAPTION` wash — into the top of
+            // the window, which is exactly the reserved band row.
+            //
+            // It was invisible until per-pixel alpha shipped. GDI writes those
+            // pixels through a COLORREF, so their alpha byte is zero: invalid
+            // premultiplied data that DWM composites as a colour that shifts
+            // with whatever is behind the window. An opaque webview covered
+            // them completely; a see-through one does not, and the band is
+            // where they land. Diagnosed by suppressing these two messages and
+            // watching the gradient go.
+            //
+            // Nothing legitimate paints here — the client owns every pixel —
+            // so `WM_NCPAINT` draws nothing at all.
+            WM_NCPAINT => return 0,
+            // `-1` is the documented way to keep `DefWindowProc`'s activation
+            // bookkeeping while skipping the non-client repaint it would
+            // otherwise do, which paints the same caption by a second route.
+            WM_NCACTIVATE => return DefSubclassProc(hwnd, msg, wparam, -1),
             WM_ERASEBKGND => {
                 // Skipped once the surface is see-through. `CreateSolidBrush`
                 // takes a COLORREF, which carries no alpha, so GDI writes zero
