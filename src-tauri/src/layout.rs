@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::commands::BAND_HEIGHT_LOGICAL;
 use crate::settings::{supported, ChromeMode, LayoutSlot, Settings};
@@ -60,9 +60,6 @@ pub const MIN_LOGICAL_HEIGHT: u32 = 80;
 /// The area of the intersection of `box_` and `monitor`, in physical pixels.
 ///
 /// `i64` because two `i32` extents multiply straight past `i32`.
-// Temporary: Task 6's `restore` function calls `fit`, making this reachable;
-// remove when restore lands.
-#[allow(dead_code)]
 fn overlap(box_: &PhysRect, monitor: &MonitorRect) -> i64 {
     let left = box_.x.max(monitor.x);
     let top = box_.y.max(monitor.y);
@@ -86,8 +83,6 @@ fn overlap(box_: &PhysRect, monitor: &MonitorRect) -> i64 {
 /// on the wrong monitor — not a window off-screen, which is what this exists
 /// to prevent. A second pass re-probing with the target's scale would narrow
 /// it and is not worth the code until someone reports it.
-// Temporary: Task 6's `restore` function calls this; remove when restore lands.
-#[allow(dead_code)]
 pub fn fit(
     slot: LogicalBox,
     monitors: &[MonitorRect],
@@ -157,9 +152,6 @@ pub fn unpeek(box_: LogicalBox, peeked: bool, grows_frame: bool) -> LogicalBox {
 ///
 /// `native_supported` is a parameter rather than a `cfg!` for the reason
 /// `supported` gives: both arms are then testable wherever the suite runs.
-// Temporary: Task 6's `restore` function calls `apply_slot`; remove when
-// restore lands.
-#[allow(dead_code)]
 pub fn apply_slot(settings: &mut Settings, slot: &LayoutSlot, native_supported: bool) {
     settings.window_width = Some(slot.window_width);
     settings.window_height = Some(slot.window_height);
@@ -257,6 +249,102 @@ pub fn bind(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
         .update(|s| {
             s.layout_slots.insert(key, slot);
         })
+        .map_err(|e| e.to_string())
+}
+
+/// The slot `index` names, or `None` when it is unbound or out of range.
+pub fn slot_to_restore(settings: &Settings, index: u8) -> Option<LayoutSlot> {
+    let key = slot_key(index)?;
+    settings.layout_slots.get(&key).cloned()
+}
+
+/// Every monitor's work area, plus the index of the primary one.
+///
+/// Matched by position and size rather than by name: `name()` is documented as
+/// returning `None` for a monitor that no longer exists, which is precisely
+/// the situation this whole path is built for.
+// Temporary: Task 7's hotkey registration is `restore`'s first non-test
+// caller; remove when it lands.
+#[allow(dead_code)]
+fn monitors(window: &tauri::Window) -> Result<(Vec<MonitorRect>, usize), String> {
+    let available = window.available_monitors().map_err(|e| e.to_string())?;
+    let primary = window.primary_monitor().map_err(|e| e.to_string())?;
+    let rects = available
+        .iter()
+        .map(|m| {
+            let area = m.work_area();
+            MonitorRect {
+                x: area.position.x,
+                y: area.position.y,
+                width: area.size.width,
+                height: area.size.height,
+                scale: m.scale_factor(),
+            }
+        })
+        .collect();
+    let primary_index = primary
+        .and_then(|p| {
+            available
+                .iter()
+                .position(|m| m.position() == p.position() && m.size() == p.size())
+        })
+        .unwrap_or(0);
+    Ok((rects, primary_index))
+}
+
+/// Restore slot `index` (`Alt+N`).
+///
+/// Persist-then-apply, matching `set_chrome_mode`, and carrying the same
+/// weakness 4A handoff §9 recorded: a failure in the apply half leaves a
+/// persisted value the window was never updated to match. Not fixed here —
+/// fixing it means reordering `set_chrome_mode` too — but this is now the
+/// second caller of the pattern.
+// Temporary: Task 7's hotkey registration is `restore`'s first non-test
+// caller; remove when it lands.
+#[allow(dead_code)]
+pub fn restore(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
+    let state = app.state::<Arc<SettingsState>>();
+    let Some(slot) = slot_to_restore(&state.snapshot(), index) else {
+        return Ok(());
+    };
+    let native_supported = crate::settings::native_supported();
+    let mode = supported(slot.chrome_mode, native_supported);
+    state
+        .update(|s| apply_slot(s, &slot, native_supported))
+        .map_err(|e| e.to_string())?;
+
+    let window = crate::commands::chrome_target(app)?;
+    let (rects, primary) = monitors(&window)?;
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let fitted = fit(
+        LogicalBox {
+            x: slot.window_x,
+            y: slot.window_y,
+            width: slot.window_width,
+            height: slot.window_height,
+        },
+        &rects,
+        primary,
+        scale,
+    );
+    window
+        .set_size(tauri::PhysicalSize::new(fitted.width, fitted.height))
+        .map_err(|e| e.to_string())?;
+    window
+        .set_position(tauri::PhysicalPosition::new(fitted.x, fitted.y))
+        .map_err(|e| e.to_string())?;
+    window
+        .set_always_on_top(slot.always_on_top)
+        .map_err(|e| e.to_string())?;
+    crate::commands::apply_chrome(&window, mode)?;
+
+    // One full snapshot carries the token-level half — alpha, the three sizes,
+    // the furigana mode — to both webviews. It works because of attributes
+    // already on `Settings`: every optional key skips serialization when
+    // absent, which is exactly what `applyFontSizes` reads as "clear it", and
+    // `always_on_top` + `clipboard_monitoring` are always present, which is
+    // what gets the payload past `isFullSnapshot` (`main.ts:639`).
+    app.emit("settings-changed", state.snapshot())
         .map_err(|e| e.to_string())
 }
 
@@ -520,5 +608,29 @@ mod tests {
         assert_eq!(slot_key(9).as_deref(), Some("9"));
         assert_eq!(slot_key(0), None);
         assert_eq!(slot_key(10), None);
+    }
+
+    /// Pressing `Alt+7` before ever binding it must do nothing and say
+    /// nothing. There is no error state in a key you have not used yet.
+    #[test]
+    fn an_unbound_slot_resolves_to_nothing_to_do() {
+        let settings = Settings::default();
+        assert!(slot_to_restore(&settings, 7).is_none());
+    }
+
+    #[test]
+    fn a_bound_slot_resolves_to_its_contents() {
+        let mut settings = Settings::default();
+        settings.layout_slots.insert("7".to_string(), slot_fixture());
+
+        assert_eq!(slot_to_restore(&settings, 7), Some(slot_fixture()));
+    }
+
+    #[test]
+    fn an_out_of_range_index_resolves_to_nothing_to_do() {
+        let mut settings = Settings::default();
+        settings.layout_slots.insert("0".to_string(), slot_fixture());
+
+        assert!(slot_to_restore(&settings, 0).is_none());
     }
 }
