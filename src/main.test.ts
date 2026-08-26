@@ -1896,4 +1896,36 @@ describe('the header history buttons', () => {
     historyForward().click();
     expect(document.querySelector('.chip')?.textContent).toBe('犬');
   });
+
+  test('a history-step event walks back and forward', () => {
+    emit('parse-result', parse('一'));
+    emit('parse-result', parse('二'));
+
+    emit('history-step', -1);
+    expect(document.querySelector('#output')?.textContent).toContain('一');
+
+    emit('history-step', 1);
+    expect(document.querySelector('#output')?.textContent).toContain('二');
+  });
+
+  test('a history-step at either end changes nothing', () => {
+    emit('parse-result', parse('一'));
+
+    emit('history-step', -1);
+    emit('history-step', 1);
+
+    expect(document.querySelector('#output')?.textContent).toContain('一');
+  });
+
+  // The chevrons and the keys share one cursor, so the buttons have to follow
+  // a keyboard step or they would advertise the wrong state.
+  test('a history-step updates the chevrons', () => {
+    emit('parse-result', parse('一'));
+    emit('parse-result', parse('二'));
+
+    emit('history-step', -1);
+
+    expect(historyBack().disabled).toBe(true);
+    expect(historyForward().disabled).toBe(false);
+  });
 });
