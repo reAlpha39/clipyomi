@@ -9,6 +9,20 @@
   --color-particle: oklch(55% 0.10 30);
   --color-counter: oklch(50% 0.10 300);
   --color-shadow: oklch(0% 0 0 / 0.18);
+  /* Window background opacity (§7.5), as a ratio. `main.ts` overrides it on
+     the root element; nothing else does, which is what keeps the settings
+     window and the popover opaque without either of them needing a guard. */
+  --surface-alpha: 1;
+  /* The see-through form of the background, derived once so it follows every
+     theme branch without being restated in any of them. `color-mix`
+     interpolates premultiplied, so this moves the alpha channel and leaves the
+     RGB exactly as authored. `--color-bg` itself stays opaque: `.context-menu`
+     uses it, and that menu is the app's only reach in content mode. */
+  --color-bg-surface: color-mix(
+    in srgb,
+    var(--color-bg) calc(var(--surface-alpha) * 100%),
+    transparent
+  );
   --tt-bg: oklch(97% 0.03 100);
   --tt-border: oklch(70% 0.02 100);
   --tt-text: oklch(20% 0 0);
