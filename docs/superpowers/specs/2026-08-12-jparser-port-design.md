@@ -655,6 +655,11 @@ Deliberately **not** ta-old's behaviour. ta-old used uniform whole-window alpha
 dimmed the Japanese text the user was trying to read. Per-pixel gives the
 see-through effect while keeping glyphs crisp, and needs no per-platform shim.
 
+The shipped control's floor is 0 %, not ta-old's 20/255. ta-old's floor
+existed only to stop uniform alpha from taking the text down with the
+background; per-pixel alpha leaves the text fully opaque at every level, so
+that reason does not survive the change of mechanism.
+
 ### 7.6 Gloss filters
 
 Three of ta-old's six JParser display options are real against JMdict:
@@ -810,21 +815,21 @@ so did the chrome and geometry work originally filed under Phase 4.
 | **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8 — created hidden in `setup` like the popover, see §6. |
 | **3C** (08-25) | Shipped. Font sizes (§7.7), as **three** persisted inputs rather than two: `--text-sentence` and `--text-gloss` in px, `--text-furigana` (and the derived `--text-furigana-romaji`) as a percentage of the sentence. §7.7's `--text-cjk`/`--text-furigana` pair never existed in this port — see the 3C design doc §2. |
 
-### Phase 4 — Window behaviour (4A and 4C shipped; 4B/4D remaining)
+### Phase 4 — Window behaviour (4A, 4B and 4C shipped; 4D remaining)
 
 2K already shipped the header + resize-edges state and geometry persistence,
-4C shipped parse history, and 4A — the other two chrome states — has now
-shipped too. Two sub-phases are left: **4B**, which now has a defined state to
-clamp on macOS only (native frame forces alpha to 100 %, and 4A resolved
-Windows to never offer native at all), and **4D last**, because a slot
-captures the state 4A, 4B and 3C introduce.
+4C shipped parse history, 4A shipped the other two chrome states, and 4B has
+now shipped per-pixel background alpha, clamped to 100 % against 4A's native
+frame (macOS/Linux only — Windows never offers `native` at all). One
+sub-phase is left: **4D last**, because a slot captures the state 4A, 4B and
+3C introduce.
 
 | Sub-phase    | Scope                                                                                                                                                                                                               | Depends on |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | **4C** (08-25) | Shipped. Parse history (§7.8): ring buffer of 50 full`ParseResult`s, consecutive duplicates deduped, back/forward in the header — what makes clipboard monitoring safe to leave running. Session-only, disk persistence still deferred (deviation #9); a new parse arriving mid-read keeps every entry ahead of the cursor rather than truncating them browser-style. | —         |
 | **4A** (08-25) | Shipped. Three-way `chrome_mode` replacing the `decorations` boolean, plus the content-only state (§7.4): the band never reveals, its controls leave the tab order, and drag and resize survive. The toggles did not move to a right-click menu — they had already moved to the settings window in 3B — so the menu carries the mode switch, Settings and Quit instead. **Native frame is macOS/Linux only**: Windows is permanently frameless (`d07711f`, `e45d55f`) and resolves `native` to `header`, which also removed a broken decorated state there. | 2K         |
-| **4B** | Per-pixel background alpha (§7.5):`"transparent": true`, a `--surface-alpha` token and its control, `macos-private-api` on macOS. Native frame forces alpha to 100 %, so 4A defines the state 4B must clamp. | 4A         |
-| **4D** | Layout hotkeys (§7.9): global-shortcut plugin,`Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha, always-on-top, font sizes, furigana mode.                  | 3C, 4A, 4B |
+| **4B** (08-26) | Shipped. Per-pixel background alpha (§7.5): the main window is transparent **unconditionally**, with `--surface-alpha` a derived background token and a range control clamping alpha to 100 % whenever chrome resolves to `native` — not the `"transparent": true` + `decorations: false` pairing §7.5 originally described, which predates 4A's three-way `chrome_mode`. `macos-private-api` enabled on macOS. | 4A         |
+| **4D** | Layout hotkeys (§7.9): global-shortcut plugin,`Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha — the **stored** `surface_alpha`, not the value 4B clamps for `native` chrome mode — always-on-top, font sizes, furigana mode.                  | 3C, 4A, 4B |
 
 ### Phase 5 — MeCab (remaining, minus what 2C took)
 
@@ -859,7 +864,7 @@ Phase 1. 6C is the last thing that happens.
 | 1 | JMdict XML instead of EDICT2                               | Structured`<pos>`/priority instead of string surgery on English glosses                        |
 | 2 | FST instead of binary search +`wcsijcmp`                 | Fewer lines*and* faster; deletes three copies of a custom comparator                           |
 | 3 | Vibrato instead of`libmecab`                             | Pure Rust; no per-platform native dependency, no per-parse init, no lock, no encoding round trip |
-| 4 | Per-pixel background alpha instead of uniform window alpha | ta-old dimmed the text being read; also needs no platform shim                                   |
+| 4 | Per-pixel background alpha instead of uniform window alpha | ta-old dimmed the text being read; also needs no platform shim. Consequence: the shipped control's floor is 0 %, not ta-old's 20/255 clamp — per-pixel alpha leaves the text opaque at every level, so the reason for ta-old's floor does not survive the change of mechanism |
 | 5 | Stem dedupe actually implemented                           | ta-old's is dead code (`Dictionary.cpp:450`); duplicates are pure noise                        |
 | 6 | No-kana-brackets filter dropped                            | N/A against JMdict's structured reading field                                                    |
 | 7 | Definition-lines / Japanese-own-line dropped               | Subsumed by the two-pane layout                                                                  |
