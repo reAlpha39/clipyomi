@@ -1206,6 +1206,20 @@ function show(result: ParseResult): void {
 historyBackButton?.addEventListener('click', () => display(history.back()));
 historyForwardButton?.addEventListener('click', () => display(history.forward()));
 
+/** Mirrors `layout::HISTORY_STEP_EVENT`. */
+const HISTORY_STEP_EVENT = 'history-step';
+
+// The global `Alt+[` / `Alt+]` pair (§7.9). Delegated to the same one-liner
+// the chevrons use, so the disabled-state sync and the popover close in
+// `display` come along for free — and `back()`/`forward()` return `null` at
+// either end, which `display` already ignores.
+void listen<number>(HISTORY_STEP_EVENT, (e) =>
+  display(e.payload < 0 ? history.back() : history.forward()),
+).catch(() => {
+  // Same reasoning as the geometry listeners above: a listener that fails to
+  // register leaves the keys inert, which is not worth taking the app down for.
+});
+
 // `listen()`'s returned promise resolves only once its IPC round trip has
 // registered the handler on the Rust side. The clipboard poll's first tick
 // waits on `frontend_ready` before it reads anything (see
