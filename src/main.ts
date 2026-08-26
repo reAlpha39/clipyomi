@@ -490,6 +490,13 @@ historyForwardButton?.addEventListener('blur', hidePeek);
  * token with a `prefers-color-scheme` branch and a `data-theme` override, and
  * the browser is the only thing that resolves all three to the sRGB triple the
  * strip has to match.
+ *
+ * Below 100 % alpha, the canvas's internal premultiply/unpremultiply round
+ * trip can shift the reported RGB by one at the low end (`[17, 17, 17]` for a
+ * page rendering `18, 18, 18`). Inert: that value is only sent onward when
+ * `opaque` is true below, and every path that reaches `opaque` also
+ * re-reports once the effective alpha is back at 1, so the off-by-one is
+ * never the value the erase fill actually uses.
  */
 function reportBackground(): void {
   const rendered = getComputedStyle(document.body).backgroundColor;
@@ -520,6 +527,17 @@ function reportBackground(): void {
  *
  * The regex is the fallback for environments with no canvas backend, which
  * includes the test DOM.
+ *
+ * That fallback can no longer match a real computed background now that the
+ * alpha token is in play: with `--color-bg-surface` derived through
+ * `color-mix()`, Chromium serializes the computed value as
+ * `color(srgb r g b / a)`, not `rgba(...)` — the pattern this regex expects.
+ * If `getContext('2d')` ever returned null (headless environments without a
+ * canvas backend, mainly), the fallback would silently fail to parse and
+ * `reportBackground` would give up (`rgb === null`) rather than merely
+ * reporting a stale colour, letting the CSS token and `BACKGROUND_OPAQUE`
+ * diverge with no error. Worth knowing; not worth code, since every
+ * environment this app actually runs in has a canvas backend.
  */
 function resolveColor(css: string): [number, number, number] | null {
   const ctx = document.createElement('canvas').getContext('2d');
