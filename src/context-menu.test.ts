@@ -125,4 +125,31 @@ describe('openContextMenu', () => {
     window.dispatchEvent(new Event('blur'));
     expect(menu()).toBeNull();
   });
+
+  // A keyboard user pressing Escape must not land on <body>: the element
+  // that had focus before the menu opened gets it back. Guarded so a trigger
+  // removed from the document meanwhile (or never focusable) cannot throw.
+  test('closing restores focus to whatever opened the menu', () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'open menu';
+    document.body.append(trigger);
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    openContextMenu(entries(), 10, 10);
+    expect(document.activeElement).not.toBe(trigger);
+
+    closeContextMenu();
+    expect(document.activeElement).toBe(trigger);
+
+    // A second trigger, removed from the document before the menu closes:
+    // must not throw, and must not leave a detached element active.
+    const goneTrigger = document.createElement('button');
+    document.body.append(goneTrigger);
+    goneTrigger.focus();
+    openContextMenu(entries(), 10, 10);
+    goneTrigger.remove();
+    expect(() => closeContextMenu()).not.toThrow();
+    expect(document.contains(document.activeElement)).toBe(true);
+  });
 });

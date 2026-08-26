@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { ChromeMode } from './types';
 
 // `main.ts` is the wired app entry, not a pure render function like
 // `sentence.ts` — exercising it means stubbing both IPC boundaries it uses:
@@ -479,13 +480,12 @@ describe('the header drag region', () => {
 });
 
 describe('the titlebar band', () => {
-  function load(nativeChrome: boolean, peekGrowsFrame = false, platformName?: string) {
+  function load(mode: ChromeMode, peekGrowsFrame = false, platformName?: string) {
     document.body.innerHTML = '<main id="app"></main>';
     listeners.clear();
     invoke.mockReset();
     invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings')
-        return Promise.resolve({ chrome_mode: nativeChrome ? 'native' : 'header' });
+      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: mode });
       if (cmd === 'is_macos') return Promise.resolve(peekGrowsFrame);
       if (cmd === 'peek_grows_frame') return Promise.resolve(peekGrowsFrame);
       if (cmd === 'platform') return Promise.resolve(platformName ?? (peekGrowsFrame ? 'macos' : 'windows'));
@@ -504,7 +504,7 @@ describe('the titlebar band', () => {
   }
 
   test('mirrors platform returned from backend onto #app', async () => {
-    await load(true, false, 'linux');
+    await load('native', false, 'linux');
     await Promise.resolve();
     await Promise.resolve();
     expect(document.querySelector('#app')?.getAttribute('data-platform')).toBe('linux');
@@ -514,25 +514,11 @@ describe('the titlebar band', () => {
   // overlay, and the reveal off it, and the pointer handlers below read it to
   // decide whether the native chrome is theirs to peek at.
   test('mirrors the loaded chrome mode onto #app', async () => {
-    await load(false);
+    await load('header');
     await Promise.resolve();
     await Promise.resolve();
 
     expect(document.querySelector('#app')?.getAttribute('data-chrome')).toBe('header');
-  });
-
-  test('the chrome mode from get_settings lands on #app', async () => {
-    await load(false, false, 'macos');
-    await vi.waitFor(() =>
-      expect(document.querySelector('#app')!.getAttribute('data-chrome')).toBe('header'),
-    );
-  });
-
-  test('a settings-changed event re-applies the chrome mode', async () => {
-    await load(true);
-    await vi.waitFor(() => expect(listeners.has('settings-changed')).toBe(true));
-    emit('settings-changed', { chrome_mode: 'header' });
-    expect(document.querySelector('#app')!.getAttribute('data-chrome')).toBe('header');
   });
 
   // The band boots decorated and the attribute is set synchronously, before
@@ -552,7 +538,7 @@ describe('the titlebar band', () => {
   });
 
   test('a settings-changed event moves the attribute with it', async () => {
-    await load(true);
+    await load('native');
     await Promise.resolve();
     await Promise.resolve();
     expect(document.querySelector('#app')?.getAttribute('data-chrome')).toBe('native');
@@ -563,7 +549,7 @@ describe('the titlebar band', () => {
   });
 
   test('hovering the band peeks the native chrome while the title bar is hidden', async () => {
-    await load(false);
+    await load('header');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -581,7 +567,7 @@ describe('the titlebar band', () => {
   });
 
   test('a peek never rewrites the persisted setting', async () => {
-    await load(false);
+    await load('header');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -601,7 +587,7 @@ describe('the titlebar band', () => {
   // With the title bar shown there is nothing to reveal — the chrome is
   // already there, and peeking would hide it on the way out.
   test('hovering does nothing while the title bar is shown', async () => {
-    await load(true);
+    await load('native');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -615,7 +601,7 @@ describe('the titlebar band', () => {
   // repeat (or a settings change mid-hover) must not queue a second objc
   // round-trip: only transitions talk to the backend.
   test('repeated enters do not re-invoke the peek', async () => {
-    await load(false);
+    await load('header');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -635,7 +621,7 @@ describe('the titlebar band', () => {
   test('a re-entry within the grace period cancels the hide entirely', async () => {
     vi.useFakeTimers();
     try {
-      await load(false);
+      await load('header');
       await Promise.resolve();
       await Promise.resolve();
 
@@ -656,7 +642,7 @@ describe('the titlebar band', () => {
   test('leaving for good hides the chrome once the grace period elapses', async () => {
     vi.useFakeTimers();
     try {
-      await load(false);
+      await load('header');
       await Promise.resolve();
       await Promise.resolve();
 
@@ -678,7 +664,7 @@ describe('the titlebar band', () => {
   test('#app carries a peeked class for as long as the chrome is up', async () => {
     vi.useFakeTimers();
     try {
-      await load(false);
+      await load('header');
       await Promise.resolve();
       await Promise.resolve();
 
@@ -701,7 +687,7 @@ describe('the titlebar band', () => {
   test('startup reports the background colour the page renders', async () => {
     document.body.style.backgroundColor = 'rgb(18, 18, 18)';
     try {
-      await load(false, true);
+      await load('header', true);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -714,7 +700,7 @@ describe('the titlebar band', () => {
   test('peeking adds the peek-offset class when the frame can grow', async () => {
     vi.useFakeTimers();
     try {
-      await load(false, true);
+      await load('header', true);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -735,7 +721,7 @@ describe('the titlebar band', () => {
     vi.useFakeTimers();
     try {
       // Linux: the only platform left whose frame does not grow on peek.
-      await load(false, false, 'linux');
+      await load('header', false, 'linux');
       await Promise.resolve();
       await Promise.resolve();
 
@@ -753,7 +739,7 @@ describe('the titlebar band', () => {
   });
 
   test('pointermove inside the window also reveals the band', async () => {
-    await load(false);
+    await load('header');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -764,7 +750,7 @@ describe('the titlebar band', () => {
   test('unfocused-mouse-move reveals the band and unfocused-mouse-leave hides it', async () => {
     vi.useFakeTimers();
     try {
-      await load(false);
+      await load('header');
       await Promise.resolve();
       await Promise.resolve();
 
@@ -785,7 +771,7 @@ describe('the titlebar band', () => {
   test('a resize seen while peeked is not persisted', async () => {
     vi.useFakeTimers();
     try {
-      await load(false);
+      await load('header');
       await Promise.resolve();
       await Promise.resolve();
 
@@ -805,7 +791,7 @@ describe('the titlebar band', () => {
   // Leaving the band hides the chrome again; if the user then turns the title
   // bar back on, the shown state must not stay stuck behind a stale peek.
   test('turning the title bar back on while hovered leaves the chrome shown', async () => {
-    await load(false);
+    await load('header');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -817,16 +803,7 @@ describe('the titlebar band', () => {
   });
 
   test('content mode does not peek', async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'content' });
-      if (cmd === 'platform') return Promise.resolve('macos');
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
+    await load('content', false, 'macos');
     const appEl = document.querySelector('#app')!;
     await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('content'));
 
@@ -838,16 +815,7 @@ describe('the titlebar band', () => {
   });
 
   test('header mode still peeks', async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
-      if (cmd === 'platform') return Promise.resolve('macos');
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
+    await load('header', false, 'macos');
     const appEl = document.querySelector('#app')!;
     await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('header'));
 
@@ -857,16 +825,7 @@ describe('the titlebar band', () => {
   });
 
   test('switching to content mid-peek drops the peek', async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
-      if (cmd === 'platform') return Promise.resolve('macos');
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
+    await load('header', false, 'macos');
     const appEl = document.querySelector('#app')!;
     await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('header'));
     appEl.dispatchEvent(new Event('pointerenter'));
@@ -887,7 +846,7 @@ describe('the titlebar band', () => {
   ])('focusing %s peeks the chrome, and blur hides it after the grace period', async (_name, getButton) => {
     vi.useFakeTimers();
     try {
-      await load(false);
+      await load('header');
       await Promise.resolve();
       await Promise.resolve();
       // Disabled buttons take no focus, so a fresh launch cannot reveal the
@@ -908,16 +867,7 @@ describe('the titlebar band', () => {
   });
 
   test('a right-click opens the chrome menu and suppresses the default one', async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'content' });
-      if (cmd === 'platform') return Promise.resolve('macos');
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
+    await load('content', false, 'macos');
     await vi.waitFor(() =>
       expect(document.querySelector('#app')!.getAttribute('data-chrome')).toBe('content'),
     );
@@ -944,16 +894,7 @@ describe('the titlebar band', () => {
   });
 
   test('the menu omits the native mode on Windows', async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header' });
-      if (cmd === 'platform') return Promise.resolve('windows');
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
+    await load('header', false, 'windows');
     await vi.waitFor(() =>
       expect(document.querySelector('#app')!.getAttribute('data-platform')).toBe('windows'),
     );
@@ -967,17 +908,8 @@ describe('the titlebar band', () => {
   });
 
   test('picking a mode from the menu applies, persists and broadcasts it', async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
     emitted.length = 0;
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'native' });
-      if (cmd === 'platform') return Promise.resolve('macos');
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
+    await load('native', false, 'macos');
     const appEl = document.querySelector('#app')!;
     await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('native'));
 
@@ -995,16 +927,7 @@ describe('the titlebar band', () => {
   });
 
   test('Settings… and Quit route to their existing commands', async () => {
-    document.body.innerHTML = '<main id="app"></main>';
-    listeners.clear();
-    invoke.mockReset();
-    invoke.mockImplementation((cmd: string) => {
-      if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'content' });
-      if (cmd === 'platform') return Promise.resolve('macos');
-      return Promise.resolve(null);
-    });
-    vi.resetModules();
-    await import('./main');
+    await load('content', false, 'macos');
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('get_settings'));
 
     const open = (label: string) => {

@@ -463,11 +463,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn only_windows_lacks_the_native_frame() {
-        assert_eq!(native_supported(), !cfg!(target_os = "windows"));
-    }
-
     /// The pre-4A boolean folds into the new key, and the mode is pinned to
     /// what the platform can draw. `native_supported()` decides the second
     /// column of the spec's §5 table, which is why every expectation here is

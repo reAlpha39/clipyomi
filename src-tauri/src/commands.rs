@@ -830,15 +830,31 @@ pub const BAND_HEIGHT_LOGICAL: u32 = 28;
 pub const DEFAULT_WINDOW_WIDTH: u32 = 720;
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 480;
 
+/// Resolves the requested mode through `supported()` and persists it.
+///
+/// Split out of `set_chrome_mode` — which needs a Tauri `AppHandle` to reach
+/// the window, and on Windows that `AppHandle` has to be concretely `Wry`
+/// because `win32_frameless::init_window` is not generic over `Runtime` —
+/// purely so this defence can be exercised with a bare `SettingsState` and no
+/// app handle at all. Same reason `push_input` above is split out of
+/// `set_input`.
+fn resolve_chrome_mode(mode: ChromeMode, settings: &SettingsState) -> Result<ChromeMode, String> {
+    // Resolved before it is applied or persisted, so an out-of-date webview
+    // cannot write a mode this platform will not honour.
+    let mode = crate::settings::supported(mode, crate::settings::native_supported());
+    settings
+        .update(|s| s.chrome_mode = Some(mode))
+        .map_err(|e| e.to_string())?;
+    Ok(mode)
+}
+
 #[tauri::command]
 pub fn set_chrome_mode(
     mode: ChromeMode,
     app: tauri::AppHandle,
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
-    // Resolved before it is applied or persisted, so an out-of-date webview
-    // cannot write a mode this platform will not honour.
-    let mode = crate::settings::supported(mode, crate::settings::native_supported());
+    let mode = resolve_chrome_mode(mode, &settings)?;
     let window = chrome_target(&app)?;
     #[cfg(target_os = "macos")]
     apply_decorations_macos(&window, mode == ChromeMode::Native)?;
@@ -847,17 +863,19 @@ pub fn set_chrome_mode(
         // No `grow_top` here any more. It existed to shed and regain the
         // reserved row across the native boundary, and `supported` above means
         // Windows never crosses it — `header` and `content` reserve the row
-        // identically, so switching between them must move nothing. Task 4
-        // deletes the function itself.
+        // identically, so switching between them must move nothing. The
+        // function itself has been deleted.
         win32_frameless::init_window(&window);
     }
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     {
         let _ = window.set_decorations(mode == ChromeMode::Native);
     }
-    settings
-        .update(|s| s.chrome_mode = Some(mode))
-        .map_err(|e| e.to_string())
+    // Windows alone reads nothing from `mode` past `resolve_chrome_mode`: the
+    // reserved row is identical in `header` and `content`, so
+    // `win32_frameless::init_window` needs no mode to switch on.
+    let _ = mode;
+    Ok(())
 }
 
 /// Shows or hides the native chrome *without* touching the persisted flag.
@@ -1645,6 +1663,31 @@ mod tests {
         let h = app.handle().clone();
         window(&h, "settings");
         assert!(chrome_target(&h).is_err());
+    }
+
+    /// Spec §8's promised test: `set_chrome_mode` must persist the mode
+    /// `supported()` resolves, not the one the webview asked for — otherwise
+    /// an out-of-date webview could write a mode this platform will not
+    /// honour. Goes through `resolve_chrome_mode` rather than the command
+    /// itself: on Windows, `set_chrome_mode` needs a concretely-`Wry`
+    /// `AppHandle` to reach `win32_frameless::init_window`, which a mock
+    /// runtime cannot supply, so `resolve_chrome_mode` exists precisely to
+    /// carry the tested defence without that dependency. Driven off
+    /// `native_supported()`, like the migration tests above, so it is
+    /// meaningful on either platform: on Windows a `Native` request persists
+    /// `Header`; where native chrome exists, it persists `Native`.
+    #[test]
+    fn set_chrome_mode_persists_the_resolved_mode_not_the_requested_one() {
+        let dir = scratch("set-chrome-mode");
+        let state = SettingsState::new(dir.join("settings.json"), Settings::default());
+
+        resolve_chrome_mode(ChromeMode::Native, &state).unwrap();
+
+        let expected = crate::settings::supported(
+            ChromeMode::Native,
+            crate::settings::native_supported(),
+        );
+        assert_eq!(state.snapshot().chrome_mode, Some(expected));
     }
 
     #[test]

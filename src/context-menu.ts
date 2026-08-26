@@ -54,18 +54,37 @@ function current(): HTMLElement | null {
   return document.querySelector<HTMLElement>('.context-menu');
 }
 
+/**
+ * What had focus just before the menu opened, restored when it closes so a
+ * keyboard user pressing Escape (or selecting an entry) does not land on
+ * `<body>`. Module-level for the same reason `current()` is not: within one
+ * loaded copy of this module, open and close always pair up.
+ */
+let previouslyFocused: HTMLElement | null = null;
+
 export function closeContextMenu(): void {
   current()?.remove();
+  const toRestore = previouslyFocused;
+  previouslyFocused = null;
+  // Guards the element having been removed from the document (or never
+  // having been focusable in the first place — a no-op `focus()` call).
+  if (toRestore !== null && document.contains(toRestore)) toRestore.focus();
 }
 
 function rowFor(entry: MenuEntry): HTMLElement {
   if (entry.kind === 'separator') {
+    // Not a wrapper around a separate separator element — this `<li>` IS the
+    // separator, so it keeps its own ARIA role rather than `role="none"`.
     const separator = document.createElement('li');
     separator.className = 'context-menu-separator';
     separator.setAttribute('role', 'separator');
     return separator;
   }
+  // `role="none"` strips the implicit `listitem` role so the button below is
+  // an owned child of the `<ul role="menu">` as far as accessibility APIs are
+  // concerned, rather than a `listitem` sitting between menu and menuitem.
   const row = document.createElement('li');
+  row.setAttribute('role', 'none');
   const button = document.createElement('button');
   button.type = 'button';
   // The radio marker is a CSS `::before`, so the label stays the button's only
@@ -97,6 +116,9 @@ function rowFor(entry: MenuEntry): HTMLElement {
  */
 export function openContextMenu(entries: MenuEntry[], x: number, y: number): void {
   closeContextMenu();
+  // Recorded after the close above, so replacing an already-open menu keeps
+  // the original trigger rather than the outgoing menu's own focused item.
+  previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   const menu = document.createElement('ul');
   menu.className = 'context-menu';
