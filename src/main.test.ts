@@ -328,7 +328,7 @@ describe('the settings warning', () => {
   test('a hotkey another app owns is reported in the window', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'shortcut_warning') {
-        return Promise.resolve('These layout hotkeys are already in use: Alt+Digit5');
+        return Promise.resolve('These hotkeys are already in use: Alt+BracketLeft');
       }
       if (cmd === 'get_settings') {
         return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
@@ -340,13 +340,13 @@ describe('the settings warning', () => {
 
     await main.showShortcutWarning();
 
-    expect(document.querySelector('#parse-error')?.textContent).toContain('Alt+Digit5');
+    expect(document.querySelector('#parse-error')?.textContent).toContain('Alt+BracketLeft');
   });
 
   test('a settings warning and a hotkey warning both survive', async () => {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'settings_warning') return Promise.resolve('settings.json could not be read');
-      if (cmd === 'shortcut_warning') return Promise.resolve('hotkeys in use: Alt+Digit5');
+      if (cmd === 'shortcut_warning') return Promise.resolve('hotkeys in use: Alt+BracketLeft');
       if (cmd === 'get_settings') {
         return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
       }
@@ -360,7 +360,7 @@ describe('the settings warning', () => {
 
     const text = document.querySelector('#parse-error')?.textContent ?? '';
     expect(text).toContain('could not be read');
-    expect(text).toContain('Alt+Digit5');
+    expect(text).toContain('Alt+BracketLeft');
   });
 });
 
