@@ -26,6 +26,35 @@ use std::sync::Arc;
 
 use tauri::Manager;
 
+/// The stored startup geometry, clamped onto a monitor that exists now.
+///
+/// `layout::fit` is the same pure clamp the restore hotkey uses (design §6),
+/// and startup is the other place a stored box meets a monitor layout that may
+/// have changed since it was written — the only place where being wrong
+/// survives a reboot, because `settings.json` still holds the off-screen origin
+/// and every key that could correct it is attached to the window that went
+/// off-screen with it.
+///
+/// `None` means "apply what was stored, the way this always did": either there
+/// is no stored position, or the monitor list could not be read, and refusing
+/// to place the window at all would be worse than placing it unclamped.
+///
+/// `height` arrives already assembled by the caller, reserved row included
+/// where the platform has one. Nothing is added here: `initial_height` stays
+/// the only place a band is ever added (`commands.rs:1104`).
+fn startup_box(
+    window: &tauri::Window,
+    loaded: &settings::Settings,
+    width: u32,
+    height: u32,
+) -> Option<layout::PhysRect> {
+    let (x, y) = (loaded.window_x?, loaded.window_y?);
+    let (rects, primary) = layout::monitors(window).ok()?;
+    let scale = window.scale_factor().ok()?;
+    let box_ = layout::LogicalBox { x, y, width, height };
+    Some(layout::fit(box_, &rects, primary, scale))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -67,25 +96,29 @@ fn main() {
                 #[cfg(target_os = "windows")]
                 {
                     commands::win32_frameless::init_window(&main_window.as_ref().window());
-                    // The window is a band taller than it looks: the reserved
-                    // row lives above the content and the region clips it away
-                    // until a peek. That row is part of the saved box, so saved
-                    // geometry restores verbatim and only a first launch has the
-                    // band added to it.
-                    let width = loaded.window_width.unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
-                    let height = commands::initial_height(loaded.window_height);
-                    let _ = main_window.set_size(tauri::LogicalSize::new(width, height));
-                    if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
-                        let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
-                    }
                 }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    if let (Some(w), Some(h)) = (loaded.window_width, loaded.window_height) {
-                        let _ = main_window.set_size(tauri::LogicalSize::new(w, h));
+                // On Windows the window is a band taller than it looks: the
+                // reserved row lives above the content and the region clips it
+                // away until a peek. That row is part of the saved box, so saved
+                // geometry restores verbatim and only a first launch has the
+                // band added to it — by `initial_height`, which answers for
+                // every platform and is still the only place a band appears.
+                let width = loaded.window_width.unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
+                let height = commands::initial_height(loaded.window_height);
+                // One path for both platforms now, because the clamp has to run
+                // wherever a stored box can name a monitor that is gone.
+                match startup_box(&main_window.as_ref().window(), &loaded, width, height) {
+                    Some(fitted) => {
+                        let size = tauri::PhysicalSize::new(fitted.width, fitted.height);
+                        let position = tauri::PhysicalPosition::new(fitted.x, fitted.y);
+                        let _ = main_window.set_size(size);
+                        let _ = main_window.set_position(position);
                     }
-                    if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
-                        let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
+                    None => {
+                        let _ = main_window.set_size(tauri::LogicalSize::new(width, height));
+                        if let (Some(x), Some(y)) = (loaded.window_x, loaded.window_y) {
+                            let _ = main_window.set_position(tauri::LogicalPosition::new(x, y));
+                        }
                     }
                 }
             }
