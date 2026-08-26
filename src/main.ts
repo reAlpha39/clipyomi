@@ -126,8 +126,8 @@ export async function showSettingsWarning(): Promise<void> {
   parseError.append(errorBlock(message));
 }
 
-// A hotkey another application owns is the one failure in the layout-slot
-// feature that would otherwise be invisible: the keys would simply do nothing.
+// A hotkey another application owns is the one hotkey failure that would
+// otherwise be invisible: the keys would simply do nothing.
 // Exported for the same reason `showStartupError` is.
 export async function showShortcutWarning(): Promise<void> {
   const message = await invoke<string | null>('shortcut_warning');

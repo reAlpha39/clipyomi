@@ -65,7 +65,7 @@ pub struct NeedsDictionary(pub bool);
 /// always be there.
 pub struct SettingsWarning(pub String);
 
-/// The layout hotkeys another application already owns, as one sentence, or
+/// The global hotkeys another application already owns, as one sentence, or
 /// empty when there are none.
 ///
 /// Separate from `SettingsWarning` for the reason that state's own doc gives

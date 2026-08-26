@@ -28,7 +28,7 @@ use tauri::Manager;
 
 /// The stored startup geometry, clamped onto a monitor that exists now.
 ///
-/// `layout::fit` is the same pure clamp the restore hotkey uses (design §6),
+/// `layout::fit` is the same pure clamp `layout::restore` uses (design §6),
 /// and startup is the other place a stored box meets a monitor layout that may
 /// have changed since it was written — the only place where being wrong
 /// survives a reboot, because `settings.json` still holds the off-screen origin
