@@ -12,8 +12,13 @@
 //! past the project's file-size ceiling, and the parts carrying the real logic
 //! are pure functions that need no window at all.
 
+use std::sync::Arc;
+
+use tauri::Manager;
+
 use crate::commands::BAND_HEIGHT_LOGICAL;
-use crate::settings::{supported, LayoutSlot, Settings};
+use crate::settings::{supported, ChromeMode, LayoutSlot, Settings};
+use crate::state::SettingsState;
 
 /// A window box in logical (scale-independent) pixels — the units
 /// `save_window_geometry` and `LayoutSlot` both store.
@@ -133,8 +138,6 @@ pub fn fit(
 /// (`commands.rs:999`). The frontend guards the identical hazard by skipping
 /// the save entirely (`main.ts:1099`) and waiting for the resize that follows
 /// the peek; a keystroke has to be answered now, so it corrects instead.
-// Temporary: Task 5's `bind` calls `unpeek`; remove when bind lands.
-#[allow(dead_code)]
 pub fn unpeek(box_: LogicalBox, peeked: bool, grows_frame: bool) -> LogicalBox {
     if !(peeked && grows_frame) {
         return box_;
@@ -171,10 +174,95 @@ pub fn apply_slot(settings: &mut Settings, slot: &LayoutSlot, native_supported: 
     settings.furigana_mode = slot.furigana_mode.clone();
 }
 
+/// The key a slot index is stored under, or `None` for an index outside
+/// §7.9's `1..9`.
+///
+/// Only the twenty registered hotkeys reach `bind` and `restore` today, so an
+/// out-of-range index is a programming error rather than user input — but it
+/// returns rather than panics, because a hotkey has no way to report a panic.
+pub fn slot_key(index: u8) -> Option<String> {
+    (1..=9).contains(&index).then(|| index.to_string())
+}
+
+/// Build a slot from the persisted settings and a window box.
+///
+/// Everything but the geometry comes from `Settings`, which is what makes the
+/// stored `surface_alpha` — rather than the value the frontend clamps for
+/// `native` chrome — the one that gets captured. The clamped value is computed
+/// by `surfaceAlphaVar` in the webview and never crosses back; only the
+/// `opaque` boolean on `set_window_background` does.
+pub fn slot_from(settings: &Settings, box_: LogicalBox) -> LayoutSlot {
+    LayoutSlot {
+        window_width: box_.width,
+        window_height: box_.height,
+        window_x: box_.x,
+        window_y: box_.y,
+        // Always `Some` after `normalize`. `Header` is the fallback because it
+        // is the shape every platform can draw.
+        chrome_mode: settings.chrome_mode.unwrap_or(ChromeMode::Header),
+        always_on_top: settings.always_on_top,
+        surface_alpha: settings.surface_alpha,
+        font_sentence: settings.font_sentence,
+        font_gloss: settings.font_gloss,
+        furigana_scale: settings.furigana_scale,
+        furigana_mode: settings.furigana_mode.clone(),
+        extra: serde_json::Map::new(),
+    }
+}
+
+/// Read the main window's box in the same units `save_window_geometry` stores:
+/// inner size, outer position, logical, rounded (`main.ts:1104`). One
+/// coordinate system for both, so a slot and `window_*` can be compared
+/// without converting either.
+fn live_box(window: &tauri::Window) -> Result<LogicalBox, String> {
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let size = window
+        .inner_size()
+        .map_err(|e| e.to_string())?
+        .to_logical::<f64>(scale);
+    let position = window
+        .outer_position()
+        .map_err(|e| e.to_string())?
+        .to_logical::<f64>(scale);
+    Ok(LogicalBox {
+        x: position.x.round() as i32,
+        y: position.y.round() as i32,
+        width: size.width.round() as u32,
+        height: size.height.round() as u32,
+    })
+}
+
+/// Capture the current layout into slot `index` (`Shift+Alt+N`).
+///
+/// Silent on success. The Windows reserved row stays in the captured height
+/// deliberately: it is part of the window's real box and is persisted that
+/// way, and `initial_height` (`commands.rs:1099`) is the one place a band is
+/// ever *added*.
+// Temporary: Task 7's hotkey registration is `bind`'s first non-test caller;
+// remove when it lands.
+#[allow(dead_code)]
+pub fn bind(app: &tauri::AppHandle, index: u8) -> Result<(), String> {
+    let Some(key) = slot_key(index) else {
+        return Err(format!("slot {index} is outside 1..9"));
+    };
+    let window = crate::commands::chrome_target(app)?;
+    let box_ = unpeek(
+        live_box(&window)?,
+        crate::commands::is_peeked(),
+        crate::commands::peek_grows_frame(),
+    );
+    let settings = app.state::<Arc<SettingsState>>();
+    let slot = slot_from(&settings.snapshot(), box_);
+    settings
+        .update(|s| {
+            s.layout_slots.insert(key, slot);
+        })
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::ChromeMode;
 
     /// A single 1920×1080 monitor at the origin, unscaled — the common case.
     fn one_monitor() -> Vec<MonitorRect> {
@@ -367,5 +455,70 @@ mod tests {
         let mut supported_here = Settings::default();
         apply_slot(&mut supported_here, &native, true);
         assert_eq!(supported_here.chrome_mode, Some(ChromeMode::Native));
+    }
+
+    fn box_fixture() -> LogicalBox {
+        LogicalBox { x: 1200, y: 40, width: 720, height: 200 }
+    }
+
+    #[test]
+    fn a_bound_slot_carries_the_window_box_and_every_setting() {
+        let settings = Settings {
+            always_on_top: true,
+            chrome_mode: Some(ChromeMode::Content),
+            surface_alpha: Some(35),
+            font_sentence: Some(30),
+            furigana_mode: Some("hiragana".to_string()),
+            ..Default::default()
+        };
+
+        let slot = slot_from(&settings, box_fixture());
+
+        assert_eq!(slot.window_width, 720);
+        assert_eq!(slot.window_height, 200);
+        assert_eq!(slot.window_x, 1200);
+        assert_eq!(slot.window_y, 40);
+        assert_eq!(slot.chrome_mode, ChromeMode::Content);
+        assert!(slot.always_on_top);
+        assert_eq!(slot.surface_alpha, Some(35));
+        assert_eq!(slot.font_sentence, Some(30));
+        assert_eq!(slot.furigana_mode, Some("hiragana".to_string()));
+    }
+
+    /// The phase's most important test. 4B handoff §3 warns that a snapshot
+    /// reading the live `--surface-alpha` while chrome is `native` would
+    /// capture 100 % and silently overwrite the alpha the user chose. Capture
+    /// reads the persisted value, so the clamped one is not reachable from
+    /// here at all — this test is what keeps it that way.
+    #[test]
+    fn a_slot_bound_in_native_chrome_records_the_stored_alpha() {
+        let settings = Settings {
+            chrome_mode: Some(ChromeMode::Native),
+            surface_alpha: Some(40),
+            ..Default::default()
+        };
+
+        assert_eq!(slot_from(&settings, box_fixture()).surface_alpha, Some(40));
+    }
+
+    /// A slot bound while nothing was persisted has to record that, not a
+    /// number: restoring it must hand the stylesheet its defaults back.
+    #[test]
+    fn a_slot_bound_with_nothing_persisted_records_nothing() {
+        let slot = slot_from(&Settings::default(), box_fixture());
+
+        assert_eq!(slot.surface_alpha, None);
+        assert_eq!(slot.font_sentence, None);
+        assert_eq!(slot.font_gloss, None);
+        assert_eq!(slot.furigana_scale, None);
+        assert_eq!(slot.furigana_mode, None);
+    }
+
+    #[test]
+    fn only_the_nine_slot_indices_have_a_key() {
+        assert_eq!(slot_key(1).as_deref(), Some("1"));
+        assert_eq!(slot_key(9).as_deref(), Some("9"));
+        assert_eq!(slot_key(0), None);
+        assert_eq!(slot_key(10), None);
     }
 }
