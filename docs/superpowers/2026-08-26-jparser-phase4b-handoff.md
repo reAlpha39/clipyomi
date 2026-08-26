@@ -18,7 +18,13 @@
    `DwmEnableBlurBehindWindow` regardless of the token's value, and whether
    the `WM_ERASEBKGND` fill still lands under blur-behind at 100 % is
    exactly what Task 1's spike was meant to answer and did not (§5). Step
-   1's first two manual checks are the ones that would settle it.
+   1's **third** manual check is the one that would settle it — checks 1 and
+   2 are a static comparison at 100 % opacity and a check for round corners,
+   neither of which exercises the erase fill at all, since that fill only
+   runs on a resize or a reveal. Check 3 (ten pointer entries in header
+   mode, counting desktop-coloured flashes against Phase 4A's 1 % baseline)
+   is the one that actually drives the fill and would show whether it still
+   lands.
 
    `--surface-alpha` is a new custom property (`src/styles/tokens.css`), and
    `--color-bg-surface` is derived from it with `color-mix(in srgb,
@@ -257,6 +263,27 @@ Run at commit `77a91f7`, the phase's final tip:
    reads the two states differently. Worth recording here so a future reader
    does not mistake the early key for a bug; §7.4's sentence describes the
    intent, not the literal mechanism.
+
+4. **The peeked band stacks a second surface layer, accepted, not fixed.**
+   `.controls` in the peeked state paints `--color-bg-surface` over the body
+   surface underneath it, so at partial alpha the band renders more opaque
+   than the window around it — a visible, more-solid strip across the top
+   during a peek. The fix wave that closed out this phase's whole-branch
+   review found and corrected a related but distinct bug (the surface being
+   declared on both `html` and `body`, doubling its own opacity); after that
+   fix the band's stacking is more pronounced in relative terms (a 64 %
+   band over a 40 % surface, rather than 78 % over 64 %), because the
+   surface it sits on is now composited correctly instead of already being
+   doubled. The alternative — removing the band's own background so it
+   inherits the surface — was considered and rejected: the band is an
+   overlay in header mode, so a see-through band would show sentence text
+   through the control strip, a real regression traded for a cosmetic gain.
+   A control strip slightly more solid than the surface it sits on is
+   defensible on its own terms and is left as-is. Note that this does not
+   literally deliver what the design spec's §3.1 table claims for these two
+   rules ("the band is part of the surface" — implying it fades with the
+   surface, not that it paints an extra coat over it); this handoff records
+   that gap rather than treating the table entry as still accurate.
 
 ---
 

@@ -28,8 +28,17 @@
 html,
 body {
   margin: 0;
-  background: var(--color-bg-surface);
   color: var(--color-text);
+}
+
+/* Declared on `body` alone, not on `html, body` together. Background
+   propagation already lifts body's background to the canvas, so naming both
+   paints the surface twice — body's box covers the viewport, so a
+   semi-transparent colour would composite with itself and render
+   1-(1-a)² instead of the alpha the user chose. Identical at alpha 1, which
+   is why no baseline moves and why nothing in the suite could catch it. */
+body {
+  background: var(--color-bg-surface);
 }
 
 :root {
@@ -84,6 +93,13 @@ body {
   border-bottom: none;
 }
 
+/* Deliberate: this paints `--color-bg-surface` a second time over the body
+   surface underneath, so at partial alpha the band composites more opaque
+   than the window around it (a visible band, more so after the body-only fix
+   above). Removing the band's own background so it inherits the surface
+   would let sentence text show through it, since the band is an overlay in
+   header mode -- a real regression traded for a cosmetic gain. Accepted, not
+   overlooked; see the phase 4B handoff. */
 #app[data-platform='windows']:not([data-chrome='native']).peeked .controls {
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-rule);
@@ -229,6 +245,10 @@ body {
   padding-top: var(--band-h);
 }
 
+/* Same deliberate double-paint as the Windows peeked-band rule above: the
+   band stacks `--color-bg-surface` over the body surface, rendering more
+   opaque than the window it sits on. Accepted for the same reason -- see the
+   phase 4B handoff. */
 #app:not([data-platform='windows']):not([data-chrome='native']).peeked .controls {
   height: var(--band-h);
   background: var(--color-bg-surface);

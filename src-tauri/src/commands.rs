@@ -683,6 +683,14 @@ pub mod win32_frameless {
                 // into the alpha byte — and under the blur-behind DWM applies
                 // to a transparent window, zero is fully transparent. Filling
                 // would paint a hole rather than a background.
+                //
+                // Declining here is correct only because `tauri.conf.json`
+                // declares no `backgroundColor` today: tao's own
+                // `WM_ERASEBKGND` handler fills only when one is configured,
+                // and otherwise registers the window class with a NULL
+                // background brush. If a `backgroundColor` were ever added to
+                // the config, tao would fill with an opaque brush on every
+                // erase and quietly defeat this gate.
                 if !BACKGROUND_OPAQUE.load(Ordering::Relaxed) {
                     return DefSubclassProc(hwnd, msg, wparam, lparam);
                 }

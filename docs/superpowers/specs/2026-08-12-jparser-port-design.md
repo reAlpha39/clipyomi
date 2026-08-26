@@ -645,7 +645,9 @@ splitters — we have no child panes).
 
 **Per-pixel background only.** `"transparent": true` + `decorations: false`, with
 opacity driven by a `--surface-alpha` token. Text, readings, and glosses stay
-100 % opaque.
+100 % opaque. (4A replaced `decorations` with `chrome_mode`, and 4B keeps
+`transparent` unconditional while clamping alpha in `native` — see §11's 4B
+row.)
 
 Requires Tauri's `macos-private-api` on macOS — acceptable for a
 self-distributed OSS build; it does rule out Mac App Store distribution.

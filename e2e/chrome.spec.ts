@@ -274,3 +274,19 @@ test('native chrome clamps the opacity to fully opaque', async ({ page }) => {
   );
   expect(token).toBe('1');
 });
+
+// The surface must be declared on `body` alone. Background propagation lifts
+// it to the canvas by itself, so declaring it on `html` too paints it twice --
+// a semi-transparent colour composites with itself and renders 1-(1-a)^2
+// instead of the alpha the user asked for. Identical at 100%, which is why no
+// screenshot baseline and no computed-style read of `body` can catch it.
+test('the root element contributes no second background layer', async ({ page }) => {
+  await page.addInitScript(stubFor('header', 'macos', 40));
+  await page.goto('/');
+  await expect(page.locator('#app')).toHaveAttribute('data-chrome', 'header');
+
+  const rootBg = await page.evaluate(
+    () => getComputedStyle(document.documentElement).backgroundColor,
+  );
+  expect(rootBg).toBe('rgba(0, 0, 0, 0)');
+});

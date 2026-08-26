@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { emit, listen } from '@tauri-apps/api/event';
+import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { FONT_LIMITS, clampFont, stylesheetDefault, type FontKind } from './font-sizes';
 import { ALPHA_LIMITS, clampAlpha } from './surface-alpha';
 import type { ChromeMode, FuriganaMode, Settings } from './types';
@@ -293,7 +293,14 @@ export function initSettingsApp(container: HTMLElement) {
     // otherwise re-run the gloss merge and the furigana comparison — which
     // re-renders the whole sentence — for a value neither of them contains.
     // `main.ts` already emits a bare `{ chrome_mode }` the same way.
-    broadcast({ surface_alpha: value });
+    //
+    // Targeted at `main` specifically, unlike `broadcast`/`saveAndBroadcast`
+    // below: `emit` reaches every window, including this settings window's
+    // own `settings-changed` listener, which would then write the dragged
+    // value back onto the slider the user is physically moving — one IPC
+    // round trip stale each time. The main window is the only intended
+    // consumer of this partial payload, so it is addressed directly instead.
+    void emitTo('main', 'settings-changed', { surface_alpha: value }).catch(() => {});
   });
 
   surfaceAlpha.addEventListener('change', saveAndBroadcast);

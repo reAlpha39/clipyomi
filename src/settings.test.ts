@@ -17,6 +17,13 @@ vi.mock('@tauri-apps/api/event', () => ({
     emitted.push([event, payload]);
     return Promise.resolve();
   },
+  // The `input` path targets the main window directly (see settings.ts) --
+  // captured into the same `emitted` array since these tests only assert on
+  // the event name and payload shape, not on which window received it.
+  emitTo: (_target: string, event: string, payload: unknown) => {
+    emitted.push([event, payload]);
+    return Promise.resolve();
+  },
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
