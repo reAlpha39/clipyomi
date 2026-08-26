@@ -154,9 +154,9 @@ hidden-title-bar stubs changed only their settings key, `decorations: false`
 
 ## 4. Verification Gate
 
-Run at commit `eee8320` (this phase's tip before the docs commits):
+Run at commit `5facf44`, the phase's final tip:
 
-- **Vitest:** 222 passed across 12 files.
+- **Vitest:** 221 passed across 12 files.
 - **`npm run build`:** clean.
 - **Playwright:** 41 passed (22 pre-existing in `e2e/panes.spec.ts` and
   `e2e/popover.spec.ts` + 19 new in `e2e/chrome.spec.ts`).
@@ -166,8 +166,10 @@ Run at commit `eee8320` (this phase's tip before the docs commits):
   `WINDOWPOS` — the same four that predate this phase; 4A added no new
   clippy debt.
 
-These numbers were produced by a run outside this documentation task and are
-reported here as given, not re-executed for this handoff.
+The Vitest count fell by one against the earlier gate at `eee8320`, which
+reported 222. That is the fix wave in §9: two duplicate tests deleted, one
+focus-restoration test added. `cargo test` holds at 83 for the same kind of
+reason — one tautological test deleted, one real one added.
 
 ---
 
@@ -262,3 +264,60 @@ parameter mentioned. The two places in the design spec that *do* mention an
 table) both correctly describe it in the past tense, as something removed.
 No edit was made to §8 as a result — the correction's premise did not hold
 against the current text.
+
+---
+
+## 9. The Final Review's Fix Wave, and the One Finding Left Open
+
+A whole-branch review ran after §7's docs commits and returned no Critical
+findings, verdict "merge after these fixes". Commit `5facf44` applied nine of
+them in one wave. Three are worth carrying forward:
+
+1. **The spec promised a test that had never shipped.** §8 of the design spec
+   lists a check that `set_chrome_mode` persists the *resolved* mode rather
+   than the requested one — the whole defence behind §6.1's claim that "an
+   out-of-date webview cannot write a mode this platform will not honour."
+   Nothing failed if that `supported()` call was deleted. It could not be
+   tested through the command directly: `tauri::test::mock_app` yields an
+   `AppHandle<MockRuntime>`, while `set_chrome_mode` needs a concrete
+   `AppHandle<Wry>` because of its Windows `win32_frameless::init_window`
+   call. The resolution moved into a private
+   `resolve_chrome_mode(mode, &SettingsState)`, mirroring this file's existing
+   `push_input`/`set_input` split, and that is what the test drives. It was
+   confirmed to go red when the `supported()` call is removed.
+
+2. **The `load()` helper in `src/main.test.ts`** still took the `decorations`
+   boolean this phase deleted, so seven tests bypassed it and hand-rolled the
+   same setup. It now takes a `ChromeMode`, and those seven route through it.
+
+3. **Two accessibility gaps in the right-click menu**, which content mode
+   makes the app's only reach: the `<li>` wrappers kept their implicit
+   `listitem` role, so the `menuitem` buttons were not owned children of the
+   `role="menu"` list (`role="none"` now fixes that), and closing the menu
+   restored focus nowhere, leaving a keyboard user on `<body>` after Escape.
+
+### Open: `set_chrome_mode`'s persist ordering
+
+**Not fixed. A later phase should decide it.**
+
+The extraction in item 1 reordered the command. Persistence — the
+`settings.update` inside `resolve_chrome_mode` — now runs **before**
+`chrome_target(&app)?` and `apply_decorations_macos(...)?`, where it used to
+be the function's last statement. If either of those fails, the mode is
+persisted although the window was never updated to match: a state the old
+ordering could not produce.
+
+It was left open deliberately, because the obvious repair is not mechanical.
+Restoring persist-last means splitting `resolve_chrome_mode` into a
+resolve-only function, which changes what the test added in item 1 actually
+covers — trading the atomicity back for the spec-promised coverage that had
+been missing until now. Both cannot be had in the current shape without a
+third arrangement.
+
+Severity, for whoever picks it up: error-path only, and self-healing. A
+failing `chrome_target` means there is no main window at all, and on the macOS
+path the next launch applies the persisted mode correctly. The frontend
+already applies the mode locally and emits `settings-changed` regardless of
+whether the `invoke` succeeded, so the persisted value is arguably the more
+faithful record of what the user asked for. What it costs is a window that
+disagrees with `settings.json` until relaunch.
