@@ -73,7 +73,7 @@ pub fn set_clipboard_monitoring(
 /// too, so an injected caller made the settings window pin or undecorate
 /// itself instead of the main window. `main.rs`'s startup restore already
 /// resolves `"main"` this way.
-fn chrome_target<R: tauri::Runtime>(
+pub(crate) fn chrome_target<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<tauri::Window<R>, String> {
     app.get_webview_window("main")
@@ -943,8 +943,6 @@ static PEEKED: AtomicBool = AtomicBool::new(false);
 ///
 /// Read by `layout::bind`, which has to correct a box captured mid-peek. The
 /// flag stays private so `peek_titlebar` remains its only writer.
-// Temporary: Task 5's `bind` calls `is_peeked`; remove when bind lands.
-#[allow(dead_code)]
 pub(crate) fn is_peeked() -> bool {
     PEEKED.load(Ordering::SeqCst)
 }
