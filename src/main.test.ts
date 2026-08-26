@@ -1605,6 +1605,28 @@ describe('font sizes reaching the root element', () => {
 
     expect(token('--text-sentence')).toBe('48px');
   });
+
+  test('one restore snapshot moves the alpha, the sizes, the furigana and the chrome', () => {
+    const root = document.documentElement;
+
+    // Exactly what `layout::restore` emits: a full `Settings`, with the keys a
+    // slot recorded as unset simply absent.
+    emit('settings-changed', {
+      always_on_top: true,
+      clipboard_monitoring: true,
+      chrome_mode: 'content' as ChromeMode,
+      surface_alpha: 35,
+      font_sentence: 30,
+      furigana_mode: 'hiragana',
+    });
+
+    expect(root.style.getPropertyValue('--surface-alpha')).toBe('0.35');
+    expect(root.style.getPropertyValue('--text-sentence')).toBe('30px');
+    expect(document.querySelector('#app')?.getAttribute('data-chrome')).toBe('content');
+    // Absent in the payload, so the token has to be gone rather than stale —
+    // this is the half of the contract that depends on serde omitting the key.
+    expect(root.style.getPropertyValue('--text-gloss')).toBe('');
+  });
 });
 
 describe('the gloss size reaching the popover window', () => {
