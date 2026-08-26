@@ -89,6 +89,12 @@ pub struct Settings {
     /// Furigana size as a percentage of the sentence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub furigana_scale: Option<u32>,
+    /// Window background opacity as a percentage (§7.5). `None` leaves
+    /// `tokens.css` owning the default. Not clamped here: out-of-range values
+    /// from a hand-edited file are pinned at apply time by `clampAlpha`,
+    /// exactly as the font sizes are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface_alpha: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -117,6 +123,7 @@ impl Default for Settings {
             font_sentence: None,
             font_gloss: None,
             furigana_scale: None,
+            surface_alpha: None,
             window_width: None,
             window_height: None,
             window_x: None,
@@ -331,6 +338,7 @@ mod tests {
         assert_eq!(s.window_height, None);
         assert_eq!(s.window_x, None);
         assert_eq!(s.window_y, None);
+        assert_eq!(s.surface_alpha, None);
     }
 
     #[test]
@@ -370,6 +378,7 @@ mod tests {
             font_sentence: None,
             font_gloss: None,
             furigana_scale: None,
+            surface_alpha: None,
             window_width: Some(400),
             window_height: Some(300),
             window_x: None,
@@ -396,6 +405,7 @@ mod tests {
             font_sentence: None,
             font_gloss: None,
             furigana_scale: None,
+            surface_alpha: None,
             window_width: Some(400),
             window_height: Some(300),
             window_x: None,
@@ -562,5 +572,45 @@ mod tests {
         let (s, warning) = load(&path);
         assert!(warning.is_none(), "got {warning:?}");
         assert!(s.chrome_mode.is_some());
+    }
+
+    /// `Option` for the same reason the font sizes are: "never set" has to
+    /// stay distinguishable from a value that happens to equal the stylesheet
+    /// default, which is what keeps `tokens.css` the one place a default lives.
+    #[test]
+    fn surface_alpha_round_trips_through_the_file() {
+        let path = scratch("surface-alpha").join("settings.json");
+        let written = Settings {
+            surface_alpha: Some(62),
+            ..Default::default()
+        };
+
+        save(&path, &written).expect("save");
+        let (read_back, warning) = load(&path);
+        assert_eq!(read_back.surface_alpha, Some(62));
+        assert!(warning.is_none(), "got {warning:?}");
+    }
+
+    #[test]
+    fn an_unset_surface_alpha_is_left_out_of_the_file() {
+        let path = scratch("surface-alpha-unset").join("settings.json");
+        save(&path, &Settings::default()).expect("save");
+
+        let raw = std::fs::read_to_string(&path).expect("read back");
+        assert!(!raw.contains("surface_alpha"), "got {raw}");
+    }
+
+    /// Zero is a real, storable setting — not a missing value. Per-pixel alpha
+    /// leaves the text opaque, so a 0 % background is still a usable window.
+    #[test]
+    fn a_zero_surface_alpha_survives_the_file() {
+        let path = scratch("surface-alpha-zero").join("settings.json");
+        let written = Settings {
+            surface_alpha: Some(0),
+            ..Default::default()
+        };
+
+        save(&path, &written).expect("save");
+        assert_eq!(load(&path).0.surface_alpha, Some(0));
     }
 }

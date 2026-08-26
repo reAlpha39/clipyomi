@@ -1069,6 +1069,13 @@ pub fn save_settings(
             if settings.hide_usage.is_some() {
                 s.hide_usage = settings.hide_usage;
             }
+            // Merged like the toggles above rather than assigned like the
+            // sizes below: a range input cannot be cleared, so alpha has no
+            // "absent means reset" state, and an unguarded assign would only
+            // give a future caller a way to wipe the value by omission.
+            if settings.surface_alpha.is_some() {
+                s.surface_alpha = settings.surface_alpha;
+            }
             // Assigned rather than merged, unlike the toggles above: an absent
             // size means the user cleared that box and wants the stylesheet
             // default back, which a merge could never express. The settings
@@ -1636,6 +1643,58 @@ mod tests {
         assert_eq!(s.hide_pos, Some(true));
         assert_eq!(s.hide_xrefs, Some(true));
         assert_eq!(s.hide_usage, Some(false));
+    }
+
+    /// The guard that separates alpha from the font sizes. The sizes are
+    /// assigned unguarded, deliberately, so that clearing a box restores the
+    /// stylesheet default. A range input cannot be cleared, so alpha has no
+    /// "absent means reset" state to express, and an unguarded assign would
+    /// only hand a future caller a way to wipe the value by omission.
+    #[test]
+    fn save_settings_leaves_a_stored_alpha_alone_when_the_payload_omits_it() {
+        let dir = scratch("save-settings-alpha");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings {
+                surface_alpha: Some(40),
+                ..Default::default()
+            },
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+
+        save_settings(
+            Settings {
+                surface_alpha: None,
+                ..Default::default()
+            },
+            app.state::<Arc<SettingsState>>(),
+        )
+        .unwrap();
+
+        assert_eq!(state.snapshot().surface_alpha, Some(40));
+    }
+
+    #[test]
+    fn save_settings_writes_a_supplied_alpha() {
+        let dir = scratch("save-settings-alpha-set");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings::default(),
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+
+        save_settings(
+            Settings {
+                surface_alpha: Some(0),
+                ..Default::default()
+            },
+            app.state::<Arc<SettingsState>>(),
+        )
+        .unwrap();
+
+        assert_eq!(state.snapshot().surface_alpha, Some(0));
     }
 
     /// Builds a window the way the real app labels them, so `chrome_target`
