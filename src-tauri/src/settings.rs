@@ -682,9 +682,7 @@ mod tests {
     fn a_layout_slot_round_trips_through_the_file() {
         let path = scratch("layout-slot").join("settings.json");
         let mut written = Settings::default();
-        written
-            .layout_slots
-            .insert("3".to_string(), slot_fixture());
+        written.layout_slots.insert("3".to_string(), slot_fixture());
 
         save(&path, &written).expect("save");
         let (read_back, warning) = load(&path);
@@ -744,9 +742,15 @@ mod tests {
         .expect("write");
 
         let (loaded, warning) = load(&path);
-        assert!(warning.is_none(), "the file parsed, so nothing to warn about");
+        assert!(
+            warning.is_none(),
+            "the file parsed, so nothing to warn about"
+        );
         assert!(loaded.always_on_top, "an unrelated key was reset");
-        assert!(loaded.layout_slots.contains_key("1a"), "the key was dropped");
+        assert!(
+            loaded.layout_slots.contains_key("1a"),
+            "the key was dropped"
+        );
         assert!(!loaded.layout_slots.contains_key("1"));
     }
 
