@@ -223,9 +223,20 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.clipboard_monitoring !== undefined) monitoring.checked = s.clipboard_monitoring;
     if (s.chrome_mode !== undefined) updateChromeButtons(s.chrome_mode);
     if (s.furigana_mode !== undefined) updateFuriganaButtons(s.furigana_mode);
-    if (s.font_sentence !== undefined) fontSentence.value = String(s.font_sentence);
-    if (s.font_gloss !== undefined) fontGloss.value = String(s.font_gloss);
-    if (s.furigana_scale !== undefined) furiganaScale.value = String(s.furigana_scale);
+    // Full snapshots own the boxes outright, including emptying them: an
+    // absent size in a full payload means the user cleared that box, or a
+    // restored layout slot recorded it as unset. A partial payload —
+    // `{ surface_alpha }` from a slider drag, `{ chrome_mode }` from the main
+    // window's menu — carries no sizes at all, and clearing on those would
+    // reproduce 4B ruling 1's bug on this surface. Discriminated by the two
+    // keys `Settings` does not mark optional, exactly as `main.ts` does.
+    const isFullSnapshot =
+      s.always_on_top !== undefined && s.clipboard_monitoring !== undefined;
+    if (isFullSnapshot) {
+      fontSentence.value = s.font_sentence === undefined ? '' : String(s.font_sentence);
+      fontGloss.value = s.font_gloss === undefined ? '' : String(s.font_gloss);
+      furiganaScale.value = s.furigana_scale === undefined ? '' : String(s.furigana_scale);
+    }
     if (s.surface_alpha !== undefined) {
       const value = clampAlpha(s.surface_alpha) ?? ALPHA_LIMITS.max;
       surfaceAlpha.value = String(value);

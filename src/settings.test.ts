@@ -423,9 +423,61 @@ describe('Settings Window', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    emit('settings-changed', { font_gloss: 20 });
+    // A real settings-changed snapshot always carries these two non-optional
+    // `Settings` keys, marking it a full snapshot rather than a partial
+    // payload like `{ surface_alpha }` — the same convention main.test.ts's
+    // parallel font-size tests already follow.
+    emit('settings-changed', { always_on_top: false, clipboard_monitoring: true, font_gloss: 20 });
 
     expect(container.querySelector<HTMLInputElement>('#setting-font-gloss')?.value).toBe('20');
+  });
+
+  test('a full snapshot with no font sizes empties the boxes', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          font_sentence: 30,
+          font_gloss: 18,
+          furigana_scale: 70,
+        });
+      }
+      return Promise.resolve(null);
+    });
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // What `layout::restore` emits for a slot that recorded the sizes unset:
+    // a full snapshot whose three font keys are simply absent.
+    emit('settings-changed', { always_on_top: false, clipboard_monitoring: true });
+
+    expect(container.querySelector<HTMLInputElement>('#setting-font-sentence')!.value).toBe('');
+    expect(container.querySelector<HTMLInputElement>('#setting-font-gloss')!.value).toBe('');
+    expect(container.querySelector<HTMLInputElement>('#setting-furigana-scale')!.value).toBe('');
+  });
+
+  test('a partial payload leaves the font boxes alone', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          font_sentence: 30,
+        });
+      }
+      return Promise.resolve(null);
+    });
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A slider drag emits this sixty times a second. Clearing the boxes on it
+    // would reproduce 4B ruling 1's bug on this surface.
+    emit('settings-changed', { surface_alpha: 40 });
+
+    expect(container.querySelector<HTMLInputElement>('#setting-font-sentence')!.value).toBe('30');
   });
 
   // A first run has nothing persisted. Empty boxes give the user nothing to
