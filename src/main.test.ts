@@ -691,7 +691,15 @@ describe('the titlebar band', () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(invoke).toHaveBeenCalledWith('set_window_background', { r: 18, g: 18, b: 18 });
+      // `opaque` is the *effective* alpha, not the stored one: this fixture
+      // persists none, so the stylesheet default of 1 applies and the Windows
+      // erase fill stays enabled.
+      expect(invoke).toHaveBeenCalledWith('set_window_background', {
+        r: 18,
+        g: 18,
+        b: 18,
+        opaque: true,
+      });
     } finally {
       document.body.style.backgroundColor = '';
     }
@@ -1064,6 +1072,43 @@ describe('the titlebar band', () => {
     emit('settings-changed', { always_on_top: false, clipboard_monitoring: true });
     await Promise.resolve();
     expect(document.documentElement.style.getPropertyValue('--text-sentence')).toBe('');
+  });
+
+  // `getComputedStyle` resolves no rule in this DOM without a real
+  // stylesheet (the CSS import is a no-op under `vitest`'s default `css:
+  // false`), so — exactly like the "startup reports the background colour"
+  // fixture above — the body needs an explicit inline colour before
+  // `reportBackground` has anything to parse and report.
+  test('a see-through surface tells the backend to stop filling', async () => {
+    document.body.style.backgroundColor = 'rgb(18, 18, 18)';
+    try {
+      await loadWithAlpha('header', 40);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const calls = invoke.mock.calls.filter(([cmd]) => cmd === 'set_window_background');
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls[calls.length - 1][1]).toMatchObject({ opaque: false });
+    } finally {
+      document.body.style.backgroundColor = '';
+    }
+  });
+
+  // Native renders fully opaque whatever is stored, and that is exactly the
+  // mode whose erase fill stops the top-edge flash. Reading the stored value
+  // here would switch the fill off in the one mode that needs it.
+  test('native keeps the fill enabled despite a low stored alpha', async () => {
+    document.body.style.backgroundColor = 'rgb(18, 18, 18)';
+    try {
+      await loadWithAlpha('native', 20);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const calls = invoke.mock.calls.filter(([cmd]) => cmd === 'set_window_background');
+      expect(calls[calls.length - 1][1]).toMatchObject({ opaque: true });
+    } finally {
+      document.body.style.backgroundColor = '';
+    }
   });
 });
 
