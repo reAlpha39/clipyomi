@@ -67,6 +67,8 @@ export interface Settings {
   font_gloss?: number;
   /** Furigana size as a percentage of the sentence, bound to `--text-furigana`. */
   furigana_scale?: number;
+  /** Window background opacity as a percentage, bound to `--surface-alpha`. */
+  surface_alpha?: number;
   window_width?: number;
   window_height?: number;
   window_x?: number;
