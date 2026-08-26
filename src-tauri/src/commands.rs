@@ -897,6 +897,33 @@ fn resolve_chrome_mode(mode: ChromeMode, settings: &SettingsState) -> Result<Chr
     Ok(mode)
 }
 
+/// The per-platform half of `set_chrome_mode`: everything after the mode has
+/// been resolved and persisted.
+///
+/// Shared with `layout::restore`, which resolves and persists a whole slot and
+/// then needs exactly this. Extracted rather than duplicated so the three-way
+/// platform split stays in one place.
+pub(crate) fn apply_chrome(window: &tauri::Window, mode: ChromeMode) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    apply_decorations_macos(window, mode == ChromeMode::Native)?;
+    #[cfg(target_os = "windows")]
+    {
+        // No `grow_top` here any more. It existed to shed and regain the
+        // reserved row across the native boundary, and `supported` means
+        // Windows never crosses it — `header` and `content` reserve the row
+        // identically, so switching between them must move nothing.
+        win32_frameless::init_window(window);
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = window.set_decorations(mode == ChromeMode::Native);
+    }
+    // Windows alone reads nothing from `mode`: the reserved row is identical
+    // in `header` and `content`.
+    let _ = mode;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn set_chrome_mode(
     mode: ChromeMode,
@@ -904,27 +931,7 @@ pub fn set_chrome_mode(
     settings: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
     let mode = resolve_chrome_mode(mode, &settings)?;
-    let window = chrome_target(&app)?;
-    #[cfg(target_os = "macos")]
-    apply_decorations_macos(&window, mode == ChromeMode::Native)?;
-    #[cfg(target_os = "windows")]
-    {
-        // No `grow_top` here any more. It existed to shed and regain the
-        // reserved row across the native boundary, and `supported` above means
-        // Windows never crosses it — `header` and `content` reserve the row
-        // identically, so switching between them must move nothing. The
-        // function itself has been deleted.
-        win32_frameless::init_window(&window);
-    }
-    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    {
-        let _ = window.set_decorations(mode == ChromeMode::Native);
-    }
-    // Windows alone reads nothing from `mode` past `resolve_chrome_mode`: the
-    // reserved row is identical in `header` and `content`, so
-    // `win32_frameless::init_window` needs no mode to switch on.
-    let _ = mode;
-    Ok(())
+    apply_chrome(&chrome_target(&app)?, mode)
 }
 
 /// Shows or hides the native chrome *without* touching the persisted flag.
