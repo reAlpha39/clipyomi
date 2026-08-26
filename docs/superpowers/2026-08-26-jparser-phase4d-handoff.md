@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-26
 **Spec:** [`docs/superpowers/specs/2026-08-26-jparser-phase4d-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-26-jparser-phase4d-design.md)
-**Commits:** `c98095c..b05a4d1` on `develop` (sixteen commits, unpushed)
+**Commits:** `a98d732..b05a4d1` on `develop` (sixteen commits, unpushed), plus
+the final-review fix wave in §8 (unpushed)
 
 This is the last sub-phase of Phase 4. Phase 4 (window behaviour) is
 complete as of this close.
@@ -54,11 +55,12 @@ complete as of this close.
    restore and the settings-window chrome switch share one per-platform
    body rather than duplicating it.
 
-8. **`slot_to_restore`, `monitors`, `restore`** (`1fffa94`). An absent slot
-   is a silent no-op. Otherwise: resolve the mode through `supported()`,
-   assign into `SettingsState`, apply geometry (fitted), always-on-top and
-   chrome in Rust, then emit one bare `settings-changed` carrying the full
-   `Settings` for the token-level half.
+8. **`slot_to_restore`, `monitors`, `restore`** (`1fffa94`, corrected in
+   §8). An absent slot is a silent no-op. Otherwise: resolve the mode
+   through `supported()`, compute the fitted box, assign it and the slot
+   into `SettingsState`, apply chrome, geometry and always-on-top in Rust,
+   then emit one bare `settings-changed` carrying the full `Settings` for
+   the token-level half.
 
 9. **The plugin, the twenty registrations, `ShortcutWarning`,
    `showShortcutWarning`** (`f352c03`). `Alt+Digit1..9` restores,
@@ -183,7 +185,10 @@ that a future reader of this phase needs, carried into my own words.
    command must extend the stub in the same commit or a later one, and the
    failure mode when that's missed is silent — an invisible padded element
    whose only visible symptom is a pixel shift in a screenshot test
-   completely unrelated to the feature that added the command.
+   completely unrelated to the feature that added the command. §8 retires
+   the class as well as the instance: the stub's default answer is now
+   `null`, which is what a Rust command returning `()` actually
+   serialises to.
 
 ---
 
@@ -203,11 +208,20 @@ Run and personally re-verified at commit `b05a4d1` (tip of `develop`):
   Re-ran twice; both times all 45 pass and `git status --short` shows no
   screenshot baseline touched — only the pre-existing, unrelated
   `.gitignore` modification that predates this phase's first commit.
-- **`cargo test`:** 119 passed (up from 88 at phase start).
+- **`cargo test`:** 119 passed (up from 88 at phase start); 125 after the
+  §8 fix wave.
 - **`cargo clippy --all-targets`:** exactly four warnings, all
   `upper_case_acronyms`, on `RECT`, `STYLESTRUCT`, `SUBCLASSPROC`,
   `WINDOWPOS` — the same four that predate this phase. 4D added no new
   clippy debt.
+
+**Re-run after the §8 fix wave**, at `12826a7`: Vitest **252 passed** (13
+files) — unchanged, no frontend behaviour changed; `npm run build` clean;
+Playwright **45 passed** with `git status --short` again showing no
+screenshot baseline touched; `cargo test` **125 passed**; `cargo clippy
+--all-targets` still exactly the same four `upper_case_acronyms`
+warnings. `cargo fmt --all -- --check` reports 34 diffs, none of them in
+this phase's Rust.
 
 **Note on how this gate was reached.** The first pass through this gate, at
 `170aaec`, showed the same four Playwright screenshot mismatches described
@@ -292,10 +306,17 @@ Deferred minors recorded in this phase's own ledger, none acted on:
   named `unnecessary_get_then_check` in the implementer's report without
   independent confirmation of that exact lint name — clippy is clean
   either way.
-- Task 3: `cargo fmt -- --check` shows 33 pre-existing diffs on this tree,
-  confirmed present before this phase started (`git stash` comparison
-  against the base commit). Not this phase's to fix; the gate never named
-  `cargo fmt`. Flagged again here for whoever next touches formatting.
+- Task 3: `cargo fmt -- --check` was reported as 33 pre-existing diffs,
+  "confirmed" by a `git stash` comparison against the base commit — a
+  measurement that could not have shown the truth, because the earlier
+  tasks were already committed by then, so `layout.rs` stayed in the tree
+  and could never have appeared as a diff. The real numbers, same rustfmt
+  1.9.0: **base `a98d732` 35, head `b05a4d1` 52**, and 16 of the 17 new
+  diffs were in `layout.rs` with 2 more in `settings.rs`'s slot tests (the
+  phase also happened to remove one pre-existing `commands.rs` diff).
+  Fixed in §8: this phase's own Rust is formatted, the 35 pre-existing
+  diffs elsewhere are left alone, and `cargo fmt --all -- --check` now
+  reports 34.
 - Task 5: `live_box` takes the default-runtime `tauri::Window` rather than
   being generic over `R: Runtime`, consistent with `bind`'s own
   non-generic `&AppHandle`. Forecloses a non-default runtime this desktop
@@ -324,7 +345,14 @@ Deferred minors recorded in this phase's own ledger, none acted on:
   UI; nothing currently asks for it.
 - **A slot list or clear affordance in the settings window.** Slots are
   visible and editable directly in `settings.json`; overwriting a slot by
-  rebinding is the only supported "clear."
+  rebinding is the only supported "clear." One caution for anyone taking
+  that advice: §2 finding 1's reasoning covers a bad slot *key*, not a bad
+  slot *value*. `LayoutSlot` has six required fields, and `load` turns any
+  serde error into defaults-plus-warning, so a typo **inside** a slot
+  object — a missing `window_x`, a string where a number belongs — resets
+  the whole file to defaults, geometry, alpha, chrome mode and fonts
+  included. Delete a whole slot object, or rebind over it; do not hand-edit
+  the fields.
 - **Disk-persisted history inside a slot.** Permanently out, per 4C
   handoff §4 — history stays session-only with no persisted key.
 - **The mixed-DPI second pass in `fit`.** Named as §6's stated ceiling: the
@@ -348,4 +376,90 @@ Deferred minors recorded in this phase's own ledger, none acted on:
   monitor rather than restoring it verbatim), exactly as design spec §10
   states them.
 
-No other master-spec text was touched.
+No other master-spec text was touched at the close. §8 revises row 14
+again, for the reason recorded there.
+
+---
+
+## 8. The Final Whole-Branch Review's Fix Wave
+
+Twelve tasks each passed their own review; the whole-branch review at the
+close found what task-scoped review could not. Four commits, on `develop`
+after `4d4bc37`:
+
+1. **`dc6d748` — restore persisted a geometry it deliberately did not
+   apply, and startup had no clamp at all.** `apply_slot` wrote the *raw*
+   slot box into `window_*` while `restore` applied the *fitted* one, so
+   binding a slot on a second monitor, unplugging it and pressing `Alt+N`
+   left the window on-screen and `settings.json` off-screen. Nothing could
+   correct it afterwards: a second `Alt+N` calls `set_position` with the
+   coordinates the window already occupies, which fires no move event, so
+   the frontend's debounced geometry save never runs — and that debounce is
+   skipped outright during a peek and lost if the app exits inside its
+   300 ms. Quit there and the next launch opened off-screen, with all
+   twenty hotkeys attached to the window that was off-screen.
+   `fit_and_persist` now returns the fitted box *and* the same box in
+   logical pixels at the target monitor's scale (the units
+   `save_window_geometry` writes), computed before the persist and written
+   into the same `state.update` closure after `apply_slot`. `fit` is
+   unchanged for callers that only place a window. `main.rs`'s startup
+   restore gained the same clamp — the other place a stored box meets a
+   possibly-changed monitor layout, and the only one where being wrong
+   survives a reboot — which collapsed the two platform branches into one;
+   `initial_height` is still the only place a band is ever added. Same
+   commit reorders `restore` to apply chrome *before* geometry: on macOS a
+   `native` slot restored from a frameless mode adds a title bar, and
+   adding one after `set_size` fixed the inner size lands the content a
+   title bar short. Two new tests pin the invariant — what gets persisted
+   is a box the window actually occupied, in the units the frontend's own
+   geometry save writes.
+
+2. **`d6e35a0` — `SettingsState::update`'s write race became genuinely
+   cross-thread, and its recorded justification was false.** The doc
+   comment named the only callers as one webview's clicks, "one at a time",
+   and released the lock before `save`. This phase's hotkey handler runs on
+   the global-shortcut plugin's own message-loop thread and both `bind` and
+   `restore` call `update` from it, so two updates can now really overlap —
+   resizing the window and pressing `Shift+Alt+1` inside the 300 ms
+   geometry-save debounce is enough. The documented consequence was the
+   file holding the older snapshot while memory held the newer: a bind that
+   silently does not survive a restart. The write moved inside the locked
+   scope and the comment now describes what is true. One test pins that the
+   file and memory agree after eight overlapping updates from eight
+   threads; it is a regression pin, not a proof — under the old code it
+   would have failed only when the timing happened to hit.
+
+3. **`3084345` — four small findings.** `overlap` did its intersection
+   arithmetic in `i32`, so `box_.x + box_.width` overflowed for a
+   hand-edited `window_x` near `i32::MAX` (a debug-build panic, on a
+   keystroke); it is `i64` throughout now. Two untested `fit` branches
+   gained tests: the `primary` fallback when `primary != 0`, and the
+   `primary.min(len - 1)` guard. `e2e/stub.ts`'s default answer is `null`
+   rather than `undefined`, because a Rust command returning `()`
+   serialises to JSON null — see §2 finding 7. `main.ts`'s
+   `settings-changed` listener is typed `Partial<Settings>`, which is what
+   its own `always_on_top !== undefined` discriminator has always assumed
+   and what `settings.ts` already did.
+
+4. **`12826a7` — `cargo fmt` on this phase's own Rust**, with the
+   corrected measurement recorded in §5.
+
+**What the fix wave deliberately did not do.** The 35 pre-existing `cargo
+fmt` diffs outside this phase's Rust; `capabilities/*.json`'s missing
+`core:event:allow-emit-to` (another phase's code, surfaced to the user
+rather than widened inside a fix wave); the README's missing hotkey
+documentation (drift predating this phase by four sub-phases);
+`supported()` computed twice; `register_all` folding two error kinds into
+one bucket; `HISTORY_STEP_EVENT`'s placement; the `layout_slots` map
+riding along in the broadcast; and `set_chrome_mode`'s persist-before-apply
+ordering, which `restore` still shares.
+
+**One thing the fix wave broke and could not fix within its scope:
+`layout.rs` is now 1114 lines, against the project's 800-line ceiling.**
+It stood at 794 before this wave. `cargo fmt` alone takes the file to 921
+(it expands compact struct literals, and the test module is full of them);
+this wave's own code and tests account for the rest. Splitting the module
+is a design decision, not a fix, so it was left to whoever owns that
+call — `commands.rs` has been over the same ceiling at ~2000 lines since
+long before this phase, so the module is not the first offender, but it is
+now the second.

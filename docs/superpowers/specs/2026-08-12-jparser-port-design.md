@@ -876,7 +876,7 @@ Phase 1. 6C is the last thing that happens.
 | 11 | Default chrome mode is `native`, not §7.4's `header` | The shipped `Settings::default()` has always been the other one, and a first-run window with no title bar cannot explain itself |
 | 12 | Content-only keeps drag and resize | ta-old's `WS_POPUP` had neither; a mode that cannot be left without editing `settings.json` is a trap, and keeping them costs nothing |
 | 13 | Global history hotkeys `Alt+[` / `Alt+]` added beyond §7.9's scope | 4A §9 named this phase's keyboard surface as their home; content-only mode has had no route to back/forward since 4A. `Alt+Left`/`Right` was rejected because a global grab would take Back from every browser and file manager on the machine. §4.2 |
-| 14 | Restore clamps geometry into a visible monitor instead of restoring it verbatim | A slot bound on a monitor that is now absent would otherwise place the window somewhere unreachable, and every key that could fix it is on that window — 4A deviation #12's trap by another route. §6 |
+| 14 | Stored geometry is clamped into a visible monitor instead of being applied verbatim — on the restore hotkey and at startup — and the clamped box is what gets persisted | A slot, or a saved window box, naming a monitor that is now absent would otherwise place the window somewhere unreachable, and every key that could fix it is on that window — 4A deviation #12's trap by another route. Persisting the raw box rather than the fitted one left the file off-screen even when the window was not, so the next launch reopened there; startup needs the same clamp because it is the one place where being wrong survives a reboot. §6 |
 
 ## 13. Deferred
 
