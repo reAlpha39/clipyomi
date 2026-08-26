@@ -164,25 +164,22 @@ impl SettingsState {
     /// config dir degrades to "settings do not survive restart" rather than
     /// "the toggles do not work".
     ///
-    /// The lock is released before `save`'s file I/O runs, deliberately: holding
-    /// it across a write would block every other read and update for the
-    /// duration of a disk operation. The cost is a narrow, real race — two
-    /// concurrent `update` calls can interleave so the file on disk ends up
-    /// holding the older of the two snapshots while memory holds the newer.
-    /// Not closed here: both callers (`set_always_on_top`,
-    /// `set_clipboard_monitoring`) are driven by clicks on one webview, one at
-    /// a time, so the window is narrow — and holding the lock across I/O to
-    /// close it would be worse than the race itself.
+    /// The lock is held across `save`'s file I/O deliberately. The callers are
+    /// no longer one webview's clicks taken one at a time: `layout::bind` and
+    /// `layout::restore` run on the global-shortcut plugin's own message-loop
+    /// thread, so two `update` calls can now genuinely overlap — pressing
+    /// `Shift+Alt+1` inside the frontend's 300 ms geometry-save debounce is
+    /// enough to do it. Releasing the lock before the write would let the later
+    /// snapshot reach disk first and leave the file holding the older one: a
+    /// bind that silently does not survive a restart. Blocking the other
+    /// readers for the length of one small `write` is the cheaper cost.
     pub fn update<F>(&self, change: F) -> Result<(), SettingsError>
     where
         F: FnOnce(&mut Settings),
     {
-        let snapshot = {
-            let mut settings = self.locked();
-            change(&mut settings);
-            settings.clone()
-        };
-        save(&self.path, &snapshot)
+        let mut settings = self.locked();
+        change(&mut settings);
+        save(&self.path, &settings)
     }
 }
 
@@ -363,6 +360,40 @@ mod tests {
         assert!(
             state.snapshot().always_on_top,
             "in-memory value must still change"
+        );
+    }
+
+    /// The write happens under the same lock as the change, so the last thread
+    /// to release the lock is also the last to reach the file. Without that,
+    /// two overlapping `update`s can land on disk in the opposite order to
+    /// memory and leave the file holding the older snapshot — a bound layout
+    /// slot that silently does not survive a restart. Threads rather than one
+    /// sequential loop because the hotkey handler really does call `update`
+    /// from a thread of its own.
+    #[test]
+    fn concurrent_updates_leave_the_file_agreeing_with_memory() {
+        let dir = scratch("concurrent");
+        let path = dir.join("settings.json");
+        let state = std::sync::Arc::new(SettingsState::new(path.clone(), Settings::default()));
+
+        let writers: Vec<_> = (0..8u32)
+            .map(|n| {
+                let state = std::sync::Arc::clone(&state);
+                std::thread::spawn(move || {
+                    let _ = state.update(|s| s.window_width = Some(700 + n));
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().expect("writer thread");
+        }
+
+        let (reloaded, warning) = crate::settings::load(&path);
+        assert!(warning.is_none(), "got {warning:?}");
+        assert_eq!(
+            reloaded.window_width,
+            state.snapshot().window_width,
+            "the file and memory disagree"
         );
     }
 
