@@ -13,6 +13,7 @@
 //! are pure functions that need no window at all.
 
 use crate::commands::BAND_HEIGHT_LOGICAL;
+use crate::settings::{supported, LayoutSlot, Settings};
 
 /// A window box in logical (scale-independent) pixels — the units
 /// `save_window_geometry` and `LayoutSlot` both store.
@@ -145,9 +146,35 @@ pub fn unpeek(box_: LogicalBox, peeked: bool, grows_frame: bool) -> LogicalBox {
     }
 }
 
+/// Write a slot back over the live settings.
+///
+/// Assignment, not merge, for every key: a slot that recorded "unset" has to
+/// clear it, which a merge cannot express. The mode is resolved on the way in,
+/// so nothing downstream has to remember to.
+///
+/// `native_supported` is a parameter rather than a `cfg!` for the reason
+/// `supported` gives: both arms are then testable wherever the suite runs.
+// Temporary: Task 6's `restore` function calls `apply_slot`; remove when
+// restore lands.
+#[allow(dead_code)]
+pub fn apply_slot(settings: &mut Settings, slot: &LayoutSlot, native_supported: bool) {
+    settings.window_width = Some(slot.window_width);
+    settings.window_height = Some(slot.window_height);
+    settings.window_x = Some(slot.window_x);
+    settings.window_y = Some(slot.window_y);
+    settings.chrome_mode = Some(supported(slot.chrome_mode, native_supported));
+    settings.always_on_top = slot.always_on_top;
+    settings.surface_alpha = slot.surface_alpha;
+    settings.font_sentence = slot.font_sentence;
+    settings.font_gloss = slot.font_gloss;
+    settings.furigana_scale = slot.furigana_scale;
+    settings.furigana_mode = slot.furigana_mode.clone();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::ChromeMode;
 
     /// A single 1920×1080 monitor at the origin, unscaled — the common case.
     fn one_monitor() -> Vec<MonitorRect> {
@@ -258,5 +285,87 @@ mod tests {
     fn a_box_read_outside_a_peek_is_left_alone() {
         let box_ = LogicalBox { x: 100, y: 100, width: 720, height: 480 };
         assert_eq!(unpeek(box_, false, true), box_);
+    }
+
+    fn slot_fixture() -> LayoutSlot {
+        LayoutSlot {
+            window_width: 720,
+            window_height: 200,
+            window_x: 1200,
+            window_y: 40,
+            chrome_mode: ChromeMode::Content,
+            always_on_top: true,
+            surface_alpha: Some(35),
+            font_sentence: Some(30),
+            font_gloss: Some(18),
+            furigana_scale: Some(70),
+            furigana_mode: Some("hiragana".to_string()),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    #[test]
+    fn applying_a_slot_writes_every_captured_key() {
+        let mut settings = Settings::default();
+        apply_slot(&mut settings, &slot_fixture(), true);
+
+        assert_eq!(settings.window_width, Some(720));
+        assert_eq!(settings.window_height, Some(200));
+        assert_eq!(settings.window_x, Some(1200));
+        assert_eq!(settings.window_y, Some(40));
+        assert_eq!(settings.chrome_mode, Some(ChromeMode::Content));
+        assert!(settings.always_on_top);
+        assert_eq!(settings.surface_alpha, Some(35));
+        assert_eq!(settings.font_sentence, Some(30));
+        assert_eq!(settings.font_gloss, Some(18));
+        assert_eq!(settings.furigana_scale, Some(70));
+        assert_eq!(settings.furigana_mode, Some("hiragana".to_string()));
+    }
+
+    /// Assignment, not merge: a slot bound while the font boxes were empty
+    /// recorded them unset, and restoring it has to empty them again. A merge
+    /// could never express that, which is why `save_settings` splits the same
+    /// way for the same keys.
+    #[test]
+    fn applying_a_slot_clears_the_keys_it_recorded_as_unset() {
+        let mut settings = Settings {
+            surface_alpha: Some(80),
+            font_sentence: Some(40),
+            font_gloss: Some(20),
+            furigana_scale: Some(50),
+            furigana_mode: Some("romaji".to_string()),
+            ..Default::default()
+        };
+        let bare = LayoutSlot {
+            surface_alpha: None,
+            font_sentence: None,
+            font_gloss: None,
+            furigana_scale: None,
+            furigana_mode: None,
+            ..slot_fixture()
+        };
+
+        apply_slot(&mut settings, &bare, true);
+
+        assert_eq!(settings.surface_alpha, None);
+        assert_eq!(settings.font_sentence, None);
+        assert_eq!(settings.font_gloss, None);
+        assert_eq!(settings.furigana_scale, None);
+        assert_eq!(settings.furigana_mode, None);
+    }
+
+    /// A slot bound on macOS in `native` restores as `header` on Windows — the
+    /// existing mechanic, reached from a new caller, with no `cfg!` of its own.
+    #[test]
+    fn a_native_slot_resolves_to_header_where_native_is_unsupported() {
+        let native = LayoutSlot { chrome_mode: ChromeMode::Native, ..slot_fixture() };
+
+        let mut unsupported = Settings::default();
+        apply_slot(&mut unsupported, &native, false);
+        assert_eq!(unsupported.chrome_mode, Some(ChromeMode::Header));
+
+        let mut supported_here = Settings::default();
+        apply_slot(&mut supported_here, &native, true);
+        assert_eq!(supported_here.chrome_mode, Some(ChromeMode::Native));
     }
 }
