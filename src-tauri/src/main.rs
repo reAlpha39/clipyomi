@@ -51,7 +51,12 @@ fn startup_box(
     let (x, y) = (loaded.window_x?, loaded.window_y?);
     let (rects, primary) = layout::monitors(window).ok()?;
     let scale = window.scale_factor().ok()?;
-    let box_ = layout::LogicalBox { x, y, width, height };
+    let box_ = layout::LogicalBox {
+        x,
+        y,
+        width,
+        height,
+    };
     Some(layout::fit(box_, &rects, primary, scale))
 }
 

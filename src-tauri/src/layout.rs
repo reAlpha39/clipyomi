@@ -161,7 +161,12 @@ pub fn fit_and_persist(
     let y = probe
         .y
         .clamp(target.y, target.y + target.height as i32 - height as i32);
-    let fitted = PhysRect { x, y, width, height };
+    let fitted = PhysRect {
+        x,
+        y,
+        width,
+        height,
+    };
     (fitted, to_logical(fitted, target.scale))
 }
 
@@ -510,15 +515,31 @@ mod tests {
 
     /// A single 1920×1080 monitor at the origin, unscaled — the common case.
     fn one_monitor() -> Vec<MonitorRect> {
-        vec![MonitorRect { x: 0, y: 0, width: 1920, height: 1080, scale: 1.0 }]
+        vec![MonitorRect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            scale: 1.0,
+        }]
     }
 
     #[test]
     fn a_box_already_inside_its_monitor_comes_back_unchanged() {
-        let slot = LogicalBox { x: 100, y: 100, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: 100,
+            y: 100,
+            width: 720,
+            height: 480,
+        };
         assert_eq!(
             fit(slot, &one_monitor(), 0, 1.0),
-            PhysRect { x: 100, y: 100, width: 720, height: 480 }
+            PhysRect {
+                x: 100,
+                y: 100,
+                width: 720,
+                height: 480
+            }
         );
     }
 
@@ -527,7 +548,12 @@ mod tests {
     /// — every key that could fix it is attached to that window.
     #[test]
     fn a_box_on_a_monitor_that_is_gone_lands_on_the_one_that_remains() {
-        let slot = LogicalBox { x: 3000, y: 200, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: 3000,
+            y: 200,
+            width: 720,
+            height: 480,
+        };
         let fitted = fit(slot, &one_monitor(), 0, 1.0);
         assert_eq!(fitted.x, 1920 - 720);
         assert_eq!(fitted.y, 200);
@@ -535,11 +561,27 @@ mod tests {
 
     #[test]
     fn a_box_bigger_than_the_work_area_shrinks_to_it() {
-        let monitors = vec![MonitorRect { x: 0, y: 0, width: 800, height: 600, scale: 1.0 }];
-        let slot = LogicalBox { x: 0, y: 0, width: 1600, height: 1200 };
+        let monitors = vec![MonitorRect {
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+            scale: 1.0,
+        }];
+        let slot = LogicalBox {
+            x: 0,
+            y: 0,
+            width: 1600,
+            height: 1200,
+        };
         assert_eq!(
             fit(slot, &monitors, 0, 1.0),
-            PhysRect { x: 0, y: 0, width: 800, height: 600 }
+            PhysRect {
+                x: 0,
+                y: 0,
+                width: 800,
+                height: 600
+            }
         );
     }
 
@@ -547,7 +589,12 @@ mod tests {
     /// window manager would refuse anyway buys nothing.
     #[test]
     fn the_configured_minimum_is_the_floor() {
-        let slot = LogicalBox { x: 0, y: 0, width: 10, height: 10 };
+        let slot = LogicalBox {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+        };
         let fitted = fit(slot, &one_monitor(), 0, 1.0);
         assert_eq!(fitted.width, MIN_LOGICAL_WIDTH);
         assert_eq!(fitted.height, MIN_LOGICAL_HEIGHT);
@@ -559,13 +606,35 @@ mod tests {
     #[test]
     fn a_monitor_left_of_primary_keeps_its_negative_coordinates() {
         let monitors = vec![
-            MonitorRect { x: 0, y: 0, width: 1920, height: 1080, scale: 1.0 },
-            MonitorRect { x: -1920, y: 0, width: 1920, height: 1080, scale: 1.0 },
+            MonitorRect {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+            },
+            MonitorRect {
+                x: -1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+            },
         ];
-        let slot = LogicalBox { x: -1800, y: 50, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: -1800,
+            y: 50,
+            width: 720,
+            height: 480,
+        };
         assert_eq!(
             fit(slot, &monitors, 0, 1.0),
-            PhysRect { x: -1800, y: 50, width: 720, height: 480 }
+            PhysRect {
+                x: -1800,
+                y: 50,
+                width: 720,
+                height: 480
+            }
         );
     }
 
@@ -574,11 +643,27 @@ mod tests {
     /// more physical pixels, not the same number.
     #[test]
     fn the_target_monitors_scale_sets_the_physical_size() {
-        let monitors = vec![MonitorRect { x: 0, y: 0, width: 2880, height: 1620, scale: 1.5 }];
-        let slot = LogicalBox { x: 0, y: 0, width: 720, height: 480 };
+        let monitors = vec![MonitorRect {
+            x: 0,
+            y: 0,
+            width: 2880,
+            height: 1620,
+            scale: 1.5,
+        }];
+        let slot = LogicalBox {
+            x: 0,
+            y: 0,
+            width: 720,
+            height: 480,
+        };
         assert_eq!(
             fit(slot, &monitors, 0, 1.0),
-            PhysRect { x: 0, y: 0, width: 1080, height: 720 }
+            PhysRect {
+                x: 0,
+                y: 0,
+                width: 1080,
+                height: 720
+            }
         );
     }
 
@@ -586,10 +671,20 @@ mod tests {
     /// slot silently useless, so the probe stands.
     #[test]
     fn an_empty_monitor_list_returns_the_probe_unchanged() {
-        let slot = LogicalBox { x: 40, y: 40, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: 40,
+            y: 40,
+            width: 720,
+            height: 480,
+        };
         assert_eq!(
             fit(slot, &[], 0, 2.0),
-            PhysRect { x: 80, y: 80, width: 1440, height: 960 }
+            PhysRect {
+                x: 80,
+                y: 80,
+                width: 1440,
+                height: 960
+            }
         );
     }
 
@@ -598,10 +693,27 @@ mod tests {
     #[test]
     fn a_box_that_overlaps_nothing_lands_on_the_primary_monitor() {
         let monitors = vec![
-            MonitorRect { x: 0, y: 0, width: 1920, height: 1080, scale: 1.0 },
-            MonitorRect { x: -1920, y: 0, width: 1280, height: 1024, scale: 1.0 },
+            MonitorRect {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+            },
+            MonitorRect {
+                x: -1920,
+                y: 0,
+                width: 1280,
+                height: 1024,
+                scale: 1.0,
+            },
         ];
-        let slot = LogicalBox { x: 6000, y: 6000, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: 6000,
+            y: 6000,
+            width: 720,
+            height: 480,
+        };
 
         let fitted = fit(slot, &monitors, 1, 1.0);
 
@@ -614,7 +726,12 @@ mod tests {
     /// for exactly that, and a hotkey is the wrong place to panic.
     #[test]
     fn a_primary_index_past_the_end_of_the_list_clamps_instead_of_panicking() {
-        let slot = LogicalBox { x: 9000, y: 0, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: 9000,
+            y: 0,
+            width: 720,
+            height: 480,
+        };
 
         let fitted = fit(slot, &one_monitor(), 5, 1.0);
 
@@ -626,7 +743,12 @@ mod tests {
     /// keystroke, with no channel to report it.
     #[test]
     fn a_box_at_the_far_edge_of_the_coordinate_space_does_not_panic() {
-        let slot = LogicalBox { x: i32::MAX - 10, y: 0, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: i32::MAX - 10,
+            y: 0,
+            width: 720,
+            height: 480,
+        };
 
         let fitted = fit(slot, &one_monitor(), 0, 1.0);
 
@@ -640,12 +762,33 @@ mod tests {
     /// the window that is off-screen.
     #[test]
     fn the_box_to_persist_is_the_fitted_one_not_the_slot() {
-        let slot = LogicalBox { x: 3000, y: 200, width: 720, height: 480 };
+        let slot = LogicalBox {
+            x: 3000,
+            y: 200,
+            width: 720,
+            height: 480,
+        };
 
         let (fitted, persisted) = fit_and_persist(slot, &one_monitor(), 0, 1.0);
 
-        assert_eq!(fitted, PhysRect { x: 1200, y: 200, width: 720, height: 480 });
-        assert_eq!(persisted, LogicalBox { x: 1200, y: 200, width: 720, height: 480 });
+        assert_eq!(
+            fitted,
+            PhysRect {
+                x: 1200,
+                y: 200,
+                width: 720,
+                height: 480
+            }
+        );
+        assert_eq!(
+            persisted,
+            LogicalBox {
+                x: 1200,
+                y: 200,
+                width: 720,
+                height: 480
+            }
+        );
         assert_ne!(persisted, slot, "the raw slot must not be what gets stored");
     }
 
@@ -654,13 +797,35 @@ mod tests {
     /// `save_window_geometry` would record for it (`main.ts:1104`).
     #[test]
     fn the_box_to_persist_is_logical_at_the_target_monitors_scale() {
-        let monitors = vec![MonitorRect { x: 0, y: 0, width: 2880, height: 1620, scale: 1.5 }];
-        let slot = LogicalBox { x: 0, y: 0, width: 720, height: 480 };
+        let monitors = vec![MonitorRect {
+            x: 0,
+            y: 0,
+            width: 2880,
+            height: 1620,
+            scale: 1.5,
+        }];
+        let slot = LogicalBox {
+            x: 0,
+            y: 0,
+            width: 720,
+            height: 480,
+        };
 
         let (fitted, persisted) = fit_and_persist(slot, &monitors, 0, 1.0);
 
-        assert_eq!(fitted, PhysRect { x: 0, y: 0, width: 1080, height: 720 });
-        assert_eq!(persisted, slot, "a fitted box that moved nothing round-trips");
+        assert_eq!(
+            fitted,
+            PhysRect {
+                x: 0,
+                y: 0,
+                width: 1080,
+                height: 720
+            }
+        );
+        assert_eq!(
+            persisted, slot,
+            "a fitted box that moved nothing round-trips"
+        );
     }
 
     /// macOS grows the frame upward for a peek, so a bind pressed mid-peek
@@ -668,10 +833,20 @@ mod tests {
     /// restore of that slot would repeat the error.
     #[test]
     fn a_peek_that_grew_the_frame_is_undone() {
-        let peeked = LogicalBox { x: 100, y: 72, width: 720, height: 508 };
+        let peeked = LogicalBox {
+            x: 100,
+            y: 72,
+            width: 720,
+            height: 508,
+        };
         assert_eq!(
             unpeek(peeked, true, true),
-            LogicalBox { x: 100, y: 100, width: 720, height: 480 }
+            LogicalBox {
+                x: 100,
+                y: 100,
+                width: 720,
+                height: 480
+            }
         );
     }
 
@@ -679,13 +854,23 @@ mod tests {
     /// so there is no growth to undo and subtracting one would corrupt the box.
     #[test]
     fn a_peek_that_did_not_grow_the_frame_is_left_alone() {
-        let box_ = LogicalBox { x: 100, y: 100, width: 720, height: 480 };
+        let box_ = LogicalBox {
+            x: 100,
+            y: 100,
+            width: 720,
+            height: 480,
+        };
         assert_eq!(unpeek(box_, true, false), box_);
     }
 
     #[test]
     fn a_box_read_outside_a_peek_is_left_alone() {
-        let box_ = LogicalBox { x: 100, y: 100, width: 720, height: 480 };
+        let box_ = LogicalBox {
+            x: 100,
+            y: 100,
+            width: 720,
+            height: 480,
+        };
         assert_eq!(unpeek(box_, false, true), box_);
     }
 
@@ -760,7 +945,10 @@ mod tests {
     /// existing mechanic, reached from a new caller, with no `cfg!` of its own.
     #[test]
     fn a_native_slot_resolves_to_header_where_native_is_unsupported() {
-        let native = LayoutSlot { chrome_mode: ChromeMode::Native, ..slot_fixture() };
+        let native = LayoutSlot {
+            chrome_mode: ChromeMode::Native,
+            ..slot_fixture()
+        };
 
         let mut unsupported = Settings::default();
         apply_slot(&mut unsupported, &native, false);
@@ -772,7 +960,12 @@ mod tests {
     }
 
     fn box_fixture() -> LogicalBox {
-        LogicalBox { x: 1200, y: 40, width: 720, height: 200 }
+        LogicalBox {
+            x: 1200,
+            y: 40,
+            width: 720,
+            height: 200,
+        }
     }
 
     #[test]
@@ -847,7 +1040,9 @@ mod tests {
     #[test]
     fn a_bound_slot_resolves_to_its_contents() {
         let mut settings = Settings::default();
-        settings.layout_slots.insert("7".to_string(), slot_fixture());
+        settings
+            .layout_slots
+            .insert("7".to_string(), slot_fixture());
 
         assert_eq!(slot_to_restore(&settings, 7), Some(slot_fixture()));
     }
@@ -855,7 +1050,9 @@ mod tests {
     #[test]
     fn an_out_of_range_index_resolves_to_nothing_to_do() {
         let mut settings = Settings::default();
-        settings.layout_slots.insert("0".to_string(), slot_fixture());
+        settings
+            .layout_slots
+            .insert("0".to_string(), slot_fixture());
 
         assert!(slot_to_restore(&settings, 0).is_none());
     }
