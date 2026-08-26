@@ -64,9 +64,9 @@ test('content mode leaves no tab stop in the band', async ({ page }) => {
 
 // Deliberately a near-duplicate of panes.spec.ts's "a hidden title bar leaves
 // the gear invisible until the band is hovered": this file has to fail if
-// content mode's rules ever leak onto header mode. The rule at risk is Task
-// 4's `#app[data-chrome='content'] .history-controls, ... { visibility:
-// hidden }` -- if that selector is ever broadened to the
+// content mode's rules ever leak onto header mode. The rule at risk is
+// global.css's `#app[data-chrome='content'] .history-controls, ... {
+// visibility: hidden }` -- if that selector is ever broadened to the
 // `:not([data-chrome='native'])` form its neighbours use (the plausible
 // mistake), header mode's controls go invisible too. So this test asserts
 // `visibility: visible` on top of the opacity panes.spec.ts already checks:

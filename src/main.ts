@@ -298,8 +298,8 @@ let chromeMode: ChromeMode = 'native';
 let currentPlatform = 'macos';
 
 /**
- * True while a hover is showing chrome that `decorations: false` normally
- * hides. Tracked rather than derived from the event, so only *crossings* reach
+ * True while a hover is showing chrome that `header` mode normally hides.
+ * Tracked rather than derived from the event, so only *crossings* reach
  * the backend: each peek is an objc round-trip on the main thread, and a
  * duplicate `pointerenter` (or one arriving while the reveal is already up)
  * should cost nothing.

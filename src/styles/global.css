@@ -236,8 +236,8 @@ body {
 }
 
 /* Frameless modes: idle hides the controls; a peek reveals them. `header` and
-   `content` share this rule — `content` simply never gets `.peeked`, and Task 4
-   takes its controls out of the tab order on top of this. */
+   `content` share this rule — `content` simply never gets `.peeked`, and the
+   content-mode rule below also takes its controls out of the tab order. */
 #app:not([data-chrome='native']) .history-controls,
 #app:not([data-chrome='native']) #settings-toggle,
 #app:not([data-chrome='native']) .window-controls {
