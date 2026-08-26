@@ -96,7 +96,9 @@ test('header mode still reveals on hover', async ({ page }) => {
 
   await expect(gear).toHaveCSS('opacity', '1');
   await expect(gear).toHaveCSS('visibility', 'visible');
+  await expect(history).toHaveCSS('opacity', '1');
   await expect(history).toHaveCSS('visibility', 'visible');
+  await expect(windowControls).toHaveCSS('opacity', '1');
   await expect(windowControls).toHaveCSS('visibility', 'visible');
   expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(28);
 });
