@@ -120,7 +120,22 @@ export async function showStartupError(): Promise<void> {
 export async function showSettingsWarning(): Promise<void> {
   const message = await invoke<string | null>('settings_warning');
   if (message === null) return;
-  parseError.replaceChildren(errorBlock(message));
+  // `append`, not `replaceChildren`: this and `showShortcutWarning` are both
+  // fire-and-forget at the bottom of this module, so whichever resolves
+  // second must not wipe the other's warning out of `#parse-error`.
+  parseError.append(errorBlock(message));
+}
+
+// A hotkey another application owns is the one failure in the layout-slot
+// feature that would otherwise be invisible: the keys would simply do nothing.
+// Exported for the same reason `showStartupError` is.
+export async function showShortcutWarning(): Promise<void> {
+  const message = await invoke<string | null>('shortcut_warning');
+  if (message === null) return;
+  // `append`, not `replaceChildren`: a corrupt settings.json puts its own,
+  // unrelated warning in this slot, and both are worth showing. The next
+  // successful parse clears the slot, exactly as it already does for that one.
+  parseError.append(errorBlock(message));
 }
 
 const dictionary = app.querySelector<HTMLElement>('#dictionary')!;
@@ -1257,4 +1272,5 @@ void applySettings().finally(() => {
     .catch(() => {});
 });
 void showSettingsWarning();
+void showShortcutWarning();
 void showDictionaryScreen();

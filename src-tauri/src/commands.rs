@@ -20,7 +20,9 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tokio::sync::{watch, Notify};
 
 use crate::settings::{ChromeMode, Settings};
-use crate::state::{AppState, NeedsDictionary, SettingsState, SettingsWarning, StartupFailure};
+use crate::state::{
+    AppState, NeedsDictionary, SettingsState, SettingsWarning, ShortcutWarning, StartupFailure,
+};
 
 /// The sending half of the input channel, managed so commands can reach it.
 pub struct InputSender(pub watch::Sender<String>);
@@ -1253,6 +1255,16 @@ pub fn startup_error(failure: State<'_, StartupFailure>) -> Option<String> {
 /// `SettingsWarning`'s doc comment for why the two are separate.
 #[tauri::command]
 pub fn settings_warning(warning: State<'_, SettingsWarning>) -> Option<String> {
+    if warning.0.is_empty() {
+        None
+    } else {
+        Some(warning.0.clone())
+    }
+}
+
+/// The hotkey registration warning, or `None` when every key took.
+#[tauri::command]
+pub fn shortcut_warning(warning: State<'_, ShortcutWarning>) -> Option<String> {
     if warning.0.is_empty() {
         None
     } else {
