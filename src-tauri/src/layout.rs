@@ -60,15 +60,18 @@ pub const MIN_LOGICAL_HEIGHT: u32 = 80;
 
 /// The area of the intersection of `box_` and `monitor`, in physical pixels.
 ///
-/// `i64` because two `i32` extents multiply straight past `i32`.
+/// `i64` for the whole calculation, not just the product: two `i32` extents
+/// multiply straight past `i32`, and `x + width` alone overflows for a
+/// hand-edited `window_x` near `i32::MAX` — which in a debug build is a panic,
+/// on a keystroke, which is the one thing this module must not do.
 fn overlap(box_: &PhysRect, monitor: &MonitorRect) -> i64 {
-    let left = box_.x.max(monitor.x);
-    let top = box_.y.max(monitor.y);
-    let right = (box_.x + box_.width as i32).min(monitor.x + monitor.width as i32);
-    let bottom = (box_.y + box_.height as i32).min(monitor.y + monitor.height as i32);
-    let width = (right - left).max(0) as i64;
-    let height = (bottom - top).max(0) as i64;
-    width * height
+    let (bx, by) = (box_.x as i64, box_.y as i64);
+    let (mx, my) = (monitor.x as i64, monitor.y as i64);
+    let left = bx.max(mx);
+    let top = by.max(my);
+    let right = (bx + box_.width as i64).min(mx + monitor.width as i64);
+    let bottom = (by + box_.height as i64).min(my + monitor.height as i64);
+    (right - left).max(0) * (bottom - top).max(0)
 }
 
 /// Pin a stored slot box onto a monitor that exists now.
@@ -588,6 +591,46 @@ mod tests {
             fit(slot, &[], 0, 2.0),
             PhysRect { x: 80, y: 80, width: 1440, height: 960 }
         );
+    }
+
+    /// No monitor overlaps the probe, so the fallback runs — and it has to be
+    /// the primary monitor, not simply the first one in the list.
+    #[test]
+    fn a_box_that_overlaps_nothing_lands_on_the_primary_monitor() {
+        let monitors = vec![
+            MonitorRect { x: 0, y: 0, width: 1920, height: 1080, scale: 1.0 },
+            MonitorRect { x: -1920, y: 0, width: 1280, height: 1024, scale: 1.0 },
+        ];
+        let slot = LogicalBox { x: 6000, y: 6000, width: 720, height: 480 };
+
+        let fitted = fit(slot, &monitors, 1, 1.0);
+
+        assert_eq!(fitted.x, -1920 + 1280 - 720);
+        assert_eq!(fitted.y, 1024 - 480);
+    }
+
+    /// `primary` comes from matching two monitor lists against each other, so a
+    /// caller can hand over an index the list no longer has. The guard exists
+    /// for exactly that, and a hotkey is the wrong place to panic.
+    #[test]
+    fn a_primary_index_past_the_end_of_the_list_clamps_instead_of_panicking() {
+        let slot = LogicalBox { x: 9000, y: 0, width: 720, height: 480 };
+
+        let fitted = fit(slot, &one_monitor(), 5, 1.0);
+
+        assert_eq!(fitted.x, 1920 - 720);
+    }
+
+    /// A hand-edited `window_x` near `i32::MAX` used to overflow the
+    /// intersection arithmetic, which in a debug build is a panic — on a
+    /// keystroke, with no channel to report it.
+    #[test]
+    fn a_box_at_the_far_edge_of_the_coordinate_space_does_not_panic() {
+        let slot = LogicalBox { x: i32::MAX - 10, y: 0, width: 720, height: 480 };
+
+        let fitted = fit(slot, &one_monitor(), 0, 1.0);
+
+        assert_eq!(fitted.x, 1920 - 720);
     }
 
     /// The invariant behind `fit_and_persist`: what restore writes to disk is a
