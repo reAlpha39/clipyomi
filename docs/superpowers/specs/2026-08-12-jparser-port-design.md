@@ -817,21 +817,21 @@ so did the chrome and geometry work originally filed under Phase 4.
 | **3B** (08-16) | Shipped. The three real gloss filters of §7.6 (`hide_pos`, `hide_xrefs`, `hide_usage`), persisted, applied in the popover. The settings surface shipped as a **dedicated window**, not the popover of deviation #8 — created hidden in `setup` like the popover, see §6. |
 | **3C** (08-25) | Shipped. Font sizes (§7.7), as **three** persisted inputs rather than two: `--text-sentence` and `--text-gloss` in px, `--text-furigana` (and the derived `--text-furigana-romaji`) as a percentage of the sentence. §7.7's `--text-cjk`/`--text-furigana` pair never existed in this port — see the 3C design doc §2. |
 
-### Phase 4 — Window behaviour (4A, 4B and 4C shipped; 4D remaining)
+### Phase 4 — Window behaviour (4A, 4B, 4C and 4D shipped — complete)
 
 2K already shipped the header + resize-edges state and geometry persistence,
-4C shipped parse history, 4A shipped the other two chrome states, and 4B has
-now shipped per-pixel background alpha, clamped to 100 % against 4A's native
-frame (macOS/Linux only — Windows never offers `native` at all). One
-sub-phase is left: **4D last**, because a slot captures the state 4A, 4B and
-3C introduce.
+4C shipped parse history, 4A shipped the other two chrome states, 4B shipped
+per-pixel background alpha, clamped to 100 % against 4A's native frame
+(macOS/Linux only — Windows never offers `native` at all), and 4D — last,
+because a slot captures the state 4A, 4B and 3C introduce — has now shipped
+the layout hotkeys. Phase 4 is complete.
 
 | Sub-phase    | Scope                                                                                                                                                                                                               | Depends on |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | **4C** (08-25) | Shipped. Parse history (§7.8): ring buffer of 50 full`ParseResult`s, consecutive duplicates deduped, back/forward in the header — what makes clipboard monitoring safe to leave running. Session-only, disk persistence still deferred (deviation #9); a new parse arriving mid-read keeps every entry ahead of the cursor rather than truncating them browser-style. | —         |
 | **4A** (08-25) | Shipped. Three-way `chrome_mode` replacing the `decorations` boolean, plus the content-only state (§7.4): the band never reveals, its controls leave the tab order, and drag and resize survive. The toggles did not move to a right-click menu — they had already moved to the settings window in 3B — so the menu carries the mode switch, Settings and Quit instead. **Native frame is macOS/Linux only**: Windows is permanently frameless (`d07711f`, `e45d55f`) and resolves `native` to `header`, which also removed a broken decorated state there. | 2K         |
 | **4B** (08-26) | Shipped. Per-pixel background alpha (§7.5): the main window is transparent **unconditionally**, with `--surface-alpha` a derived background token and a range control clamping alpha to 100 % whenever chrome resolves to `native` — not the `"transparent": true` + `decorations: false` pairing §7.5 originally described, which predates 4A's three-way `chrome_mode`. `macos-private-api` enabled on macOS. | 4A         |
-| **4D** | Layout hotkeys (§7.9): global-shortcut plugin,`Alt+1..9` restores, `Shift+Alt+1..9` binds. A slot captures geometry, chrome mode, background alpha — the **stored** `surface_alpha`, not the value 4B clamps for `native` chrome mode — always-on-top, font sizes, furigana mode.                  | 3C, 4A, 4B |
+| **4D** (08-26) | Shipped. Layout hotkeys (§7.9): `tauri-plugin-global-shortcut`, twenty global shortcuts — `Alt+Digit1..9` restores a slot, `Shift+Alt+Digit1..9` binds one, `Alt+BracketLeft`/`Alt+BracketRight` step parse history. A slot captures geometry, chrome mode, background alpha — the **stored** `surface_alpha`, not the value 4B clamps for `native` chrome mode — always-on-top, the three font sizes, and furigana mode, restored by assignment (never merge) so an unset value clears rather than survives. Restoring fits the stored geometry onto whichever live monitor overlaps it most, floored at 160×80, rather than placing the window off-screen. Two deviations from the master spec's §7.9 scope: the global history hotkeys (beyond §7.9 itself) and the fit-to-monitor clamp — see §12 rows 13–14. | 3C, 4A, 4B |
 
 ### Phase 5 — MeCab (remaining, minus what 2C took)
 
@@ -875,6 +875,8 @@ Phase 1. 6C is the last thing that happens.
 | 10 | Native frame is macOS/Linux only | The Windows window is permanently frameless (`d07711f`, `e45d55f`); restoring `WS_CAPTION` re-opens the DWM shadow that commit removed |
 | 11 | Default chrome mode is `native`, not §7.4's `header` | The shipped `Settings::default()` has always been the other one, and a first-run window with no title bar cannot explain itself |
 | 12 | Content-only keeps drag and resize | ta-old's `WS_POPUP` had neither; a mode that cannot be left without editing `settings.json` is a trap, and keeping them costs nothing |
+| 13 | Global history hotkeys `Alt+[` / `Alt+]` added beyond §7.9's scope | 4A §9 named this phase's keyboard surface as their home; content-only mode has had no route to back/forward since 4A. `Alt+Left`/`Right` was rejected because a global grab would take Back from every browser and file manager on the machine. §4.2 |
+| 14 | Restore clamps geometry into a visible monitor instead of restoring it verbatim | A slot bound on a monitor that is now absent would otherwise place the window somewhere unreachable, and every key that could fix it is on that window — 4A deviation #12's trap by another route. §6 |
 
 ## 13. Deferred
 
