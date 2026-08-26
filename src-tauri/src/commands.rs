@@ -1104,40 +1104,52 @@ pub fn initial_height(saved: Option<u32>) -> u32 {
     }
 }
 
+/// The merge `save_settings` performs, without the state wrapper.
+///
+/// Split out for the reason `resolve_chrome_mode` is: a `#[tauri::command]`
+/// taking `State<'_, _>` cannot be called from a test, and the rule this
+/// function encodes — which keys are merged, which are assigned, and which are
+/// not touched at all — is worth pinning.
+///
+/// `layout_slots` is deliberately absent. The settings window never sends it,
+/// so it arrives as an empty map on every save; assigning it would wipe every
+/// bound slot.
+pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
+    if incoming.furigana_mode.is_some() {
+        current.furigana_mode = incoming.furigana_mode;
+    }
+    if incoming.hide_pos.is_some() {
+        current.hide_pos = incoming.hide_pos;
+    }
+    if incoming.hide_xrefs.is_some() {
+        current.hide_xrefs = incoming.hide_xrefs;
+    }
+    if incoming.hide_usage.is_some() {
+        current.hide_usage = incoming.hide_usage;
+    }
+    // Merged like the toggles above rather than assigned like the sizes below:
+    // a range input cannot be cleared, so alpha has no "absent means reset"
+    // state, and an unguarded assign would only give a future caller a way to
+    // wipe the value by omission.
+    if incoming.surface_alpha.is_some() {
+        current.surface_alpha = incoming.surface_alpha;
+    }
+    // Assigned rather than merged, unlike the toggles above: an absent size
+    // means the user cleared that box and wants the stylesheet default back,
+    // which a merge could never express. The settings window is the only
+    // caller and always sends all three.
+    current.font_sentence = incoming.font_sentence;
+    current.font_gloss = incoming.font_gloss;
+    current.furigana_scale = incoming.furigana_scale;
+}
+
 #[tauri::command]
 pub fn save_settings(
     settings: Settings,
     state: State<'_, Arc<SettingsState>>,
 ) -> Result<(), String> {
     state
-        .update(|s| {
-            if settings.furigana_mode.is_some() {
-                s.furigana_mode = settings.furigana_mode;
-            }
-            if settings.hide_pos.is_some() {
-                s.hide_pos = settings.hide_pos;
-            }
-            if settings.hide_xrefs.is_some() {
-                s.hide_xrefs = settings.hide_xrefs;
-            }
-            if settings.hide_usage.is_some() {
-                s.hide_usage = settings.hide_usage;
-            }
-            // Merged like the toggles above rather than assigned like the
-            // sizes below: a range input cannot be cleared, so alpha has no
-            // "absent means reset" state, and an unguarded assign would only
-            // give a future caller a way to wipe the value by omission.
-            if settings.surface_alpha.is_some() {
-                s.surface_alpha = settings.surface_alpha;
-            }
-            // Assigned rather than merged, unlike the toggles above: an absent
-            // size means the user cleared that box and wants the stylesheet
-            // default back, which a merge could never express. The settings
-            // window is the only caller and always sends all three.
-            s.font_sentence = settings.font_sentence;
-            s.font_gloss = settings.font_gloss;
-            s.furigana_scale = settings.furigana_scale;
-        })
+        .update(|s| merge_saved(s, settings))
         .map_err(|e| e.to_string())
 }
 
@@ -1912,7 +1924,43 @@ mod tests {
         assert!(toggle_maximize_window(h.clone()).is_ok());
         assert!(close_window(h).is_ok());
     }
+
+    /// The settings window's `currentSnapshot()` (`settings.ts:192`) does not
+    /// build `layout_slots`, so it arrives here as serde's default — an empty
+    /// map — on every save from that window. Assigning it would wipe every
+    /// slot the moment the user changed the theme, and nothing in the code
+    /// says "leave it alone", so only this test stops a future contributor
+    /// completing the pattern.
+    #[test]
+    fn a_save_from_the_settings_window_leaves_the_layout_slots_alone() {
+        let mut current = crate::settings::Settings::default();
+        current.layout_slots.insert(
+            "1".to_string(),
+            crate::settings::LayoutSlot {
+                window_width: 720,
+                window_height: 200,
+                window_x: 0,
+                window_y: 0,
+                chrome_mode: ChromeMode::Content,
+                always_on_top: false,
+                surface_alpha: Some(35),
+                font_sentence: None,
+                font_gloss: None,
+                furigana_scale: None,
+                furigana_mode: None,
+                extra: serde_json::Map::new(),
+            },
+        );
+
+        merge_saved(
+            &mut current,
+            crate::settings::Settings {
+                furigana_mode: Some("katakana".to_string()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(current.layout_slots.len(), 1, "a settings save wiped a slot");
+        assert_eq!(current.layout_slots["1"].surface_alpha, Some(35));
+    }
 }
-
-
-

@@ -11,6 +11,7 @@
 //! silently truncated by this one, and `normalize` folds the pre-4A
 //! `decorations` boolean into `chrome_mode` on the way in.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -59,6 +60,38 @@ pub fn supported(mode: ChromeMode, native_supported: bool) -> ChromeMode {
     }
 }
 
+/// One layout slot (§7.9): the whole shape of the window, restorable with one
+/// keystroke.
+///
+/// Geometry and `chrome_mode` are not `Option` — a bind always has a real
+/// window box and a mode that has already been through `supported()`. The rest
+/// are, for the reason 3C and 4B both give: "unset, `tokens.css` owns the
+/// default" is a reachable state, and a slot bound while the font boxes were
+/// empty has to restore them empty rather than silently pinning 24 px.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LayoutSlot {
+    pub window_width: u32,
+    pub window_height: u32,
+    pub window_x: i32,
+    pub window_y: i32,
+    pub chrome_mode: ChromeMode,
+    pub always_on_top: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface_alpha: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_sentence: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_gloss: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub furigana_scale: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub furigana_mode: Option<String>,
+    /// Keys a later version added, carried through on rewrite for the same
+    /// reason `Settings::extra` exists.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -103,6 +136,15 @@ pub struct Settings {
     pub window_x: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_y: Option<i32>,
+    /// The nine layout slots (§7.9), keyed by digit, holding only the ones
+    /// actually bound.
+    ///
+    /// A `String` key rather than a `u8`: `load` turns any parse failure into
+    /// the whole file reset to defaults, so a stricter key type would make one
+    /// hand-typed slot name cost the user every other setting too. An unknown
+    /// key here is simply never looked up.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub layout_slots: BTreeMap<String, LayoutSlot>,
     /// Keys this version does not know about, carried through on rewrite so a
     /// file written by a later version is not truncated by this one.
     #[serde(flatten)]
@@ -128,6 +170,7 @@ impl Default for Settings {
             window_height: None,
             window_x: None,
             window_y: None,
+            layout_slots: BTreeMap::new(),
             extra: serde_json::Map::new(),
         }
     }
@@ -383,6 +426,7 @@ mod tests {
             window_height: Some(300),
             window_x: None,
             window_y: None,
+            layout_slots: BTreeMap::new(),
             extra: serde_json::Map::new(),
         };
         let json = serde_json::to_string(&settings).expect("serialization succeeds");
@@ -410,6 +454,7 @@ mod tests {
             window_height: Some(300),
             window_x: None,
             window_y: None,
+            layout_slots: BTreeMap::new(),
             extra: serde_json::Map::new(),
         };
         let json = serde_json::to_string(&settings).expect("serialization succeeds");
@@ -612,5 +657,117 @@ mod tests {
 
         save(&path, &written).expect("save");
         assert_eq!(load(&path).0.surface_alpha, Some(0));
+    }
+
+    /// A slot fixture with every optional key set, so a round trip that drops
+    /// one is visible.
+    fn slot_fixture() -> LayoutSlot {
+        LayoutSlot {
+            window_width: 720,
+            window_height: 200,
+            window_x: 1200,
+            window_y: 40,
+            chrome_mode: ChromeMode::Content,
+            always_on_top: true,
+            surface_alpha: Some(35),
+            font_sentence: Some(30),
+            font_gloss: Some(18),
+            furigana_scale: Some(70),
+            furigana_mode: Some("hiragana".to_string()),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    #[test]
+    fn a_layout_slot_round_trips_through_the_file() {
+        let path = scratch("layout-slot").join("settings.json");
+        let mut written = Settings::default();
+        written
+            .layout_slots
+            .insert("3".to_string(), slot_fixture());
+
+        save(&path, &written).expect("save");
+        let (read_back, warning) = load(&path);
+        assert!(warning.is_none(), "got {warning:?}");
+        assert_eq!(read_back.layout_slots.get("3"), Some(&slot_fixture()));
+    }
+
+    /// The same reason the font sizes are `Option`: a slot bound while the
+    /// boxes were empty has to restore them empty, so "unset" must survive the
+    /// file as an absent key rather than as a number.
+    #[test]
+    fn a_slots_unset_keys_are_left_out_of_the_file() {
+        let path = scratch("layout-slot-unset").join("settings.json");
+        let mut written = Settings::default();
+        written.layout_slots.insert(
+            "1".to_string(),
+            LayoutSlot {
+                surface_alpha: None,
+                font_sentence: None,
+                font_gloss: None,
+                furigana_scale: None,
+                furigana_mode: None,
+                ..slot_fixture()
+            },
+        );
+
+        save(&path, &written).expect("save");
+        let raw = std::fs::read_to_string(&path).expect("read back");
+        assert!(!raw.contains("surface_alpha"), "got {raw}");
+        assert!(!raw.contains("font_sentence"), "got {raw}");
+        assert_eq!(load(&path).0.layout_slots["1"].surface_alpha, None);
+    }
+
+    #[test]
+    fn no_slots_means_no_key_in_the_file() {
+        let path = scratch("layout-slot-empty").join("settings.json");
+        save(&path, &Settings::default()).expect("save");
+
+        let raw = std::fs::read_to_string(&path).expect("read back");
+        assert!(!raw.contains("layout_slots"), "got {raw}");
+    }
+
+    /// The reason the key is a `String` and not a `u8`. `load` turns any parse
+    /// failure into the whole file reset to defaults — so with a stricter key
+    /// type, one hand-typed slot name would also cost the user their fonts,
+    /// geometry, alpha and chrome mode. It costs them nothing instead.
+    #[test]
+    fn a_garbage_slot_key_is_ignored_without_resetting_the_file() {
+        let path = scratch("layout-slot-garbage").join("settings.json");
+        std::fs::write(
+            &path,
+            br#"{"always_on_top":true,"clipboard_monitoring":true,
+                 "layout_slots":{"1a":{"window_width":720,"window_height":200,
+                 "window_x":0,"window_y":0,"chrome_mode":"content",
+                 "always_on_top":false}}}"#,
+        )
+        .expect("write");
+
+        let (loaded, warning) = load(&path);
+        assert!(warning.is_none(), "the file parsed, so nothing to warn about");
+        assert!(loaded.always_on_top, "an unrelated key was reset");
+        assert!(loaded.layout_slots.contains_key("1a"), "the key was dropped");
+        assert!(!loaded.layout_slots.contains_key("1"));
+    }
+
+    /// A slot key added by a later version must survive a rewrite by this one,
+    /// exactly as `unknown_keys_survive_a_rewrite` requires of the top level.
+    #[test]
+    fn an_unknown_key_inside_a_slot_survives_a_rewrite() {
+        let path = scratch("layout-slot-extra").join("settings.json");
+        std::fs::write(
+            &path,
+            br#"{"always_on_top":false,"clipboard_monitoring":true,
+                 "layout_slots":{"2":{"window_width":720,"window_height":200,
+                 "window_x":0,"window_y":0,"chrome_mode":"header",
+                 "always_on_top":false,"theme":"dark"}}}"#,
+        )
+        .expect("write");
+
+        let (loaded, _) = load(&path);
+        save(&path, &loaded).expect("save");
+
+        let raw = std::fs::read_to_string(&path).expect("read back");
+        assert!(raw.contains("\"theme\""), "got {raw}");
     }
 }
