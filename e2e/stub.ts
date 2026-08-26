@@ -47,6 +47,9 @@ export const STUB = `
       // needs an answer, and null is the "nothing to report" case Task 6
       // itself defines for this command.
       if (cmd === 'settings_warning') return null;
+      // No hotkey another app owns in this stub's world — null is the
+      // "nothing to report" case Task 7 defines for this command too.
+      if (cmd === 'shortcut_warning') return null;
       // Fixed, deliberately unpressed/pressed values rather than mirroring
       // some other stubbed state: it gives the visual baselines a stable,
       // non-default-looking set of buttons without depending on
