@@ -331,8 +331,14 @@ never the injected `tauri::Window`, or the settings window undecorates itself).
 
 The command runs `supported` over its argument before applying or persisting it,
 so an out-of-date webview cannot write a mode this platform will not honour.
-`save_settings` gains a `chrome_mode` merge arm alongside the existing ones.
-`main.rs`'s startup restore and its handler list follow the rename.
+`chrome_mode` is persisted by `set_chrome_mode` itself, exactly as
+`always_on_top` and `clipboard_monitoring` are persisted by their own dedicated
+commands — neither of those has a `save_settings` merge arm either, and
+`chrome_mode` does not gain one. A merge arm would let the settings window's
+snapshot overwrite the value `set_chrome_mode` had just resolved through
+`supported`, which on Windows would turn a transient in-session mismatch into
+a persisted wrong value. `main.rs`'s startup restore and its handler list
+follow the rename.
 
 Nothing else in `win32_frameless` changes.
 
