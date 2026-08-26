@@ -939,6 +939,16 @@ pub fn set_chrome_mode(
 /// with the real frame. One main window, so one flag.
 static PEEKED: AtomicBool = AtomicBool::new(false);
 
+/// Whether a peek is showing right now.
+///
+/// Read by `layout::bind`, which has to correct a box captured mid-peek. The
+/// flag stays private so `peek_titlebar` remains its only writer.
+// Temporary: Task 5's `bind` calls `is_peeked`; remove when bind lands.
+#[allow(dead_code)]
+pub(crate) fn is_peeked() -> bool {
+    PEEKED.load(Ordering::SeqCst)
+}
+
 #[tauri::command]
 pub fn platform() -> &'static str {
     if cfg!(target_os = "macos") {

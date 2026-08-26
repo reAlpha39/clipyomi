@@ -12,6 +12,8 @@
 //! past the project's file-size ceiling, and the parts carrying the real logic
 //! are pure functions that need no window at all.
 
+use crate::commands::BAND_HEIGHT_LOGICAL;
+
 /// A window box in logical (scale-independent) pixels — the units
 /// `save_window_geometry` and `LayoutSlot` both store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,6 +125,26 @@ pub fn fit(
     PhysRect { x, y, width, height }
 }
 
+/// Undo a peek's frame growth on a box just read from the live window.
+///
+/// `peek_titlebar` grows the frame upward by `BAND_HEIGHT_LOGICAL` and moves
+/// the origin up by the same amount where `peek_grows_frame()` is true — macOS
+/// (`commands.rs:999`). The frontend guards the identical hazard by skipping
+/// the save entirely (`main.ts:1099`) and waiting for the resize that follows
+/// the peek; a keystroke has to be answered now, so it corrects instead.
+// Temporary: Task 5's `bind` calls `unpeek`; remove when bind lands.
+#[allow(dead_code)]
+pub fn unpeek(box_: LogicalBox, peeked: bool, grows_frame: bool) -> LogicalBox {
+    if !(peeked && grows_frame) {
+        return box_;
+    }
+    LogicalBox {
+        y: box_.y + BAND_HEIGHT_LOGICAL as i32,
+        height: box_.height.saturating_sub(BAND_HEIGHT_LOGICAL),
+        ..box_
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +232,31 @@ mod tests {
             fit(slot, &[], 0, 2.0),
             PhysRect { x: 80, y: 80, width: 1440, height: 960 }
         );
+    }
+
+    /// macOS grows the frame upward for a peek, so a bind pressed mid-peek
+    /// would store a box a band too tall sitting a band too high — and every
+    /// restore of that slot would repeat the error.
+    #[test]
+    fn a_peek_that_grew_the_frame_is_undone() {
+        let peeked = LogicalBox { x: 100, y: 72, width: 720, height: 508 };
+        assert_eq!(
+            unpeek(peeked, true, true),
+            LogicalBox { x: 100, y: 100, width: 720, height: 480 }
+        );
+    }
+
+    /// Windows reserves the row permanently and only changes the clip region,
+    /// so there is no growth to undo and subtracting one would corrupt the box.
+    #[test]
+    fn a_peek_that_did_not_grow_the_frame_is_left_alone() {
+        let box_ = LogicalBox { x: 100, y: 100, width: 720, height: 480 };
+        assert_eq!(unpeek(box_, true, false), box_);
+    }
+
+    #[test]
+    fn a_box_read_outside_a_peek_is_left_alone() {
+        let box_ = LogicalBox { x: 100, y: 100, width: 720, height: 480 };
+        assert_eq!(unpeek(box_, false, true), box_);
     }
 }
