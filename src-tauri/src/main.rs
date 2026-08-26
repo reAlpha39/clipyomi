@@ -12,6 +12,7 @@
 
 mod clipboard;
 mod commands;
+mod layout;
 mod mouse_tracker;
 mod parse;
 mod popover;
