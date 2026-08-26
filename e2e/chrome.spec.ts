@@ -9,7 +9,11 @@ const MODES = ['native', 'header', 'content'] as const;
  * and `WINDOWS_STUB`: wrap `STUB`'s `invoke` and override only what this file
  * needs to pin — the chrome mode and the platform the CSS keys off.
  */
-function stubFor(mode: (typeof MODES)[number], platform: 'macos' | 'windows'): string {
+function stubFor(
+  mode: (typeof MODES)[number],
+  platform: 'macos' | 'windows',
+  alpha?: number,
+): string {
   return `
   ${STUB}
   const realInvoke = window.__TAURI_INTERNALS__.invoke;
@@ -17,7 +21,7 @@ function stubFor(mode: (typeof MODES)[number], platform: 'macos' | 'windows'): s
     if (cmd === 'platform') return Promise.resolve('${platform}');
     if (cmd === 'is_macos') return Promise.resolve(${platform === 'macos'});
     if (cmd === 'peek_grows_frame') return Promise.resolve(${platform === 'macos'});
-    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: '${mode}' });
+    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: '${mode}', surface_alpha: ${alpha ?? 'undefined'} });
     return realInvoke(cmd, args);
   };
 `;
@@ -215,3 +219,58 @@ for (const mode of MODES) {
     });
   }
 }
+
+// The assertions below compare computed colours to each other rather than to
+// a literal. `color-mix()` with an `oklch()` input serializes in whichever
+// space the engine picks, so pinning a string would test Chromium's
+// serializer, not the app.
+test('the opacity setting reaches the window background', async ({ page }) => {
+  await page.addInitScript(stubFor('header', 'macos', 100));
+  await page.goto('/');
+  await expect(page.locator('#app')).toHaveAttribute('data-chrome', 'header');
+
+  const opaque = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+  // The same path the slider drag uses: a partial `settings-changed` payload.
+  await page.evaluate(() =>
+    (window as unknown as { __TA_EMIT__: (e: string, p: unknown) => void }).__TA_EMIT__(
+      'settings-changed',
+      { surface_alpha: 0 },
+    ),
+  );
+
+  const clear = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(clear).not.toBe(opaque);
+});
+
+// 0% is a real, reachable setting (spec §4.3). It stays escapable because the
+// menu never fades: content mode already removes the gear, the history nav and
+// the window buttons, so at 0% this menu is the only reach into the app.
+test('the right-click menu stays opaque at zero opacity', async ({ page }) => {
+  await page.addInitScript(stubFor('content', 'macos', 0));
+  await page.goto('/');
+  await expect(page.locator('#app')).toHaveAttribute('data-chrome', 'content');
+
+  const menu = page.locator('.context-menu');
+  await page.mouse.click(100, 100, { button: 'right' });
+  await expect(menu).toHaveCount(1);
+
+  const [menuBg, bodyBg] = await page.evaluate(() => [
+    getComputedStyle(document.querySelector('.context-menu')!).backgroundColor,
+    getComputedStyle(document.body).backgroundColor,
+  ]);
+  expect(menuBg).not.toBe(bodyBg);
+});
+
+// The clamp, from the outside: a stored 0 renders fully opaque under the
+// native frame, and the stored value is not rewritten to say so.
+test('native chrome clamps the opacity to fully opaque', async ({ page }) => {
+  await page.addInitScript(stubFor('native', 'macos', 0));
+  await page.goto('/');
+  await expect(page.locator('#app')).toHaveAttribute('data-chrome', 'native');
+
+  const token = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--surface-alpha').trim(),
+  );
+  expect(token).toBe('1');
+});
