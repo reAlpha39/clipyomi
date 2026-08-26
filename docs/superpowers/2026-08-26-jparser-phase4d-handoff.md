@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-26
 **Spec:** [`docs/superpowers/specs/2026-08-26-jparser-phase4d-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-26-jparser-phase4d-design.md)
-**Commits:** `c98095c..b05a4d1` on `develop` (fifteen commits, unpushed)
+**Commits:** `c98095c..b05a4d1` on `develop` (sixteen commits, unpushed)
 
 This is the last sub-phase of Phase 4. Phase 4 (window behaviour) is
 complete as of this close.
