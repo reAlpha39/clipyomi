@@ -1,8 +1,9 @@
 # JParser Port — Design
 
 **Date:** 2026-08-12
-**Last amended:** 2026-08-18
-**Status:** In implementation — Phases 1 and 2 shipped, Phase 3 in progress. See
+**Last amended:** 2026-08-26
+**Status:** In implementation — Phases 1–3 shipped, Phase 4 partial (4A and
+4C shipped; 4B/4D remaining). See
 §11 for the per-phase breakdown; sub-phase design specs amend this document
 rather than replace it.
 **Reference implementation:** `ta-old/` (Translation Aggregator, GPL v2)

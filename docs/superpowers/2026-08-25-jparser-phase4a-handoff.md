@@ -28,8 +28,8 @@
    children go `visibility: hidden` (not `opacity`, so they leave the tab
    order — §3.2). Everything content mode depends on already existed for
    header mode: the reserved band row, the region clip, the `HTCAPTION` drag
-   strip, and the resize edges. Nothing in `win32_frameless.rs` changed for
-   this state.
+   strip, and the resize edges. Nothing in the `win32_frameless` module
+   (declared inside `commands.rs`) changed for this state.
 
 3. **Three-way settings control and right-click menu** (`678c3c9`, `672bb6a`,
    `e7742c3`, `4c7fed7`). The settings window's checkbox became a segmented
@@ -84,16 +84,17 @@
 
 ## 2. What Task 0 Deleted, and Where Its Measurements Went
 
-`9330ff8` reverted roughly 200 lines marked `THROWAWAY PROBE (spike, revert
-me)` across `commands.rs`, `xtask/`, and `tools/`: `PROBE_FLUSH`,
-`PROBE_PAINTS`, `PROBE_ACTIVE`, `probe_clip`, `probe_wait_compose`,
-`probe_window_rect`, `probe_qpc`, `probe_log_toggle[_at]`, `probe_note_paint`,
-`probe_autotoggle`, the `probe_region_clip` command, the `WM_PAINT` probe arm,
-the `DwmFlush` extern, the probe block in `peek_titlebar`, the call site in
-`main.rs`, `xtask/src/probe.rs`, and the three `tools/probe-*` scripts. It went
-first, in its own commit, partly because its injected JS keyed off
-`data-decorations`, which this phase renames — it would have broken regardless
-of anything else in 4A.
+`9330ff8` reverted 1,281 lines across seven files (`commands.rs`, `main.rs`,
+`xtask/`, `tools/`) marked `THROWAWAY PROBE (spike, revert me)` — 439 of them
+in `commands.rs` alone: `PROBE_FLUSH`, `PROBE_PAINTS`, `PROBE_ACTIVE`,
+`probe_clip`, `probe_wait_compose`, `probe_window_rect`, `probe_qpc`,
+`probe_log_toggle[_at]`, `probe_note_paint`, `probe_autotoggle`, the
+`probe_region_clip` command, the `WM_PAINT` probe arm, the `DwmFlush` extern,
+the probe block in `peek_titlebar`, the call site in `main.rs`,
+`xtask/src/probe.rs` in full, and the three `tools/probe-*` scripts in full.
+It went first, in its own commit, partly because its injected JS keyed off
+`data-decorations`, which this phase renames — it would have broken
+regardless of anything else in 4A.
 
 Kept: `update_clip_region` (a real command used on scale changes),
 `STRIP_SHOWN`, and the measurement recorded in its doc comment (39% of reveals
@@ -193,10 +194,20 @@ because Windows structurally cannot be in the state the clamp exists for.
   `apply_decorations_macos`, the frame-growth half of `peek_titlebar`, and the
   macOS branch of `set_chrome_mode` are `cfg`-gated out of a Windows build, so
   nothing here ran or verified them beyond reading the code and the design
-  spec's reasoning. The design spec's manual-verification list (§8, and the
-  brief's manual-verification checklist) is what actually covers macOS — it
-  was not re-run as part of this phase's own gate, and this handoff makes no
-  claim about macOS behavior beyond what the spec asserts.
+  spec's reasoning.
+- **The manual-verification checklist has not been performed, on either
+  platform.** Nothing in this phase clicked through a real window: no mode
+  transition was tried by hand, drag and resize in content mode were never
+  exercised on real hardware, and header mode's hover reveal was never
+  watched on a screen — only inferred safe by the invariance argument in §4.5
+  and the unchanged Playwright baselines. The design spec's manual list (§8)
+  and the brief's manual-verification checklist are both still entirely
+  outstanding. So is the pre-existing item the 4C handoff already carried
+  forward: `docs/superpowers/2026-08-18-windows-titlebar-test-plan.md`
+  remains unreported, and this phase's own manual list asks for exactly that
+  check (“header mode's hover reveal, on both platforms, exactly as
+  [that test plan] describes it”). None of it is claimed as done anywhere in
+  this handoff.
 
 ---
 

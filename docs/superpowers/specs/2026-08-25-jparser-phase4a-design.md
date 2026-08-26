@@ -1,7 +1,7 @@
 # JParser Phase 4A — Chrome Modes Design
 
 **Date:** 2026-08-25
-**Status:** Approved, not yet implemented.
+**Status:** Shipped. Commits `9330ff8..eee8320` on `develop`.
 **Reference:** `docs/superpowers/specs/2026-08-12-jparser-port-design.md` (§7.2, §7.4, §11)
 
 ---
