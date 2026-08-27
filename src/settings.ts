@@ -6,6 +6,13 @@ import type { ChromeMode, FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
 
+/**
+ * The hints note's base sentence — what downloads, and how big. Shared by the
+ * static template below and the dynamic note `hints_dir` fills in once it
+ * answers, so the two do not drift apart.
+ */
+const HINTS_NOTE_BASE = 'Improves word splitting. Enabling downloads an 8 MB IPADIC dictionary.';
+
 export function initSettingsApp(container: HTMLElement) {
   container.innerHTML = `
     <div class="settings-page">
@@ -68,7 +75,7 @@ export function initSettingsApp(container: HTMLElement) {
           <span class="label-text">Boundary hints (MeCab)</span>
         </label>
         <p class="settings-note" id="setting-mecab-hints-note">
-          Improves word splitting. Enabling downloads an 8 MB IPADIC dictionary.
+          ${HINTS_NOTE_BASE}
         </p>
         <p class="settings-note" id="setting-mecab-hints-status" hidden></p>
       </section>
@@ -429,9 +436,8 @@ export function initSettingsApp(container: HTMLElement) {
     .then((dir) => {
       if (typeof dir !== 'string' || dir === '') return;
       mecabNote.textContent =
-        `Improves word splitting. Enabling downloads an 8 MB IPADIC dictionary. ` +
-        `To use your own instead, drop a Vibrato .tar.xz in ${dir} and toggle this ` +
-        `off and on — the newest archive wins.`;
+        `${HINTS_NOTE_BASE} To use your own instead, drop an IPADIC-format Vibrato ` +
+        `.tar.xz in ${dir} and toggle this off and on — the newest archive wins.`;
     })
     .catch(() => {});
 

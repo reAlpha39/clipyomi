@@ -12,7 +12,7 @@
 //! results arrive as `parse-result` / `parse-error` events, not as a command
 //! return value.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -1301,16 +1301,27 @@ fn emit_hints_status(app: &AppHandle, status: &str) {
 }
 
 /// A `VibratoTokenizer::load` failure, with the format hint the manual route
-/// makes necessary.
+/// makes necessary and a way out of the state a bad hand-placed archive
+/// leaves behind.
 ///
 /// Before this phase a load failure meant a corrupt download or a bad
 /// `TA_HINTS_DICT`. With any dictionary accepted it also means a format
 /// mismatch, and "the vibrato dictionary could not be loaded" alone reads as a
-/// corrupt archive.
-fn describe_hints_error(err: jparser::hints::HintsError) -> String {
+/// corrupt archive. Worse, `resolve` has already published the bad file by
+/// the time this runs — `archive_is_newer` now compares the archive against
+/// its own replacement, so every later toggle fails identically until the
+/// directory is gone. `path` is what named `dir`, the thing the user actually
+/// has to remove; the message says so rather than leaving that to be worked
+/// out from a stack of nested paths.
+fn describe_hints_error(err: jparser::hints::HintsError, path: &Path) -> String {
+    let dir = path.parent().unwrap_or(path);
     format!(
-        "{err}. A hand-placed archive must hold a Vibrato v0.5.0-format \
-         dictionary — that is the format this app downloads."
+        "the dictionary at {path} could not be loaded: {err}. A hand-placed \
+         archive must be a Vibrato v0.5.0-format IPADIC dictionary — that is \
+         the format this app downloads. Remove or rename {dir}, then toggle \
+         hints off and on again to re-download the pinned one.",
+        path = path.display(),
+        dir = dir.display(),
     )
 }
 
@@ -1598,7 +1609,7 @@ pub async fn set_mecab_hints(
         emit_hints_status(&handle, phase);
 
         let path = vibrato_source::resolve(&hints_dir).map_err(|e| e.to_string())?;
-        jparser::hints::VibratoTokenizer::load(&path).map_err(describe_hints_error)
+        jparser::hints::VibratoTokenizer::load(&path).map_err(|e| describe_hints_error(e, &path))
     })
     .await;
 
@@ -2208,13 +2219,22 @@ mod tests {
 
     /// With any dictionary accepted, a load failure also means a format mismatch —
     /// this tree pins `vibrato` 0.5.2, which reads v0.5.0-format dictionaries. The
-    /// message has to say so rather than reading as a corrupt download.
+    /// message has to say so rather than reading as a corrupt download, and it has
+    /// to name the directory the user removes to escape the stranded state
+    /// `resolve` already left them in — see `describe_hints_error`'s own doc.
     #[test]
-    fn a_hints_load_failure_names_the_format_it_expects() {
-        let message = describe_hints_error(jparser::hints::HintsError::Dictionary(
-            "unsupported version".to_string(),
-        ));
+    fn a_hints_load_failure_names_the_format_it_expects_and_the_way_out() {
+        let path = Path::new(r"C:\Users\me\AppData\clipyomi\hints\current\system.dic");
+        let message = describe_hints_error(
+            jparser::hints::HintsError::Dictionary("unsupported version".to_string()),
+            path,
+        );
         assert!(message.contains("unsupported version"), "got {message}");
         assert!(message.contains("v0.5.0"), "got {message}");
+        assert!(message.contains("IPADIC"), "got {message}");
+        assert!(
+            message.contains(r"hints\current"),
+            "must name the directory to remove: got {message}"
+        );
     }
 }
