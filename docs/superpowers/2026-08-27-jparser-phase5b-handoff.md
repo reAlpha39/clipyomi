@@ -179,10 +179,11 @@ phrased so they can be executed directly. All assume a fresh `<app_config_dir>/h
    shown, and no network activity — `published()` short-circuited inside
    `resolve`.
 3. **A hand-placed archive replaces the dictionary.** With the app running,
-   copy the 5A asset (or any Vibrato `.tar.xz`) into `<app_config_dir>/hints/`,
-   then untick and re-tick. Expect "Unpacking the archive…", `<hints>/
-   current/` afterwards holding the archive's dictionary, and `ls -a
-   <hints>` showing no `.partial` or `.backup` leftovers.
+   copy the 5A asset (or another IPADIC-sized Vibrato `.tar.xz` — the
+   extractor's caps refuse UniDic/NEologd-sized ones, see §5) into
+   `<app_config_dir>/hints/`, then untick and re-tick. Expect "Unpacking the
+   archive…", `<hints>/current/` afterwards holding the archive's dictionary,
+   and `ls -a <hints>` showing no `.partial` or `.backup` leftovers.
 4. **A missing dictionary is a warning, not a fatal.** Quit. Delete
    `<app_config_dir>/hints/current/` while `settings.json` still has
    `"mecab_hints": true`. Relaunch. Expect the app to start normally, the
@@ -291,6 +292,20 @@ Copied from the design spec's §12, unchanged by implementation:
   Worth carrying forward: a `jparser-cli` command that calls `resolve()`
   the way `set_mecab_hints` does would close this gap without needing the
   GUI, but adding one is a code change outside this task's scope.
+
+- **The "accepts any Vibrato dictionary" claim, repeated in this spec's §2,
+  the port-design §11 5B row and this handoff, was a spec defect.**
+  `extract.rs`'s caps — `MAX_TAR_BYTES` = 12 MiB, `MAX_DICT_BYTES` = 64 MiB —
+  are sized at ~1.5x/1.4x the pinned IPADIC asset. Every other Vibrato
+  release asset (UniDic, BCCWJ, NEologd) exceeds both by a large multiple, so
+  the hand-placed route in practice accepts IPADIC-sized archives and
+  nothing else, and a too-large archive fails with a message that reads like
+  corruption rather than a size mismatch. Found by the phase's final
+  whole-branch review, not by this task. Corrected in this spec, the design
+  spec's §2 and §12, and the port-design §11 row, without raising the caps —
+  they are a real disk-fill guard, and §12's deferred non-IPADIC detection
+  already names the settings note as the honest mitigation for what a
+  correctly-sized non-IPADIC dictionary would still do silently.
 
 ---
 
@@ -479,8 +494,9 @@ Phase 5 table's 5B row marked shipped. See §8 below for the exact edits.
   settings-window control, `set_mecab_hints` acquiring on demand and
   publishing to the live worker over a second `watch`, `AppState.hints`
   deleted, an absent dictionary at startup meaning hints off plus a warning
-  rather than a fatal, the hand-placed-archive route accepting any Vibrato
-  dictionary, `TA_HINTS_DICT` keeping its fatal) and names §12 rows 19–20.
+  rather than a fatal, the hand-placed-archive route accepting an
+  IPADIC-format, IPADIC-sized Vibrato dictionary, `TA_HINTS_DICT` keeping its
+  fatal) and names §12 rows 19–20.
 - **§12**: gained rows 19 and 20, copied verbatim from the design spec's
   §13.
 
