@@ -1577,7 +1577,10 @@ pub async fn set_mecab_hints(
         return Ok(());
     }
 
-    claim_download(&inflight.0)?;
+    // `claim_download`'s own error text names a dictionary download; this slot
+    // guards the hints acquisition instead, so the message is remapped rather
+    // than shown as-is.
+    claim_download(&inflight.0).map_err(|_| "hints are already being installed".to_string())?;
     let flag = Arc::clone(&inflight.0);
     let handle = app.clone();
 
