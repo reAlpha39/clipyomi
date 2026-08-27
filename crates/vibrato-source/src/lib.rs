@@ -431,6 +431,66 @@ pub fn resolve_from(
     }
 }
 
+/// Writes a `.tar.xz` at `out`, shaped like the real release asset: one
+/// directory holding [`COPYING`], [`NOTICE`], and [`SYSTEM_DIC_ZST`]
+/// (`dictionary`, zstd-compressed).
+///
+/// `dictionary` is taken as a parameter rather than built here: building one
+/// needs `vibrato::SystemDictionaryBuilder`, and `vibrato` is only a
+/// dev-dependency of this crate (see `Cargo.toml`) — calling it from a
+/// production function would make it a production dependency instead, which
+/// none of this crate's real work needs. `src-tauri` supplies a real
+/// dictionary's bytes (via `jparser::hints::write_test_dictionary`) so the
+/// archive this produces is one [`extract::unpack_into`] and
+/// `VibratoTokenizer::load` both accept for real.
+///
+/// Modelled on the integration suite's own `tests/support::tar_xz`, minus its
+/// raw-GNU-header trick: that exists to write a path `Header::set_path`
+/// refuses (a traversing `..`), and every name here is well-formed.
+///
+/// **Not part of the supported surface.** `#[doc(hidden)]` for the same
+/// reason `jparser::hints::write_test_dictionary` is `pub`: a `#[cfg(test)]`
+/// item is invisible to another crate, and `src-tauri` needs a real `.tar.xz`
+/// to drive `set_mecab_hints`'s hand-placed-archive branch in a test — the
+/// alternatives are a committed binary fixture or a network call. Nothing in
+/// a shipping build calls this.
+#[doc(hidden)]
+pub fn pack_archive(dictionary: &[u8], out: &Path) -> Result<(), SourceError> {
+    let compressed =
+        ruzstd::encoding::compress_to_vec(dictionary, ruzstd::encoding::CompressionLevel::Fastest);
+
+    let members: [(String, &[u8]); 3] = [
+        (
+            format!("ipadic-mecab-2_7_0/{COPYING}"),
+            b"IPADIC licence text",
+        ),
+        (
+            format!("ipadic-mecab-2_7_0/{NOTICE}"),
+            b"IPADIC notice text",
+        ),
+        (
+            format!("ipadic-mecab-2_7_0/{SYSTEM_DIC_ZST}"),
+            compressed.as_slice(),
+        ),
+    ];
+
+    let mut builder = tar::Builder::new(Vec::new());
+    for (name, bytes) in &members {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_path(name).map_err(SourceError::Io)?;
+        header.set_cksum();
+        builder.append(&header, *bytes).map_err(SourceError::Io)?;
+    }
+    let tar_bytes = builder.into_inner().map_err(SourceError::Io)?;
+
+    let mut xz = Vec::new();
+    lzma_rs::xz_compress(&mut tar_bytes.as_slice(), &mut xz).map_err(SourceError::Io)?;
+
+    std::fs::write(out, &xz).map_err(SourceError::Io)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
