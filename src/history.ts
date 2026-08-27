@@ -52,9 +52,19 @@ export function createHistory(): History {
   return {
     push(result: ParseResult): void {
       const newest = buffer[buffer.length - 1];
-      // Skipping leaves the cursor alone on purpose: nothing new arrived, so
-      // a user reading an older parse should not be yanked forward.
-      if (newest !== undefined && surfaceText(newest) === surfaceText(result)) return;
+      // Same copied text, so this is not a new step in the chain — but it can
+      // be a new *reading* of that text: 5B's hints toggle re-parses what is
+      // already on screen, and the re-segmentation joins back to an identical
+      // surface. Dropping it outright left the stale segmentation on screen
+      // and made the toggle look inert, so the newest entry is replaced
+      // instead. One entry per copied text either way.
+      //
+      // The cursor is left alone on purpose, exactly as skipping did: no step
+      // was added, so a user reading an older parse is not yanked forward.
+      if (newest !== undefined && surfaceText(newest) === surfaceText(result)) {
+        buffer[buffer.length - 1] = result;
+        return;
+      }
 
       buffer.push(result);
       if (buffer.length > HISTORY_CAP) buffer.shift();
