@@ -52,7 +52,10 @@ fn an_archive_without_the_dictionary_names_the_missing_member() {
 
     let err = extract::unpack_into(&archive, &dir.join("staging")).expect_err("must fail");
     match err {
-        SourceError::MissingMember { name } => assert_eq!(name, "system.dic.zst"),
+        SourceError::MissingMember { name, archive: named } => {
+            assert_eq!(name, "system.dic.zst");
+            assert_eq!(named, archive, "the message must say which archive");
+        }
         other => panic!("got {other:?}"),
     }
 }
@@ -247,4 +250,106 @@ fn publishing_over_an_existing_dictionary_succeeds_and_clears_staging() {
         !staging.exists(),
         "the losing staging directory must be removed"
     );
+}
+
+/// Two archives is not an error: the newest wins, which is the same rule
+/// `resolve` applies against the published slot. One sentence to explain, and
+/// no new error variant.
+#[test]
+fn the_newest_hand_placed_archive_wins() {
+    let dir = scratch("handplaced-newest");
+    write(&dir, "old.tar.xz", &real_shaped_archive());
+    tick();
+    write(&dir, "new.tar.xz", &real_shaped_archive());
+
+    assert_eq!(
+        vibrato_source::hand_placed(&dir),
+        Some(dir.join("new.tar.xz"))
+    );
+}
+
+/// A staging archive is a download in progress or a dead one's leftover, and
+/// neither is a file the user placed. It is excluded twice over — by the
+/// leading dot and by not ending in the suffix — and this pins both halves.
+#[test]
+fn dotfiles_and_staging_archives_are_not_hand_placed() {
+    let dir = scratch("handplaced-staging");
+    let (staging_archive, _) = vibrato_source::staging_names(&dir);
+    write(&dir, ".hidden.tar.xz", b"not a candidate");
+    std::fs::write(&staging_archive, b"mid download").expect("write");
+    write(&dir, "notes.txt", b"not an archive");
+
+    assert_eq!(vibrato_source::hand_placed(&dir), None);
+}
+
+/// First run: the hints directory does not exist yet. A `read_dir` failure
+/// there is "no archive", not an error to report.
+#[test]
+fn an_absent_hints_directory_has_no_hand_placed_archive() {
+    let dir = scratch("handplaced-absent");
+    assert_eq!(vibrato_source::hand_placed(&dir.join("never-created")), None);
+}
+
+/// The whole point of the second entry point: `publish` treats an occupied
+/// target as a benign race and throws the new dictionary away, which is right
+/// for two processes fetching the same pinned artifact and wrong for a
+/// deliberate replacement.
+#[test]
+fn publish_replacing_overwrites_an_existing_dictionary() {
+    let dir = scratch("replace-happy");
+    let target = dir.join(DICT_DIR);
+    std::fs::create_dir_all(&target).expect("target");
+    std::fs::write(target.join(SYSTEM_DIC), b"the old one").expect("write");
+
+    let (_, staging) = vibrato_source::staging_names(&dir);
+    std::fs::create_dir_all(&staging).expect("staging");
+    std::fs::write(staging.join(SYSTEM_DIC), b"the new one").expect("write");
+
+    vibrato_source::publish_replacing(&staging, &target).expect("replace");
+
+    assert_eq!(
+        std::fs::read(target.join(SYSTEM_DIC)).expect("read"),
+        b"the new one"
+    );
+    assert!(!staging.exists(), "the staging directory must not survive");
+    let leftovers: Vec<String> = std::fs::read_dir(&dir)
+        .expect("read_dir")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.contains(".partial"))
+        .collect();
+    assert!(leftovers.is_empty(), "backup left behind: {leftovers:?}");
+}
+
+/// The failure the backup exists for: the second rename does not happen, and
+/// the user must not be left with no dictionary at all. A staging directory
+/// that is not there is the portable way to make that rename fail.
+#[test]
+fn a_failed_replacement_puts_the_old_dictionary_back() {
+    let dir = scratch("replace-restore");
+    let target = dir.join(DICT_DIR);
+    std::fs::create_dir_all(&target).expect("target");
+    std::fs::write(target.join(SYSTEM_DIC), b"the old one").expect("write");
+
+    let (_, staging) = vibrato_source::staging_names(&dir);
+
+    let err = vibrato_source::publish_replacing(&staging, &target).expect_err("must fail");
+    assert!(matches!(err, SourceError::Publish { .. }), "got {err:?}");
+    assert_eq!(
+        std::fs::read(target.join(SYSTEM_DIC)).expect("the old dictionary must survive"),
+        b"the old one"
+    );
+}
+
+/// No dictionary to replace is not a special case for the caller to handle.
+#[test]
+fn publish_replacing_onto_nothing_is_a_plain_publish() {
+    let dir = scratch("replace-empty");
+    let (_, staging) = vibrato_source::staging_names(&dir);
+    std::fs::create_dir_all(&staging).expect("staging");
+    std::fs::write(staging.join(SYSTEM_DIC), b"the only one").expect("write");
+
+    vibrato_source::publish_replacing(&staging, &dir.join(DICT_DIR)).expect("publish");
+
+    assert!(vibrato_source::published(&dir).is_some());
 }

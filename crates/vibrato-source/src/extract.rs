@@ -274,6 +274,7 @@ fn unpack_bounded(
     if !found {
         return Err(SourceError::MissingMember {
             name: SYSTEM_DIC_ZST.to_string(),
+            archive: archive.to_path_buf(),
         });
     }
     Ok(())

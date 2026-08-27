@@ -16,6 +16,12 @@
 //! how an application lays out its data. One difference of substance — the
 //! asset is a single immutable GitHub release file, so it is pinned by
 //! SHA-256, where JMdict (rebuilt daily) can only be checked structurally.
+//!
+//! Since 5B there is a second source: a `.tar.xz` the user drops in the hints
+//! directory themselves, which is unpacked without a hash check because a file
+//! they placed is already their choice — the same asymmetry `jmdict-source` has
+//! for its own hand-placed file. The extractor's guards do not depend on the
+//! pin, so this route inherits no hole: see [`extract::unpack_into`].
 
 use std::path::{Path, PathBuf};
 
@@ -39,10 +45,26 @@ pub const ASSET_SHA256: &str = "4764f983b7c3a9e1cb6a5ee945e00558efd812980e0dad61
 /// to compare.
 pub const ASSET_BYTES: u64 = 7_704_680;
 
-/// The published directory's name, inside the caller's hints directory. Named
-/// for the asset so a future dictionary lands beside this one instead of
-/// overwriting it.
-pub const DICT_DIR: &str = "ipadic-mecab-2_7_0";
+/// The caller's hints directory, inside whatever config directory the
+/// application owns. Named here for the same reason `jmdict_source::SOURCE_DIR`
+/// is: the crate names its own conventional subdirectory without deriving an
+/// app layout it does not own.
+pub const HINTS_DIR: &str = "hints";
+
+/// The published directory's name, inside the caller's hints directory.
+///
+/// Version-blind on purpose. 5A named it for the pinned release on the
+/// reasoning that a later release would land beside it; nothing ever reads a
+/// second slot, and this crate now accepts dictionaries the pin does not
+/// describe — a hand-placed archive is not hash-checked — so a name derived
+/// from the pin would be a lie about the contents.
+pub const DICT_DIR: &str = "current";
+
+/// The suffix a hand-placed archive must carry to be [`hand_placed`].
+///
+/// Staging archives are excluded twice over: they begin with a dot, and they
+/// end in `.partial.<pid>-<n>` rather than this.
+pub const ARCHIVE_SUFFIX: &str = ".tar.xz";
 
 /// The published dictionary: decompressed, exactly what `VibratoTokenizer::load`
 /// and `TA_HINTS_DICT` expect.
@@ -118,8 +140,8 @@ pub enum SourceError {
     /// than on a bad zstd frame; the string says which layer failed.
     #[error("the archive could not be unpacked: {0}")]
     Archive(String),
-    #[error("the archive carried no {name}")]
-    MissingMember { name: String },
+    #[error("the archive at {archive} carried no {name}", archive = archive.display())]
+    MissingMember { name: String, archive: PathBuf },
     /// The dictionary unpacked cleanly but could not be renamed into place,
     /// and nothing is published at the target either. Its own variant rather
     /// than [`SourceError::Io`] because the realistic cause is a directory the
@@ -171,6 +193,50 @@ pub enum SourceError {
 pub fn published(hints_dir: &Path) -> Option<PathBuf> {
     let path = hints_dir.join(DICT_DIR).join(SYSTEM_DIC);
     path.is_file().then_some(path)
+}
+
+/// The newest hand-placed archive directly in `hints_dir`, or `None`.
+///
+/// A file qualifies when its name ends in [`ARCHIVE_SUFFIX`] and does not begin
+/// with a dot. Subdirectories are not descended into: this is a drop box, not a
+/// search path.
+///
+/// A `read_dir` that fails — on a directory that does not exist yet — is `None`
+/// rather than an error. First run is not a failure.
+///
+/// Public rather than private to [`resolve`] because the caller picks the phase
+/// label it shows the user *before* calling `resolve`: `resolve` returns a
+/// path, not which branch produced it, and by the time it returns the label is
+/// no longer useful. Being wrong costs a mislabelled phase, not a wrong
+/// outcome, which is not worth a second return channel.
+pub fn hand_placed(hints_dir: &Path) -> Option<PathBuf> {
+    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+
+    for entry in std::fs::read_dir(hints_dir).ok()?.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') || !name.ends_with(ARCHIVE_SUFFIX) {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        let Ok(mtime) = metadata.modified() else {
+            continue;
+        };
+        let better = match &newest {
+            Some((best, _)) => mtime > *best,
+            None => true,
+        };
+        if better {
+            newest = Some((mtime, entry.path()));
+        }
+    }
+
+    newest.map(|(_, path)| path)
 }
 
 /// Counter appended to every staging name after the PID.
@@ -245,6 +311,59 @@ pub fn publish(staging: &Path, target: &Path) -> Result<(), SourceError> {
     }
 }
 
+/// Appended to a staging path to name this call's backup. Begins with a dot
+/// because the staging name does, so a backup is neither [`published`] nor
+/// [`hand_placed`].
+const BACKUP_SUFFIX: &str = ".backup";
+
+/// Publish `staging` onto `target`, replacing a dictionary already there.
+///
+/// [`publish`] treats an occupied target as a benign race and discards the
+/// staging directory. That is right for two processes fetching the same pinned
+/// artifact and wrong for a deliberate replacement — dropping a newer archive
+/// in and toggling is how a user replaces their dictionary, and it must not
+/// silently keep the old one.
+///
+/// The existing target is renamed aside first and put back if the second rename
+/// fails, so there is no window in which the user has no dictionary. The backup
+/// name is derived from `staging`, which already carries this process's PID and
+/// [`STAGING_SEQ`], so it is unique to this call for the same reason the
+/// staging directory is. All three paths live inside the same hints directory,
+/// so no rename crosses a filesystem.
+pub fn publish_replacing(staging: &Path, target: &Path) -> Result<(), SourceError> {
+    if !target.exists() {
+        return publish(staging, target);
+    }
+
+    let mut backup = staging.as_os_str().to_owned();
+    backup.push(BACKUP_SUFFIX);
+    let backup = PathBuf::from(backup);
+
+    let failed = |cause: String| SourceError::Publish {
+        staging: staging.to_path_buf(),
+        target: target.to_path_buf(),
+        cause,
+    };
+
+    std::fs::rename(target, &backup).map_err(|e| failed(e.to_string()))?;
+
+    match std::fs::rename(staging, target) {
+        Ok(()) => {
+            // Best-effort: a leftover backup is inert — never resolved, never
+            // hand-placed — so failing here would report a failure that did not
+            // happen.
+            let _ = std::fs::remove_dir_all(&backup);
+            Ok(())
+        }
+        Err(e) => {
+            // The dictionary the user already had is the one thing that must
+            // survive this.
+            let _ = std::fs::rename(&backup, target);
+            Err(failed(e.to_string()))
+        }
+    }
+}
+
 /// The published dictionary in `hints_dir`, downloading it if absent.
 ///
 /// The steady-state path is a single `is_file` — nothing here touches the
@@ -254,12 +373,26 @@ pub fn resolve(hints_dir: &Path) -> Result<PathBuf, SourceError> {
     resolve_from(ASSET_URL, ASSET_SHA256, hints_dir, RETRY_BACKOFF)
 }
 
-/// [`resolve`] with the URL, hash and backoff injected, so a test can prove the
-/// short-circuit by pointing the fall-through at a local listener and asserting
-/// it was never connected to — the same reason [`fetch::fetch_with_retry`]
-/// exists for [`fetch::fetch`], and the same shape as
-/// `jmdict_source::resolve_from`. Without an injectable URL, a regression in
-/// [`published`] would send the test to the live GitHub release.
+/// Whether `archive` is newer than the published dictionary at `dic`.
+///
+/// A missing dictionary is older than anything: an archive with no slot beside
+/// it wins. An unreadable mtime on either side is "not newer" — keeping a
+/// dictionary that works beats replacing it on a failed `stat`.
+fn archive_is_newer(archive: &Path, dic: &Path) -> bool {
+    let Ok(archive_mtime) = std::fs::metadata(archive).and_then(|m| m.modified()) else {
+        return false;
+    };
+    match std::fs::metadata(dic).and_then(|m| m.modified()) {
+        Ok(dic_mtime) => archive_mtime > dic_mtime,
+        Err(_) if !dic.exists() => true,
+        Err(_) => false,
+    }
+}
+
+/// [`resolve`] with the URL, hash and backoff injected, so a test can prove
+/// both short-circuits — the published slot and the hand-placed archive — by
+/// pointing the fall-through at a local listener and asserting it was never
+/// connected to. The same shape as `jmdict_source::resolve_from`.
 ///
 /// **Not part of the supported surface.** Production callers use [`resolve`].
 #[doc(hidden)]
@@ -269,6 +402,29 @@ pub fn resolve_from(
     hints_dir: &Path,
     backoff: std::time::Duration,
 ) -> Result<PathBuf, SourceError> {
+    let target = hints_dir.join(DICT_DIR);
+    let dic = target.join(SYSTEM_DIC);
+
+    // Steps 1 and 2: a hand-placed archive newer than the slot — or with no
+    // slot beside it at all — is what the user just asked for. Deliberately not
+    // hashed; see this module's own docs and design §3.3. This is also how a
+    // dictionary is *replaced*: drop the new archive in, toggle off and on.
+    if let Some(archive) = hand_placed(hints_dir) {
+        if archive_is_newer(&archive, &dic) {
+            let (_, staging) = staging_names(hints_dir);
+            let result = extract::unpack_into(&archive, &staging)
+                .and_then(|()| publish_replacing(&staging, &target));
+            if result.is_err() {
+                // Inert either way, but a failed unpack can leave tens of
+                // megabytes behind and nothing else will ever remove it.
+                let _ = std::fs::remove_dir_all(&staging);
+            }
+            result?;
+            return Ok(dic);
+        }
+    }
+
+    // Steps 3 and 4.
     match published(hints_dir) {
         Some(path) => Ok(path),
         None => fetch::fetch_with_retry(url, sha256, hints_dir, backoff),

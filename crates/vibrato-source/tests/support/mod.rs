@@ -107,3 +107,12 @@ pub fn write(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
     file.write_all(bytes).expect("write");
     path
 }
+
+/// Sleep long enough that the next file written compares strictly newer.
+///
+/// The archive-versus-slot rule is an mtime comparison, and two files written
+/// in the same tick can compare equal. Crude, but the alternative is a
+/// `filetime` dependency for a test-only concern.
+pub fn tick() {
+    std::thread::sleep(std::time::Duration::from_millis(50));
+}
