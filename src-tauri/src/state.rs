@@ -5,10 +5,13 @@
 // under the terms of the GNU General Public License version 2 as published
 // by the Free Software Foundation.
 
-//! Startup state: the index, the conjugation table, and optional hints.
+//! Startup state: the index and the conjugation table.
 //!
 //! Everything here is built once at launch and then read-only, which is what
-//! lets `AppState` live in Tauri's managed state behind a shared reference.
+//! lets `AppState` live in Tauri's managed state behind a shared reference —
+//! and what `parse::catch_parse`'s unwind-safety argument rests on. Hints are
+//! deliberately not here: they change while the app runs, and they travel to
+//! the worker on their own `watch` channel instead.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -34,7 +37,6 @@ pub const HINTS_ENV: &str = "TA_HINTS_DICT";
 pub struct AppState {
     pub index: Index,
     pub table: ConjugationTable,
-    pub hints: Option<VibratoTokenizer>,
 }
 
 /// A startup failure, kept as a rendered string so the webview can display it.
@@ -73,6 +75,19 @@ pub struct SettingsWarning(pub String);
 /// kind, one command each, because the messages are independent and either can
 /// be present without the other.
 pub struct ShortcutWarning(pub String);
+
+/// Why hints are off while the setting says they are on, or empty when they
+/// agree.
+///
+/// Its own managed string on `ShortcutWarning`'s stated precedent: one per
+/// warning kind, one command each, because the messages are independent and any
+/// of them can be present without the others.
+///
+/// Parked, not dead: `main.rs`'s `setup` already manages it from `load_hints`'s
+/// result, but no command reads it back out yet — that is `hints_warning`,
+/// Task 4's command, on `settings_warning`'s precedent.
+#[allow(dead_code)]
+pub struct HintsWarning(pub String);
 
 #[derive(Debug, thiserror::Error)]
 pub enum StartupError {
@@ -116,16 +131,68 @@ pub fn load_state(root: &Path) -> Result<AppState, StartupError> {
     let index = Index::open(&generation)?;
     let table = ConjugationTable::load_embedded()?;
 
-    let hints = match std::env::var_os(HINTS_ENV) {
-        Some(path) => Some(VibratoTokenizer::load(Path::new(&path))?),
-        None => None,
+    Ok(AppState { index, table })
+}
+
+/// The warning shown when the setting asks for hints and there are none.
+///
+/// It exists because §5's rule creates a visible mismatch: the setting stays on
+/// while hints are off, so the checkbox reads on and the parse has no hints.
+/// The sentence names that state and the gesture that fixes it.
+fn hints_off_warning(detail: &str) -> String {
+    format!(
+        "MeCab boundary hints are switched on but not loaded ({detail}). \
+         Open Settings and toggle Boundary hints off and on to install them."
+    )
+}
+
+/// The tokenizer this launch should parse with, and the warning to show if the
+/// setting asks for one that is not there.
+///
+/// Deliberately **not** part of [`load_state`]. That function returns
+/// `Err(NoIndex)` on first run and never reaches its own tail, so hints folded
+/// into it would go unloaded on exactly the run that downloads JMdict, and stay
+/// unloaded until a restart.
+///
+/// [`HINTS_ENV`] keeps 2C's fatal because it keeps 2C's meaning: an explicit
+/// request, made outside the app, with no UI to recover in. That reasoning does
+/// not describe a persisted setting, which has a control the user can see and a
+/// warning surface to explain itself — so an absent dictionary there is hints
+/// off, not a failed launch.
+///
+/// **Never acquires.** It calls `published`, never `resolve`: no network, and no
+/// unpack of a hand-placed archive either. An unpack is a second of work with no
+/// gesture behind it and its own ways to fail. The consequence is worth stating
+/// — an archive dropped in while the app was closed is not installed by the next
+/// launch. The toggle installs it, and the settings note says so.
+pub fn load_hints(
+    hints_dir: &Path,
+    enabled: bool,
+) -> Result<(Option<VibratoTokenizer>, String), StartupError> {
+    if let Some(path) = std::env::var_os(HINTS_ENV) {
+        return Ok((
+            Some(VibratoTokenizer::load(Path::new(&path))?),
+            String::new(),
+        ));
+    }
+
+    if !enabled {
+        return Ok((None, String::new()));
+    }
+
+    let Some(path) = vibrato_source::published(hints_dir) else {
+        return Ok((
+            None,
+            hints_off_warning(&format!("no dictionary in {}", hints_dir.display())),
+        ));
     };
 
-    Ok(AppState {
-        index,
-        table,
-        hints,
-    })
+    match VibratoTokenizer::load(&path) {
+        Ok(tokenizer) => Ok((Some(tokenizer), String::new())),
+        // A file that is there but will not load is the same user-visible state
+        // as one that is not there, and the same gesture fixes both.
+        Err(e) => Ok((None, hints_off_warning(&e.to_string()))),
+    }
 }
 
 /// Settings plus the path they persist to, shared between the commands that
@@ -262,34 +329,150 @@ mod tests {
     // unguarded second one.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    /// `TA_HINTS_DICT` pointing at nothing must surface as
-    /// `StartupError::Hints`, not silently skip hints or panic. This needs a
-    /// real, openable index: `load_state` only reaches the hints branch after
-    /// the index and conjugation table both load, so the no-index shortcut
-    /// `commands::run_parse`'s tests use cannot reach this code path.
-    #[test]
-    fn a_missing_hints_dictionary_is_reported_as_startup_error_hints() {
-        let root = scratch("hints-missing");
-        crate::test_support::build_index_generation(&root);
+    /// Write a real, loadable dictionary into `hints_dir`'s published slot.
+    fn publish_fixture_dictionary(hints_dir: &std::path::Path) {
+        let dir = hints_dir.join(vibrato_source::DICT_DIR);
+        std::fs::create_dir_all(&dir).expect("slot");
+        jparser::hints::write_test_dictionary(&dir.join(vibrato_source::SYSTEM_DIC))
+            .expect("fixture dictionary");
+    }
 
+    /// The setting off is the ordinary state, and it must cost nothing: no
+    /// tokenizer, no warning, no look at the disk.
+    #[test]
+    fn hints_off_loads_nothing_and_warns_about_nothing() {
+        let dir = scratch("hints-off");
         let _guard = ENV_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        // SAFETY: `ENV_LOCK` above is the only writer of `TA_HINTS_DICT` in
-        // this binary, held for the full set/read/clear cycle, so no other
-        // thread can observe this variable mid-write.
+
+        let (tokenizer, warning) = load_hints(&dir, false).expect("must not fail");
+
+        assert!(tokenizer.is_none());
+        assert!(warning.is_empty(), "got {warning:?}");
+    }
+
+    /// The happy path: the setting is on, a dictionary is published, and it loads.
+    #[test]
+    fn hints_on_loads_the_published_dictionary() {
+        let dir = scratch("hints-published");
+        publish_fixture_dictionary(&dir);
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let (tokenizer, warning) = load_hints(&dir, true).expect("must not fail");
+
+        assert!(tokenizer.is_some(), "a published dictionary must load");
+        assert!(warning.is_empty(), "got {warning:?}");
+    }
+
+    /// Master spec §11's 5B rule: an absent dictionary means hints off, not a
+    /// fatal. The setting stays on, so the mismatch has to be named somewhere the
+    /// user can see it.
+    #[test]
+    fn hints_on_without_a_dictionary_is_a_warning_not_a_failure() {
+        let dir = scratch("hints-absent");
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let (tokenizer, warning) = load_hints(&dir, true).expect("must not be fatal");
+
+        assert!(tokenizer.is_none());
+        assert!(!warning.is_empty(), "the mismatch must be named");
+        assert!(
+            warning.contains("Settings"),
+            "the warning must name the gesture that fixes it, got {warning}"
+        );
+    }
+
+    /// `published` only asks whether the file is there. A truncated or corrupt one
+    /// answers yes and then fails to load, and that is the same user-visible state
+    /// as an absent one.
+    #[test]
+    fn a_published_dictionary_that_will_not_load_is_a_warning_too() {
+        let dir = scratch("hints-corrupt");
+        let slot = dir.join(vibrato_source::DICT_DIR);
+        std::fs::create_dir_all(&slot).expect("slot");
+        std::fs::write(slot.join(vibrato_source::SYSTEM_DIC), b"not a dictionary").expect("write");
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let (tokenizer, warning) = load_hints(&dir, true).expect("must not be fatal");
+
+        assert!(tokenizer.is_none());
+        assert!(!warning.is_empty(), "got an empty warning");
+    }
+
+    /// Startup must never acquire: no network, and no unpack of a hand-placed
+    /// archive either. An archive dropped in while the app was closed is installed
+    /// by the toggle, not by the next launch.
+    #[test]
+    fn startup_never_installs_a_hand_placed_archive() {
+        let dir = scratch("hints-archive-ignored");
+        std::fs::create_dir_all(&dir).expect("hints dir");
+        std::fs::write(dir.join("ipadic.tar.xz"), b"not unpacked at startup").expect("write");
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        let (tokenizer, warning) = load_hints(&dir, true).expect("must not be fatal");
+
+        assert!(tokenizer.is_none(), "startup must not unpack");
+        assert!(!warning.is_empty());
+        assert!(
+            !dir.join(vibrato_source::DICT_DIR).exists(),
+            "nothing may be published by a launch"
+        );
+    }
+
+    /// `TA_HINTS_DICT` keeps 2C's fatal because it keeps 2C's meaning: an explicit
+    /// request, made outside the app, with no UI to recover in. Unlike the setting,
+    /// there is no control to show and no warning surface to explain itself.
+    ///
+    /// No index is built here any more: `load_hints` is independent of
+    /// `load_state`, which is the whole point of it being a separate function.
+    #[test]
+    fn a_missing_hints_dictionary_is_reported_as_startup_error_hints() {
+        let dir = scratch("hints-env-missing");
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // SAFETY: `ENV_LOCK` above is the only writer of `TA_HINTS_DICT` in this
+        // binary, held for the full set/read/clear cycle, so no other thread can
+        // observe this variable mid-write.
         unsafe { std::env::set_var(HINTS_ENV, "/nonexistent/ta-hints-dict.dic") };
-        let result = load_state(&root);
+        let result = load_hints(&dir, false);
         unsafe { std::env::remove_var(HINTS_ENV) };
 
-        // Matched by hand rather than `matches!(result, ..., "got {result:?}")`:
-        // `AppState` (the `Ok` payload) has no `Debug` impl, so a
-        // format-string assert on the whole `Result` will not compile.
         match result {
             Err(StartupError::Hints(_)) => {}
             Ok(_) => panic!("expected StartupError::Hints, got Ok(_)"),
             Err(other) => panic!("expected StartupError::Hints, got a different error: {other}"),
         }
+    }
+
+    /// The env var outranks the setting in both directions: it loads even with the
+    /// setting off, which is what makes it an override rather than a second toggle.
+    #[test]
+    fn the_env_override_loads_even_with_the_setting_off() {
+        let dir = scratch("hints-env-present");
+        let path = dir.join("system.dic");
+        jparser::hints::write_test_dictionary(&path).expect("fixture dictionary");
+
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // SAFETY: as above.
+        unsafe { std::env::set_var(HINTS_ENV, &path) };
+        let result = load_hints(&dir, false);
+        unsafe { std::env::remove_var(HINTS_ENV) };
+
+        let (tokenizer, warning) = result.expect("a readable override must load");
+        assert!(tokenizer.is_some());
+        assert!(warning.is_empty(), "got {warning:?}");
     }
 
     #[test]

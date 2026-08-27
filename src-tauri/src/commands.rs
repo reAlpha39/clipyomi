@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use jparser::hints::VibratoTokenizer;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::{watch, Notify};
 
@@ -1280,13 +1281,35 @@ pub const DICTIONARY_STATUS_EVENT: &str = "dictionary-status";
 /// publish a freshly built index to the already-running worker.
 pub struct IndexSender(pub watch::Sender<Option<Arc<AppState>>>);
 
-/// Where the dictionary lives. Resolved once in `main`'s `setup`, so the
-/// command does not need the app config dir, and so `source/` stays a sibling
-/// of `dict/` rather than living inside a published generation, which is
-/// immutable.
+/// The sending half of the hints channel, managed so `set_mecab_hints` can
+/// publish a freshly loaded tokenizer to the already-running worker.
+///
+/// A second channel rather than a rebuilt `AppState` republished over the index
+/// one: that path reopens the index on every toggle, and gives a mid-rebuild
+/// failure a way to leave the worker holding no index at all.
+///
+/// Parked, not dead: `main.rs`'s `setup` already manages this and holds its own
+/// clone of the sender to publish the startup tokenizer, but nothing yet reads
+/// the field back out of managed state to publish a *later* one — that is
+/// `set_mecab_hints`, Task 4's command.
+#[allow(dead_code)]
+pub struct HintsSender(pub watch::Sender<Option<Arc<VibratoTokenizer>>>);
+
+/// Where the dictionaries live. Resolved once in `main`'s `setup`, so no command
+/// needs the app config dir, and so `source/` stays a sibling of `dict/` rather
+/// than living inside a published generation, which is immutable.
 pub struct DictionaryPaths {
     pub root: PathBuf,
     pub source_dir: PathBuf,
+    /// The MeCab hints directory: `<app_config_dir>/hints`, holding the single
+    /// published slot and any archive the user drops in beside it.
+    ///
+    /// Parked, not dead: `main.rs`'s `setup` already resolves and stores it, but
+    /// no command reads it back yet — that is `set_mecab_hints`, Task 4's
+    /// command, which resolves the hints dictionary the same way `download_dictionary`
+    /// resolves `source_dir` today.
+    #[allow(dead_code)]
+    pub hints_dir: PathBuf,
 }
 
 /// Guards against two concurrent `ensure_dictionary` runs. An `Arc` rather than
@@ -1430,20 +1453,7 @@ pub async fn download_dictionary(
         )
         .map_err(|e| describe_index_error(&e))?;
 
-        // mirrors state::load_state's hints branch
-        let hints = match std::env::var_os(crate::state::HINTS_ENV) {
-            Some(path) => Some(
-                jparser::hints::VibratoTokenizer::load(std::path::Path::new(&path))
-                    .map_err(|e| format!("loading the hints dictionary failed: {e}"))?,
-            ),
-            None => None,
-        };
-
-        Ok::<AppState, String>(AppState {
-            index,
-            table,
-            hints,
-        })
+        Ok::<AppState, String>(AppState { index, table })
     })
     .await;
 

@@ -98,6 +98,15 @@ pub struct Settings {
     pub always_on_top: bool,
     #[serde(default = "default_true")]
     pub clipboard_monitoring: bool,
+    /// Whether MeCab boundary hints are switched on (§7.1).
+    ///
+    /// Owned by the backend outright: `commands::merge_saved` is a whitelist
+    /// and does not carry this key, the settings window never sends it, and
+    /// `set_mecab_hints` is the only writer. The alternative — a snapshot
+    /// written by an unrelated font-box change clobbering an in-flight toggle —
+    /// is silent when it happens.
+    #[serde(default)]
+    pub mecab_hints: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chrome_mode: Option<ChromeMode>,
     /// Pre-4A, replaced by `chrome_mode`. Read once by `normalize` to seed the
@@ -156,6 +165,7 @@ impl Default for Settings {
         Self {
             always_on_top: false,
             clipboard_monitoring: true,
+            mecab_hints: false,
             chrome_mode: None,
             decorations: None,
             furigana_mode: None,
@@ -362,6 +372,26 @@ mod tests {
         assert_eq!(json["always_on_top"], true, "known key lost");
     }
 
+    /// Owned by the backend, not the settings window: `merge_saved` is a whitelist
+    /// that does not carry this key, so the only writer is `set_mecab_hints`. Off
+    /// by default — a first launch must not download 8 MB nobody asked for.
+    #[test]
+    fn mecab_hints_defaults_off_and_survives_a_round_trip() {
+        let dir = scratch("mecab-hints-roundtrip");
+        let path = dir.join(SETTINGS_FILE);
+        assert!(!Settings::default().mecab_hints);
+
+        let settings = Settings {
+            mecab_hints: true,
+            ..Settings::default()
+        };
+        save(&path, &settings).expect("save");
+
+        let (reloaded, warning) = load(&path);
+        assert!(reloaded.mecab_hints);
+        assert!(warning.is_none(), "got {warning:?}");
+    }
+
     #[test]
     fn the_settings_path_is_a_sibling_of_the_dict_directory() {
         let root = std::path::Path::new("/tmp/cfg");
@@ -412,6 +442,7 @@ mod tests {
         let settings = Settings {
             always_on_top: true,
             clipboard_monitoring: true,
+            mecab_hints: false,
             chrome_mode: Some(ChromeMode::Header),
             decorations: None,
             furigana_mode: Some("hiragana".to_string()),
@@ -440,6 +471,7 @@ mod tests {
         let settings = Settings {
             always_on_top: true,
             clipboard_monitoring: true,
+            mecab_hints: false,
             chrome_mode: Some(ChromeMode::Header),
             decorations: None,
             furigana_mode: Some("hiragana".to_string()),
