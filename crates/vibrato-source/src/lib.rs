@@ -170,6 +170,18 @@ pub fn publish(staging: &Path, target: &Path) -> Result<(), SourceError> {
     }
 }
 
+/// The published dictionary in `hints_dir`, downloading it if absent.
+///
+/// The steady-state path is a single `is_file` — nothing here touches the
+/// network once the dictionary exists, which is what lets Phase 5B call it on
+/// a toggle without thinking about cost.
+pub fn resolve(hints_dir: &Path) -> Result<PathBuf, SourceError> {
+    match published(hints_dir) {
+        Some(path) => Ok(path),
+        None => fetch::fetch(hints_dir),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
