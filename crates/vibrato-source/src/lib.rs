@@ -31,8 +31,7 @@ pub const ASSET_URL: &str =
 /// SHA-256 of [`ASSET_URL`]'s body, lowercase hex. Checked before any
 /// decompressor sees a byte, so a substituted or truncated archive fails at
 /// the cheapest point rather than somewhere inside three nested formats.
-pub const ASSET_SHA256: &str =
-    "4764f983b7c3a9e1cb6a5ee945e00558efd812980e0dad61224f63ee3b0475d9";
+pub const ASSET_SHA256: &str = "4764f983b7c3a9e1cb6a5ee945e00558efd812980e0dad61224f63ee3b0475d9";
 
 /// Measured size of the pinned asset. Not a security control — [`ASSET_SHA256`]
 /// is — but a mismatch identifies a wrong-file download in the error message
@@ -105,9 +104,7 @@ pub enum SourceError {
     Archive(String),
     #[error("the archive carried no {name}")]
     MissingMember { name: String },
-    #[error(
-        "could not obtain the vibrato dictionary after {attempts} attempts ({last})"
-    )]
+    #[error("could not obtain the vibrato dictionary after {attempts} attempts ({last})")]
     TooManyAttempts {
         attempts: usize,
         hints_dir: PathBuf,
@@ -141,6 +138,38 @@ pub fn staging_names(hints_dir: &Path) -> (PathBuf, PathBuf) {
     )
 }
 
+/// Move a completed staging directory to its published name.
+///
+/// This is the only moment anything appears at the resolved path, which is what
+/// makes a killed process harmless: until the rename, `published` sees nothing.
+///
+/// A rename onto an existing directory fails — on Windows always, on Unix
+/// unless the target is empty — and that failure is the benign race: another
+/// process finished first. A target holding a dictionary therefore reads as
+/// success, and this process's staging directory is removed. The worst case is
+/// last-writer-wins between two copies of the same pinned artifact, not a
+/// corrupt one.
+///
+/// The staging directory always lives inside the same hints directory, so this
+/// rename never crosses a filesystem — `fs::rename` returns `EXDEV` across
+/// devices and does not fall back to copying.
+pub fn publish(staging: &Path, target: &Path) -> Result<(), SourceError> {
+    match std::fs::rename(staging, target) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            if target.join(SYSTEM_DIC).is_file() {
+                // Best-effort: a leftover staging directory is inert, and
+                // failing here would report a download failure that did not
+                // happen.
+                let _ = std::fs::remove_dir_all(staging);
+                Ok(())
+            } else {
+                Err(SourceError::Io(e))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,8 +201,11 @@ mod tests {
     fn a_complete_directory_is_published() {
         let dir = scratch("published-complete");
         std::fs::create_dir_all(dir.join(DICT_DIR)).expect("dict dir");
-        std::fs::write(dir.join(DICT_DIR).join(SYSTEM_DIC), b"not really a dictionary")
-            .expect("write");
+        std::fs::write(
+            dir.join(DICT_DIR).join(SYSTEM_DIC),
+            b"not really a dictionary",
+        )
+        .expect("write");
         assert_eq!(published(&dir), Some(dir.join(DICT_DIR).join(SYSTEM_DIC)));
     }
 
@@ -192,7 +224,12 @@ mod tests {
     fn the_pin_matches_the_measured_asset() {
         assert_eq!(ASSET_BYTES, 7_704_680);
         assert_eq!(ASSET_SHA256.len(), 64);
-        assert!(ASSET_SHA256.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-        assert!(ASSET_URL.starts_with("https://"), "GitHub serves no plain HTTP");
+        assert!(ASSET_SHA256
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(
+            ASSET_URL.starts_with("https://"),
+            "GitHub serves no plain HTTP"
+        );
     }
 }
