@@ -164,39 +164,79 @@ fn main() {
             let (index_tx, index_rx) = tokio::sync::watch::channel(None::<Arc<state::AppState>>);
             app.manage(commands::IndexSender(index_tx.clone()));
 
+            // Hints travel on their own channel rather than inside `AppState`:
+            // that state is built once and then read-only — which is what
+            // `parse::catch_parse`'s unwind-safety argument rests on — and a
+            // toggle must not rebuild the index to change one flag.
+            let (hints_tx, hints_rx) =
+                tokio::sync::watch::channel(None::<Arc<jparser::hints::VibratoTokenizer>>);
+            app.manage(commands::HintsSender(hints_tx.clone()));
+
             let source_dir = config_dir.join(jmdict_source::SOURCE_DIR);
+            let hints_dir = config_dir.join(vibrato_source::HINTS_DIR);
             app.manage(commands::DictionaryPaths {
                 root: root.clone(),
                 source_dir,
+                hints_dir: hints_dir.clone(),
             });
             app.manage(commands::DownloadInFlight(Arc::new(AtomicBool::new(false))));
 
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, rx));
+            tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, hints_rx, rx));
 
-            // `StartupFailure` and `NeedsDictionary` are both managed on every
-            // branch: `Option<State<'_, T>>` is not a valid Tauri 2 command
-            // parameter, so a command cannot express "this state may not be
-            // managed". Empty string / `false` are the "nothing wrong" values.
-            match state::load_state(&root) {
-                Ok(s) => {
-                    app.manage(state::StartupFailure(String::new()));
-                    app.manage(state::NeedsDictionary(false));
+            // Hints first, and outside `load_state`: that function returns
+            // `Err(NoIndex)` on first run and never reaches its own tail, so
+            // hints folded into it would go unloaded on exactly the run that
+            // downloads JMdict, and stay unloaded until a restart.
+            match state::load_hints(&hints_dir, settings.snapshot().mecab_hints) {
+                Ok((tokenizer, warning)) => {
+                    // Also kept for developers running from a terminal, the way
+                    // the settings warning above already is.
+                    if !warning.is_empty() {
+                        eprintln!("{warning}");
+                    }
+                    app.manage(state::HintsWarning(warning));
                     // A send failure would mean the worker died between its
                     // spawn above and this line, which cannot happen — it is
-                    // awaiting its first input. Ignored with that reason rather
-                    // than turned into a startup abort.
-                    let _ = index_tx.send(Some(Arc::new(s)));
+                    // awaiting its first input.
+                    let _ = hints_tx.send(tokenizer.map(Arc::new));
+
+                    // `StartupFailure` and `NeedsDictionary` are both managed on
+                    // every branch: `Option<State<'_, T>>` is not a valid Tauri
+                    // 2 command parameter, so a command cannot express "this
+                    // state may not be managed". Empty string / `false` are the
+                    // "nothing wrong" values.
+                    match state::load_state(&root) {
+                        Ok(s) => {
+                            app.manage(state::StartupFailure(String::new()));
+                            app.manage(state::NeedsDictionary(false));
+                            // A send failure would mean the worker died between
+                            // its spawn above and this line, which cannot
+                            // happen — it is awaiting its first input. Ignored
+                            // with that reason rather than turned into a
+                            // startup abort.
+                            let _ = index_tx.send(Some(Arc::new(s)));
+                        }
+                        // The expected first run. Deliberately not a
+                        // `StartupFailure`: that one puts a fatal message in
+                        // `#output` for the rest of the session, and this state
+                        // is fixable from inside the window instead — the
+                        // download screen handles it.
+                        Err(e) if state::is_missing_dictionary(&e) => {
+                            app.manage(state::StartupFailure(String::new()));
+                            app.manage(state::NeedsDictionary(true));
+                        }
+                        Err(e) => {
+                            app.manage(state::StartupFailure(e.to_string()));
+                            app.manage(state::NeedsDictionary(false));
+                        }
+                    }
                 }
-                // The expected first run. Deliberately not a `StartupFailure`:
-                // that one puts a fatal message in `#output` for the rest of
-                // the session, and this state is fixable from inside the
-                // window instead — the download screen handles it.
-                Err(e) if state::is_missing_dictionary(&e) => {
-                    app.manage(state::StartupFailure(String::new()));
-                    app.manage(state::NeedsDictionary(true));
-                }
+                // `TA_HINTS_DICT` set and unreadable. The same fatal arm
+                // today's `load_state` hints error already lands in, so no
+                // behaviour moves.
                 Err(e) => {
+                    app.manage(state::HintsWarning(String::new()));
                     app.manage(state::StartupFailure(e.to_string()));
                     app.manage(state::NeedsDictionary(false));
                 }

@@ -10,6 +10,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
+use jparser::hints::VibratoTokenizer;
 use jparser::{BoundaryHints, ParseOptions, ParseResult};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::watch;
@@ -25,7 +26,9 @@ pub const PARSE_ERROR_EVENT: &str = "parse-error";
 ///
 /// `AssertUnwindSafe` is sound here: the managed state is read-only after
 /// startup and no `&mut` crosses this boundary, so there is no invariant a
-/// half-completed parse could leave broken.
+/// half-completed parse could leave broken. The tokenizer now arrives by `Arc`
+/// off a `watch` channel rather than out of `AppState`, and is equally
+/// read-only, so nothing about that argument changes.
 pub fn catch_parse<F>(input_len: usize, f: F) -> Result<ParseResult, String>
 where
     F: FnOnce() -> Result<ParseResult, String>,
@@ -68,6 +71,17 @@ pub fn current_index(index: &watch::Receiver<Option<Arc<AppState>>>) -> Option<A
     index.borrow().clone()
 }
 
+/// The tokenizer hints are currently derived from, or `None` when they are off.
+///
+/// Separated from `run_worker` for the reason `current_index` is, and with the
+/// same shape: the `watch` borrow is released before the value is returned, so
+/// no guard is ever held across an `.await`.
+pub fn current_hints(
+    hints: &watch::Receiver<Option<Arc<VibratoTokenizer>>>,
+) -> Option<Arc<VibratoTokenizer>> {
+    hints.borrow().clone()
+}
+
 /// Parse each new input and emit the outcome to the webview.
 ///
 /// The index arrives through `index` rather than being passed by value, because
@@ -75,20 +89,26 @@ pub fn current_index(index: &watch::Receiver<Option<Arc<AppState>>>) -> Option<A
 /// run it starts empty and begins parsing when `commands::download_dictionary`
 /// publishes. Input arriving before then is dropped — the download screen is on
 /// top at that point, so there is nothing a message could usefully tell the user.
+///
+/// `hints` is the same shape for a different reason: the tokenizer is switched
+/// on and off while the app runs, and read once per parse so a toggle takes
+/// effect on the next one without a restart.
 pub async fn run_worker(
     app: AppHandle,
     index: watch::Receiver<Option<Arc<AppState>>>,
+    hints: watch::Receiver<Option<Arc<VibratoTokenizer>>>,
     mut rx: watch::Receiver<String>,
 ) {
     while let Some(text) = next_input(&mut rx).await {
         let Some(state) = current_index(&index) else {
             continue;
         };
+        let tokenizer = current_hints(&hints);
         let len = text.chars().count();
 
         let outcome = tauri::async_runtime::spawn_blocking(move || {
             catch_parse(len, || {
-                let flags = state.hints.as_ref().map(|t| t.hints(&text));
+                let flags = tokenizer.as_ref().map(|t| t.hints(&text));
                 jparser::parse(
                     &state.index,
                     &state.table,
@@ -180,13 +200,37 @@ mod tests {
         let state = AppState {
             index: Index::open(&generation).expect("open"),
             table: ConjugationTable::load_embedded().expect("table"),
-            hints: None,
         };
 
         let (tx, rx) = watch::channel(None);
         assert!(current_index(&rx).is_none(), "starts empty");
         tx.send(Some(Arc::new(state))).expect("send");
         assert!(current_index(&rx).is_some(), "publishing must be visible");
+    }
+
+    /// Before the toggle is ever pressed there is no tokenizer, and the worker
+    /// must parse without one rather than wait for it.
+    #[test]
+    fn no_hints_yet_yields_no_tokenizer() {
+        let (_tx, rx) = watch::channel(None::<Arc<VibratoTokenizer>>);
+        assert!(current_hints(&rx).is_none());
+    }
+
+    /// The hints counterpart of `a_published_index_becomes_visible_without_a_restart`,
+    /// and the mechanism the toggle's "no restart" promise rests on. Writable for
+    /// real because `write_test_dictionary` makes a dictionary vibrato loads
+    /// without a 46 MB file or a network call.
+    #[test]
+    fn a_published_tokenizer_becomes_visible_without_a_restart() {
+        let dir = crate::test_support::scratch("worker-late-hints");
+        let path = dir.join("system.dic");
+        jparser::hints::write_test_dictionary(&path).expect("fixture dictionary");
+        let tokenizer = VibratoTokenizer::load(&path).expect("load");
+
+        let (tx, rx) = watch::channel(None);
+        assert!(current_hints(&rx).is_none(), "starts empty");
+        tx.send(Some(Arc::new(tokenizer))).expect("send");
+        assert!(current_hints(&rx).is_some(), "publishing must be visible");
     }
 
     /// Ported from `commands::tests::a_parse_failure_is_reported_as_its_display_string`:
