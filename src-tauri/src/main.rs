@@ -180,6 +180,7 @@ fn main() {
                 hints_dir: hints_dir.clone(),
             });
             app.manage(commands::DownloadInFlight(Arc::new(AtomicBool::new(false))));
+            app.manage(commands::HintsInFlight(Arc::new(AtomicBool::new(false))));
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, hints_rx, rx));
@@ -282,6 +283,9 @@ fn main() {
             commands::frontend_ready,
             commands::download_dictionary,
             commands::needs_dictionary,
+            commands::set_mecab_hints,
+            commands::hints_warning,
+            commands::hints_dir,
             popover::place_popover,
             popover::hide_popover
         ])
