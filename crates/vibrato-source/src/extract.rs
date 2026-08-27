@@ -177,7 +177,28 @@ pub fn unpack_into_for_test(
     unpack_bounded(archive, staging, max_tar, max_dict)
 }
 
+/// [`unpack_bounded`]'s real work, wrapped by it so `SourceError::Archive`
+/// gets the archive's path named exactly once, at this function's one caller,
+/// rather than at each of the several places below that can produce one.
 fn unpack_bounded(
+    archive: &Path,
+    staging: &Path,
+    max_tar: u64,
+    max_dict: u64,
+) -> Result<(), SourceError> {
+    unpack_bounded_inner(archive, staging, max_tar, max_dict).map_err(|e| match e {
+        // With two `.tar.xz` files possible in the drop box, "the archive
+        // could not be unpacked: xz: ..." does not say which one to remove.
+        // Named once, here, rather than threaded through every construction
+        // site inside `unpack_bounded_inner`.
+        SourceError::Archive(msg) => {
+            SourceError::Archive(format!("{msg} (in {})", archive.display()))
+        }
+        other => other,
+    })
+}
+
+fn unpack_bounded_inner(
     archive: &Path,
     staging: &Path,
     max_tar: u64,

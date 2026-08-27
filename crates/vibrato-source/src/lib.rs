@@ -144,15 +144,15 @@ pub enum SourceError {
     MissingMember { name: String, archive: PathBuf },
     /// The dictionary unpacked cleanly but could not be renamed into place,
     /// and nothing is published at the target either. Its own variant rather
-    /// than [`SourceError::Io`] because the realistic cause is a directory the
-    /// user put there by hand — an `ipadic-mecab-2_7_0/` left by the `tar xf`
-    /// instructions this phase deleted, holding `COPYING`, `NOTICE` and
-    /// `system.dic.zst`: the resolved name, non-empty, and with no
-    /// `system.dic` in it. `hints io failed: Directory not empty (os error
-    /// 39)` names neither path and offers no way out, and every later run
-    /// fails identically. Not retried, for the same reason
-    /// [`SourceError::Io`] is not: another 7.7 MB download meets the same
-    /// directory.
+    /// than [`SourceError::Io`] because the realistic cause is a directory
+    /// the user put at [`DICT_DIR`] by hand — an empty `current/` created
+    /// ahead of the first toggle, say — or a permissions failure, such as a
+    /// hints directory Windows has marked read-only: either way the resolved
+    /// name is occupied and holds no `system.dic`. `hints io failed:
+    /// Directory not empty (os error 39)` names neither path and offers no
+    /// way out, and every later run fails identically. Not retried, for the
+    /// same reason [`SourceError::Io`] is not: another 7.7 MB download meets
+    /// the same directory.
     #[error(
         "the dictionary was unpacked into {from} but could not be published: \
          renaming it to {to} failed ({cause}), and {to} holds no {file}. \

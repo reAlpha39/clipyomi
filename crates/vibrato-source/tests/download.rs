@@ -286,6 +286,51 @@ fn an_older_hand_placed_archive_loses_to_the_published_slot() {
     assert_eq!(requests.load(Ordering::SeqCst), 0);
 }
 
+/// A broken hand-placed archive is the common case now that the extractor's
+/// caps refuse anything but an IPADIC-sized dictionary: this proves it costs
+/// nothing when it happens. Bytes that are not xz fail `unpack_into` before
+/// `publish_replacing` ever runs, so the slot's original contents survive,
+/// the failed staging directory is swept rather than left behind holding
+/// disk, and the network is never touched.
+#[test]
+fn a_broken_hand_placed_archive_leaves_the_published_slot_untouched() {
+    let dir = scratch("resolve-archive-broken");
+    std::fs::create_dir_all(dir.join(DICT_DIR)).expect("dict dir");
+    std::fs::write(dir.join(DICT_DIR).join(SYSTEM_DIC), b"already here").expect("write");
+    tick();
+    write(&dir, "ipadic.tar.xz", b"not actually xz");
+
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (url, _server) = serve(500, b"boom".to_vec(), requests.clone());
+
+    let err = resolve_from(
+        &url,
+        &sha256_hex(b"never used"),
+        &dir,
+        Duration::from_millis(1),
+    )
+    .expect_err("an unxz-able archive must not resolve");
+
+    assert!(matches!(err, SourceError::Archive(_)), "got {err:?}");
+    assert_eq!(
+        std::fs::read(dir.join(DICT_DIR).join(SYSTEM_DIC)).expect("read"),
+        b"already here",
+        "a broken archive must not have replaced the published slot"
+    );
+    let leftovers: Vec<_> = std::fs::read_dir(&dir)
+        .expect("read_dir")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.contains(".partial") || name.contains(".backup"))
+        .collect();
+    assert!(leftovers.is_empty(), "got leftovers: {leftovers:?}");
+    assert_eq!(
+        requests.load(Ordering::SeqCst),
+        0,
+        "a broken archive must not fall through to the network"
+    );
+}
+
 /// A file the user placed in their own config directory is already their
 /// choice; hashing it could only refuse what they explicitly asked for. The
 /// hash passed here matches nothing, and the archive is published anyway.
