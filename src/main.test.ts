@@ -101,6 +101,41 @@ describe('the event-driven render path', () => {
     expect(document.querySelector('.def-row')).toBeNull();
   });
 
+  // 5B's hints toggle re-parses the text already on screen
+  // (`commands::reparse`), so a second result can arrive carrying the same
+  // surface with a different segmentation. `history.push` dedupes on that
+  // surface, and dropping the result outright left the stale chips rendered —
+  // the toggle looked inert until the user copied something else. This pins
+  // the whole show/push/display path rather than history's contract alone.
+  test('a re-segmentation of the same text replaces what is on screen', () => {
+    const seg = (start: number, surface: string) => ({
+      start,
+      len: surface.length,
+      surface,
+      reading: null,
+      matched: true,
+      entries: [
+        {
+          headword: surface,
+          reading: null,
+          conjugation: null,
+          pos: ['n'],
+          senses: [{ pos: ['n'], glosses: ['x'], xrefs: [], misc: [], info: [] }],
+          flags: ['primary'],
+        },
+      ],
+    });
+    const chips = () =>
+      [...document.querySelectorAll('.chip')].map((c) => c.textContent);
+
+    emit('parse-result', { segments: [seg(0, '東京'), seg(2, '都')] });
+    expect(chips()).toEqual(['東京', '都']);
+
+    emit('parse-result', { segments: [seg(0, '東京都')] });
+
+    expect(chips()).toEqual(['東京都']);
+  });
+
   // Important 2 (final review): the clipboard poll's first tick waits on the
   // Rust-side `frontend_ready` signal before it reads anything (see
   // `clipboard::wait_for_frontend`), so text copied before launch is not

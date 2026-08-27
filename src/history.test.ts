@@ -146,6 +146,21 @@ describe('createHistory', () => {
     expect(history.canBack()).toBe(false);
   });
 
+  // Phase 5B's hints toggle re-parses the text already on screen: the surface
+  // is identical, the segmentation is not. Dropping that result outright left
+  // the old segmentation on screen and made the toggle look inert, so a
+  // same-surface parse now REPLACES the newest rather than being discarded —
+  // still one entry per copied text, but the newest reading of it.
+  test('a re-segmentation of the newest parse replaces it', () => {
+    const history = createHistory();
+    history.push(parse('猫', 'が'));
+
+    history.push(parse('猫が'));
+
+    expect(history.current()?.segments.map((s) => s.surface)).toEqual(['猫が']);
+    expect(history.canBack()).toBe(false);
+  });
+
   test('skips a duplicate of the newest without moving the cursor', () => {
     const history = createHistory();
     history.push(parse('猫'));
