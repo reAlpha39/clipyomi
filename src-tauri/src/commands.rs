@@ -22,7 +22,8 @@ use tokio::sync::{watch, Notify};
 
 use crate::settings::{ChromeMode, Settings};
 use crate::state::{
-    AppState, NeedsDictionary, SettingsState, SettingsWarning, ShortcutWarning, StartupFailure,
+    AppState, HintsWarning, NeedsDictionary, SettingsState, SettingsWarning, ShortcutWarning,
+    StartupFailure,
 };
 
 /// The sending half of the input channel, managed so commands can reach it.
@@ -1277,6 +1278,68 @@ pub fn shortcut_warning(warning: State<'_, ShortcutWarning>) -> Option<String> {
 /// `"downloading"`, `"building"`, `"ready"`, or an error message.
 pub const DICTIONARY_STATUS_EVENT: &str = "dictionary-status";
 
+/// Emitted with a `String` payload as the hints toggle moves between phases:
+/// `"downloading"`, `"unpacking"`, `"ready"`, `"off"`, or an error message.
+///
+/// A const beside `DICTIONARY_STATUS_EVENT` rather than a literal at each emit
+/// site, for the reason that one already is.
+pub const HINTS_STATUS_EVENT: &str = "hints-status";
+
+/// Guards against two concurrent `set_mecab_hints` acquisitions, exactly as
+/// `DownloadInFlight` does for the index download. An `Arc` rather than a bare
+/// `AtomicBool` because the command must clone it out of `State` before its
+/// first `.await` — `tauri::State` is not `Send`.
+pub struct HintsInFlight(pub Arc<AtomicBool>);
+
+/// Emit a hints phase label, logging rather than propagating a failed emit.
+fn emit_hints_status(app: &AppHandle, status: &str) {
+    if let Err(e) = app.emit(HINTS_STATUS_EVENT, status.to_string()) {
+        // Nothing to fall back on: if the event cannot reach the webview there
+        // is no other channel to report progress through.
+        eprintln!("emitting a hints-status event failed: {e}");
+    }
+}
+
+/// A `VibratoTokenizer::load` failure, with the format hint the manual route
+/// makes necessary.
+///
+/// Before this phase a load failure meant a corrupt download or a bad
+/// `TA_HINTS_DICT`. With any dictionary accepted it also means a format
+/// mismatch, and "the vibrato dictionary could not be loaded" alone reads as a
+/// corrupt archive.
+fn describe_hints_error(err: jparser::hints::HintsError) -> String {
+    format!(
+        "{err}. A hand-placed archive must hold a Vibrato v0.5.0-format \
+         dictionary — that is the format this app downloads."
+    )
+}
+
+/// Re-parse whatever is on screen.
+///
+/// Enabling hints changes the segmentation of text already displayed, and
+/// without this the toggle appears inert until the next clipboard copy — which
+/// for a segmentation-quality switch is the entire feedback the user gets.
+///
+/// An empty channel value means nothing has been parsed yet, so there is
+/// nothing to re-parse. `watch::send` marks the slot changed even for an equal
+/// value, so the worker wakes and parses the same text again, and
+/// `run_worker`'s loop needs no change — `next_input`'s three tests keep
+/// pinning the same code.
+///
+/// Making the worker `select!` over both channels was the alternative. It puts
+/// the rule where any future publisher inherits it, at the cost of rewriting
+/// the loop those tests cover and making the worker retain the last input
+/// itself.
+fn reparse(tx: &watch::Sender<String>) {
+    let text = tx.borrow().clone();
+    if text.is_empty() {
+        return;
+    }
+    // A dead worker is reported by every other path that touches this channel;
+    // a settings toggle is not where the user should learn about it.
+    let _ = tx.send(text);
+}
+
 /// The sending half of the index channel, managed so `download_dictionary` can
 /// publish a freshly built index to the already-running worker.
 pub struct IndexSender(pub watch::Sender<Option<Arc<AppState>>>);
@@ -1287,12 +1350,6 @@ pub struct IndexSender(pub watch::Sender<Option<Arc<AppState>>>);
 /// A second channel rather than a rebuilt `AppState` republished over the index
 /// one: that path reopens the index on every toggle, and gives a mid-rebuild
 /// failure a way to leave the worker holding no index at all.
-///
-/// Parked, not dead: `main.rs`'s `setup` already manages this and holds its own
-/// clone of the sender to publish the startup tokenizer, but nothing yet reads
-/// the field back out of managed state to publish a *later* one — that is
-/// `set_mecab_hints`, Task 4's command.
-#[allow(dead_code)]
 pub struct HintsSender(pub watch::Sender<Option<Arc<VibratoTokenizer>>>);
 
 /// Where the dictionaries live. Resolved once in `main`'s `setup`, so no command
@@ -1303,12 +1360,6 @@ pub struct DictionaryPaths {
     pub source_dir: PathBuf,
     /// The MeCab hints directory: `<app_config_dir>/hints`, holding the single
     /// published slot and any archive the user drops in beside it.
-    ///
-    /// Parked, not dead: `main.rs`'s `setup` already resolves and stores it, but
-    /// no command reads it back yet — that is `set_mecab_hints`, Task 4's
-    /// command, which resolves the hints dictionary the same way `download_dictionary`
-    /// resolves `source_dir` today.
-    #[allow(dead_code)]
     pub hints_dir: PathBuf,
 }
 
@@ -1483,6 +1534,112 @@ pub async fn download_dictionary(
 
     emit_status(&app, &message);
     Ok(())
+}
+
+/// Switch MeCab boundary hints on or off, acquiring the dictionary if needed.
+///
+/// Returns `Err` only when the work could not be *started*; every outcome after
+/// that — including failure — arrives as a `hints-status` event. Same split as
+/// `download_dictionary` and `set_input`, and for the same reason: one path to
+/// the screen.
+///
+/// The setting is persisted only on success, so a failed acquisition leaves it
+/// off and the next launch does not claim hints it does not have.
+#[tauri::command]
+pub async fn set_mecab_hints(
+    enabled: bool,
+    app: AppHandle,
+    settings: State<'_, Arc<SettingsState>>,
+    hints: State<'_, HintsSender>,
+    input: State<'_, InputSender>,
+    paths: State<'_, DictionaryPaths>,
+    inflight: State<'_, HintsInFlight>,
+) -> Result<(), String> {
+    // Everything needed after the `.await` is cloned out first: `tauri::State`
+    // is not `Send`, so holding one across an await point does not compile.
+    let hints_tx = hints.0.clone();
+    let input_tx = input.0.clone();
+    let settings = Arc::clone(&*settings);
+    let hints_dir = paths.hints_dir.clone();
+
+    if !enabled {
+        // Nothing fallible and nothing slow, so no slot to claim and no thread
+        // to spawn: publishing `None` is the whole of switching hints off.
+        let _ = hints_tx.send(None);
+        if let Err(e) = settings.update(|s| s.mecab_hints = false) {
+            // A read-only config dir degrades to "the setting does not survive
+            // a restart", not "the toggle does not work" — the same trade
+            // `SettingsState::update` already documents.
+            eprintln!("persisting the hints setting failed: {e}");
+        }
+        reparse(&input_tx);
+        emit_hints_status(&app, "off");
+        return Ok(());
+    }
+
+    claim_download(&inflight.0)?;
+    let flag = Arc::clone(&inflight.0);
+    let handle = app.clone();
+
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        // `resolve` returns a path, not which branch produced it, and by the
+        // time it returns the label is no longer useful — so the branch is
+        // picked here, with one `read_dir`. Being wrong costs a mislabelled
+        // phase, not a wrong outcome, so the window between this check and
+        // `resolve`'s own call is not worth a second return channel.
+        let phase = if vibrato_source::hand_placed(&hints_dir).is_some() {
+            "unpacking"
+        } else {
+            "downloading"
+        };
+        emit_hints_status(&handle, phase);
+
+        let path = vibrato_source::resolve(&hints_dir).map_err(|e| e.to_string())?;
+        jparser::hints::VibratoTokenizer::load(&path).map_err(describe_hints_error)
+    })
+    .await;
+
+    release_download(&flag);
+
+    let message = match outcome {
+        Ok(Ok(tokenizer)) => {
+            let _ = hints_tx.send(Some(Arc::new(tokenizer)));
+            if let Err(e) = settings.update(|s| s.mecab_hints = true) {
+                eprintln!("persisting the hints setting failed: {e}");
+            }
+            reparse(&input_tx);
+            emit_hints_status(&app, "ready");
+            return Ok(());
+        }
+        Ok(Err(message)) => message,
+        Err(e) => format!("the hints task failed to run: {e}"),
+    };
+
+    emit_hints_status(&app, &message);
+    Ok(())
+}
+
+/// Why hints are off while the setting says they are on, or `null` when the two
+/// agree. Same empty-string sentinel as `shortcut_warning`, and read by both
+/// windows — the main window appends it to `#parse-error`, the settings window
+/// seeds its status line from it.
+#[tauri::command]
+pub fn hints_warning(warning: State<'_, HintsWarning>) -> Option<String> {
+    if warning.0.is_empty() {
+        None
+    } else {
+        Some(warning.0.clone())
+    }
+}
+
+/// Where to drop a hand-placed dictionary archive.
+///
+/// The settings note names this path literally, so the manual route is
+/// discoverable without documentation, and the webview cannot resolve the app
+/// config dir itself.
+#[tauri::command]
+pub fn hints_dir(paths: State<'_, DictionaryPaths>) -> String {
+    paths.hints_dir.display().to_string()
 }
 
 #[cfg(test)]
@@ -1999,5 +2156,62 @@ mod tests {
 
         assert_eq!(current.layout_slots.len(), 1, "a settings save wiped a slot");
         assert_eq!(current.layout_slots["1"].surface_alpha, Some(35));
+    }
+
+    /// Nothing has been parsed yet, so there is nothing to re-parse. Sending an
+    /// empty string would wake the worker to parse nothing.
+    #[tokio::test]
+    async fn reparse_skips_an_empty_channel() {
+        let (tx, rx) = tokio::sync::watch::channel(String::new());
+        reparse(&tx);
+        assert!(!rx.has_changed().expect("the sender is alive"));
+    }
+
+    /// Enabling hints changes the segmentation of text already on screen. Without
+    /// this the toggle looks inert until the next clipboard copy, which for a
+    /// segmentation-quality switch is the entire feedback the user gets.
+    ///
+    /// `watch::send` marks the slot changed even for an equal value, which is the
+    /// mechanism this relies on.
+    #[tokio::test]
+    async fn reparse_resends_the_current_text() {
+        let (tx, mut rx) = tokio::sync::watch::channel(String::new());
+        push_input(&tx, "東京都".to_string()).expect("push");
+        assert_eq!(
+            crate::parse::next_input(&mut rx).await.as_deref(),
+            Some("東京都"),
+            "the first send is consumed so the re-send is what the assert below sees"
+        );
+
+        reparse(&tx);
+
+        assert_eq!(
+            crate::parse::next_input(&mut rx).await.as_deref(),
+            Some("東京都")
+        );
+    }
+
+    /// The same exclusion `download_dictionary` has, re-pointed at the hints slot:
+    /// two acquisitions against one hints directory would race on the published
+    /// slot, and the second toggle must be refused rather than queued.
+    #[test]
+    fn a_second_hints_acquisition_is_rejected_while_one_is_running() {
+        let flag = std::sync::atomic::AtomicBool::new(false);
+        claim_download(&flag).expect("the first claim succeeds");
+        assert!(claim_download(&flag).is_err());
+        release_download(&flag);
+        claim_download(&flag).expect("retry after release");
+    }
+
+    /// With any dictionary accepted, a load failure also means a format mismatch —
+    /// this tree pins `vibrato` 0.5.2, which reads v0.5.0-format dictionaries. The
+    /// message has to say so rather than reading as a corrupt download.
+    #[test]
+    fn a_hints_load_failure_names_the_format_it_expects() {
+        let message = describe_hints_error(jparser::hints::HintsError::Dictionary(
+            "unsupported version".to_string(),
+        ));
+        assert!(message.contains("unsupported version"), "got {message}");
+        assert!(message.contains("v0.5.0"), "got {message}");
     }
 }

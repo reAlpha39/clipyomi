@@ -82,11 +82,6 @@ pub struct ShortcutWarning(pub String);
 /// Its own managed string on `ShortcutWarning`'s stated precedent: one per
 /// warning kind, one command each, because the messages are independent and any
 /// of them can be present without the others.
-///
-/// Parked, not dead: `main.rs`'s `setup` already manages it from `load_hints`'s
-/// result, but no command reads it back out yet — that is `hints_warning`,
-/// Task 4's command, on `settings_warning`'s precedent.
-#[allow(dead_code)]
 pub struct HintsWarning(pub String);
 
 #[derive(Debug, thiserror::Error)]
