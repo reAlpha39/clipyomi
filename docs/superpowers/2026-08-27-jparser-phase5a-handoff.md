@@ -184,11 +184,22 @@ Three things surfaced while building this phase that are not in
    block, which decodes "successfully" to the wrong byte with no structural
    failure at all. `extract.rs` now compares the two checksum values itself
    after `std::io::copy` completes and returns `SourceError::Archive` on a
-   mismatch. Without this, a corrupted or truncated dictionary — one that
-   happened to still parse as a valid zstd frame — could be published and
-   silently loaded by `VibratoTokenizer::load`, producing wrong segmentation
-   with no error anywhere in the chain. This is a behavioural addition
-   beyond §5.3, not an implementation detail of it.
+   mismatch. This is a behavioural addition beyond the spec's §5.3, not an
+   implementation detail of it.
+
+   **Scoped by the fix wave (§10): the pinned asset carries no content
+   checksum, so this check is inert on the real download.** The frame's
+   content-checksum flag is optional, and it is clear on today's pin.
+   Measured on the real archive: `ipadic-mecab-2_7_0/system.dic.zst` opens
+   `28 b5 2f fd 00` — the magic, then a Frame_Header_Descriptor of `0x00`,
+   whose bit 2 (`Content_Checksum_flag`) is 0. The `if let (Some, Some)`
+   therefore never fires on the production asset. What the check does protect
+   is the test fixtures (`ruzstd`'s encoder emits a checksum) and any future
+   asset built with one. What protects today's download from a corrupt or
+   truncated dictionary is `ASSET_SHA256` over the whole `.tar.xz`, verified
+   before a decompressor sees a byte, plus xz's own integrity check. The
+   original wording here stated the protection unconditionally; do not restate
+   it that way.
 
 2. **`ring v0.17.14` appears in `Cargo.lock`** as an optional, never-enabled
    dependency of `rustls-webpki`. `cargo metadata` lists it because Cargo
@@ -249,10 +260,17 @@ Windows, tree clean before and after:
   Windows, for a reason that predates this phase and is out of its scope.**
   See below.
 
-**On the `-D warnings` workspace run.** `.github/workflows/ci.yml` runs this
-exact command on `ubuntu-latest`, where it passes. Run locally on Windows it
-fails with four errors, all `clippy::upper_case_acronyms` on `RECT`,
-`STYLESTRUCT`, `WINDOWPOS` and `SUBCLASSPROC` in
+**On the `-D warnings` workspace run.** `.github/workflows/ci.yml` runs
+this exact command on `ubuntu-latest`, where it is *expected* to pass.
+That is an inference from the `#[cfg]` reasoning below, not an
+observation: this repository has no git remote, so no run of this
+workflow has ever been seen, and the fix wave in §10 found that the
+`purity` job's TLS grep would in fact have failed on that runner. Read
+every claim about CI in this section as an expectation.
+
+Run locally on Windows it fails with four errors, all
+`clippy::upper_case_acronyms` on `RECT`, `STYLESTRUCT`, `WINDOWPOS` and
+`SUBCLASSPROC` in
 `src-tauri/src/commands.rs` — the same four warnings Task 0 and Step 2 above
 already count as the pre-existing baseline of 6 warning lines, and the same
 four the Phase 4D handoff §3 already recorded as predating that phase too.
@@ -320,3 +338,112 @@ verification that a killed fetch mid-download actually leaves a `.partial`
 directory and no half-written `system.dic` at the resolved name (asserted
 only by the unit/integration tests' controlled fixtures, never against the
 real 46 MB asset under a real interruption).
+
+---
+
+## 10. Post-Close Fix Wave
+
+A whole-branch review after the close raised fifteen findings against the code
+above. All fourteen code/doc items were fixed in one pass; nothing new was
+built and no dependency was added. What changed, and why it is not visible in
+§1:
+
+- **`ci.yml`'s TLS grep failed on the runner it runs on.** The pattern was
+  case-insensitive and unanchored, so `openssl` matched `openssl-probe
+  v0.2.1`, which `rustls-native-certs` pulls in on Linux under
+  `rustls-platform-verifier`. That crate links nothing and is MIT OR
+  Apache-2.0 — a false positive, but a fatal one, since the `purity` job only
+  ever runs on `ubuntu-latest`. Now anchored to `openssl v|openssl-sys|
+  native-tls|\bring v|aws-lc` with `-i` dropped, and commented so it is not
+  re-broadened. Confirmed clean for both `--target x86_64-unknown-linux-gnu`
+  and the Windows host, and confirmed still to catch `openssl v`,
+  `openssl-sys`, `native-tls`, `ring v`, `aws-lc-rs` and `aws-lc-sys`.
+- **`vibrato-source` declared a Rust floor it cannot keep.** It inherited the
+  workspace's 1.85; `graviola 0.4.1` (under `rustls-graviola`) declares 1.89
+  and `ruzstd 0.9.0` declares 1.87, both read from the resolved packages, and
+  Cargo treats that as a hard error rather than a warning. Now an explicit
+  `rust-version = "1.89"` with the same reasoning `src-tauri/Cargo.toml`
+  already carries. The `msrv` job is unaffected: it never compiles this crate.
+- **`staging_names` keyed on the PID alone**, so two calls in one process
+  shared both names. With 5B calling `resolve` from a UI toggle, that is a
+  real shape: one thread publishes, the second `File::create`s what is now the
+  published dictionary and truncates 46 MB to zero while `published()` still
+  reports it present. A process-wide `AtomicU64` now uniquifies both names per
+  call, and the doc comments that claimed the protection say what actually
+  provides it.
+- **Neither decompression layer bounded its output.** `lzma-rs` 0.3 has no
+  bounded xz entry point, so the bound is a limiting `Write` adapter used on
+  both layers, capped at 12 MiB (tar; measured 8,058,880) and 64 MiB
+  (dictionary; measured 47,788,814). An overrun is `SourceError::Archive`.
+- **A full disk was reported as a corrupt archive and retried.** `io::copy`
+  collapses a decode failure, a cap overrun and a failed write into one
+  `io::Error`, and all three were mapped to `Archive` — so an ENOSPC
+  re-downloaded 7.7 MB and re-decompressed it twice more onto a still-full
+  disk. The limiting writer now remembers which of the two *it* produced, and
+  a write failure surfaces as `SourceError::Io` (immediate return). The
+  `COPYING`/`NOTICE` branch is classified the same way, so a read failure
+  there is `Archive` like the dictionary branch, not `Io`.
+- **A rename failure discarded 46 MB and named neither path.** The realistic
+  trigger is a `<hints>/ipadic-mecab-2_7_0/` left by the `tar xf` instructions
+  this phase deleted — the resolved name, non-empty, no `system.dic` — which
+  made every run fail identically with `hints io failed: Directory not empty
+  (os error 39)`. Now `SourceError::Publish`, carrying both paths and telling
+  the user to remove or rename the directory. Non-retrying, like `Io`.
+- **No job compiled `hints-source`**, so `tests/cli_hints.rs` and the whole
+  `Command::FetchHints` arm were type-checked nowhere in CI. Design spec §9.5
+  lists this gate; a `hints` job mirroring `mecab` now runs
+  `cargo test -p jparser --features hints-source` and the matching
+  `clippy ... -D warnings`.
+- **`hints_dir` was carried in two error variants and rendered in neither.**
+  Both now end with `nothing was written to <dir>` / `nothing was published in
+  <dir>`, the way `jmdict_source::SourceError` renders its `source_dir`.
+- **The `resolve` test stood up no server**, despite its own doc claiming the
+  guarantee was "asserted by the server never being connected to". It passed
+  only because `published()` short-circuits — a regression there would have
+  sent the suite to the live `ASSET_URL`. A `resolve_from(url, sha, dir,
+  backoff)` injection point was added (the shape `jmdict_source::resolve_from`
+  already has), and the test now drives it against a local listener and
+  asserts zero connections before touching `resolve` itself.
+- **`ASSET_BYTES` was dead.** It is now checked in `download_and_verify`
+  before the hash, gated on the hash being the pinned one, and reported as
+  `SourceError::Size`. The tautological `assert_eq!(ASSET_BYTES, 7_704_680)`
+  in the unit tests is gone; a served body of the wrong length under the
+  pinned hash proves it instead.
+- **The traversal test passed for the wrong reason.** `../escaped.txt` has an
+  un-whitelisted basename, so it was skipped as an unrecognised member — a
+  path another test already covers. The fixture is now `../COPYING`: a
+  whitelisted basename behind a `..`, which is the case where basename
+  extraction is actually load-bearing.
+- **`[[test]] cli_hints` needed `required-features = ["hints-source", "cli"]`.**
+  The stated mechanism was slightly off — measured, the test still *compiles*
+  under `--no-default-features --features hints-source`, because Cargo sets
+  `CARGO_BIN_EXE_jparser-cli` regardless; what fails is the run, with
+  `Os { code: 2, kind: NotFound }`, because the binary is
+  `required-features = ["cli"]` and was never built. Either way the fix is the
+  one named, and Cargo now says "requires the features: `hints-source`, `cli`"
+  instead.
+- **The zstd content-checksum claim was scoped to reality** — see §5.1. The
+  pinned asset's frame carries no checksum.
+- **§6's CI claim was restated as an expectation**, since this repo has no
+  remote and the `purity` job would in fact have failed.
+
+One finding produced no test. A read failure from the tar cannot be provoked
+in-process: `unpack_into` reads the tar from a `std::io::Cursor<Vec<u8>>`,
+whose reads never fail, and a member truncated at end-of-data returns `Ok(0)`
+through `io::Take` rather than an error. The classification fix stands (it is
+correct for a sparse-entry or long-name failure, which `tar` *can* raise), but
+it is unreachable from a fixture, so no test asserts it.
+
+Gate after the wave, on Windows, `rustc 1.97.1`:
+
+- `cargo test --workspace`: **464 passed, 0 failed, 1 ignored** — up from the
+  close's 460 / 0 / 1. The +4 is `vibrato-source`'s own suite going 22 -> 26
+  (two cap tests, one publish-blocked test, one size-pin test; the traversal
+  test was rewritten rather than added).
+- `cargo test -p jparser --features hints-source`: **277 passed, 0 failed** —
+  unchanged.
+- `cargo clippy -p vibrato-source --all-targets -- -D warnings`: clean.
+- `cargo clippy -p jparser --features hints-source --all-targets -- -D warnings`:
+  clean (the new CI job, run locally).
+- `cargo check -p jparser --no-default-features --all-targets`: clean.
+- Both `cargo tree` TLS greps: clean, Linux target and Windows host.
