@@ -190,6 +190,96 @@ pub fn load_hints(
     }
 }
 
+/// Everything `setup` must manage, decided from the startup loads.
+///
+/// One struct rather than four separate decisions inlined into `setup`, so the
+/// decision itself is testable without a `tauri::App`: `setup`'s own job
+/// shrinks to unpacking this into four `app.manage` calls and two `watch`
+/// sends.
+pub struct Startup {
+    pub hints_warning: HintsWarning,
+    pub hints: Option<VibratoTokenizer>,
+    pub failure: StartupFailure,
+    pub needs_dictionary: NeedsDictionary,
+    pub index: Option<AppState>,
+}
+
+/// Decide everything `setup` needs to manage from this launch's hints and
+/// index loads.
+///
+/// `index` is a closure, not a second `Result`, and that is the one thing to
+/// get right here. Today `load_state` is called only from inside this
+/// function's own success branch — a fatal hints load never opens the index at
+/// all. A plain `Result` parameter would force every caller to open the index
+/// *before* calling this function, which is eager: it would open an index
+/// nobody uses on exactly the branch that must not touch one. The closure
+/// keeps `load_state`'s laziness intact — it runs at most once, and only when
+/// the hints load succeeded.
+///
+/// The four branches, behaviour-identical to what `setup` decided inline
+/// before this extraction:
+/// 1. `hints` is `Err(e)` — `TA_HINTS_DICT` set and unreadable. `hints_warning`
+///    is empty, `hints` is `None`, `failure` is `e`'s message, `needs_dictionary`
+///    is `false`, `index` is `None`, and **`index` is never called.**
+/// 2. `hints` is `Ok`, `index()` is `Ok(s)` — the happy path. Everything as
+///    loaded, `index` is `Some(s)`.
+/// 3. `hints` is `Ok`, `index()` is `Err(e)` and [`is_missing_dictionary`] — the
+///    expected first run. It is fixable from inside the window rather than a
+///    failed launch, so `failure` stays empty and `needs_dictionary` is `true`
+///    instead.
+/// 4. `hints` is `Ok`, `index()` is `Err(e)` otherwise — a genuine failure.
+///    `failure` is `e`'s message.
+pub fn startup(
+    hints: Result<(Option<VibratoTokenizer>, String), StartupError>,
+    index: impl FnOnce() -> Result<AppState, StartupError>,
+) -> Startup {
+    let (tokenizer, warning) = match hints {
+        Ok(pair) => pair,
+        // `TA_HINTS_DICT` set and unreadable — the same fatal arm `load_state`'s
+        // own hints error used to land in, so no behaviour moves. `index` is
+        // deliberately not called on this branch; see this function's own doc
+        // comment for why that laziness matters.
+        Err(e) => {
+            return Startup {
+                hints_warning: HintsWarning(String::new()),
+                hints: None,
+                failure: StartupFailure(e.to_string()),
+                needs_dictionary: NeedsDictionary(false),
+                index: None,
+            };
+        }
+    };
+
+    let hints_warning = HintsWarning(warning);
+    match index() {
+        Ok(state) => Startup {
+            hints_warning,
+            hints: tokenizer,
+            failure: StartupFailure(String::new()),
+            needs_dictionary: NeedsDictionary(false),
+            index: Some(state),
+        },
+        // The expected first run. Deliberately not a failure: that puts a
+        // fatal message in `#output` for the rest of the session, and this
+        // state is fixable from inside the window instead — the download
+        // screen handles it.
+        Err(e) if is_missing_dictionary(&e) => Startup {
+            hints_warning,
+            hints: tokenizer,
+            failure: StartupFailure(String::new()),
+            needs_dictionary: NeedsDictionary(true),
+            index: None,
+        },
+        Err(e) => Startup {
+            hints_warning,
+            hints: tokenizer,
+            failure: StartupFailure(e.to_string()),
+            needs_dictionary: NeedsDictionary(false),
+            index: None,
+        },
+    }
+}
+
 /// Settings plus the path they persist to, shared between the commands that
 /// change them and the poll that reads them.
 pub struct SettingsState {
@@ -468,6 +558,109 @@ mod tests {
         let (tokenizer, warning) = result.expect("a readable override must load");
         assert!(tokenizer.is_some());
         assert!(warning.is_empty(), "got {warning:?}");
+    }
+
+    // --- `startup`, Phase 5B check-up Piece 1 -------------------------------
+    //
+    // `AppState` derives no `Debug` (see its own doc comment: it is built once
+    // and read-only, and nothing in the running app ever needs to print one),
+    // so `Startup` cannot either. These assert on individual fields rather than
+    // `matches!` with a `{result:?}` panic message, which is what the rest of
+    // this file's `AppState`-adjacent tests already do (see `parse.rs`'s own
+    // tests, which hit the same thing building one via `test_support`).
+
+    /// Branch 1: a fatal hints load must never open the index — there is no
+    /// `AppState` anyone will read on this branch, so opening one would be
+    /// wasted work at best and, for a first-run directory, a spurious "no
+    /// index" report layered on top of the real failure. A `Cell` the closure
+    /// sets is the cheapest proof the closure ran at all.
+    #[test]
+    fn a_fatal_hints_load_never_calls_the_index_closure() {
+        let index_called = std::cell::Cell::new(false);
+        let err = StartupError::Hints(HintsError::Dictionary("boom".to_string()));
+
+        let result = startup(Err(err), || {
+            index_called.set(true);
+            Err(StartupError::NoIndex {
+                root: PathBuf::from("/never"),
+            })
+        });
+
+        assert!(
+            !index_called.get(),
+            "a fatal hints load must never open the index"
+        );
+        assert!(result.hints_warning.0.is_empty());
+        assert!(result.hints.is_none());
+        assert!(!result.failure.0.is_empty(), "the hints error must be fatal");
+        assert!(!result.needs_dictionary.0);
+        assert!(result.index.is_none());
+    }
+
+    /// Branch 2: the happy path. The warning string is a value distinct from
+    /// every other branch's own test, so a field wired to the wrong source
+    /// inside `startup` would show up as a mismatch here rather than passing
+    /// by coincidence.
+    #[test]
+    fn a_successful_index_open_carries_the_loaded_hints_through() {
+        let dir = scratch("startup-happy");
+        let generation = crate::test_support::build_index_generation(&dir);
+        let tokenizer_path = dir.join("system.dic");
+        jparser::hints::write_test_dictionary(&tokenizer_path).expect("fixture dictionary");
+        let tokenizer = VibratoTokenizer::load(&tokenizer_path).expect("load fixture");
+
+        let result = startup(Ok((Some(tokenizer), "branch-2 warning".to_string())), || {
+            Ok(AppState {
+                index: Index::open(&generation).expect("open"),
+                table: ConjugationTable::load_embedded().expect("table"),
+            })
+        });
+
+        assert_eq!(result.hints_warning.0, "branch-2 warning");
+        assert!(
+            result.hints.is_some(),
+            "the loaded tokenizer must carry through"
+        );
+        assert!(result.failure.0.is_empty(), "got {:?}", result.failure.0);
+        assert!(!result.needs_dictionary.0);
+        assert!(result.index.is_some(), "a successful open must be kept");
+    }
+
+    /// Branch 3: `NoIndex` is the first-run condition, not a failure —
+    /// `failure` must stay empty so the webview does not show a fatal, and
+    /// `needs_dictionary` must flip so it shows the download screen instead.
+    #[test]
+    fn a_missing_index_offers_the_download_screen_instead_of_failing() {
+        let result = startup(Ok((None, String::new())), || {
+            Err(StartupError::NoIndex {
+                root: PathBuf::from("/nowhere"),
+            })
+        });
+
+        assert!(result.hints.is_none());
+        assert!(result.failure.0.is_empty(), "got {:?}", result.failure.0);
+        assert!(result.needs_dictionary.0);
+        assert!(result.index.is_none());
+    }
+
+    /// Branch 4: every other index failure stays fatal, unlike branch 3's
+    /// `NoIndex` — the mirror of `every_other_startup_error_stays_fatal`
+    /// above, at the `startup` level rather than `is_missing_dictionary`'s own.
+    #[test]
+    fn any_other_index_failure_stays_fatal() {
+        let result = startup(Ok((None, String::new())), || {
+            Err(StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
+                name: "x".to_string(),
+                pos: "y".to_string(),
+            }))
+        });
+
+        assert!(
+            !result.failure.0.is_empty(),
+            "a genuine index failure must be fatal"
+        );
+        assert!(!result.needs_dictionary.0);
+        assert!(result.index.is_none());
     }
 
     #[test]
