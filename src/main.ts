@@ -138,6 +138,18 @@ export async function showShortcutWarning(): Promise<void> {
   parseError.append(errorBlock(message));
 }
 
+// Hints that are silently off are invisible otherwise: the setting reads on and
+// the parse has none, which looks like the segmentation simply not improving.
+// Exported for the same reason `showStartupError` is.
+export async function showHintsWarning(): Promise<void> {
+  const message = await invoke<string | null>('hints_warning');
+  if (message === null) return;
+  // `append`, not `replaceChildren`, for the reason `showSettingsWarning`
+  // documents: a corrupt settings.json and a taken hotkey can already both be
+  // in this slot, and none of the three may wipe the others.
+  parseError.append(errorBlock(message));
+}
+
 const dictionary = app.querySelector<HTMLElement>('#dictionary')!;
 
 // `role="status"` on the markup element (a native ARIA live region — no JS
@@ -1292,4 +1304,5 @@ void applySettings().finally(() => {
 });
 void showSettingsWarning();
 void showShortcutWarning();
+void showHintsWarning();
 void showDictionaryScreen();

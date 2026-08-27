@@ -248,6 +248,7 @@ describe('main: a startup failure reports itself', () => {
       // the reject below and turns `void showDictionaryScreen()` into an
       // unhandled rejection that fails the whole file.
       if (cmd === 'needs_dictionary') return Promise.resolve(false);
+      if (cmd === 'hints_warning') return Promise.resolve(null);
       return Promise.reject('no other invoke call is expected in this test');
     });
 
@@ -270,6 +271,7 @@ describe('main: a startup failure reports itself', () => {
       // Same reason as the sibling test above: showDictionaryScreen must not
       // fall through to a rejection here.
       if (cmd === 'needs_dictionary') return Promise.resolve(false);
+      if (cmd === 'hints_warning') return Promise.resolve(null);
       return Promise.reject('unused');
     });
 
@@ -360,6 +362,44 @@ describe('the settings warning', () => {
 
     const text = document.querySelector('#parse-error')?.textContent ?? '';
     expect(text).toContain('could not be read');
+    expect(text).toContain('Alt+BracketLeft');
+  });
+
+  test('hints silently off is reported in the window', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'hints_warning') {
+        return Promise.resolve('MeCab boundary hints are switched on but not loaded');
+      }
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    const main = await import('./main');
+
+    await main.showHintsWarning();
+
+    expect(document.querySelector('#parse-error')?.textContent).toContain('not loaded');
+  });
+
+  test('a hints warning and a hotkey warning both survive', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'hints_warning') return Promise.resolve('hints are switched on but not loaded');
+      if (cmd === 'shortcut_warning') return Promise.resolve('hotkeys in use: Alt+BracketLeft');
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    const main = await import('./main');
+
+    await main.showHintsWarning();
+    await main.showShortcutWarning();
+
+    const text = document.querySelector('#parse-error')?.textContent ?? '';
+    expect(text).toContain('not loaded');
     expect(text).toContain('Alt+BracketLeft');
   });
 });

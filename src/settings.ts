@@ -62,6 +62,18 @@ export function initSettingsApp(container: HTMLElement) {
       </section>
 
       <section class="settings-group">
+        <h2 class="settings-group-title">Segmentation</h2>
+        <label class="settings-checkbox-row">
+          <input type="checkbox" id="setting-mecab-hints" />
+          <span class="label-text">Boundary hints (MeCab)</span>
+        </label>
+        <p class="settings-note" id="setting-mecab-hints-note">
+          Improves word splitting. Enabling downloads an 8 MB IPADIC dictionary.
+        </p>
+        <p class="settings-note" id="setting-mecab-hints-status" hidden></p>
+      </section>
+
+      <section class="settings-group">
         <h2 class="settings-group-title">Window &amp; Behavior</h2>
         <label class="settings-checkbox-row">
           <input type="checkbox" id="setting-always-on-top" />
@@ -115,6 +127,9 @@ export function initSettingsApp(container: HTMLElement) {
   const surfaceAlphaNote = container.querySelector<HTMLElement>(
     '#setting-surface-alpha-note',
   )!;
+  const mecabHints = container.querySelector<HTMLInputElement>('#setting-mecab-hints')!;
+  const mecabNote = container.querySelector<HTMLElement>('#setting-mecab-hints-note')!;
+  const mecabStatus = container.querySelector<HTMLElement>('#setting-mecab-hints-status')!;
 
   let currentMode: FuriganaMode = 'none';
 
@@ -149,6 +164,65 @@ export function initSettingsApp(container: HTMLElement) {
       btn.setAttribute('aria-checked', String(match));
     });
   }
+
+  /**
+   * The backend's own phase labels. Anything not here is an error message to
+   * show verbatim — the same lookup-not-enum shape `main.ts` uses for
+   * `dictionary-status`, and for the same reason: the failure arm carries text
+   * the user needs to read.
+   */
+  const HINTS_PHASES: Record<string, string> = {
+    downloading: 'Downloading the dictionary…',
+    unpacking: 'Unpacking the archive…',
+  };
+
+  function showHintsStatus(message: string) {
+    mecabStatus.textContent = message;
+    mecabStatus.hidden = message === '';
+  }
+
+  /**
+   * The checkbox is never the source of truth: this is. A toggle disables the
+   * control and invokes; what it ends up showing is whatever the backend says
+   * happened.
+   */
+  function applyHintsStatus(status: string) {
+    const phase = HINTS_PHASES[status];
+    if (phase !== undefined) {
+      // Left exactly as the click set it: the work is still running, and
+      // flipping it here would fight the user's own gesture mid-fetch.
+      showHintsStatus(phase);
+      return;
+    }
+    mecabHints.disabled = false;
+    if (status === 'ready') {
+      mecabHints.checked = true;
+      showHintsStatus('');
+      return;
+    }
+    if (status === 'off') {
+      mecabHints.checked = false;
+      showHintsStatus('');
+      return;
+    }
+    // A failure. The backend persisted nothing, so the checkbox must not read
+    // as on — and the message is the only explanation the user gets.
+    mecabHints.checked = false;
+    showHintsStatus(status);
+  }
+
+  mecabHints.addEventListener('change', () => {
+    mecabHints.disabled = true;
+    showHintsStatus('');
+    void invoke('set_mecab_hints', { enabled: mecabHints.checked }).catch((e) => {
+      // Only reached when the work could not be *started* — no `hints-status`
+      // event will arrive, so this is the one path that has to re-enable the
+      // control itself.
+      mecabHints.disabled = false;
+      mecabHints.checked = false;
+      showHintsStatus(String(e));
+    });
+  });
 
   function showAlpha(value: number) {
     surfaceAlphaValue.textContent = `${value}%`;
@@ -221,6 +295,7 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.hide_usage !== undefined) hideUsage.checked = s.hide_usage;
     if (s.always_on_top !== undefined) alwaysOnTop.checked = s.always_on_top;
     if (s.clipboard_monitoring !== undefined) monitoring.checked = s.clipboard_monitoring;
+    if (s.mecab_hints !== undefined) mecabHints.checked = s.mecab_hints;
     if (s.chrome_mode !== undefined) updateChromeButtons(s.chrome_mode);
     if (s.furigana_mode !== undefined) updateFuriganaButtons(s.furigana_mode);
     // Full snapshots own the boxes outright, including emptying them: an
@@ -346,6 +421,30 @@ export function initSettingsApp(container: HTMLElement) {
 
   void listen<Settings>('settings-changed', (e) => {
     applySettings(e.payload);
+  });
+
+  // The path is named literally so the manual route needs no documentation to
+  // find; the webview cannot resolve the app config dir itself.
+  void invoke<string>('hints_dir')
+    .then((dir) => {
+      if (typeof dir !== 'string' || dir === '') return;
+      mecabNote.textContent =
+        `Improves word splitting. Enabling downloads an 8 MB IPADIC dictionary. ` +
+        `To use your own instead, drop a Vibrato .tar.xz in ${dir} and toggle this ` +
+        `off and on — the newest archive wins.`;
+    })
+    .catch(() => {});
+
+  // Seeded from the same command the main window reads, so a user who opens
+  // settings to fix the warning sees the explanation next to the control.
+  void invoke<string | null>('hints_warning')
+    .then((message) => {
+      if (message !== null && message !== undefined) showHintsStatus(String(message));
+    })
+    .catch(() => {});
+
+  void listen<string>('hints-status', (e) => {
+    applyHintsStatus(e.payload);
   });
 }
 
