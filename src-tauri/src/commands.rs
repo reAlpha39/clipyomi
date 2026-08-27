@@ -2238,6 +2238,32 @@ mod tests {
         );
     }
 
+    /// The last uncovered link in item 4's chain: the warning has to reach
+    /// the webview, and `hints_warning` is the command that hands it over.
+    /// Empty-string-means-nothing is the same sentinel every warning state in
+    /// this crate uses (`state.rs`'s own doc comment on `HintsWarning`), so
+    /// this proves the command turns that sentinel into `None` rather than
+    /// `Some("")`, which would render as an empty warning line.
+    #[test]
+    fn hints_warning_reports_none_for_the_empty_sentinel() {
+        let app = tauri::test::mock_app();
+        app.manage(HintsWarning(String::new()));
+
+        assert_eq!(hints_warning(app.state::<HintsWarning>()), None);
+    }
+
+    /// The other half: a non-empty warning must reach the caller verbatim.
+    #[test]
+    fn hints_warning_reports_a_non_empty_message() {
+        let app = tauri::test::mock_app();
+        app.manage(HintsWarning("boundary hints are off".to_string()));
+
+        assert_eq!(
+            hints_warning(app.state::<HintsWarning>()),
+            Some("boundary hints are off".to_string())
+        );
+    }
+
     // --- Phase 5B handoff §2.3 items 3 and 5, automated -------------------
     //
     // Both manual checks name `set_mecab_hints` as the only production caller
@@ -2496,6 +2522,106 @@ mod tests {
         assert!(
             message.contains(&current.display().to_string()),
             "must name the directory to remove: got {message}"
+        );
+    }
+
+    // --- Phase 5B handoff §2.3 item 2, automated ---------------------------
+    //
+    // "Untick, then re-tick. Expect `ready` effectively immediately,
+    // \"Unpacking the archive…\" never shown, and no network activity —
+    // `published()` short-circuited inside `resolve`." Driven through the
+    // real `set_mecab_hints`, the same way items 3 and 5 above are.
+
+    /// Handoff §2.3 item 2: the second toggle is offline and instant. Arranges
+    /// the steady state a first successful toggle leaves behind — a real,
+    /// loadable dictionary already published at `current/system.dic` — and
+    /// **no** `.tar.xz` anywhere in the hints directory, so `resolve`'s
+    /// hand-placed branch has nothing to find and its `published()`
+    /// short-circuit is the only branch that can run.
+    ///
+    /// **What this test does and does not prove about the network.** It
+    /// cannot inject the URL `set_mecab_hints` resolves against —
+    /// `vibrato_source::ASSET_URL` is a hard-coded pinned constant, not a
+    /// parameter — so staying offline here depends entirely on `published()`
+    /// answering before `resolve` ever reaches the network. The precondition
+    /// assertion below exists so a regression in `published` fails fast, on
+    /// this machine, rather than this test silently attempting a real 7.7 MB
+    /// download from GitHub inside `cargo test`. The zero-connection proof
+    /// itself lives in `vibrato-source`'s own suite —
+    /// `resolve_returns_a_published_dictionary_without_downloading`
+    /// (`crates/vibrato-source/tests/download.rs`), which stands up a local
+    /// listener and asserts its connection counter stays at 0. This test
+    /// proves the phase label and the republish-avoidance; it does not itself
+    /// prove "no network".
+    #[tokio::test]
+    async fn the_second_toggle_is_offline_and_instant() {
+        let hints_dir = hints_scratch("second-toggle");
+        let current = hints_dir.join(vibrato_source::DICT_DIR);
+        std::fs::create_dir_all(&current).expect("current dir");
+        jparser::hints::write_test_dictionary(&current.join(vibrato_source::SYSTEM_DIC))
+            .expect("fixture dictionary");
+        let before =
+            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read before");
+
+        // Precondition, not an assumption — see this test's own doc comment.
+        assert!(
+            vibrato_source::published(&hints_dir).is_some(),
+            "precondition: a published dictionary must already be there, or \
+             the command below would fall through to a real download"
+        );
+
+        let harness = hints_harness(hints_dir.clone(), false);
+        let events = capture_hints_status(&harness.app);
+        let handle = harness.app.handle().clone();
+
+        let result = set_mecab_hints(
+            true,
+            handle,
+            harness.app.state::<Arc<SettingsState>>(),
+            harness.app.state::<HintsSender>(),
+            harness.app.state::<InputSender>(),
+            harness.app.state::<DictionaryPaths>(),
+            harness.app.state::<HintsInFlight>(),
+        )
+        .await;
+
+        assert!(result.is_ok(), "got {result:?}");
+
+        // A tokenizer reached the worker.
+        assert!(
+            harness.hints_rx.borrow().is_some(),
+            "a tokenizer must be published to the worker"
+        );
+
+        // The setting persists as on.
+        assert!(
+            harness.settings.snapshot().mecab_hints,
+            "a successful acquisition must persist the setting"
+        );
+
+        // "Unpacking the archive…" is the manual check's own wording for the
+        // one thing it must never show — there was no archive to unpack.
+        // Observed alongside it, and worth noting rather than hiding: the
+        // label actually shown is "downloading", not e.g. "ready" straight
+        // away, because `set_mecab_hints` picks the label from one `read_dir`
+        // before `resolve` runs (this file's own comment on that call
+        // explains the trade — a wrong guess costs a mislabelled phase, not a
+        // wrong outcome). That is existing, deliberate behaviour, not
+        // something this test changes.
+        let captured = events.lock().unwrap();
+        assert!(
+            !captured.iter().any(|e| e == "unpacking"),
+            "no archive was present, so \"unpacking\" must never be shown: got {captured:?}"
+        );
+        assert_eq!(*captured, vec!["downloading", "ready"], "got {captured:?}");
+        drop(captured);
+
+        // Nothing was re-published over a slot that was already good: byte-
+        // identical before and after the offline short-circuit.
+        assert_eq!(
+            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read after"),
+            before,
+            "the published slot must be untouched by the offline short-circuit"
         );
     }
 }
