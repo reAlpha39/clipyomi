@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-27
 **Spec:** [`docs/superpowers/specs/2026-08-27-jparser-phase5b-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-27-jparser-phase5b-design.md)
-**Commits:** `6685b61..772856a` on `develop` (eight commits across five tasks, unpushed), plus this task's own doc commit closing the phase.
+**Commits:** `6685b61..772856a` on `develop` (eight commits across five tasks, unpushed), plus this task's own doc commit closing the phase, plus the post-close fix in §10.
 
 This is Phase 5B of Phase 5 (MeCab). 5A shipped acquisition only — download,
 verify, unpack, publish, headless — as a library and a CLI driver. 5B is the
@@ -162,18 +162,42 @@ itself is exercised — with fixture archives, not the real asset — by
 `dotfiles_and_staging_archives_are_not_hand_placed`,
 `an_absent_hints_directory_has_no_hand_placed_archive`. See §5 and §8.
 
-### 2.3 Unrun — the six GUI manual checks
+### 2.3 The six GUI manual checks — one run post-close, five outstanding
 
-None of these ran. They are handed to a human with a window to click,
-phrased so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
+Item 1 has since been run by the user, and it **failed** — see §10. The other
+five did not run. They are handed to a human with a window to click, phrased
+so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
 (move any existing one aside first) and `npm run tauri dev`.
 
-1. **Fresh install downloads and takes effect live.** Copy `東京都に住んでいます`
-   to the clipboard and note the segmentation. Open Settings, tick **Boundary
-   hints (MeCab)**. Expect the status line to read "Downloading the
-   dictionary…", then clear with the box checked, and the on-screen sentence
-   to re-segment **without a restart**. Record the wall time and the new
-   segmentation.
+1. **Fresh install downloads and takes effect live. — RUN, failed, fixed;
+   see §10.** Copy `すもももももももものうち` to the clipboard and note the
+   segmentation. Open Settings, tick **Boundary hints (MeCab)**. Expect the
+   status line to read "Downloading the dictionary…", then clear with the box
+   checked, and the on-screen sentence to re-segment **without a restart**.
+
+   **Do not use `東京都に住んでいます` for this check**, which is what this
+   section originally named. Measured against the real `gen-1` index, it
+   parses identically with and without hints: JMdict carries `東京都` as a
+   single headword ("Tokyo Metropolis"), so the three-character match wins
+   outright either way and the check cannot fail. The 5A handoff's use of it
+   was to show hints *working*, not to discriminate. Nine candidate sentences
+   were compared through `jparser-cli parse` with and without `--hints`
+   against the real index; **seven were identical** — including
+   `外国人参政権`, `東京特許許可局`, `ここではきものを脱ぐ` and
+   `私は毎日新聞を読んでいます`, because JMdict already holds those compounds
+   as entries and longest-match wins regardless. Two differed:
+
+   | Text | Hints off | Hints on |
+   | --- | --- | --- |
+   | `すもももももももものうち` | すもも / もも / もも / もも / のうち | すもも / も / もも / も / もも / のうち |
+   | `くるまではこう` | くるま / では / こう | くる / まで / はこう |
+
+   The `すもも` row is the better demo — hints recover the `も` particles — and
+   is what this check should use. The wider result is worth carrying forward
+   on its own: **on real JMdict, hints rarely change kanji-compound
+   segmentation**; they earn their keep on kana-heavy ambiguity. 6A's
+   differential run should expect that distribution rather than the kanji
+   examples the design documents lead with.
 2. **The second toggle is offline and instant.** Untick, then re-tick.
    Expect `ready` effectively immediately, "Unpacking the archive…" never
    shown, and no network activity — `published()` short-circuited inside
@@ -246,6 +270,19 @@ Copied from the design spec's §12, unchanged by implementation:
 ---
 
 ## 5. Findings From Implementation, Beyond the Design Spec
+
+- **`reparse` and the history dedupe encode contradictory invariants, and
+  nothing in either phase could see it.** Found post-close by the user, on
+  the first run of §2.3's check 1; fixed in §10. Design §6.2 requires the
+  re-parse to reach the screen; Phase 3's `src/history.ts` dedupes on the
+  surface text — "what the user copied, independent of how it segmented" — so
+  it dropped exactly the result §6.2 exists to deliver. Each invariant is
+  correct in isolation, each had passing tests, and no review read both:
+  5B's task reviews were scoped to 5B's diff, and `history.ts` is not in it.
+  **The lesson for later phases is about the review's scope, not the code**:
+  a change whose whole purpose is to make an existing surface behave
+  differently has to be reviewed against that surface's existing rules, which
+  a diff-scoped review by construction cannot see.
 
 - **The plan's predicted per-file test counts were stale.** The plan
   (`docs/superpowers/plans/2026-08-27-jparser-phase5b.md`) derived its
@@ -326,6 +363,10 @@ after every command:
 | `npx playwright test` | **45 passed** | 45 | exactly equal (unchanged — this phase touches no Playwright-covered surface) |
 | `cargo tree --workspace \| grep -E "openssl v\|openssl-sys\|native-tls\|\bring v\|aws-lc"` | clean | clean | matches |
 | `cargo tree --workspace --target x86_64-unknown-linux-gnu \| grep -E "..."` | clean | clean | matches |
+
+These numbers are as of `772856a` and stand. The post-close fix in §10 moves
+`npx vitest run` to **265 passed, 13 files**; nothing else in this table
+changed with it, because that fix touches no Rust.
 
 `cargo test --workspace`'s +23 over baseline (464 → 487) is accounted for as
 follows: `vibrato-source` contributes a verified **+9** (26 → 35, Task 1's own
@@ -523,11 +564,13 @@ for a later phase.
 
 **This phase's own new unrun items:**
 
-- The six GUI manual checks in §2.3 — a fresh-install download taking effect
-  live, the offline second toggle, a hand-placed-archive replacement, a
-  missing-dictionary warning in both windows, an unloadable-dictionary
-  message naming the format, and the env-override's fatal — none of them
-  run.
+- **Five of the six GUI manual checks in §2.3** — the offline second toggle,
+  a hand-placed-archive replacement, a missing-dictionary warning in both
+  windows, an unloadable-dictionary message naming the format, and the
+  env-override's fatal. Check 1 has since been run: it failed, the defect is
+  fixed, and the re-run passed (§10). Checks 3 and 5 are the two that
+  exercise the destructive replace-a-published-slot path and are the ones
+  worth running before any release.
 - The hand-placed-archive branch has **no automated or scriptable coverage
   against the real 46 MB asset** — see §2.2 and §5. The branch's logic is
   unit-tested with fixtures; the real-asset path is provable only by the
@@ -537,3 +580,56 @@ for a later phase.
 - 6B's Playwright coverage of the settings window, named in the design spec
   and in this phase's own §10.3, has not started; the toggle's full
   lifecycle is proven only by vitest until it does.
+
+---
+
+## 10. Post-Close Defect and Fix
+
+The phase closed with §2.3's manual checks unrun. The user ran check 1 first,
+and it failed: **toggling the hints checkbox changed nothing on screen.**
+Copying a different sentence afterwards *did* show the new hints state, so
+acquisition, persistence and the `watch` publication were all working.
+
+**Root cause — not in this phase's code.** `src/history.ts`'s `push` dedupes
+on `surfaceText(result)`, the segments joined back together, documented as
+"what the user copied, independent of how it segmented". `commands::reparse`
+re-parses the text already on screen, so its result carries an **identical
+surface with a different segmentation** — the exact shape that dedupe key
+calls a duplicate. `push` dropped it, and `src/main.ts`'s `show()` then
+re-displayed `history.current()`: the stale parse. `すもも/もも/もも/もも` and
+`すもも/も/もも/も/もも` both join to `すもももももももものうち`, so the
+result was provably discarded rather than merely suspected.
+
+**Fix** (`c330288`): a same-surface parse now **replaces** the newest history
+entry instead of being discarded. Still one entry per copied text, and the
+cursor is left alone exactly as skipping did, so a user reading an older parse
+is not yanked forward. All sixteen pre-existing `history.test.ts` tests pass
+unchanged, including the four that pin the dedupe's other guarantees.
+
+**Tests added**, both verified to fail with the fix reverted:
+
+- `src/history.test.ts` — `a re-segmentation of the newest parse replaces it`,
+  the unit contract.
+- `src/main.test.ts` — `a re-segmentation of the same text replaces what is on
+  screen`, which drives two `parse-result` events through the real
+  show/push/display path. Reverted, it fails with
+  `expected [ '東京', '都' ] to deeply equal [ '東京都' ]` — the user's symptom
+  exactly. This is the one that matters: the defect lived in the *interaction*,
+  and a history-only test would let a future `show()` refactor reintroduce it.
+
+**Gate after the fix:** `npx vitest run` **265 passed, 13 files** (263 before),
+`npx tsc --noEmit` clean, `npx playwright test` **45 passed**. No Rust changed,
+so §6's Rust numbers stand.
+
+**Check 1 then passed on re-run**, confirmed by the user: the download, the
+live publication to the running worker, and re-segmentation without a restart.
+That makes it the first end-to-end GUI evidence in the phase — everything in
+§2 before it was headless.
+
+**What this says about the phase's testing.** The vitest suite covered
+`reparse`'s backend half and the checkbox lifecycle, and the Rust suite covered
+the channel and the worker. Nothing covered a second `parse-result` arriving
+for the same text, which is the only new event shape 5B introduced to the
+frontend. That gap is now closed, but it is the kind worth looking for
+directly: when a phase makes an existing surface receive an input it never
+received before, test that surface with that input.
