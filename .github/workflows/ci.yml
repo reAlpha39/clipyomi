@@ -122,9 +122,19 @@ jobs:
       # with `rustls-graviola` (ISC) injected as the provider — if a build
       # error here tempts you to enable ureq's default features, that silently
       # takes `ring` back, and this grep is the only thing that would notice.
+      #
+      # The pattern is anchored, and deliberately not `-i`: a bare `openssl`
+      # also matches `openssl-probe`, which `rustls-native-certs` pulls in on
+      # Linux via `rustls-platform-verifier`. That crate links nothing — it only
+      # locates the system trust store — and is MIT OR Apache-2.0, so it is
+      # compatible and not what this gate is for. Since this job only ever runs
+      # on ubuntu-latest, the unanchored pattern matched `openssl-probe v0.2.1`
+      # and failed the job on every run. Do not re-broaden it back to a bare
+      # `openssl`: a real OpenSSL link appears as `openssl v` or `openssl-sys`,
+      # and both are still caught.
       - name: no GPL-incompatible TLS backend
         run: |
-          if cargo tree --workspace | grep -iE "openssl|native-tls|\bring v|aws-lc"; then
+          if cargo tree --workspace | grep -E "openssl v|openssl-sys|native-tls|\bring v|aws-lc"; then
             echo "::error::a GPLv2-incompatible TLS dependency entered the tree"
             exit 1
           fi
@@ -149,6 +159,25 @@ jobs:
       # guarantee.
       - run: cargo test -p jparser --features mecab
       - run: cargo clippy -p jparser --features mecab --all-targets -- -D warnings
+
+  hints:
+    name: jparser with hints-source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # `hints-source` is off by default and implied by nothing — not by `cli`,
+      # not by `mecab` — so without this job neither `tests/cli_hints.rs` nor
+      # the `Command::FetchHints` match arm (both behind `#[cfg(feature =
+      # "hints-source")]`) is type-checked anywhere in CI. Design spec §9.5
+      # lists this gate; it did not reach this file until the Phase 5A fix wave.
+      # Mirrors the `mecab` job above deliberately.
+      - run: cargo test -p jparser --features hints-source
+      - run: cargo clippy -p jparser --features hints-source --all-targets -- -D warnings
 
   coverage:
     name: coverage
