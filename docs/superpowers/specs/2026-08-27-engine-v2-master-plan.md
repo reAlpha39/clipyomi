@@ -124,6 +124,17 @@ Other data already in use:
 | JMdict (EDRDG) | CC BY-SA 4.0 | Data licence. Constrains the *index*, not the code |
 | IPADIC via Vibrato | BSD-style, above | Notice retention only |
 | Vibrato, Lindera | MIT / MIT OR Apache-2.0 | Free |
+| **MeCab** | **GPL *or* LGPL *or* BSD** | Take under BSD. Permissive, and it has the two features Vibrato lacks (§4.1) |
+| **UniDic** (NINJAL) | **GPL-2 *or* LGPL-2.1 *or* BSD New** | Take under BSD. Better readings than IPADIC, which matters for furigana |
+
+MeCab's own documentation states the tri-licence directly:
+
+> MeCab はフリーソフトウェアです．GPL(the GNU General Public License),
+> LGPL(Lesser GNU General Public License), または BSD ライセンスに従って
+> 本ソフトウェアを使用,再配布することができます。
+
+Neither was in this plan's first draft. Both were found by examining
+LunaTranslator (§4.4), which uses MeCab with UniDic.
 
 ### 3.4 The ecosystem trap
 
@@ -189,9 +200,20 @@ pub(crate) mod lattice;   // crate-private
 `Worker`'s public surface is `reset_sentence`, `tokenize`, `num_tokens`,
 `token(i)` — one path only. No `nbest` symbol exists anywhere in the crate.
 
-Consequence: **k-best readings cannot come from Vibrato.** They must come from
-this project's own DP, which is why §7.1 keeps a DP rather than delegating
-segmentation to Vibrato's Viterbi wholesale.
+Consequence: **k-best readings cannot come from Vibrato as it ships.** Three
+routes exist, and the choice is deferred to Phase 2 (§9.5):
+
+| Route | Cost | Notes |
+| --- | --- | --- |
+| **Fork Vibrato** | ~100 lines | MIT, so forking is free. The lattice is already written and correct — it is only `pub(crate)`. Cheapest by a wide margin, and upstreamable |
+| **Own k-shortest-path** | ~400 lines | Full control over the JMdict-aware cost model. §4.2 |
+| **Swap to MeCab** | build system | Native `-N` up to 512 *and* `Lattice::set_boundary_constraint` (0.995+), under BSD (§3.3). Cost is C++ in a Rust/Tauri cross-platform build |
+
+Note that a tokenizer's N-best is not the same object as this tool's k-best: it
+enumerates morpheme sequences over IPADIC or UniDic, not segmentations scored
+against JMdict. Whichever route is taken, tokenizer N-best is a **candidate
+generator** feeding this project's ranking, not the answer itself. That is why
+§7 keeps a DP under all three.
 
 ### 4.2 The DP is already most of a k-best solver
 
@@ -225,6 +247,48 @@ touches `はこう`'s start (4) or end (6).
 This is the class of bug success criterion 3 names. The fix is a cost model in
 which tokenizer boundaries are evidence rather than a ±10 nudge — designed in
 Phase 1, tuned against Phase 0's corpus.
+
+### 4.4 Prior art — LunaTranslator
+
+The closest actively-maintained peer: a visual-novel translator with Japanese
+segmentation and furigana, GPL-3.0, C++ and Python, ~12.9k stars, and commits
+landing daily. **GPL-3.0 means no code may be reused here** — this section is
+architectural study only, and nothing in it was copied.
+
+**Its entire parser is roughly forty lines.**
+`src/NativeImpl/NativeUtils/_/simplemecab.cpp` loads a vendored MeCab 0.996 by
+`LoadLibraryW`, constructs a tagger with `-C -r nul -d <dict> -Owakati`, calls
+`mecab_sparse_tonode`, walks `node->next`, and hands each `(surface, feature)`
+pair to a callback. `libmecab.cmake` fetches and patches MeCab from source. That
+is the whole implementation.
+
+**Everything else is delegated.** `src/LunaTranslator/cishu/` holds `mdict.py`,
+`jisho.py`, `weblio.py`, `japandict.py`, `jpdb.py`, `mojidict.py`, `youdao.py`,
+and `chatgptlike.py` — offline MDX files, online lookup services, and an LLM.
+Yomitan runs in an embedded browser for the rest. There is **no deinflector, no
+JMdict engine, no sense ranking, and no conjugation chain** anywhere in the
+project.
+
+Four things worth carrying:
+
+1. **The tri-licences (§3.3).** MeCab and UniDic were found here. That is this
+   section's largest contribution.
+2. **A thin tokenizer never invents the §4.3 bug.** LunaTranslator would parse
+   `くるまではこう` correctly for the simple reason that it has no JMdict cost
+   model able to override the tokenizer. Independent evidence for the direction
+   §4.3 already takes: boundaries should be strong.
+3. **It uses one-best anyway.** `mecab_sparse_tonode`, not `mecab_nbest_*`,
+   despite N-best being available to it. Nobody in this space appears to have
+   shipped k-best readings — §9.5 is genuinely open ground, not a solved problem
+   with a known answer.
+4. **Runtime `LoadLibraryW` sidesteps static-link licence questions**, and is
+   Windows-only as written. ClipYomi targets macOS as well, so that particular
+   trick does not transfer.
+
+What does **not** transfer is the architecture itself. LunaTranslator's premise
+is bring-your-own-dictionary; ClipYomi's is owning the pipeline end to end —
+deinflection, sense ranking, and the conjugation chain are the product (§7.3).
+Adopting the thin-tokenizer design would delete the reason the app exists.
 
 ---
 
@@ -390,7 +454,8 @@ plan and the one most likely to need its own spec.
 
 ### Phase 2 — k-best readings
 
-**In:** k-shortest-path over the Phase 1 DP; a whole-sentence reading list with
+**In:** the §4.1 route decision, taken with Phase 1's measured cost model in
+hand; k-best paths over the Phase 1 DP; a whole-sentence reading list with
 scores; UI to cycle readings; oracle@k added to `score`.
 
 **Out:** automatic disambiguation beyond ranking. The user picks.
@@ -438,6 +503,16 @@ No layer ships without its licence established in writing first.
    cleanly safe; scrubbing the citations is cheaper. This plan assumes
    scrubbing. If a reviewer disagrees, Phase 1 grows by ~1,300 lines.
 4. **Does k-best justify its UI?** Answered by Phase 2's gate, not in advance.
+5. **Which N-best route (§4.1)?** Fork Vibrato, write k-shortest-path, or move
+   to MeCab. Deferred to Phase 2 deliberately: Phase 1's measured cost model
+   should inform it. Current lean is the Vibrato fork — MIT, ~100 lines,
+   upstreamable, and it keeps the build pure Rust.
+6. **IPADIC or UniDic (§3.3)?** UniDic has better readings, which matters for
+   furigana, and is BSD-available. But `hints.rs:22` hardcodes
+   `READING_FIELD = 7` for IPADIC's column layout, and UniDic's differs — the
+   silent-degradation hazard already recorded in the Phase 5B design §12.
+   Evaluate in Phase 0, where the harness can measure the difference instead of
+   arguing it.
 
 ---
 
@@ -445,7 +520,8 @@ No layer ships without its licence established in writing first.
 
 | Decision | Rationale |
 | --- | --- |
-| Keep a DP; do not delegate segmentation to Vibrato | Vibrato has no lattice access (§4.1), and compound preservation (`東京都`) requires scoring JMdict matches, not tokenizer output |
+| Keep a DP under every engine option | Compound preservation (`東京都`) requires scoring JMdict matches, not tokenizer output. A tokenizer's N-best enumerates morphemes over IPADIC/UniDic, not JMdict segmentations — it is a candidate generator, not the answer (§4.1) |
+| Study LunaTranslator, adopt nothing | GPL-3.0, so no reuse. Its thin-tokenizer + delegated-dictionary design would delete the conjugation chain and sense ranking that are ClipYomi's reason to exist (§4.4) |
 | Reject cross-engine consensus voting | JMdict longest-match and a deinflector share one dictionary — correlated voters echo rather than vote. Ties need a tiebreak, which rebuilds a cost model. k-best surfaces the same disagreements with a principled ranking |
 | Reject boundary F1 | Punishes JMdict compound preservation (§5.2) |
 | Reject `bunpo`, `deinflector`, `yomichan_rs` | GPL-3.0 lineage or provenance risk (§3.4) |
