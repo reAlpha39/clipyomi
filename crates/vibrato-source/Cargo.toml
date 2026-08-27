@@ -1,0 +1,34 @@
+[package]
+name = "vibrato-source"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# GitHub serves no plain HTTP, so unlike `jmdict-source` this crate needs TLS.
+# `rustls` is MIT OR Apache-2.0 OR ISC, taken under MIT — but its default crypto
+# providers are NOT usable here: `ring` is "Apache-2.0 AND ISC" and `aws-lc-sys`
+# carries an "AND Apache-2.0" term, and an AND offers no compatible option under
+# this project's GPL-2.0-only. Hence `rustls-no-provider` plus the provider below.
+ureq = { version = "3", default-features = false, features = [
+    "rustls-no-provider",
+    "platform-verifier",
+] }
+# Apache-2.0 OR ISC OR MIT-0, taken under ISC. Pure Rust, x86_64 and aarch64.
+rustls-graviola = "0.4"
+# MIT. Pure-Rust xz, so no C toolchain enters any platform's build.
+lzma-rs = "0.3"
+# MIT OR Apache-2.0, taken under MIT.
+tar = "0.4"
+# MIT. Pure-Rust zstd.
+ruzstd = "0.9"
+# MIT OR Apache-2.0, taken under MIT.
+sha2 = "0.11"
+thiserror = "1"
+
+[dev-dependencies]
+# Fixtures are built, never committed: `SystemDictionaryBuilder` makes the same
+# two-entry dictionary `jparser`'s `hints.rs` uses in its own tests.
+# `default-features = false` drops vibrato's `train` feature, as jparser does.
+vibrato = { version = "0.5", default-features = false }
