@@ -189,58 +189,41 @@ fn main() {
             // `Err(NoIndex)` on first run and never reaches its own tail, so
             // hints folded into it would go unloaded on exactly the run that
             // downloads JMdict, and stay unloaded until a restart.
-            match state::load_hints(&hints_dir, settings.snapshot().mecab_hints) {
-                Ok((tokenizer, warning)) => {
-                    // Also kept for developers running from a terminal, the way
-                    // the settings warning above already is.
-                    if !warning.is_empty() {
-                        eprintln!("{warning}");
-                    }
-                    app.manage(state::HintsWarning(warning));
-                    // A send failure would mean the worker died between its
-                    // spawn above and this line, which cannot happen — it is
-                    // awaiting its first input.
-                    let _ = hints_tx.send(tokenizer.map(Arc::new));
+            //
+            // The four-branch decision itself lives in `state::startup` — see
+            // its own doc comment for the branches and for why the index load
+            // stays a lazy closure here rather than a second, eager `Result`.
+            // This block is only the plumbing left after that extraction: the
+            // stderr echo, the four `app.manage` calls, and the two `watch`
+            // sends.
+            let startup = state::startup(
+                state::load_hints(&hints_dir, settings.snapshot().mecab_hints),
+                || state::load_state(&root),
+            );
 
-                    // `StartupFailure` and `NeedsDictionary` are both managed on
-                    // every branch: `Option<State<'_, T>>` is not a valid Tauri
-                    // 2 command parameter, so a command cannot express "this
-                    // state may not be managed". Empty string / `false` are the
-                    // "nothing wrong" values.
-                    match state::load_state(&root) {
-                        Ok(s) => {
-                            app.manage(state::StartupFailure(String::new()));
-                            app.manage(state::NeedsDictionary(false));
-                            // A send failure would mean the worker died between
-                            // its spawn above and this line, which cannot
-                            // happen — it is awaiting its first input. Ignored
-                            // with that reason rather than turned into a
-                            // startup abort.
-                            let _ = index_tx.send(Some(Arc::new(s)));
-                        }
-                        // The expected first run. Deliberately not a
-                        // `StartupFailure`: that one puts a fatal message in
-                        // `#output` for the rest of the session, and this state
-                        // is fixable from inside the window instead — the
-                        // download screen handles it.
-                        Err(e) if state::is_missing_dictionary(&e) => {
-                            app.manage(state::StartupFailure(String::new()));
-                            app.manage(state::NeedsDictionary(true));
-                        }
-                        Err(e) => {
-                            app.manage(state::StartupFailure(e.to_string()));
-                            app.manage(state::NeedsDictionary(false));
-                        }
-                    }
-                }
-                // `TA_HINTS_DICT` set and unreadable. The same fatal arm
-                // today's `load_state` hints error already lands in, so no
-                // behaviour moves.
-                Err(e) => {
-                    app.manage(state::HintsWarning(String::new()));
-                    app.manage(state::StartupFailure(e.to_string()));
-                    app.manage(state::NeedsDictionary(false));
-                }
+            // Also kept for developers running from a terminal, the way the
+            // settings warning above already is.
+            if !startup.hints_warning.0.is_empty() {
+                eprintln!("{}", startup.hints_warning.0);
+            }
+            app.manage(startup.hints_warning);
+            // A send failure would mean the worker died between its spawn
+            // above and this line, which cannot happen — it is awaiting its
+            // first input.
+            let _ = hints_tx.send(startup.hints.map(Arc::new));
+
+            // `StartupFailure` and `NeedsDictionary` are both managed on every
+            // branch: `Option<State<'_, T>>` is not a valid Tauri 2 command
+            // parameter, so a command cannot express "this state may not be
+            // managed". Empty string / `false` are the "nothing wrong" values.
+            app.manage(startup.failure);
+            app.manage(startup.needs_dictionary);
+            if let Some(s) = startup.index {
+                // A send failure would mean the worker died between its spawn
+                // above and this line, which cannot happen — it is awaiting
+                // its first input. Ignored with that reason rather than turned
+                // into a startup abort.
+                let _ = index_tx.send(Some(Arc::new(s)));
             }
             // Built here rather than declared in tauri.conf.json's `windows`
             // array: the config array has no way to express "create it hidden
