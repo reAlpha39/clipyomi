@@ -56,6 +56,11 @@ export type ChromeMode = 'native' | 'header' | 'content';
 export interface Settings {
   always_on_top: boolean;
   clipboard_monitoring: boolean;
+  /**
+   * MeCab boundary hints. Backend-owned: `save_settings` never carries it, so
+   * the settings window reads it and never writes it.
+   */
+  mecab_hints?: boolean;
   chrome_mode?: ChromeMode;
   furigana_mode?: FuriganaMode;
   hide_pos?: boolean;

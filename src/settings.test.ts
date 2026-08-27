@@ -609,4 +609,177 @@ describe('Settings Window', () => {
     container.querySelector<HTMLButtonElement>('[data-chrome-mode="content"]')?.click();
     expect(note.hidden).toBe(true);
   });
+
+  /** Flush the promise chains `initSettingsApp` starts on import. */
+  async function settled(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  test('the hints checkbox reflects the persisted setting', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          mecab_hints: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await settled();
+
+    expect(
+      container.querySelector<HTMLInputElement>('#setting-mecab-hints')?.checked,
+    ).toBe(true);
+  });
+
+  test('toggling hints on disables the checkbox and invokes set_mecab_hints', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          mecab_hints: false,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await settled();
+
+    const checkbox = container.querySelector<HTMLInputElement>('#setting-mecab-hints')!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+
+    expect(invoke).toHaveBeenCalledWith('set_mecab_hints', { enabled: true });
+    // The backend's event decides what the checkbox ends up showing; until one
+    // arrives, a second click must not be able to race the acquisition.
+    expect(checkbox.disabled).toBe(true);
+  });
+
+  test('a phase event shows its label and leaves the checkbox disabled', async () => {
+    invoke.mockImplementation(() => Promise.resolve(null));
+    initSettingsApp(container);
+    await settled();
+
+    const checkbox = container.querySelector<HTMLInputElement>('#setting-mecab-hints')!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    emit('hints-status', 'downloading');
+
+    const status = container.querySelector<HTMLElement>('#setting-mecab-hints-status');
+    expect(status?.textContent ?? '').not.toBe('');
+    expect(status?.hidden).toBe(false);
+    expect(checkbox.disabled).toBe(true);
+  });
+
+  test('a ready event checks the box, re-enables it, and clears the status', async () => {
+    invoke.mockImplementation(() => Promise.resolve(null));
+    initSettingsApp(container);
+    await settled();
+
+    const checkbox = container.querySelector<HTMLInputElement>('#setting-mecab-hints')!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    emit('hints-status', 'unpacking');
+    emit('hints-status', 'ready');
+
+    expect(checkbox.checked).toBe(true);
+    expect(checkbox.disabled).toBe(false);
+    expect(container.querySelector<HTMLElement>('#setting-mecab-hints-status')?.hidden).toBe(
+      true,
+    );
+  });
+
+  test('an off event unchecks the box and re-enables it', async () => {
+    invoke.mockImplementation(() => Promise.resolve(null));
+    initSettingsApp(container);
+    await settled();
+
+    const checkbox = container.querySelector<HTMLInputElement>('#setting-mecab-hints')!;
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new Event('change'));
+    emit('hints-status', 'off');
+
+    expect(checkbox.checked).toBe(false);
+    expect(checkbox.disabled).toBe(false);
+  });
+
+  test('a failure message unchecks the box and shows the message verbatim', async () => {
+    invoke.mockImplementation(() => Promise.resolve(null));
+    initSettingsApp(container);
+    await settled();
+
+    const checkbox = container.querySelector<HTMLInputElement>('#setting-mecab-hints')!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+    emit('hints-status', 'the dictionary server returned HTTP 404');
+
+    // The setting was not persisted, so the checkbox must not read as on.
+    expect(checkbox.checked).toBe(false);
+    expect(checkbox.disabled).toBe(false);
+    expect(
+      container.querySelector<HTMLElement>('#setting-mecab-hints-status')?.textContent,
+    ).toContain('HTTP 404');
+  });
+
+  test('a startup hints warning seeds the status line', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'hints_warning') {
+        return Promise.resolve('MeCab boundary hints are switched on but not loaded');
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await settled();
+
+    expect(
+      container.querySelector<HTMLElement>('#setting-mecab-hints-status')?.textContent,
+    ).toContain('not loaded');
+  });
+
+  test('the note names the hints directory so the manual route is discoverable', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'hints_dir') return Promise.resolve('C:\\Users\\me\\AppData\\clipyomi\\hints');
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await settled();
+
+    expect(
+      container.querySelector<HTMLElement>('#setting-mecab-hints-note')?.textContent,
+    ).toContain('clipyomi\\hints');
+  });
+
+  test('saving another setting never sends mecab_hints', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve<Settings>({
+          always_on_top: false,
+          clipboard_monitoring: true,
+          mecab_hints: true,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    initSettingsApp(container);
+    await settled();
+
+    const hidePos = container.querySelector<HTMLInputElement>('#setting-hide-pos')!;
+    hidePos.checked = true;
+    hidePos.dispatchEvent(new Event('change'));
+
+    const save = invoke.mock.calls.find(([cmd]) => cmd === 'save_settings');
+    expect(save).toBeDefined();
+    // The backend owns this key outright. A snapshot carrying it could clobber
+    // an in-flight toggle, and `merge_saved` is a whitelist precisely so it
+    // cannot — this asserts the frontend half of that agreement.
+    expect(Object.keys(save![1].settings)).not.toContain('mecab_hints');
+  });
 });
