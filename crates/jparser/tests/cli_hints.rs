@@ -30,9 +30,9 @@ fn scratch(name: &str) -> std::path::PathBuf {
 #[test]
 fn fetch_hints_reports_an_already_published_dictionary_without_downloading() {
     let dir = scratch("published");
-    let published = dir.join("ipadic-mecab-2_7_0");
+    let published = dir.join(vibrato_source::DICT_DIR);
     std::fs::create_dir_all(&published).expect("dict dir");
-    std::fs::write(published.join("system.dic"), b"already here").expect("write");
+    std::fs::write(published.join(vibrato_source::SYSTEM_DIC), b"already here").expect("write");
 
     let out = cli()
         .args(["fetch-hints", dir.to_str().expect("utf-8 path")])
