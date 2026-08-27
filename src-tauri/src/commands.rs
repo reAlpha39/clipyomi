@@ -1292,7 +1292,7 @@ pub const HINTS_STATUS_EVENT: &str = "hints-status";
 pub struct HintsInFlight(pub Arc<AtomicBool>);
 
 /// Emit a hints phase label, logging rather than propagating a failed emit.
-fn emit_hints_status(app: &AppHandle, status: &str) {
+fn emit_hints_status<R: tauri::Runtime>(app: &tauri::AppHandle<R>, status: &str) {
     if let Err(e) = app.emit(HINTS_STATUS_EVENT, status.to_string()) {
         // Nothing to fall back on: if the event cannot reach the webview there
         // is no other channel to report progress through.
@@ -1557,9 +1557,9 @@ pub async fn download_dictionary(
 /// The setting is persisted only on success, so a failed acquisition leaves it
 /// off and the next launch does not claim hints it does not have.
 #[tauri::command]
-pub async fn set_mecab_hints(
+pub async fn set_mecab_hints<R: tauri::Runtime>(
     enabled: bool,
-    app: AppHandle,
+    app: tauri::AppHandle<R>,
     settings: State<'_, Arc<SettingsState>>,
     hints: State<'_, HintsSender>,
     input: State<'_, InputSender>,
@@ -1659,7 +1659,7 @@ pub fn hints_dir(paths: State<'_, DictionaryPaths>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tauri::Manager;
+    use tauri::{Listener, Manager};
 
     /// `set_input` is a thin push into the watch channel; the part worth testing
     /// is that the newest value is what a reader sees.
@@ -2234,6 +2234,267 @@ mod tests {
         assert!(message.contains("IPADIC"), "got {message}");
         assert!(
             message.contains(r"hints\current"),
+            "must name the directory to remove: got {message}"
+        );
+    }
+
+    // --- Phase 5B handoff §2.3 items 3 and 5, automated -------------------
+    //
+    // Both manual checks name `set_mecab_hints` as the only production caller
+    // of `vibrato_source::resolve` (§2.2's own finding), so driving the real
+    // command through a mock app is what closes the gap the handoff left
+    // open — a fixture-shaped stand-in would prove a different code path.
+
+    /// A scratch hints directory, removed and recreated per test — the same
+    /// pattern `scratch` above uses, named separately so a reader is not left
+    /// wondering whether these tests share a directory with the dictionary
+    /// ones above.
+    fn hints_scratch(name: &str) -> std::path::PathBuf {
+        scratch(&format!("hints-{name}"))
+    }
+
+    /// Every piece of managed state `set_mecab_hints` reads, wired onto a mock
+    /// app the same way `main.rs`'s `setup` wires it onto the real one.
+    ///
+    /// `hints_rx` is kept alive here rather than dropped: a `watch::Sender`
+    /// with no live receiver still accepts a `send`, but the command's own
+    /// `hints_tx.send(...)` result would then prove nothing about what a
+    /// reader downstream (the parse worker, in the real app) actually sees.
+    struct HintsHarness {
+        app: tauri::App<tauri::test::MockRuntime>,
+        settings: Arc<SettingsState>,
+        hints_rx: watch::Receiver<Option<Arc<VibratoTokenizer>>>,
+    }
+
+    fn hints_harness(hints_dir: std::path::PathBuf, mecab_hints: bool) -> HintsHarness {
+        let settings = Arc::new(SettingsState::new(
+            hints_dir.join("settings.json"),
+            Settings {
+                mecab_hints,
+                ..Default::default()
+            },
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&settings));
+
+        let (hints_tx, hints_rx) = watch::channel(None::<Arc<VibratoTokenizer>>);
+        app.manage(HintsSender(hints_tx));
+
+        // Empty, and left empty: `reparse` is a no-op on an empty channel
+        // (see its own doc comment), so nothing in these tests needs to read
+        // this one back.
+        let (input_tx, _input_rx) = watch::channel(String::new());
+        app.manage(InputSender(input_tx));
+
+        app.manage(DictionaryPaths {
+            // Unused by `set_mecab_hints` — it only ever reads `hints_dir` —
+            // but the struct has no `Default`, so these need a value.
+            root: hints_dir.join("dict"),
+            source_dir: hints_dir.join("source"),
+            hints_dir,
+        });
+        app.manage(HintsInFlight(Arc::new(AtomicBool::new(false))));
+
+        HintsHarness {
+            app,
+            settings,
+            hints_rx,
+        }
+    }
+
+    /// Captures every `hints-status` payload the command emits, in the order
+    /// emitted. Registered before the command runs so nothing is missed.
+    ///
+    /// This turned out to be practical against a mock app: `tauri`'s own
+    /// manager tests (`tauri-2.11.5/src/manager/mod.rs`) prove `Listener::
+    /// listen` plus a plain `Emitter::emit` work against `MockRuntime` with
+    /// no window and no webview, and the callback runs synchronously inside
+    /// `emit` — so by the time `set_mecab_hints(..).await` returns, every
+    /// event it emitted (including the one from inside its `spawn_blocking`
+    /// closure) is already in the vec below.
+    fn capture_hints_status(
+        app: &tauri::App<tauri::test::MockRuntime>,
+    ) -> Arc<std::sync::Mutex<Vec<String>>> {
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        app.listen(HINTS_STATUS_EVENT, move |event| {
+            let payload: String = serde_json::from_str(event.payload())
+                .expect("a hints-status payload is always a JSON string");
+            sink.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(payload);
+        });
+        events
+    }
+
+    /// Every `.partial`/`.backup` entry found anywhere under `dir` — the
+    /// substrings [`staging_names`](vibrato_source::staging_names) and
+    /// `publish_replacing`'s own backup suffix leave behind on a killed or
+    /// failed run. An empty result is what "no leftovers" means.
+    fn staging_leftovers(dir: &std::path::Path) -> Vec<String> {
+        let mut leftovers = Vec::new();
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return leftovers;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.contains(".partial") || name.contains(".backup") {
+                leftovers.push(path.display().to_string());
+            }
+            if path.is_dir() {
+                leftovers.extend(staging_leftovers(&path));
+            }
+        }
+        leftovers
+    }
+
+    /// Handoff §2.3 item 3: "A hand-placed archive replaces the dictionary."
+    /// Arranges the exact shape the manual check describes — a published slot
+    /// holding one dictionary, a newer `.tar.xz` dropped beside it — and
+    /// drives the real command rather than `resolve` directly, since the
+    /// command is what picks the phase label and persists the setting.
+    #[tokio::test]
+    async fn a_hand_placed_archive_replaces_the_published_dictionary() {
+        let hints_dir = hints_scratch("hand-placed");
+        let current = hints_dir.join(vibrato_source::DICT_DIR);
+        std::fs::create_dir_all(&current).expect("current dir");
+        let old_dictionary = b"OLD DICTIONARY BYTES - NOT THE ARCHIVE'S".to_vec();
+        std::fs::write(current.join(vibrato_source::SYSTEM_DIC), &old_dictionary)
+            .expect("write old dictionary");
+
+        // Strictly newer than the write above: `archive_is_newer` is an mtime
+        // comparison, and two files written in the same tick can compare
+        // equal. `vibrato-source`'s own suite sleeps 50ms for exactly this
+        // reason (`tests/support::tick`) rather than add a `filetime`
+        // dependency; same trade here.
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // A real, loadable dictionary — built the same way `state.rs`'s own
+        // tests build one — packed into a real `.tar.xz` via `vibrato-
+        // source`'s own fixture-archive helper (Piece 1). `resolve` and
+        // `VibratoTokenizer::load` both see exactly what a real hand-placed
+        // archive would contain.
+        let fixture_path = hints_dir.join("fixture.dic");
+        jparser::hints::write_test_dictionary(&fixture_path).expect("fixture dictionary");
+        let new_dictionary = std::fs::read(&fixture_path).expect("read fixture");
+        vibrato_source::pack_archive(&new_dictionary, &hints_dir.join("dropped.tar.xz"))
+            .expect("pack archive");
+
+        let harness = hints_harness(hints_dir.clone(), false);
+        let events = capture_hints_status(&harness.app);
+        let handle = harness.app.handle().clone();
+
+        let result = set_mecab_hints(
+            true,
+            handle,
+            harness.app.state::<Arc<SettingsState>>(),
+            harness.app.state::<HintsSender>(),
+            harness.app.state::<InputSender>(),
+            harness.app.state::<DictionaryPaths>(),
+            harness.app.state::<HintsInFlight>(),
+        )
+        .await;
+
+        assert!(result.is_ok(), "got {result:?}");
+
+        // The phase label: "unpacking" only when `hand_placed` finds an
+        // archive ahead of `resolve`'s own call (commands.rs's own comment on
+        // that `read_dir`). Proven directly on the emitted events, which
+        // `capture_hints_status`'s own doc explains is practical here — no
+        // precondition-only fallback needed.
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec!["unpacking", "ready"],
+            "the archive precondition must select \"unpacking\", and the load \
+             must succeed"
+        );
+
+        // The load succeeded on what the archive published: a tokenizer
+        // reached the hints channel.
+        assert!(
+            harness.hints_rx.borrow().is_some(),
+            "a tokenizer must be published to the worker"
+        );
+
+        // `<hints>/current/system.dic` holds the archive's dictionary, not
+        // the one that was there before — asserted on bytes, so a no-op
+        // publish would fail this rather than passing by coincidence.
+        assert_eq!(
+            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read published"),
+            new_dictionary,
+            "the published slot must hold the archive's dictionary"
+        );
+        assert_ne!(
+            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read published"),
+            old_dictionary,
+            "...and not the old one"
+        );
+
+        // No `.partial` or `.backup` entry survives anywhere in the hints
+        // dir — the leftovers assertion from the manual check.
+        let leftovers = staging_leftovers(&hints_dir);
+        assert!(leftovers.is_empty(), "staging leftovers: {leftovers:?}");
+
+        // The setting persisted as on.
+        assert!(
+            harness.settings.snapshot().mecab_hints,
+            "a successful acquisition must persist the setting"
+        );
+    }
+
+    /// Handoff §2.3 item 5: "An unloadable dictionary names the format." No
+    /// hand-placed archive is present, so `resolve` takes the `published()`
+    /// short-circuit — offline by construction, the same guarantee item 3's
+    /// archive branch relies on, just the other branch of it.
+    #[tokio::test]
+    async fn an_unloadable_dictionary_names_the_way_out_and_persists_nothing() {
+        let hints_dir = hints_scratch("unloadable");
+        let current = hints_dir.join(vibrato_source::DICT_DIR);
+        std::fs::create_dir_all(&current).expect("current dir");
+        let junk_path = current.join(vibrato_source::SYSTEM_DIC);
+        std::fs::write(&junk_path, b"not a vibrato dictionary").expect("write junk");
+
+        let harness = hints_harness(hints_dir.clone(), false);
+        let events = capture_hints_status(&harness.app);
+        let handle = harness.app.handle().clone();
+
+        let result = set_mecab_hints(
+            true,
+            handle,
+            harness.app.state::<Arc<SettingsState>>(),
+            harness.app.state::<HintsSender>(),
+            harness.app.state::<InputSender>(),
+            harness.app.state::<DictionaryPaths>(),
+            harness.app.state::<HintsInFlight>(),
+        )
+        .await;
+
+        // A load failure is reported as an event, not as an `Err` — the
+        // command's documented contract.
+        assert!(result.is_ok(), "got {result:?}");
+
+        // Nothing bad was published to the worker.
+        assert!(
+            harness.hints_rx.borrow().is_none(),
+            "no tokenizer may be published on a load failure"
+        );
+
+        // The setting was not persisted as on — still off.
+        assert!(
+            !harness.settings.snapshot().mecab_hints,
+            "a failed acquisition must not persist the setting"
+        );
+
+        // The failure message, read straight off the emitted event (proven
+        // practical by Test A above, so no `describe_hints_error` workaround
+        // needed here either): names the format and the way out.
+        let captured = events.lock().unwrap();
+        let message = captured.last().expect("at least one event must fire");
+        assert!(message.contains("v0.5.0"), "got {message}");
+        assert!(message.contains("IPADIC"), "got {message}");
+        assert!(
+            message.contains(&current.display().to_string()),
             "must name the directory to remove: got {message}"
         );
     }
