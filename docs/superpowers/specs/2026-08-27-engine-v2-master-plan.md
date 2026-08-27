@@ -117,6 +117,26 @@ form:
                     └─ 活用型  (conjugation class)
 ```
 
+**Colloquial contractions are lexicalised too**, which is better than this plan
+first assumed. Measured against the installed `hints/current/system.dic`:
+
+```
+食べちゃった   食べ | ちゃっ 動詞,非自立,五段・ワ行促音便,連用タ接続,ちゃう | た
+やっとかなきゃ やっ | とか  動詞,非自立,五段・カ行イ音便,未然形,とく    | なきゃ 助動詞,特殊・ナイ,仮定縮約２,ない
+```
+
+〜ちゃう and 〜とく arrive as ordinary 非自立 verbs with a conjugation class, and
+なきゃ has its own IPADIC form, 仮定縮約２. The informal register does not need a
+separate hand-written contraction layer on top of the table — it needs the same
+class-plus-form mapping as everything else. This is evidence for the §7.2 size
+estimate, and it was measured rather than assumed.
+
+**What IPADIC does not carry is semantics.** Fields 2–4 are `*` on every
+auxiliary; there is no 使役 / 受身 / 丁寧 / 否定 tag anywhere in the feature
+string. Those readings are recoverable only from the dictionary-form field
+(せる / られる / ます / ん / です / た). §7.3 is therefore a lemma-to-label
+mapping, not a tag-to-label mapping, and no choice of dictionary changes that.
+
 Other data already in use:
 
 | Asset | Licence | Effect |
@@ -248,6 +268,41 @@ This is the class of bug success criterion 3 names. The fix is a cost model in
 which tokenizer boundaries are evidence rather than a ±10 nudge — designed in
 Phase 1, tuned against Phase 0's corpus.
 
+#### Why two objectives, and what arbitrates between them
+
+Strengthening boundaries raises the obvious question the fix does not answer:
+why keep a separate JMdict scoring pass at all, rather than one objective that
+scores morphemes and JMdict entries in a single lattice?
+
+Because the two vocabularies are not commensurable. A tokenizer's cost model is
+a bigram over context IDs assigned at dictionary build time — IPADIC's, and only
+IPADIC's. JMdict entries have no context IDs and no transition statistics; their
+POS vocabulary (`n`, `v5k`, `adj-i`, `exp`) has no defined relationship to
+IPADIC's. Putting a JMdict compound node into the tokenizer's lattice requires
+synthesising a `(left_id, right_id)` pair for every entry, which is a large
+hand-authored judgement table with no permissive upstream and no way to validate
+it short of the Phase 0 corpus. A single objective does not remove the second
+scoring model; it hides it inside a mapping table and makes it harder to measure.
+
+So the engine keeps two objectives. The arbitration rule between them:
+
+- **The tokenizer decides where words may not begin or end.** Its boundaries are
+  hard constraints on the DP, not scored terms. This is the §4.3 fix.
+- **JMdict decides which span, among those the constraints allow, is a word.**
+  Compound preservation lives here: `東京都` is one JMdict headword spanning a
+  boundary IPADIC puts between `東京` and `都`, so **constraints forbid splitting
+  inside a token, never merging across one.** That asymmetry is deliberate and it
+  is what makes both `くるまではこう` and `東京都` come out right.
+- **When the tokenizer is wrong, the constraint is wrong, and the DP cannot
+  recover.** This is the accepted cost of the asymmetry, and it is the failure
+  mode Phase 0 must measure rather than assume: the corpus sampler (§5.1) exists
+  to find these cases, and Phase 2's k-best is the escape hatch that surfaces the
+  suppressed reading to the user instead of guessing on their behalf.
+
+If Phase 0 shows tokenizer-wrong cases are common enough to hurt span accuracy,
+the constraint softens to a large-but-finite penalty and the tuning happens
+against the corpus. That is a cost-model parameter, not a redesign.
+
 ### 4.4 Prior art — LunaTranslator
 
 The closest actively-maintained peer: a visual-novel translator with Japanese
@@ -300,10 +355,26 @@ Clean-room requires an independently designed cost model, so the new engine
 **will not** reproduce the old engine's output. "No regressions against jparser"
 is therefore not a gate — it contradicts the goal.
 
-jparser's role changes: it is a **disagreement source**, not an oracle. Run both
-engines over unlabelled text; the sentences where they differ are the sentences
-worth a human's labelling time. Agreements are cheap and near-always right.
-This is what makes a gold corpus affordable — hundreds of labels, not thousands.
+jparser's role changes: it is a **disagreement source**, not an oracle. Run two
+segmenters over unlabelled text; the sentences where they differ are the
+sentences worth a human's labelling time. Agreements are cheap and near-always
+right. This is what makes a gold corpus affordable — hundreds of labels, not
+thousands.
+
+**In Phase 0 the second segmenter is Vibrato, not a second engine.** The new
+engine does not exist yet, so the pair is jparser's spans against Vibrato's token
+boundaries. From Phase 1 the pair becomes jparser against its replacement.
+
+Getting this pair right matters more than it looks. The obvious Phase 0 pairing —
+jparser with hints against jparser without hints — **cannot find the bug this
+project exists to fix.** For `くるまではこう` the flags are `bad_start = {1,3,6}`,
+`bad_end = {0,2,5}`; neither touches `はこう` (§4.3), so hints-on and hints-off
+produce the *same wrong* parse and the sentence never surfaces. Diffing against
+Vibrato surfaces it immediately, because Vibrato is right and jparser is not.
+
+Hints-on and hints-off remain the **baseline pair** (§7, Phase 0) — two numbers
+measuring what the hint mechanism is currently worth. They are not the corpus
+sampler.
 
 ### 5.2 Metrics
 
@@ -355,10 +426,19 @@ A `jparser-cli` subcommand plus a JSONL corpus file. No framework, no TUI
 library, no web UI:
 
 ```
-jparser-cli diff  <index> <corpus.txt> [--hints <dic>]   → sentences where engines differ
+jparser-cli diff  <index> <corpus.txt> --hints <dic>     → spans jparser and Vibrato disagree on
 jparser-cli label <index> <disagreements.jsonl>          → adjudicate, append labels
-jparser-cli score <index> <gold.jsonl>                   → span accuracy, entry top-1
+jparser-cli score <index> <gold.jsonl> [--hints <dic>]   → span accuracy, entry top-1
 ```
+
+`--hints` is **required** on `diff` — Vibrato is the second segmenter (§5.1), so
+there is nothing to diff against without it. On `score` it is optional, because
+that is where the hints-on and hints-off baseline pair is produced.
+
+`diff` compares jparser's span boundaries against Vibrato's token boundaries and
+emits the sentences where the two disagree. Boundary-level disagreement is the
+sampling signal only; the labels themselves stay `(span, ent_seq)` pairs per
+§5.3, and the adjudicator is free to rule that neither segmenter was right.
 
 `label` prints both parses and reads a keystroke. Output is append-only JSONL so
 an interrupted session loses nothing.
@@ -393,8 +473,9 @@ sequenced, each phase is verified by the one before it.
 ### Phase 0 — Harness and baseline
 
 **In:** the three CLI subcommands (§5.4); the JSONL label format; genre
-extension of the sentence corpus; a recorded baseline of both metrics for the
-current engine, with and without hints.
+extension of the sentence corpus, sampled by jparser-against-Vibrato
+disagreement (§5.1); a recorded baseline of both metrics for the current engine,
+with and without hints.
 
 **Out:** any change to parsing behaviour. Phase 0 writes no code under
 `crates/jparser/src/`.
@@ -513,6 +594,19 @@ No layer ships without its licence established in writing first.
    silent-degradation hazard already recorded in the Phase 5B design §12.
    Evaluate in Phase 0, where the harness can measure the difference instead of
    arguing it.
+7. **Does sudachi.rs change the answer to question 6?** Not considered in this
+   plan's first draft. Pure Rust, zero FFI, and its Mode A/B/C multi-granularity
+   is aimed at exactly the short-unit-versus-long-unit tension §5.2 describes:
+   Mode C keeps `東京都` whole, Mode A splits it. Two caveats keep it out of
+   Phase 1. **It is Apache-2.0 with no MIT leg**, and `src-tauri/Cargo.toml`
+   records twice that Apache-2.0 alone is incompatible with this repository's
+   GPL-2.0-only — so it cannot enter the tree until the relicence has landed,
+   which is Phase 1's output, not its input. And Mode C emits *SudachiDict* long
+   units, not JMdict headwords, so it narrows the compound-preservation gap
+   without closing it; the JMdict-aware scoring layer stays either way (§4.3).
+   **Measure it out-of-tree at the Phase 0/1 boundary**, where nothing is
+   distributed and the licence question does not arise, and record the number
+   here.
 
 ---
 
@@ -527,3 +621,7 @@ No layer ships without its licence established in writing first.
 | Reject `bunpo`, `deinflector`, `yomichan_rs` | GPL-3.0 lineage or provenance risk (§3.4) |
 | Write the conjugation table rather than port or depend | No permissive upstream exists (§3.4); conjugation rules are facts, and IPADIC supplies the forms permissively (§3.3) |
 | Phase 0 before any rewrite | A clean-room rewrite is different-by-construction; without a baseline, "better" is unfalsifiable (§5.1) |
+| Reject the unified single-stage lattice (ULLE) | Proposed in an external review: merge IPADIC morphemes, JMdict entries and deinflected spans into one lattice scored by the tokenizer's bigram matrix. The matrix is indexed by IPADIC context IDs and JMdict entries have none, so every entry needs a synthesised `(left_id, right_id)` — a large hand-authored table with no permissive upstream, which is the artefact the proposal exists to avoid. Without it the design collapses back into the two-objective engine it replaces. §4.3 states the arbitration rule instead |
+| Reject Eppstein's algorithm for k-best | Same review. The lattice is a DAG, so exact k-best is a backward-Viterbi potential plus a priority queue over partial paths — about fifty lines, and what MeCab's N-best already does. Eppstein's persistent 4-ary heap buys asymptotics that never bind at tens of nodes and k≈3, at a much higher chance of being wrong |
+| Reject CI provenance auditing that diffs against ta-old | Same review proposed continuous AST comparison against the upstream repository. That requires the protected expression present in CI and in the workspace, which is the one fact §3.5 must be able to deny. If a mechanised check is wanted, fingerprint the upstream once from outside the clean room and compare against the fingerprints |
+| Sample the gold corpus against Vibrato, not against hints-on/hints-off | The hints pair produces the same wrong parse on `くるまではこう`, so it cannot surface the bug success criterion 3 names (§5.1). Vibrato disagrees with jparser there, which is exactly the signal wanted |
