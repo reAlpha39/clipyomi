@@ -164,9 +164,11 @@ itself is exercised — with fixture archives, not the real asset — by
 
 ### 2.3 The six GUI manual checks — one run post-close, five outstanding
 
-Item 1 has since been run by the user, and it **failed** — see §10. Items 3
-and 5 are no longer manual at all: they are automated as `cargo test`, offline
-and headless — see §11. Items 2, 4 and 6 remain unrun. They are handed to a human with a window to click, phrased
+Item 1 has since been run by the user, and it **failed** — see §10. **The
+other five are no longer manual at all**: items 3 and 5 were automated first
+(§11), then items 2, 4 and 6 (§12). All five run as ordinary `cargo test`,
+offline and headless. The list below is kept as the record of what each check
+asserts and who now asserts it. They are handed to a human with a window to click, phrased
 so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
 (move any existing one aside first) and `npm run tauri dev`.
 
@@ -199,7 +201,7 @@ so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
    segmentation**; they earn their keep on kana-heavy ambiguity. 6A's
    differential run should expect that distribution rather than the kanji
    examples the design documents lead with.
-2. **The second toggle is offline and instant.** Untick, then re-tick.
+2. **The second toggle is offline and instant. — AUTOMATED, see §12.** Untick, then re-tick.
    Expect `ready` effectively immediately, "Unpacking the archive…" never
    shown, and no network activity — `published()` short-circuited inside
    `resolve`.
@@ -209,7 +211,7 @@ so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
    `<app_config_dir>/hints/`, then untick and re-tick. Expect "Unpacking the
    archive…", `<hints>/current/` afterwards holding the archive's dictionary,
    and `ls -a <hints>` showing no `.partial` or `.backup` leftovers.
-4. **A missing dictionary is a warning, not a fatal.** Quit. Delete
+4. **A missing dictionary is a warning, not a fatal. — AUTOMATED, see §12.** Quit. Delete
    `<app_config_dir>/hints/current/` while `settings.json` still has
    `"mecab_hints": true`. Relaunch. Expect the app to start normally, the
    warning to appear in **both** the main window's `#parse-error` and the
@@ -219,7 +221,7 @@ so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
    Expect the failure message to name the v0.5.0 format, the checkbox to
    fall back to unchecked, and `settings.json` to still hold
    `"mecab_hints": false` afterwards.
-6. **The env override is still fatal.** Quit. Launch with `TA_HINTS_DICT`
+6. **The env override is still fatal. — AUTOMATED, see §12.** Quit. Launch with `TA_HINTS_DICT`
    pointing at a path that does not exist. Expect a startup failure in
    `#output`, exactly as 2C shipped it. **5A's caveat applies unchanged**:
    the desktop app surfaces startup failures only into the managed
@@ -565,12 +567,11 @@ for a later phase.
 
 **This phase's own new unrun items:**
 
-- **Three of the six GUI manual checks in §2.3** — the offline second toggle
-  (item 2), a missing-dictionary warning in both windows (item 4), and the
-  env-override's fatal (item 6). Item 1 was run and failed; the defect is
-  fixed and the re-run passed (§10). Items 3 and 5 — the two that exercise
-  the destructive replace-a-published-slot path — are now automated tests
-  (§11) and need no human at all.
+- **None of §2.3's six checks is outstanding.** Item 1 was run by hand and
+  failed; the defect is fixed and the re-run passed (§10). Items 3 and 5 are
+  automated (§11), and items 2, 4 and 6 followed (§12). What no automated
+  test covers is named in §11 and §12: the real 46 MB asset, and the literal
+  act of launching the app and clicking the control.
 - The hand-placed-archive branch is now covered by an automated test through
   the real `set_mecab_hints` (§11), but still **not against the real 46 MB
   asset** — the fixture archive is a two-entry dictionary. See §2.2 and §5. The branch's logic is
@@ -694,3 +695,75 @@ test), `cargo clippy -p vibrato-source --all-targets -- -D warnings` clean, and
 so the real 46 MB asset is still unexercised by any automated test — §2.2's gap
 narrows but does not close. Nothing here touches the checkbox's own visual
 state, which vitest covers separately. Items 2, 4 and 6 remain manual.
+
+---
+
+## 12. Manual Checks 2, 4 and 6, Automated
+
+An audit before this work found items 4 and 6 were already **mostly** covered
+— the warning's creation, both windows rendering it, the checkbox state, the
+`StartupError::Hints` fatal, and `showStartupError` all had tests. What both
+stopped at was the same wall: `main.rs`'s `setup` closure, where a four-branch
+decision sat interleaved with `app.manage` plumbing that no unit test can
+reach. Item 2 had no command-level coverage at all.
+
+### The extraction
+
+`state::startup(hints, index)` now holds that decision, returning a `Startup`
+carrying the four managed values plus the opened index. `setup` keeps only the
+plumbing: the stderr echo, four `app.manage` calls, and two `watch` sends. This
+is the pattern the codebase already uses in five places — `is_missing_
+dictionary`, `merge_saved`, `initial_height`, `supported`, `resolve_chrome_
+mode` — each split out with the same stated reason: a decision inside a Tauri
+closure or a `State`-taking command cannot be called from a test.
+
+**The index stays a lazy closure**, not a second eager `Result`. `load_state`
+was only ever called inside `load_hints`'s `Ok` arm, so a fatal `TA_HINTS_DICT`
+never opened the index; passing a `Result` would have opened one nobody uses.
+`a_fatal_hints_load_never_calls_the_index_closure` pins that, and was
+mutation-proved: adding a single `let _ = index();` to the fatal arm fails it.
+
+One behavioural difference, deliberate and inert: the hints channel is now sent
+`None` on the fatal branch where previously nothing was sent. The channel's
+initial value is already `None` and `run_worker` only `borrow()`s it per input
+rather than awaiting `changed()`, so no observer can distinguish the two.
+
+### What now covers each check
+
+- **Item 2** — `the_second_toggle_is_offline_and_instant` drives the real
+  `set_mecab_hints` against a published, loadable dictionary with no archive
+  present. It asserts a tokenizer reaches the channel, the setting persists,
+  `system.dic` is byte-identical afterwards, and `"unpacking"` never appears in
+  the emitted events. **It does not prove "no network"** — `resolve`'s URL is
+  not injectable, so the test stays offline only because `published()`
+  short-circuits. It asserts `published().is_some()` as an explicit
+  precondition so a regression fails locally instead of reaching GitHub, and
+  the zero-connection proof continues to live where it can be made properly:
+  `vibrato-source`'s `resolve_returns_a_published_dictionary_without_
+  downloading`, which stands up a local listener and asserts the counter is 0.
+- **Item 4** — `state::startup`'s branch tests cover the warning surviving into
+  the managed `HintsWarning` while the launch succeeds; new `hints_warning`
+  command tests cover the empty-string sentinel round-tripping to the webview,
+  which was the last uncovered link in that chain.
+- **Item 6** — `state::startup`'s branch-1 test covers `load_hints`'s `Err`
+  mapping to a non-empty `StartupFailure` with `NeedsDictionary(false)`, which
+  was the only part of that check without a test.
+
+### An observation, recorded rather than fixed
+
+With no archive present, `set_mecab_hints` still emits `"downloading"` before
+`"ready"` even though `resolve` short-circuits and downloads nothing — the
+label is chosen by `hand_placed().is_some()` *before* `resolve` runs, a trade
+`commands.rs` documents at that `read_dir`. The user briefly sees "Downloading
+the dictionary…" on a toggle that touches no network. Cosmetic, pre-existing,
+and left alone here; a future phase that wants the label to be honest has to
+give `resolve` a way to say which branch it took.
+
+**Gate:** `cargo test -p clipyomi` **147 passed** (140 before), `cargo test
+--workspace` **498 passed, 0 failed**, `cargo clippy -p clipyomi --all-targets
+| grep -c "^warning"` still **6**, `cargo clippy --workspace --all-targets
+--exclude clipyomi -- -D warnings` clean, `npx vitest run` **265 passed** and
+`npx tsc --noEmit` clean — the frontend is untouched by this work.
+
+All seven new tests were mutation-proved: each had the behaviour it guards
+broken, was confirmed to fail, and was confirmed to pass again on restore.
