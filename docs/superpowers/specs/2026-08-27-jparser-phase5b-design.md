@@ -29,8 +29,12 @@ worker without a restart.
   to the live worker.
 - A second `watch` channel carrying the tokenizer, replacing `AppState.hints`.
 - Startup resolution: an absent dictionary means hints off, not a fatal.
-- A hand-placed-archive route, accepting **any** Vibrato dictionary rather than
-  only the pinned one (§3).
+- A hand-placed-archive route, accepting an IPADIC-format, IPADIC-sized
+  Vibrato dictionary rather than only the pinned one (§3) — the extractor's
+  caps (12 MiB tar / 64 MiB dictionary, §3.4) refuse the larger UniDic and
+  NEologd release assets, and §12's deferred non-IPADIC detection means a
+  non-IPADIC dictionary that did fit those caps would degrade silently
+  instead of being refused.
 
 **Out:**
 
@@ -498,7 +502,10 @@ and it must not add to them.
   so hints degrade silently rather than failing. Detection means probing a known
   token's feature layout at load — a guess with a false-positive cost that would
   refuse a working dictionary. The settings note naming IPADIC is the honest fix
-  for now.
+  for now. In practice the extractor's size caps (§3.4) already enforce half of
+  this: every other Vibrato release asset (UniDic, BCCWJ, NEologd) exceeds
+  12 MiB tar / 64 MiB dictionary by a large multiple, so a dictionary this gap
+  can actually reach has to be both non-IPADIC and IPADIC-sized.
 - **Installing a hand-placed archive at startup.** §5.
 - **A progress percentage.** §6.1.
 - **Sweeping staging directories.** Inherited from 5A unchanged, for the reason
