@@ -31,6 +31,10 @@ use crate::{SourceError, COPYING, NOTICE, SYSTEM_DIC, SYSTEM_DIC_ZST};
 /// An unrecognised member is skipped rather than refused — a future release
 /// that adds a README must not fail the fetch. A missing [`SYSTEM_DIC_ZST`] is
 /// [`SourceError::MissingMember`].
+///
+/// When the zstd frame carries a content checksum, it is verified against the
+/// decoded bytes before this returns — `ruzstd`'s own decoder does not do this
+/// itself; see the check inline below.
 pub fn unpack_into(archive: &Path, staging: &Path) -> Result<(), SourceError> {
     // The xz layer is decoded to memory rather than streamed: `xz_decompress`
     // wants a `BufRead` and a `Write`, the decompressed tar is ~8 MB, and the

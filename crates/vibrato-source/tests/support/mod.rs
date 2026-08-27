@@ -12,6 +12,12 @@
 //! back out through the exact stack the production code reads: vibrato →
 //! zstd → tar → xz. A fixture that is a real archive of a real dictionary is
 //! the only kind that can prove the unpacker end to end.
+//!
+//! This module is compiled once per integration-test binary that declares
+//! `mod support;`, and no single binary calls every helper here — so an
+//! unused one is not dead code, just a fixture another binary needs.
+
+#![allow(dead_code)]
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -34,7 +40,8 @@ pub fn dictionary_bytes() -> Vec<u8> {
     .expect("the fixture dictionary must build");
 
     let mut out = Vec::new();
-    dict.write(&mut out).expect("the fixture dictionary must serialize");
+    dict.write(&mut out)
+        .expect("the fixture dictionary must serialize");
     out
 }
 
@@ -73,7 +80,10 @@ pub fn tar_xz(members: &[(&str, Vec<u8>)]) -> Vec<u8> {
 /// The archive the real release publishes: three members under one directory.
 pub fn real_shaped_archive() -> Vec<u8> {
     tar_xz(&[
-        ("ipadic-mecab-2_7_0/COPYING", b"IPADIC licence text".to_vec()),
+        (
+            "ipadic-mecab-2_7_0/COPYING",
+            b"IPADIC licence text".to_vec(),
+        ),
         ("ipadic-mecab-2_7_0/NOTICE", b"IPADIC notice text".to_vec()),
         (
             "ipadic-mecab-2_7_0/system.dic.zst",
