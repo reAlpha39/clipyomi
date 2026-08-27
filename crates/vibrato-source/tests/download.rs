@@ -188,6 +188,11 @@ fn a_5xx_exhausts_the_attempts() {
 fn resolve_returns_a_published_dictionary_without_downloading() {
     let dir = scratch("resolve-published");
     std::fs::create_dir_all(dir.join(DICT_DIR)).expect("dict dir");
+    // An archive older than the slot. `resolve` looks for one on every call, so
+    // this proves that lookup neither reaches the network nor clobbers a newer
+    // slot on its way to the published short-circuit below.
+    write(&dir, "stale.tar.xz", &real_shaped_archive());
+    tick();
     std::fs::write(dir.join(DICT_DIR).join(SYSTEM_DIC), b"already here").expect("write");
 
     let requests = Arc::new(AtomicUsize::new(0));
@@ -212,6 +217,97 @@ fn resolve_returns_a_published_dictionary_without_downloading() {
     // it safe to run the production entry point, which has no local listener to
     // fall through to.
     assert_eq!(resolve(&dir).expect("resolve"), path);
+    assert_eq!(
+        std::fs::read(&path).expect("read"),
+        b"already here",
+        "a stale archive must not have replaced the slot"
+    );
+}
+
+/// The archive branch's central proof: an archive newer than the slot is
+/// unpacked and published, and no socket is opened doing it.
+#[test]
+fn a_newer_hand_placed_archive_wins_without_touching_the_network() {
+    let dir = scratch("resolve-archive-newer");
+    std::fs::create_dir_all(dir.join(DICT_DIR)).expect("dict dir");
+    std::fs::write(dir.join(DICT_DIR).join(SYSTEM_DIC), b"the old one").expect("write");
+    tick();
+    write(&dir, "ipadic.tar.xz", &real_shaped_archive());
+
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (url, _server) = serve(200, real_shaped_archive(), requests.clone());
+
+    let path = resolve_from(
+        &url,
+        &sha256_hex(b"never used"),
+        &dir,
+        Duration::from_millis(1),
+    )
+    .expect("resolve");
+
+    assert_eq!(path, dir.join(DICT_DIR).join(SYSTEM_DIC));
+    let file = std::fs::File::open(&path).expect("open");
+    vibrato::Dictionary::read(std::io::BufReader::new(file))
+        .expect("the archive's dictionary must have replaced the old file");
+    assert_eq!(
+        requests.load(Ordering::SeqCst),
+        0,
+        "the archive branch must not reach the network"
+    );
+}
+
+/// The other direction, and the reason the rule is an mtime comparison rather
+/// than "an archive present wins": the archive a user installed last month must
+/// not re-unpack on every toggle.
+#[test]
+fn an_older_hand_placed_archive_loses_to_the_published_slot() {
+    let dir = scratch("resolve-archive-older");
+    write(&dir, "ipadic.tar.xz", &real_shaped_archive());
+    tick();
+    std::fs::create_dir_all(dir.join(DICT_DIR)).expect("dict dir");
+    std::fs::write(dir.join(DICT_DIR).join(SYSTEM_DIC), b"already here").expect("write");
+
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (url, _server) = serve(200, real_shaped_archive(), requests.clone());
+
+    let path = resolve_from(
+        &url,
+        &sha256_hex(b"never used"),
+        &dir,
+        Duration::from_millis(1),
+    )
+    .expect("resolve");
+
+    assert_eq!(
+        std::fs::read(&path).expect("read"),
+        b"already here",
+        "an older archive must not replace the published slot"
+    );
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+/// A file the user placed in their own config directory is already their
+/// choice; hashing it could only refuse what they explicitly asked for. The
+/// hash passed here matches nothing, and the archive is published anyway.
+#[test]
+fn a_hand_placed_archive_is_published_without_a_hash_check() {
+    let dir = scratch("resolve-archive-nohash");
+    write(&dir, "ipadic.tar.xz", &real_shaped_archive());
+
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (url, _server) = serve(500, b"boom".to_vec(), requests.clone());
+
+    let path = resolve_from(
+        &url,
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        &dir,
+        Duration::from_millis(1),
+    )
+    .expect("an unhashed hand-placed archive must publish");
+
+    let file = std::fs::File::open(&path).expect("open");
+    vibrato::Dictionary::read(std::io::BufReader::new(file)).expect("vibrato must read it");
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
 }
 
 /// `ASSET_BYTES` is the cheap half of the pin: a truncating proxy or a
