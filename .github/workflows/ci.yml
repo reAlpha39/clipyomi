@@ -108,16 +108,23 @@ jobs:
       - name: no http client or decompressor in the library
         run: |
           if cargo tree -p jparser --no-default-features \
-             | grep -E "jmdict-source|ureq|flate2|vibrato"; then
+             | grep -E "jmdict-source|vibrato-source|ureq|flate2|vibrato"; then
             echo "::error::jparser's library pulled in a cli-only dependency"
             exit 1
           fi
 
       # GPL v2: OpenSSL is Apache-2.0, which the FSF holds GPLv2-incompatible,
       # so no dependency may link native-tls/OpenSSL — now or in any later phase.
+      #
+      # `ring` ("Apache-2.0 AND ISC") and `aws-lc-sys` (which carries its own
+      # "AND Apache-2.0" term) are refused for the same reason: an AND offers no
+      # compatible option to take. Phase 5A's HTTPS therefore runs on `rustls`
+      # with `rustls-graviola` (ISC) injected as the provider — if a build
+      # error here tempts you to enable ureq's default features, that silently
+      # takes `ring` back, and this grep is the only thing that would notice.
       - name: no GPL-incompatible TLS backend
         run: |
-          if cargo tree --workspace | grep -iE "openssl|native-tls"; then
+          if cargo tree --workspace | grep -iE "openssl|native-tls|\bring v|aws-lc"; then
             echo "::error::a GPLv2-incompatible TLS dependency entered the tree"
             exit 1
           fi
