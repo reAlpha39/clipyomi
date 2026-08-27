@@ -164,8 +164,9 @@ itself is exercised — with fixture archives, not the real asset — by
 
 ### 2.3 The six GUI manual checks — one run post-close, five outstanding
 
-Item 1 has since been run by the user, and it **failed** — see §10. The other
-five did not run. They are handed to a human with a window to click, phrased
+Item 1 has since been run by the user, and it **failed** — see §10. Items 3
+and 5 are no longer manual at all: they are automated as `cargo test`, offline
+and headless — see §11. Items 2, 4 and 6 remain unrun. They are handed to a human with a window to click, phrased
 so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
 (move any existing one aside first) and `npm run tauri dev`.
 
@@ -202,7 +203,7 @@ so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
    Expect `ready` effectively immediately, "Unpacking the archive…" never
    shown, and no network activity — `published()` short-circuited inside
    `resolve`.
-3. **A hand-placed archive replaces the dictionary.** With the app running,
+3. **A hand-placed archive replaces the dictionary. — AUTOMATED, see §11.** With the app running,
    copy the 5A asset (or another IPADIC-sized Vibrato `.tar.xz` — the
    extractor's caps refuse UniDic/NEologd-sized ones, see §5) into
    `<app_config_dir>/hints/`, then untick and re-tick. Expect "Unpacking the
@@ -213,7 +214,7 @@ so they can be executed directly. All assume a fresh `<app_config_dir>/hints`
    `"mecab_hints": true`. Relaunch. Expect the app to start normally, the
    warning to appear in **both** the main window's `#parse-error` and the
    settings window's status line, and the checkbox to still read on.
-5. **An unloadable dictionary names the format.** Quit. Write junk over
+5. **An unloadable dictionary names the format. — AUTOMATED, see §11.** Quit. Write junk over
    `<hints>/current/system.dic`. Relaunch, open Settings, untick and re-tick.
    Expect the failure message to name the v0.5.0 format, the checkbox to
    fall back to unchecked, and `settings.json` to still hold
@@ -564,15 +565,15 @@ for a later phase.
 
 **This phase's own new unrun items:**
 
-- **Five of the six GUI manual checks in §2.3** — the offline second toggle,
-  a hand-placed-archive replacement, a missing-dictionary warning in both
-  windows, an unloadable-dictionary message naming the format, and the
-  env-override's fatal. Check 1 has since been run: it failed, the defect is
-  fixed, and the re-run passed (§10). Checks 3 and 5 are the two that
-  exercise the destructive replace-a-published-slot path and are the ones
-  worth running before any release.
-- The hand-placed-archive branch has **no automated or scriptable coverage
-  against the real 46 MB asset** — see §2.2 and §5. The branch's logic is
+- **Three of the six GUI manual checks in §2.3** — the offline second toggle
+  (item 2), a missing-dictionary warning in both windows (item 4), and the
+  env-override's fatal (item 6). Item 1 was run and failed; the defect is
+  fixed and the re-run passed (§10). Items 3 and 5 — the two that exercise
+  the destructive replace-a-published-slot path — are now automated tests
+  (§11) and need no human at all.
+- The hand-placed-archive branch is now covered by an automated test through
+  the real `set_mecab_hints` (§11), but still **not against the real 46 MB
+  asset** — the fixture archive is a two-entry dictionary. See §2.2 and §5. The branch's logic is
   unit-tested with fixtures; the real-asset path is provable only by the
   manual check in §2.3 item 3, or by adding a `jparser-cli` command that
   calls `resolve()` — a code change this task did not make, being out of
@@ -633,3 +634,63 @@ for the same text, which is the only new event shape 5B introduced to the
 frontend. That gap is now closed, but it is the kind worth looking for
 directly: when a phase makes an existing surface receive an input it never
 received before, test that surface with that input.
+
+---
+
+## 11. Manual Checks 3 and 5, Automated
+
+§2.3 items 3 and 5 needed a human because `set_mecab_hints` is the only
+production caller of `vibrato_source::resolve()` — §2.2 records that dead end.
+Both now run as ordinary `cargo test`, offline and headless, driving the
+**real** command.
+
+**What made it possible.** `set_mecab_hints` and `emit_hints_status` are now
+generic over `R: tauri::Runtime`, so `tauri::test::mock_app()`'s `MockRuntime`
+can call them. That is the pattern `minimize_window`, `toggle_maximize_window`,
+`close_window`, `open_settings_window` and `create_settings_window` in the same
+file already use; `download_dictionary` and `emit_status` were left alone.
+Emitted `hints-status` events turned out to be observable against
+`MockRuntime`, so both tests assert on the real event stream rather than on a
+proxy.
+
+**`vibrato_source::pack_archive(dictionary, out)`** (`#[doc(hidden)]`) writes a
+release-shaped `.tar.xz` — `COPYING`, `NOTICE`, and a zstd `system.dic.zst` —
+around dictionary bytes the caller supplies. Taking the bytes as a parameter is
+what keeps it free of a `vibrato` dependency, which stays a dev-dependency
+there. Same justification as `jparser::hints::write_test_dictionary`: a
+`#[cfg(test)]` item is invisible to another crate, and the alternatives are a
+committed binary fixture or a network call. It added no dependency to any
+crate — `tar`, `lzma-rs` and `ruzstd` were already `vibrato-source`'s.
+
+**`a_hand_placed_archive_replaces_the_published_dictionary`** (item 3) arranges
+a published slot holding distinguishable bytes, sleeps 50 ms, drops a packed
+archive beside it, and calls `set_mecab_hints(true, ..)`. It asserts the
+emitted events are exactly `["unpacking", "ready"]`, a tokenizer reaches the
+hints channel, `<hints>/current/system.dic` holds the **archive's** bytes and
+not the old ones, no `.partial`/`.backup` entry survives, and the setting
+persisted as on.
+
+**`an_unloadable_dictionary_names_the_way_out_and_persists_nothing`** (item 5)
+puts junk in the slot with no archive present, so `resolve` takes the
+`published()` short-circuit. It asserts the command returns `Ok(())` (a load
+failure is an event, not an `Err`), **no** tokenizer is published, the setting
+is **not** persisted, and the emitted message names `v0.5.0`, `IPADIC`, and the
+directory to remove.
+
+**Both were mutation-proved rather than assumed.** Pointing the archive branch
+at `publish` instead of `publish_replacing` fails item 3's test on its event
+assertion; redacting `IPADIC` from `describe_hints_error` fails item 5's on its
+message assertion. Restored, both pass. Item 5's failure output also shows a
+genuine vibrato error — `InvalidArgumentError: rdr: The magic number of the
+input model mismatches` — which is what proves the test drives the real loader
+against real junk rather than a stub.
+
+**Gate:** `cargo test -p clipyomi` **140 passed** (138 before), `cargo test -p
+vibrato-source` **37 passed** (35 before, +1 for `pack_archive`'s round-trip
+test), `cargo clippy -p vibrato-source --all-targets -- -D warnings` clean, and
+`cargo clippy -p clipyomi --all-targets | grep -c "^warning"` still **6**.
+
+**What this does not cover.** The fixture archive holds a two-entry dictionary,
+so the real 46 MB asset is still unexercised by any automated test — §2.2's gap
+narrows but does not close. Nothing here touches the checkbox's own visual
+state, which vitest covers separately. Items 2, 4 and 6 remain manual.
