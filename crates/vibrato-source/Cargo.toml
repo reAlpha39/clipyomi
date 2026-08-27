@@ -3,7 +3,14 @@ name = "vibrato-source"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-rust-version.workspace = true
+# Not `rust-version.workspace = true`: the workspace floor (1.85) is a promise
+# about the reusable library crates, and this crate's dependency stack cannot
+# keep it. `graviola 0.4.1` (under `rustls-graviola`) declares 1.89 and
+# `ruzstd 0.9.0` declares 1.87 — read from the resolved packages, not assumed —
+# and Cargo treats a dependency whose `rust-version` exceeds the active
+# toolchain as a hard error, not a warning. Declaring 1.85 here would be a
+# promise the crate cannot keep. Same reasoning as `src-tauri/Cargo.toml`.
+rust-version = "1.89"
 
 [dependencies]
 # GitHub serves no plain HTTP, so unlike `jmdict-source` this crate needs TLS.
