@@ -353,3 +353,26 @@ fn publish_replacing_onto_nothing_is_a_plain_publish() {
 
     assert!(vibrato_source::published(&dir).is_some());
 }
+
+/// The fixture-archive helper's own round trip: what `pack_archive` writes
+/// must be exactly what `unpack_into` reads back. `src-tauri`'s
+/// hand-placed-archive test drives the real `resolve` against an archive this
+/// helper builds, and if the two disagreed that test would be proving
+/// something false.
+#[test]
+fn pack_archive_round_trips_through_unpack_into() {
+    let dir = scratch("pack-roundtrip");
+    let dictionary = dictionary_bytes();
+    let archive = dir.join("packed.tar.xz");
+
+    vibrato_source::pack_archive(&dictionary, &archive).expect("pack");
+
+    let staging = dir.join("staging");
+    extract::unpack_into(&archive, &staging).expect("unpack");
+
+    assert_eq!(
+        std::fs::read(staging.join(SYSTEM_DIC)).expect("read"),
+        dictionary,
+        "the unpacked dictionary must equal what was packed"
+    );
+}
