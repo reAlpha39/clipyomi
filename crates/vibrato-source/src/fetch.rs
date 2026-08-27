@@ -15,7 +15,7 @@ use std::time::Duration;
 use sha2::Digest;
 
 use crate::{
-    extract, publish, staging_names, SourceError, ASSET_SHA256, ASSET_URL, DICT_DIR,
+    extract, publish, staging_names, SourceError, ASSET_BYTES, ASSET_SHA256, ASSET_URL, DICT_DIR,
     DOWNLOAD_ATTEMPTS, SYSTEM_DIC,
 };
 
@@ -127,6 +127,22 @@ fn download_and_verify(
         std::io::Write::flush(&mut file)?;
     }
 
+    // The size pin is half of the same pin as the hash, so it only says
+    // anything when the hash being checked is the pinned one — every test
+    // driving this function names a body of its own instead. Checked first
+    // because it is a `metadata` call rather than a 7.7 MB read, and because
+    // "expected 7704680 bytes, got 1274" is a report a human can act on
+    // without diffing two hex strings.
+    if sha256 == ASSET_SHA256 {
+        let actual = std::fs::metadata(staging)?.len();
+        if actual != ASSET_BYTES {
+            return Err(SourceError::Size {
+                expected: ASSET_BYTES,
+                actual,
+            });
+        }
+    }
+
     let actual = sha256_hex(staging)?;
     if actual != sha256 {
         return Err(SourceError::Hash {
@@ -156,9 +172,11 @@ pub fn download_and_verify_for_test(
 /// One attempt: download, verify, unpack, publish. [`fetch_with_retry`] adds
 /// the retry policy.
 ///
-/// Both staging names carry this process's PID, so two concurrent runs against
-/// one hints directory never share a path. Neither is ever resolved by
-/// [`crate::published`], so a killed run cannot be mistaken for a finished one.
+/// Both staging names come from [`staging_names`], which makes them unique per
+/// call as well as per process — two concurrent runs against one hints
+/// directory never share a path, and neither do two calls inside one process.
+/// Neither name is ever resolved by [`crate::published`], so a killed run
+/// cannot be mistaken for a finished one.
 pub fn fetch_from(url: &str, sha256: &str, hints_dir: &Path) -> Result<PathBuf, SourceError> {
     std::fs::create_dir_all(hints_dir)?;
     let (staging_archive, staging_dir) = staging_names(hints_dir);
@@ -211,7 +229,10 @@ pub fn fetch_with_retry(
                     status: 400..=499, ..
                 },
             ) => return Err(e),
-            Err(e @ SourceError::Io(_)) => return Err(e),
+            // A publish failure is a directory in the way, not a bad download:
+            // the archive already arrived and unpacked. Retrying re-downloads
+            // 7.7 MB into the same obstruction.
+            Err(e @ (SourceError::Io(_) | SourceError::Publish { .. })) => return Err(e),
             Err(e) => {
                 last = e.to_string();
                 if attempt < DOWNLOAD_ATTEMPTS {

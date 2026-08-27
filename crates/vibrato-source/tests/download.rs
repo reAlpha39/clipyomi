@@ -16,7 +16,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use support::*;
-use vibrato_source::{fetch, published, resolve, SourceError, DICT_DIR, SYSTEM_DIC};
+use vibrato_source::{
+    fetch, published, resolve, resolve_from, SourceError, ASSET_BYTES, ASSET_SHA256, DICT_DIR,
+    SYSTEM_DIC,
+};
 
 /// A one-shot server that answers every request with `status` and `body`,
 /// counting the connections it accepted.
@@ -176,15 +179,67 @@ fn a_5xx_exhausts_the_attempts() {
 
 /// `resolve` must answer from disk when the dictionary is already published —
 /// asserted by the server never being connected to, not by timing.
+///
+/// Driven through `resolve_from` rather than `resolve`, because `resolve`'s
+/// fall-through is the live GitHub release: with no injected URL, a regression
+/// in `published` would not fail this test, it would put a 7.7 MB download
+/// inside the suite. The counter is what makes the doc sentence above true.
 #[test]
 fn resolve_returns_a_published_dictionary_without_downloading() {
     let dir = scratch("resolve-published");
     std::fs::create_dir_all(dir.join(DICT_DIR)).expect("dict dir");
     std::fs::write(dir.join(DICT_DIR).join(SYSTEM_DIC), b"already here").expect("write");
 
-    let path = resolve(&dir).expect("resolve");
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (url, _server) = serve(200, real_shaped_archive(), requests.clone());
+
+    let path = resolve_from(
+        &url,
+        &sha256_hex(b"never used"),
+        &dir,
+        Duration::from_millis(1),
+    )
+    .expect("resolve");
 
     assert_eq!(path, dir.join(DICT_DIR).join(SYSTEM_DIC));
+    assert_eq!(
+        requests.load(Ordering::SeqCst),
+        0,
+        "a published dictionary must be answered from disk"
+    );
+
+    // Only after the assertion above proves `published` still short-circuits is
+    // it safe to run the production entry point, which has no local listener to
+    // fall through to.
+    assert_eq!(resolve(&dir).expect("resolve"), path);
+}
+
+/// `ASSET_BYTES` is the cheap half of the pin: a truncating proxy or a
+/// repointed release is named by a length, before 7.7 MB is hashed to say the
+/// same thing in hex. Getting `Size` rather than `Hash` here is what proves the
+/// order.
+#[test]
+fn a_body_of_the_wrong_length_is_rejected_by_the_size_pin() {
+    let dir = scratch("fetch-badsize");
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (url, _server) = serve(200, b"far too short".to_vec(), requests.clone());
+
+    let err = fetch::download_and_verify_for_test(
+        &url,
+        &dir.join("staging.tar.xz"),
+        ASSET_SHA256,
+        Duration::from_secs(30),
+        32 * 1024 * 1024,
+    )
+    .expect_err("must fail");
+
+    match err {
+        SourceError::Size { expected, actual } => {
+            assert_eq!(expected, ASSET_BYTES);
+            assert_eq!(actual, 13);
+        }
+        other => panic!("got {other:?}"),
+    }
 }
 
 /// A staging directory from a killed run is not a published dictionary, and a

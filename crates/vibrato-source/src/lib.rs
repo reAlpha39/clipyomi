@@ -34,8 +34,9 @@ pub const ASSET_URL: &str =
 pub const ASSET_SHA256: &str = "4764f983b7c3a9e1cb6a5ee945e00558efd812980e0dad61224f63ee3b0475d9";
 
 /// Measured size of the pinned asset. Not a security control — [`ASSET_SHA256`]
-/// is — but a mismatch identifies a wrong-file download in the error message
-/// without making the reader compare two hex strings.
+/// is — but it is checked before the hash, so a wrong-file or truncated
+/// download is named by its size rather than by two hex strings the reader has
+/// to compare.
 pub const ASSET_BYTES: u64 = 7_704_680;
 
 /// The published directory's name, inside the caller's hints directory. Named
@@ -58,8 +59,8 @@ pub const COPYING: &str = "COPYING";
 pub const NOTICE: &str = "NOTICE";
 
 /// Marks a download or an unpack that is in progress or unverified. The
-/// writing process's PID follows it, so two concurrent runs against one hints
-/// directory stage into different names instead of one truncating the other.
+/// writing process's PID and a per-call counter follow it, so no two staging
+/// areas ever share a name — see [`staging_names`], which builds them.
 ///
 /// **These accumulate.** A killed unpack leaves a staging directory holding up
 /// to ~46 MB that nothing sweeps — deliberately, for the reason
@@ -80,7 +81,11 @@ pub enum SourceError {
     Io(#[from] std::io::Error),
     #[error("downloading the vibrato dictionary failed: {0}")]
     Transport(String),
-    #[error("the dictionary server returned HTTP {status} for {url}")]
+    #[error(
+        "the dictionary server returned HTTP {status} for {url}; nothing was \
+         written to {dir}",
+        dir = hints_dir.display(),
+    )]
     Http {
         status: u16,
         /// The URL that was requested. A 4xx means the pinned release asset
@@ -89,9 +94,20 @@ pub enum SourceError {
         url: String,
         /// Where the dictionary would have been published. Named for the same
         /// reason `jmdict-source` names its source directory: the message is
-        /// shown to someone who has to decide what to do next.
+        /// shown to someone who has to decide what to do next, and "nothing
+        /// was written there" is what tells them there is no half-finished
+        /// directory to clean up.
         hints_dir: PathBuf,
     },
+    /// The body was the wrong length for the pinned asset. Checked before
+    /// [`SourceError::Hash`] because it is the cheaper test and the clearer
+    /// message: a truncating proxy or a repointed URL shows up as a number a
+    /// reader can act on rather than as two 64-character strings.
+    #[error(
+        "the downloaded archive is not the pinned dictionary: expected \
+         {expected} bytes, got {actual}"
+    )]
+    Size { expected: u64, actual: u64 },
     #[error(
         "the downloaded archive is not the pinned dictionary: expected SHA-256 \
          {expected}, got {actual}"
@@ -104,7 +120,38 @@ pub enum SourceError {
     Archive(String),
     #[error("the archive carried no {name}")]
     MissingMember { name: String },
-    #[error("could not obtain the vibrato dictionary after {attempts} attempts ({last})")]
+    /// The dictionary unpacked cleanly but could not be renamed into place,
+    /// and nothing is published at the target either. Its own variant rather
+    /// than [`SourceError::Io`] because the realistic cause is a directory the
+    /// user put there by hand — an `ipadic-mecab-2_7_0/` left by the `tar xf`
+    /// instructions this phase deleted, holding `COPYING`, `NOTICE` and
+    /// `system.dic.zst`: the resolved name, non-empty, and with no
+    /// `system.dic` in it. `hints io failed: Directory not empty (os error
+    /// 39)` names neither path and offers no way out, and every later run
+    /// fails identically. Not retried, for the same reason
+    /// [`SourceError::Io`] is not: another 7.7 MB download meets the same
+    /// directory.
+    #[error(
+        "the dictionary was unpacked into {from} but could not be published: \
+         renaming it to {to} failed ({cause}), and {to} holds no {file}. \
+         Remove or rename {to}, then run this again",
+        from = staging.display(),
+        to = target.display(),
+        file = SYSTEM_DIC,
+    )]
+    Publish {
+        staging: PathBuf,
+        target: PathBuf,
+        /// The rename's own failure, rendered. "Directory not empty" and
+        /// "Permission denied" are different problems with different fixes,
+        /// and the sentence above only covers the first.
+        cause: String,
+    },
+    #[error(
+        "could not obtain the vibrato dictionary after {attempts} attempts \
+         ({last}); nothing was published in {dir}",
+        dir = hints_dir.display(),
+    )]
     TooManyAttempts {
         attempts: usize,
         hints_dir: PathBuf,
@@ -126,15 +173,35 @@ pub fn published(hints_dir: &Path) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-/// This process's staging archive and staging directory inside `hints_dir`.
+/// Counter appended to every staging name after the PID.
 ///
-/// Both carry the PID, so two concurrent runs never share either one. Both are
-/// hidden behind a leading dot and neither is ever resolved by [`published`].
+/// The PID alone separates *processes*; it does not separate two calls inside
+/// one. Phase 5B calls [`resolve`] from a UI toggle, so two threads of one
+/// process against one hints directory is a real shape — and with a shared
+/// name, a thread that publishes hands the second thread a `File::create` on
+/// what is now the published dictionary, truncating 46 MB to zero while
+/// [`published`] still reports it present. One `fetch_add` per call closes
+/// that.
+static STAGING_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A staging archive and staging directory inside `hints_dir`, unique to this
+/// call.
+///
+/// Both carry this process's PID and a process-wide counter ([`STAGING_SEQ`]),
+/// so neither two processes nor two calls in one process ever share a path.
+/// Both are hidden behind a leading dot and neither is ever resolved by
+/// [`published`].
+///
+/// Each call returns a *new* pair. Callers that need to find the names again
+/// must keep them, not call this twice.
 pub fn staging_names(hints_dir: &Path) -> (PathBuf, PathBuf) {
     let pid = std::process::id();
+    // `Relaxed` is enough: the only requirement is that no two `fetch_add`s
+    // return the same value, which every ordering guarantees.
+    let seq = STAGING_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     (
-        hints_dir.join(format!(".{DICT_DIR}.tar.xz{PARTIAL_SUFFIX}.{pid}")),
-        hints_dir.join(format!(".{DICT_DIR}{PARTIAL_SUFFIX}.{pid}")),
+        hints_dir.join(format!(".{DICT_DIR}.tar.xz{PARTIAL_SUFFIX}.{pid}-{seq}")),
+        hints_dir.join(format!(".{DICT_DIR}{PARTIAL_SUFFIX}.{pid}-{seq}")),
     )
 }
 
@@ -164,7 +231,15 @@ pub fn publish(staging: &Path, target: &Path) -> Result<(), SourceError> {
                 let _ = std::fs::remove_dir_all(staging);
                 Ok(())
             } else {
-                Err(SourceError::Io(e))
+                // Not `SourceError::Io`: a bare "Directory not empty (os error
+                // 39)" names neither path, and the thing standing in the way is
+                // usually something the user can simply move. See
+                // [`SourceError::Publish`].
+                Err(SourceError::Publish {
+                    staging: staging.to_path_buf(),
+                    target: target.to_path_buf(),
+                    cause: e.to_string(),
+                })
             }
         }
     }
@@ -176,9 +251,27 @@ pub fn publish(staging: &Path, target: &Path) -> Result<(), SourceError> {
 /// network once the dictionary exists, which is what lets Phase 5B call it on
 /// a toggle without thinking about cost.
 pub fn resolve(hints_dir: &Path) -> Result<PathBuf, SourceError> {
+    resolve_from(ASSET_URL, ASSET_SHA256, hints_dir, RETRY_BACKOFF)
+}
+
+/// [`resolve`] with the URL, hash and backoff injected, so a test can prove the
+/// short-circuit by pointing the fall-through at a local listener and asserting
+/// it was never connected to — the same reason [`fetch::fetch_with_retry`]
+/// exists for [`fetch::fetch`], and the same shape as
+/// `jmdict_source::resolve_from`. Without an injectable URL, a regression in
+/// [`published`] would send the test to the live GitHub release.
+///
+/// **Not part of the supported surface.** Production callers use [`resolve`].
+#[doc(hidden)]
+pub fn resolve_from(
+    url: &str,
+    sha256: &str,
+    hints_dir: &Path,
+    backoff: std::time::Duration,
+) -> Result<PathBuf, SourceError> {
     match published(hints_dir) {
         Some(path) => Ok(path),
-        None => fetch::fetch(hints_dir),
+        None => fetch::fetch_with_retry(url, sha256, hints_dir, backoff),
     }
 }
 
@@ -234,7 +327,10 @@ mod tests {
 
     #[test]
     fn the_pin_matches_the_measured_asset() {
-        assert_eq!(ASSET_BYTES, 7_704_680);
+        // `ASSET_BYTES` is deliberately not asserted here: comparing a constant
+        // to its own literal proves nothing. It is exercised for real by
+        // `tests/download.rs`, which serves a body of the wrong length under
+        // the pinned hash.
         assert_eq!(ASSET_SHA256.len(), 64);
         assert!(ASSET_SHA256
             .chars()
