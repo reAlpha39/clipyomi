@@ -151,31 +151,56 @@ pub enum HintsError {
     Dictionary(String),
 }
 
+/// A compiled two-entry IPADIC-shaped dictionary, built in memory.
+///
+/// Deliberately not a fixture file: the real dictionary is 46 MB, and nothing
+/// in this crate's tests may touch the network or ship a binary. These four
+/// readers are the same inputs vibrato's own `compile` binary takes.
+fn test_dictionary() -> vibrato::Dictionary {
+    const LEX: &str = "東京,0,0,5000,名詞,固有名詞,地域,一般,*,*,東京,トウキョウ,トーキョー\n\
+                       都,0,0,5000,名詞,接尾,地域,*,*,*,都,ト,ト\n";
+    const MATRIX: &str = "1 1\n0 0 0\n";
+    const CHAR: &str = "DEFAULT 0 1 0\nKANJI 0 0 2\n0x4E00..0x9FFF KANJI\n";
+    const UNK: &str = "DEFAULT,0,0,5000,記号,*,*,*,*,*,*\n\
+                       KANJI,0,0,5000,名詞,一般,*,*,*,*,*\n";
+
+    vibrato::SystemDictionaryBuilder::from_readers(
+        LEX.as_bytes(),
+        MATRIX.as_bytes(),
+        CHAR.as_bytes(),
+        UNK.as_bytes(),
+    )
+    .expect("the built-in test dictionary must build")
+}
+
+/// Write [`test_dictionary`] to `path`, for tests in crates that cannot reach
+/// this module's private fixture.
+///
+/// `src-tauri` has to exercise the real [`VibratoTokenizer::load`] — its
+/// startup resolution and its `watch` publication both carry a real tokenizer,
+/// and a stub would prove neither — and the alternatives are a 46 MB file in
+/// the repository or a network call inside the suite.
+///
+/// Serialized to memory first rather than through a `BufWriter`: a buffered
+/// writer flushed only by its `Drop` swallows the error that matters here.
+///
+/// **Not part of the supported surface.** Nothing in a shipping build calls it;
+/// it is `pub` because a `#[cfg(test)]` item is invisible to another crate.
+#[doc(hidden)]
+pub fn write_test_dictionary(path: &Path) -> Result<(), HintsError> {
+    let mut bytes = Vec::new();
+    test_dictionary()
+        .write(&mut bytes)
+        .map_err(|e| HintsError::Dictionary(e.to_string()))?;
+    std::fs::write(path, &bytes).map_err(|source| HintsError::Io {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A two-entry IPADIC-shaped dictionary, built in memory.
-    ///
-    /// Deliberately not a fixture file: the real dictionary is 7.7 MB and the
-    /// tests must not touch the network or the filesystem. These four readers
-    /// are the same inputs vibrato's own `compile` binary takes.
-    pub(crate) fn test_dictionary() -> vibrato::Dictionary {
-        const LEX: &str = "東京,0,0,5000,名詞,固有名詞,地域,一般,*,*,東京,トウキョウ,トーキョー\n\
-                           都,0,0,5000,名詞,接尾,地域,*,*,*,都,ト,ト\n";
-        const MATRIX: &str = "1 1\n0 0 0\n";
-        const CHAR: &str = "DEFAULT 0 1 0\nKANJI 0 0 2\n0x4E00..0x9FFF KANJI\n";
-        const UNK: &str = "DEFAULT,0,0,5000,記号,*,*,*,*,*,*\n\
-                           KANJI,0,0,5000,名詞,一般,*,*,*,*,*\n";
-
-        vibrato::SystemDictionaryBuilder::from_readers(
-            LEX.as_bytes(),
-            MATRIX.as_bytes(),
-            CHAR.as_bytes(),
-            UNK.as_bytes(),
-        )
-        .expect("the built-in test dictionary must build")
-    }
 
     #[test]
     fn the_test_dictionary_tokenizes_a_known_sentence() {
@@ -275,6 +300,21 @@ mod tests {
             !f.bad_start(1),
             "a reading-less token must not be penalized"
         );
+    }
+
+    /// Task 3's `load_hints` tests need a file `VibratoTokenizer::load` accepts, in
+    /// a crate that cannot reach this module's private fixture. The proof that the
+    /// helper is worth anything is that its output loads and tokenizes.
+    #[test]
+    fn the_written_test_dictionary_loads_and_tokenizes() {
+        let dir = scratch("write-test-dictionary");
+        let path = dir.join("system.dic");
+
+        write_test_dictionary(&path).expect("write");
+
+        let tokenizer = VibratoTokenizer::load(&path).expect("load what we just wrote");
+        let flags = tokenizer.hints("東京都");
+        assert!(flags.bad_end(0) && flags.bad_start(1), "東京's interior");
     }
 
     fn scratch(name: &str) -> std::path::PathBuf {
