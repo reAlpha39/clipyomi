@@ -15,6 +15,12 @@ cli = ["dep:jmdict-source"]
 # without a tokenizer, and `cargo check -p jparser --no-default-features` is the
 # gate that proves it.
 mecab = ["dep:vibrato"]
+# The `fetch-hints` driver. Deliberately NOT implied by `cli`, which is on by
+# default, nor by `mecab`, which `src-tauri` enables: either would put a TLS
+# stack and an archive-unpacking stack into the shell's build months before 5B
+# wants them there. 5B adds `vibrato-source` to `src-tauri` directly, the way
+# 2F added `jmdict-source`.
+hints-source = ["dep:vibrato-source", "mecab"]
 
 [dependencies]
 bincode = "1.3"
@@ -29,6 +35,7 @@ thiserror = "1"
 # `default-features = false` drops vibrato's default `train` feature and the
 # `rucrf` training stack with it — nothing here trains a model.
 vibrato = { version = "0.5", default-features = false, optional = true }
+vibrato-source = { path = "../vibrato-source", optional = true }
 
 [dev-dependencies]
 insta = "1"
@@ -42,3 +49,8 @@ required-features = ["cli"]
 name = "cli_generations"
 path = "tests/cli_generations.rs"
 required-features = ["cli"]
+
+[[test]]
+name = "cli_hints"
+path = "tests/cli_hints.rs"
+required-features = ["hints-source"]

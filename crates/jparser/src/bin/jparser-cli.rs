@@ -83,6 +83,16 @@ enum Command {
         /// Directory to download into. Conventionally named `source`.
         dir: PathBuf,
     },
+    /// Download the compiled Vibrato dictionary into DIR, if it is not there
+    /// already, and print the path to the published `system.dic`.
+    ///
+    /// The result is what `parse --hints` and `TA_HINTS_DICT` want:
+    /// uncompressed, ready for `VibratoTokenizer::load`.
+    #[cfg(feature = "hints-source")]
+    FetchHints {
+        /// Directory to publish into. Conventionally named `hints`.
+        dir: PathBuf,
+    },
     /// List the generations in ROOT, newest first.
     GenList {
         /// Generation root directory.
@@ -128,12 +138,8 @@ enum Command {
         /// Path to an uncompressed compiled Vibrato dictionary. When given,
         /// tokenization supplies boundary hints to the segmenter.
         ///
-        /// The distributed archive is compressed twice, and this flag wants
-        /// neither layer. Download IPADIC from
-        /// https://github.com/daac-tools/vibrato/releases/download/v0.5.0/ipadic-mecab-2_7_0.tar.xz
-        /// then run: tar xf ipadic-mecab-2_7_0.tar.xz && zstd -d
-        /// ipadic-mecab-2_7_0/system.dic.zst -- and pass the resulting
-        /// ipadic-mecab-2_7_0/system.dic here.
+        /// `jparser-cli fetch-hints <DIR>` (feature `hints-source`) downloads
+        /// and publishes one; pass the `system.dic` it prints.
         #[cfg(feature = "mecab")]
         #[arg(long)]
         hints: Option<PathBuf>,
@@ -206,6 +212,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let path = jmdict_source::fetch::fetch(&dir)?;
             println!("archive:    {}", path.display());
             println!("convention: keep it in a directory named {SOURCE_DIR}");
+        }
+        #[cfg(feature = "hints-source")]
+        Command::FetchHints { dir } => {
+            let path = match vibrato_source::published(&dir) {
+                Some(path) => path,
+                None => vibrato_source::fetch::fetch(&dir)?,
+            };
+            println!("{}", path.display());
         }
         Command::GenList { root } => {
             let mut entries: Vec<(String, PathBuf)> = Vec::new();
