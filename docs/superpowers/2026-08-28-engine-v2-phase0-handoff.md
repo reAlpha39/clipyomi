@@ -139,36 +139,84 @@ Assets already on this machine; no downloads needed:
 
 ### Task 8 — build the corpus
 
-Targets from design §3.4: 250 committed sentences (tier A 80 Aozora 新字新仮名 only,
-max 8 per work; tier B 50 ja.Wikinews/Wikipedia; tier C1 80 pastiche — **mimetics-led,
-per §4.1 above**; tier D 40 hand-derived noise), plus ~100 local tier C2 lines from
-`vn_data` in the gitignored `gold_local.jsonl`.
+**The pools are already built.** `corpus_staging/` (gitignored, on this machine)
+holds a 612-line pool across all four tiers and a ranked `disagreements.jsonl`
+with **246 sampled sentences** — essentially the design's 250-committed target.
+`corpus_staging/README.md` is the guide; start there. Provenance rows for every
+sentence are pre-written in `corpus_staging/manifest_rows.md`, to paste into
+`gold_sources.md` once you know which sentences survived adjudication (a skipped
+sentence must not leave an orphaned attribution row).
+
+| tier | pool | sampled | design target | median spans |
+| --- | --- | --- | --- | --- |
+| A Aozora, 新字新仮名, 40 works/40 authors | 320 | 104 | 80 | 16 |
+| B ja.Wikinews, CC BY 2.5, 48 articles | 111 | 53 | 50 | 23 |
+| C1 hand-written pastiche | 123 | 73 | 80 | 9 |
+| D derived noise | 58 | 16 | 40 | 22 |
+| **all** | **612** | **246** | **250** | **14** |
+
+So the only step left is adjudication:
 
 ```powershell
 $app = "$env:APPDATA\dev.jparser.clipyomi"
-
-# sample a pool (tiers A/B/C1 pools you author; C2 uses vn_data/pool.tsv)
-cargo run --release -p jparser --features mecab --bin jparser-cli -- `
-  diff "$app\dict\gen-1" <pool.tsv> --hints "$app\hints\current\system.dic" > disagreements.jsonl
-
-# adjudicate — appends, resumable, re-labelling supersedes
 cargo run --release -p jparser --bin jparser-cli -- `
-  label "$app\dict\gen-1" disagreements.jsonl crates/jparser/tests/fixtures/gold.jsonl
+  label "$app\dict\gen-1" corpus_staging\disagreements.jsonl `
+  crates\jparser	estsixtures\gold.jsonl
+```
 
-# regenerate the subset after EVERY append (see §3.2)
-python tools/extract_jmdict_subset.py <expanded JMdict_e.xml> `
+Keys: `j` jparser spans, `v` Vibrato spans, `e` retype the interior cuts, `s`
+skip, `q` quit; then per span a numbered pick, `n` for no entry, `#<ent_seq>` by
+id. Skip freely — an unlabelled sentence costs a denominator entry, a guessed one
+costs the baseline's meaning. Records are ranked by conflict density, so stopping
+early costs the least.
+
+**Regenerate the subset after every append** — `score` now hard-errors on a gold
+`ent_seq` the subset does not carry (§3.2):
+
+```powershell
+python tools/extract_jmdict_subset.py `
+  "$env:LOCALAPPDATA\Temp\claude\D--Code-oss-clipyomi\phase0\JMdict_e.xml" `
   crates/jparser/tests/fixtures/gold.jsonl `
   crates/jparser/assets/conjugations.json `
   crates/jparser/tests/fixtures/gold_jmdict_subset.xml
 ```
 
-Keys: `j` jparser spans, `v` Vibrato spans, `e` retype the interior cuts, `s` skip,
-`q` quit; then per span a numbered pick, `n` for no entry, `#<ent_seq>` by id. Skip
-freely — an unlabelled sentence costs a denominator entry, a guessed one costs the
-baseline's meaning.
+Also still to do for task 8: ~100 local tier C2 lines from `vn_data/pool.tsv`
+into the gitignored `gold_local.jsonl`, and the subset-size check at 100 labelled
+sentences (design §3.4 — if 2.5x the printed `output bytes` exceeds 8 MB, cap the
+corpus and record the cap).
 
-**Check the subset size at 100 labelled sentences.** If 2.5× the printed `output bytes`
-exceeds 8 MB, cap the corpus and record the cap (design §3.4).
+#### Four findings from pre-staging, which change your expectations
+
+1. **Adjudication costs ~60% more than the design estimated.** §3.4 assumed ~10
+   spans per sentence; the measured median is 14 and the mean 16.3, so labelling
+   all 246 is **~4,000 span decisions**, not 2,500. Not all are equal — a
+   single-character particle is a fast `n` — but the count is real. Levers:
+   stop at the top ~150 by conflict density (~2,400 decisions, still covers every
+   tier), lower `MAX_CHARS` in the tier A/B fetchers, or shift the mix toward C1,
+   which is by far the cheapest tier per sentence.
+2. **Tier C1's first draft missed the class it was written for.** The vn_data
+   measurement said reduplicated mimetics were ~65% of conflicts, so the first 40
+   lines used ordinary mimetic adverbs (どきどき, ぶるぶる, ぐるぐる) — and only
+   **12%** sampled, because those are JMdict headwords and both segmenters agree.
+   The conflicting shape is a short mora unit repeated *many* times with little
+   kanji anchor, ideally one JMdict lacks. Rewriting took mim to 35% and C1 to
+   59%. General lesson: "cover class X" is not "write sentences containing X",
+   and only the sampler tells you which you did.
+3. **Aozora's 新字新仮名 flag describes the edition, not the content.** Two leaks
+   beyond §3.3's warning, both now filtered: classical passages quoted inside a
+   modern edition (宮沢賢治's 二十六夜 carries a pseudo-sutra in kanbun style),
+   and kana iteration marks (`慌てゝ`, `こゝへ`). Also, a work usually has several
+   catalogue rows and the 旧字旧仮名 edition often sorts first — resolving a title
+   to "the first matching row" silently violates §3.3.
+4. **Most capture artefacts do not change segmentation.** Tier D samples at only
+   28%: halfwidth `?`, `！`→`!` and `，` mostly leave the parse identical. The OCR
+   confusables and the spurious-space transform are what actually perturb it. Tier
+   D is also capped at 3 lines per transform by design, which ceilings it at 58
+   derived and 16 sampled — reaching the 40-sentence target means raising
+   `MAX_PER_TRANSFORM`. One class is deliberately uncovered: 卜/ト is a real
+   confusable but 卜 is vanishingly rare in prose, and a contrived sentence to
+   exercise it would be worse than saying so.
 
 ### Task 9 — record the baseline
 
