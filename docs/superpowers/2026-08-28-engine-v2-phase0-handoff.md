@@ -287,7 +287,46 @@ Finally: fill design §8.3's table, and fold the §14 deviations into the master
 (§5.3, §5.4, §7, §9, §10) — including the two new rows this run earned, the measured
 predicate value in §4.2 above and the tier C1 correction in §4.1.
 
-## 6. Loose ends
+## 6. §9.6 answered: stay on IPADIC
+
+Measured at the Phase 0/1 boundary against the 150-sentence corpus, with
+unidic-mecab-2.1.2 fetched out-of-tree.
+
+| hints | span accuracy | entry top-1 |
+| --- | --- | --- |
+| none | 0.6810 (1473 / 2163) | 0.9166 |
+| IPADIC, field 7 | **0.6963 (1506 / 2163)** | **0.9169** |
+| UniDic, field 9 (its true reading column) | 0.6958 (1505 / 2163) | 0.9151 |
+| UniDic, field 7 (the naive setting) | 0.6958 (1505 / 2163) | 0.9151 |
+
+UniDic is one span worse and slightly worse on entry top-1, for 199 MB unpacked
+against IPADIC's 46 MB. The "better readings" argument does not appear in either
+metric this project scores on. Revisit only if furigana quality becomes a
+measured goal.
+
+**The silent-degradation hazard is real, and the dangerous direction is the
+opposite of the one §9.6 anticipated.** Measured layouts: IPADIC's surface
+reading is field 7 and its unknown words get a *short* 7-field string, so the
+guard fires on an absent column for 3.7% of tokens. UniDic's field 7 is the
+**lemma**; its surface pronunciation is field 9.
+
+- UniDic read at 7 drops the guard from 13.8% of tokens to 0.5% — degraded and
+  silent, but the score is identical either way, so immaterial here.
+- **IPADIC read at 9 disables every hint.** The guard fires on 100% of tokens
+  (IPADIC strings are only 9 fields wide), and the run scores *exactly* the
+  no-hints baseline of 1473 spans with no error anywhere. That silently costs the
+  whole +1.5-point hint benefit, and it is the direction to fear.
+
+`hints.rs` now resolves the column once at load time, overridable via
+`TA_HINTS_READING_FIELD`, and carries a test pinning that a column the
+dictionary lacks derives no flags at all rather than partial ones. That test is
+the guard against this failure recurring as "hints just did not help".
+
+A side observation worth having: the unknown-word guard is barely load-bearing.
+It skips 3.7% of IPADIC tokens, and switching UniDic's guard rate between 0.5%
+and 13.8% does not move either metric by a single span.
+
+## 7. Loose ends
 
 - **Deferred minors, all judged safe to stand:** two `#[allow(clippy::err_expect)]` in
   `corpus.rs` (the fix is the one-word `.expect_err`); `use std::io::Write;` inside a
