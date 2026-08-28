@@ -216,6 +216,16 @@ before promoting; the numbers below are provisional on that review.
   of whose candidate lists varied by occurrence; nine surfaces are null because
   the index has no correct entry and the nearest miss would have been a lie.
 
+**The entry decisions were self-audited.** `corpus_staging/audit_entries.py`
+re-checks all 258 non-null choices against the full JMdict entries rather than
+the first-sense gloss the candidate list displayed, plus a mechanical
+POS-consistency test. **0 real errors**; the five flags the first run produced
+were all the expectation table being wrong (JMdict tags 月 as `n-suf`, 零 and 円
+as nouns, じゃん as `prt`, なさい as `aux-v`). It vindicated the riskiest picks —
+`と` → 1008490, whose quotative sense is #4 and was never displayed. Re-run it
+after any edit to `surface_entries.tsv`: 267 rows feed 990 spans, and `の` alone
+reaches 111 of them.
+
 **Two design gates were run for the first time and both pass.** §11.4's
 equivalence check: `score --json` over the full 67 MB index and over the
 subset returns byte-identical metrics, hints-on and hints-off. §3.4's
