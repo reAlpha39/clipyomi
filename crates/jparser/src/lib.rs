@@ -718,6 +718,7 @@ mod tests {
         assert_eq!(entry["conjugation"], serde_json::Value::Null);
         assert_eq!(entry["pos"][0], "n");
         assert_eq!(entry["flags"][0], "primary");
+        assert_eq!(entry["entry_id"], 0);
     }
 
     /// An unmatched run must still be a well-formed segment: the sentence pane
