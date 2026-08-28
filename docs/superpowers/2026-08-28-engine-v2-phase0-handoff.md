@@ -628,6 +628,69 @@ Tests: 324 default, 357 under `--features mecab`, both clippy gates clean.
 demonstration of the whole finding — its gold splits `高い` into `高` / `い`
 while the index carries `高い` — so it now pins both numbers.
 
+### 9.5 Correction — a quarter of the "compound preservation" is spurious
+
+§9.1 said the merges are all real JMdict entries jparser found correctly. That
+was written from about 40 of the 230 covering spans and **it is wrong for
+roughly 28 of them.** Reading all 92 of the `ordinary longer headword` bucket
+turned up a coherent defect class the sample had missed.
+
+jparser absorbs a preceding particle or fragment into the following word and
+finds a kana-unified dictionary match that is semantically absurd:
+
+| kept | matched as | actually |
+| --- | --- | --- |
+| `はいた` | はく [1399760] 履く, to wear shoes | は + いた |
+| `ももう` | もむ [1567610] 揉む, to rub | も + もう |
+| `はこ` | はこ [1585650] 箱, box | は + この |
+| `がい` | がい [1204330] 甲斐, worth | が + いった |
+| `になって` | になう [1599900] 荷なう, to shoulder | に + なる |
+| `してい` | してい [1308000] 指定, designation | して + いた |
+| `どうし` | どうし [1451380] 同士, fellow | どう + しました |
+| `ことし` | ことし [1579130] 今年, this year | こと + してる |
+| `クで` / `タは` / `ヌの` | くで / たは / ぬの | katakana unified into unrelated kana headwords |
+| `的で` | 的 [1437260] | `目的` split as 目 + 的で |
+
+**Vibrato has the boundary in every one of them** — that is the criterion that
+put them in this set at all. So this is §4.3's "hints are advisory where they
+should be decisive", with a measured example list attached. It is the strongest
+Phase 1 evidence Phase 0 has produced.
+
+Revised decomposition of the 266, hand-classified over the full list rather
+than sampled:
+
+| | count | share | verdict |
+| --- | ---: | ---: | --- |
+| `exp` and vs-noun MWE merges | ~120 | 45% | legitimate — §5.2 working |
+| ordinary compound nouns (`副大統領`, `定期点検`, `ノーベル化学賞`) | ~64 | 24% | legitimate |
+| numeral + counter (`2月`, `五日`) | 18 | 7% | legitimate |
+| **spurious particle-absorbing merges** | **~28** | **10.5%** | **defect** |
+| **fallback punctuation lumping** | **36** | **13.5%** | **defect** |
+
+Real engine defect is therefore about **64 boundaries, not 36** — and the
+particle-absorbing half is the interesting one, because it is a wrong answer
+rather than a coarse one.
+
+### 9.6 What this does to the tolerant metric
+
+**It over-forgives, and now that is measured rather than suspected.** A
+spurious merge is a matched segment whose endpoints are gold boundaries, so
+§9.4's rule credits it. Roughly 28 of the 167 merges are of this kind, so the
+0.8465 is optimistic by about 1.3 points; true span quality is nearer 0.835.
+
+**No heuristic is going to fix this, and one should not be added.** The
+distinguishing fact is whether the merged entry is semantically right, and the
+corpus carries no label for a merged span — that is what makes it merged.
+Every mechanical discriminator tried separates the wrong way: `音がする` and
+`はいた` are both matched entries spanning gold boundaries, both swallow a
+particle, and both differ from their headword by conjugation.
+
+So the honest treatment is the one already in place — report `coarsening: N
+spans in M merges` beside both accuracies, and read a rising M as a warning
+rather than a win. A Phase 1 change that lifts tolerant accuracy by inflating
+the merge count has probably found more spurious matches, not more compounds.
+Anyone quoting the tolerant number should quote this paragraph with it.
+
 ## 10. Loose ends
 
 - **Deferred minors, all judged safe to stand:** two `#[allow(clippy::err_expect)]` in

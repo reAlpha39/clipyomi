@@ -429,6 +429,18 @@ Never combined, and never used alone. Strict moving without tolerant moving
 means granularity changed, not correctness; the pair localises a regression a
 single number would only average away.
 
+**The tolerant metric over-forgives by about 1.3 points, and no heuristic
+should be added to fix it.** Roughly 28 of the 167 merges it credits are
+spurious — jparser absorbing a particle into the next word and landing on a
+kana-unified match that is absurd (`は`+`いた` as 履く, `も`+`もう` as 揉む,
+`が`+`いった` as 甲斐). They pass the test because they *are* matched segments
+spanning gold boundaries. Separating them from `音がする` needs a label for the
+merged span, which the corpus by definition does not carry; every mechanical
+discriminator tried cuts the wrong way. The guard is the `coarsening: N spans
+in M merges` line printed beside both accuracies: a change that lifts tolerant
+accuracy by inflating M has probably found more spurious matches, not more
+compounds.
+
 **Oracle@k** joins in Phase 2 — is the gold parse present anywhere in the top-k
 whole-sentence readings? It measures whether k-best earns its complexity, and it
 is meaningless before k-best exists.
@@ -783,7 +795,8 @@ No layer ships without its licence established in writing first.
 | Study LunaTranslator, adopt nothing | GPL-3.0, so no reuse. Its thin-tokenizer + delegated-dictionary design would delete the conjugation chain and sense ranking that are ClipYomi's reason to exist (§4.4) |
 | Reject cross-engine consensus voting | JMdict longest-match and a deinflector share one dictionary — correlated voters echo rather than vote. Ties need a tiebreak, which rebuilds a cost model. k-best surfaces the same disagreements with a principled ranking |
 | Reject boundary F1 | Punishes JMdict compound preservation (§5.2) |
-| **Span accuracy inherits boundary F1's defect, and it was not noticed** | Measured by `examples/boundary_diag.rs` over the gold corpus: of the 266 gold boundaries Vibrato supplies and jparser drops, ~45% are jparser merging into a real JMdict multi-word expression or vs-noun headword (音がする, ことになっている, 首を振る, これまでに) and another 7% into a numeral+counter date headword (2月, 18日). The corpus was adjudicated at the tokenizer's short-unit granularity, so the metric penalises exactly the behaviour §5.2 calls the reason the DP exists. Only the 13.5% fallback bucket — runs of punctuation lumped into one unmatched segment — is unambiguously an engine defect |
+| **Span accuracy inherits boundary F1's defect, and it was not noticed** | Measured by `examples/boundary_diag.rs` over the gold corpus: of the 266 gold boundaries Vibrato supplies and jparser drops, ~45% are jparser merging into a real JMdict multi-word expression or vs-noun headword (音がする, ことになっている, 首を振る, これまでに) and another 7% into a numeral+counter date headword (2月, 18日). The corpus was adjudicated at the tokenizer's short-unit granularity, so the metric penalises exactly the behaviour §5.2 calls the reason the DP exists. Reading the full list rather than a sample then found a second defect class inside the merges: ~10.5% are jparser absorbing a particle into the next word and matching a kana-unified absurdity (`は`+`いた` as 履く, `も`+`もう` as 揉む, `に`+`なる` as 荷なう). With the 13.5% fallback bucket that is ~64 boundaries of real defect, not 36 |
+| **Make Vibrato boundaries decisive, and treat this as §4.3's evidence** | The particle-absorbing merges above all have a Vibrato boundary at exactly the place jparser overrode. That is the measured case for §4.3 — the strongest Phase 1 evidence Phase 0 produced, and a concrete example list to test a new cost model against (handoff §9.5) |
 | **Answered: add compound-tolerant span accuracy, keep strict beside it** | Costs 16.5 points on this corpus (0.6810 strict against 0.8465 tolerant, hints off). Chosen over re-adjudicating the corpus at JMdict granularity, which is expensive and edges toward the §7.2 tautology of a corpus that agrees with the engine by construction; and over simply accepting the strict number, which leaves Phase 1's done-when clause rewarding the removal of compound preservation. It also revealed the hint benefit is understated: +2.13 points tolerant against +1.53 strict (§5.2) |
 | Reject `bunpo`, `deinflector`, `yomichan_rs` | GPL-3.0 lineage or provenance risk (§3.4) |
 | Write the conjugation table rather than port or depend | No permissive upstream exists (§3.4); conjugation rules are facts, and IPADIC supplies the forms permissively (§3.3) |

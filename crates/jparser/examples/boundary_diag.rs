@@ -30,18 +30,26 @@
 //! context. Read the cost-model bucket as an upper bound and the lexical-gap
 //! bucket as a lower one.
 //!
-//! **What it found, so the next reader does not repeat the mistake this was
-//! written under.** The gap is 266 boundaries, and most of it is not a defect.
-//! 45% of them are jparser merging into a JMdict multi-word expression or
-//! vs-noun headword — `音がする`, `ことになっている`, `首を振る`, `これまでに` —
-//! which is §5.2's compound preservation working, penalised because the corpus
-//! was adjudicated at the tokenizer's short-unit granularity. Another 7% are
-//! numeral + counter kept as a date headword (`2月`, `18日`). Only the 13.5%
-//! fallback bucket is unambiguously an engine defect, and it is mostly runs of
-//! punctuation lumped into one unmatched segment.
+//! **What it found.** The gap is 266 boundaries and most of it is not a
+//! defect. Roughly 45% are jparser merging into a JMdict multi-word expression
+//! or vs-noun headword — `音がする`, `ことになっている`, `首を振る` — which is
+//! §5.2's compound preservation working, penalised because the corpus was
+//! adjudicated at the tokenizer's short-unit granularity. Another 24% are
+//! ordinary compound nouns and 7% numeral + counter.
 //!
-//! So the headline recall number does not decompose into headroom. Read the
-//! "what it lost the boundary to" table, not the total.
+//! **The remaining quarter is two real defects.** 13.5% is the fallback path
+//! lumping runs of punctuation into one unmatched segment. About 10.5% is
+//! subtler and worse: jparser absorbs a preceding particle into the following
+//! word and lands on a kana-unified match that is semantically absurd —
+//! `は`+`いた` matched as 履く, `も`+`もう` as 揉む, `が`+`いった` as 甲斐,
+//! `に`+`なる` as 荷なう. Vibrato has the boundary in every one, which is
+//! §4.3's case for making hints decisive rather than advisory.
+//!
+//! So the headline recall number does not decompose into headroom, and the
+//! per-kind lists below are the point rather than the totals. **Read them all
+//! — this analysis first reported "every merge is correct" from a sample of
+//! about 40 of 230, and the particle-absorbing class is entirely inside the
+//! part that sample missed.** The example lists are uncapped for that reason.
 //!
 //! Run it hints-off, which is how the baseline is measured:
 //!
@@ -97,6 +105,15 @@ impl Bucket {
             Bucket::Fallback => "fallback  (covering span matched nothing)",
             Bucket::CostModel => "cost model(both halves matchable; DP took the longer)",
             Bucket::Lexical => "lexical   (a half is not a matchable unit)",
+        }
+    }
+
+    /// Short form, for tagging a per-kind example line with its stage.
+    fn tag(self) -> &'static str {
+        match self {
+            Bucket::Fallback => "fall",
+            Bucket::CostModel => "cost",
+            Bucket::Lexical => "lex ",
         }
     }
 }
@@ -232,9 +249,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "  merge: an ordinary longer headword"
             };
             *kinds.entry(kind).or_default() += 1;
-            examples.entry(bucket.label()).or_default().push(format!(
-                "  {:<14} {}·{}   kept {:<14} as {}",
+            // Keyed by kind, not by stage, and uncapped. Reading a sample and
+            // generalising from it is how the first pass of this analysis
+            // produced a claim about 230 spans from about 40 of them.
+            examples.entry(kind).or_default().push(format!(
+                "  {:<14} [{}] {}·{}   kept {:<14} as {}",
                 g.source,
+                bucket.tag(),
                 slice(&chars, a, p),
                 slice(&chars, p, b),
                 seg.surface,
@@ -272,9 +293,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("{:>5}  {:>5.1}%{label}", n, pct(**n));
     }
 
-    for (label, _) in &rows {
-        println!("\n=== {label} ===");
-        for line in examples[*label].iter().take(14) {
+    for (label, n) in &krows {
+        println!("\n=== {} ({n}) ===", label.trim());
+        for line in &examples[*label] {
             println!("{line}");
         }
     }
