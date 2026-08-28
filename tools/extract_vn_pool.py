@@ -120,13 +120,14 @@ def main(argv):
 def demo():
     """Self-check for `clean`, the only branching logic here."""
     assert clean("テスト太郎「これはためしの文です」") == (
-        "「いや、それ以前に、こんなの考えたこともないか?」",
+        "「これはためしの文です」",
         "テスト太郎",
     )
     assert clean("「ここにもためしの文があります」") == ("「ここにもためしの文があります」", "")
     assert clean("短い") is None, "under MIN_CHARS"
     assert clean("あ" * 200) is None, "over MAX_CHARS"
     assert clean("  　 ") is None, "whitespace only"
+    assert clean("ここに\tタブが入った文です") is None, "a tab would break the TSV"
     assert clean("前半です。\r\n後半です。") == ("前半です。後半です。", "")
     print("demo: ok")
 
