@@ -194,3 +194,37 @@ fn a_hash_prefixed_ent_seq_absent_from_the_index_is_rejected_and_reprompted() {
     );
 }
 
+/// The append-only, last-wins contract, driven through the binary rather than
+/// through `corpus.rs`'s own unit tests (which cover the read side directly).
+/// `label` never rewrites, so two labelling passes over the same sentence
+/// leave two lines in `gold.jsonl` — provable by `score`, which folds
+/// duplicates by `text` and reports exactly one live sentence and one
+/// supersession.
+#[test]
+fn relabelling_a_sentence_supersedes_the_earlier_record() {
+    let dir = scratch("cli-label-last-wins");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,1,3]");
+    let gold = dir.join("gold.jsonl");
+
+    label(&index, &diff, &gold, "j\n1\n");
+    label(&index, &diff, &gold, "j\nn\n");
+
+    let raw = std::fs::read_to_string(&gold).unwrap();
+    assert_eq!(
+        raw.lines().count(),
+        2,
+        "label never rewrites: both appends survive"
+    );
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("sentences:      1"), "got {stdout}");
+    assert!(stdout.contains("superseded:     1"), "got {stdout}");
+}

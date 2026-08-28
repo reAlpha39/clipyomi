@@ -238,9 +238,13 @@ fn the_json_form_carries_the_same_numbers() {
         .expect("runnable");
     assert!(out.status.success());
 
+    // `index_dir` always names its directory `index`, and no `--hints` is
+    // passed here, so `index_generation` and `hints` are pinned values, not
+    // incidental ones.
     assert_eq!(
         String::from_utf8(out.stdout).unwrap().trim(),
-        "{\"sentences\":1,\"gold_spans\":1,\"superseded\":0,\"span_hits\":1,\"top1_hits\":1,\"top1_total\":1}"
+        "{\"sentences\":1,\"gold_spans\":1,\"superseded\":0,\"span_hits\":1,\"top1_hits\":1,\
+         \"top1_total\":1,\"hints\":false,\"index_generation\":\"index\"}"
     );
 }
 

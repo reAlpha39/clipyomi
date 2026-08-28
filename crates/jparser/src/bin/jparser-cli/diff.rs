@@ -96,6 +96,40 @@ pub fn read_pool(path: &Path) -> Result<Vec<(String, String)>, Box<dyn Error>> {
     Ok(out)
 }
 
+/// Clamp a raw Vibrato cut list to the sentence's real bounds: `0` at the
+/// front and `chars` at the back.
+///
+/// Vibrato does not guarantee its first token starts at char 0 or its last
+/// token ends at the sentence's char length — it can skip a character it
+/// never tokenizes (an interior space, U+3000) without leaving a boundary
+/// there. An unclamped list would then make [`conflicts`] report `0` or
+/// `chars` as a jparser-only cut even when the two segmentations agree on
+/// everything else, over-sampling into the noise tier `diff --all` exists to
+/// audit. A no-op when the list already covers the full range, and left as an
+/// empty list when there was nothing to tokenize at all — see
+/// `no_sampling_signal`.
+fn clamp_bounds(mut cuts: Vec<usize>, chars: usize) -> Vec<usize> {
+    if cuts.is_empty() {
+        return cuts;
+    }
+    if cuts[0] != 0 {
+        cuts.insert(0, 0);
+    }
+    if *cuts.last().expect("checked non-empty above") != chars {
+        cuts.push(chars);
+    }
+    cuts
+}
+
+/// True when Vibrato tokenized nothing at all. `conflicts` would then treat
+/// every jparser cut as a disagreement — the densest possible signal — while
+/// `unknown_tokens: 0` tells the adjudicator the tokenizer was confident. That
+/// is a tokenizer failure, not sampling signal, so `run` skips these records
+/// rather than letting them consume `--limit`'s budget.
+fn no_sampling_signal(vibrato_cuts: &[usize]) -> bool {
+    vibrato_cuts.is_empty()
+}
+
 /// Tokenize `text` and return its cut offsets plus the count of tokens whose
 /// IPADIC reading field is `*`, absent, or empty.
 ///
@@ -124,6 +158,7 @@ fn tokenize(tokenizer: &vibrato::Tokenizer, text: &str) -> (Vec<usize>, usize) {
     }
     if !cuts.is_empty() {
         cuts.push(end);
+        cuts = clamp_bounds(cuts, text.chars().count());
     }
     (cuts, unknown)
 }
@@ -167,10 +202,15 @@ pub fn run(
     let raw = vibrato::Tokenizer::new(dict);
 
     let mut records = Vec::new();
+    let mut skipped_no_signal = 0;
     for (source, text) in read_pool(pool)? {
         let parsed = jparser::parse(&index, &table, &text, &ParseOptions::default(), None)?;
         let j = boundaries_from_segments(&parsed.segments);
         let (v, unknown_tokens) = tokenize(&raw, &text);
+        if no_sampling_signal(&v) {
+            skipped_no_signal += 1;
+            continue;
+        }
         let c = conflicts(&j, &v);
         let interesting = if all { j != v } else { !c.is_empty() };
         if !interesting {
@@ -184,6 +224,11 @@ pub fn run(
             conflicts: c,
             unknown_tokens,
         });
+    }
+    if skipped_no_signal > 0 {
+        eprintln!(
+            "note: skipped {skipped_no_signal} sentence(s) where vibrato produced no tokens"
+        );
     }
 
     rank(&mut records, all);
@@ -252,6 +297,39 @@ mod tests {
     #[test]
     fn an_empty_segment_list_has_no_boundaries() {
         assert_eq!(boundaries_from_segments(&[]), Vec::<usize>::new());
+    }
+
+    /// A leading character Vibrato never tokenizes (e.g. a skipped space)
+    /// leaves the raw cut list missing its 0.
+    #[test]
+    fn clamp_bounds_prepends_a_missing_zero() {
+        assert_eq!(clamp_bounds(vec![1, 2, 3], 3), vec![0, 1, 2, 3]);
+    }
+
+    /// Symmetric case at the end of the sentence.
+    #[test]
+    fn clamp_bounds_appends_a_missing_final_boundary() {
+        assert_eq!(clamp_bounds(vec![0, 1, 2], 3), vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn clamp_bounds_leaves_a_correct_cover_untouched() {
+        assert_eq!(clamp_bounds(vec![0, 1, 3], 3), vec![0, 1, 3]);
+    }
+
+    #[test]
+    fn clamp_bounds_leaves_an_empty_list_empty() {
+        assert_eq!(clamp_bounds(Vec::new(), 3), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn a_sentence_with_no_vibrato_tokens_has_no_sampling_signal() {
+        assert!(no_sampling_signal(&[]));
+    }
+
+    #[test]
+    fn a_sentence_with_vibrato_tokens_has_sampling_signal() {
+        assert!(!no_sampling_signal(&[0, 2, 4]));
     }
 
     #[test]

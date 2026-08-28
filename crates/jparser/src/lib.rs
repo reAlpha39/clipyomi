@@ -700,7 +700,7 @@ mod tests {
                     pos: vec!["n".to_string()],
                     senses: vec![],
                     flags: WordFlags::PRIMARY,
-                    entry_id: 0,
+                    entry_id: 1000010,
                 }],
             }],
         };
@@ -718,7 +718,10 @@ mod tests {
         assert_eq!(entry["conjugation"], serde_json::Value::Null);
         assert_eq!(entry["pos"][0], "n");
         assert_eq!(entry["flags"][0], "primary");
-        assert_eq!(entry["entry_id"], 0);
+        // A nonzero id: `entry_id`'s type default is 0, so asserting against
+        // that value would pass even if the field silently stopped
+        // serializing and fell back to its default.
+        assert_eq!(entry["entry_id"], 1000010);
     }
 
     /// An unmatched run must still be a well-formed segment: the sentence pane

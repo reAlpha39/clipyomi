@@ -199,7 +199,7 @@ compressing.
 One JSON object per sentence, one line each:
 
 ```jsonl
-{"text":"くるまではこう","source":"c1:pastiche-014","spans":[{"start":0,"len":3,"ent_seq":1207610},{"start":3,"len":1,"ent_seq":2028980},{"start":4,"len":1,"ent_seq":2028920},{"start":5,"len":2,"ent_seq":1288860}]}
+{"text":"くるまではこう","source":"c1:pastiche-014","spans":[{"start":0,"len":3,"ent_seq":1207610},{"start":3,"len":1,"ent_seq":2028980},{"start":4,"len":1,"ent_seq":2028920},{"start":5,"len":2,"ent_seq":1288860}],"decision":"e"}
 ```
 
 - `text` — the sentence verbatim, and the record's identity.
@@ -210,6 +210,10 @@ One JSON object per sentence, one line each:
   directly comparable without normalisation. Offsets are **character** offsets,
   never bytes, matching `Segment::start` and `Segment::len`.
 - `ent_seq` — the JMdict entry the span should resolve to, or `null`.
+- `decision` — which key the adjudicator pressed to settle this record's spans
+  in `label`: `"j"` (blessed jparser's), `"v"` (blessed Vibrato's), `"e"`
+  (retyped the cuts). Absent (not `null`) on a hand-authored record that no
+  adjudicator produced. See §7.1 for why it is recorded.
 
 `null` means *no JMdict entry belongs first here* — the span is a function word
 with no useful entry, or an unmatched run, or the adjudicator ruled that nothing
@@ -321,7 +325,8 @@ sentences:      250
 gold spans:     2481
 superseded:     12
 span accuracy:  0.8734  (2167 / 2481)
-entry top-1:    0.7912  (1502 / 1898)
+entry top-1:    0.7914  (1502 / 1898)
+  by decision:  j 1.0000 (980 / 980)  v 0.7421 (612 / 825)  e 0.8506 (575 / 676)
 ```
 
 Numerator and denominator beside every ratio, so a corpus change is visible as a
@@ -329,8 +334,17 @@ denominator change rather than showing up as unexplained metric movement. No
 combined score — master plan §5.2 forbids it, because a change that improves one
 metric and harms the other is a finding, not noise.
 
-`--json` emits the same numbers as one object, for recording baselines into the
-phase's handoff without transcribing them by hand.
+The `by decision:` line is additive: span accuracy split by the `label`
+decision (`j`, `v`, or `e`, §4.1) that produced each gold record, printed only
+when at least one record carries one. Ordered `j`, `v`, `e`, then anything else
+alphabetically. This is §7.1's fast-path bias made measurable rather than
+removed — see that section for why `j`'s number in particular should not be
+read as "the parser is right".
+
+`--json` emits the same numbers as one object, including the decision
+breakdown and the run's provenance (§8.3: whether `--hints` was used, and the
+index generation), for recording baselines into the phase's handoff without
+transcribing them by hand.
 
 ### 5.4 Why `Entry` must expose `entry_id`
 
@@ -462,6 +476,20 @@ cannot rule on stays unlabelled rather than becoming a guess in the gold file.
 
 Then, per span, the entry choice: a numbered list, `n` for `null`, `b` to go
 back. No default. Enter alone is rejected rather than accepting anything.
+
+**The sentence-level decision (`j`, `v`, or `e`) is recorded on the gold
+record**, per §4.1. It has to be: `diff` runs with `hints = None` (§6.2), so
+`j` blesses the *hints-off* segmentation verbatim. A `j`-blessed sentence
+therefore scores 1.0 on span accuracy under `score` hints-off by construction,
+before the parser has done anything `hints` should get credit for. That biases
+§8.3's hints-on-minus-hints-off comparison — the one number this whole harness
+exists to produce — against the hint mechanism, silently, unless the bias is
+visible. The fix is not to make `j` blessing rarer or to run `diff` hints-on
+(§8.3's per-decision breakdown is worthless if `j` itself is redefined every
+time hints change); it is to record which decision produced each record and
+report span accuracy split by it, so a corpus that is mostly `j` reads as
+mostly rubber-stamped rather than as a strong hints-off baseline. A high `j`
+share is evidence about the labelling pass, not about the parser.
 
 ### 7.2 Entries are listed by `ent_seq`, not by rank
 
@@ -749,6 +777,14 @@ zero score — it means the extractor was not re-run after the corpus grew, and
 `tests/fixtures/README.md` already records that failure mode for
 `parse_sentences.txt` ("the snapshot will show unmatched spans instead of
 failing loudly"). Phase 0 fails loudly instead.
+
+`score` enforces this: every gold span's `ent_seq` is looked up against the
+index before it can be scored (lookups cached, since the same id recurs across
+a corpus), and the first absent one aborts the run naming both the record's
+`text` and the offending id, with the likely cause (a stale subset — re-run
+`tools/extract_jmdict_subset.py`). Silently scoring an absent id as a miss
+would misattribute a fixture bug to the engine — the exact failure this
+section forbids.
 
 ---
 
