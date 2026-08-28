@@ -66,6 +66,15 @@ pub struct Metrics {
     /// [`run`] sorts it before either output is produced.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub by_decision: Vec<DecisionBreakdown>,
+    /// Whether `--hints` was used for this run. Recorded so two `--json`
+    /// baselines are distinguishable on their own — without it a swapped
+    /// hints-on/hints-off pair would silently sign-flip the reported hint
+    /// delta (design §8.3, §5.3).
+    pub hints: bool,
+    /// The index directory's final path component — its generation name
+    /// (e.g. `gen-3`), or `None` if the path has none. Recorded beside the
+    /// numbers for the same reason as `hints`.
+    pub index_generation: Option<String>,
 }
 
 /// Bump one decision's span tally in `by_decision`, inserting it if this is
@@ -233,9 +242,18 @@ pub fn run(
         Some(path) => Some(jparser::hints::VibratoTokenizer::load(path)?),
         None => None,
     };
+    #[cfg(feature = "mecab")]
+    let hints_used = tokenizer.is_some();
+    #[cfg(not(feature = "mecab"))]
+    let hints_used = false;
+    let index_generation = index_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned());
 
     let mut m = Metrics {
         superseded,
+        hints: hints_used,
+        index_generation,
         ..Metrics::default()
     };
     let mut ent_seq_cache: HashMap<u32, bool> = HashMap::new();

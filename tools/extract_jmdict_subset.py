@@ -111,9 +111,15 @@ def read_corpus(path):
 
     Duplicates are dropped rather than rejected: the substring closure is a
     set, so a repeated sentence would only widen it redundantly.
+
+    A leading UTF-8 BOM is stripped: hand-authoring a sentence file on Windows
+    saves one by default, and an unstripped BOM glues itself to the first
+    line's first character, silently dropping that whole line's substrings
+    from the closure — Critical 2's failure mode (a "kept" entry that
+    `score` still can't find) through a different door.
     """
     p = Path(path)
-    raw = p.read_text(encoding="utf-8")
+    raw = p.read_text(encoding="utf-8").lstrip("\ufeff")
     ent_seqs = set()
     if p.suffix == ".jsonl":
         texts = []
