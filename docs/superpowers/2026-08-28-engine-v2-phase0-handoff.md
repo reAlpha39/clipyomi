@@ -14,7 +14,7 @@ requires a *committed* corpus. Master plan §9.1, §9.2 and §9.6 are all answer
 
 ## 1. What exists now
 
-Thirteen commits, `0e8b1cb`..`7ed79c4` (originally `4933d91`..`765da93`, rewritten by the §9 scrub). Tests: **320** under default
+Thirteen commits, `0e8b1cb`..`7ed79c4` (originally `4933d91`..`765da93`, rewritten by the §10 scrub). Tests: **320** under default
 features, **353** under `--features mecab`, all passing. `cargo check -p jparser
 --no-default-features` clean; `cargo clippy -p jparser --all-targets -- -D warnings`
 clean with and without `--features mecab`.
@@ -477,11 +477,14 @@ real conflicts in `vn_data`. So this is not a clean loss for sudachi; it is two
 engines with opposite weaknesses.
 
 **What actually decides it is jparser's own row.** Boundary recall 0.8614
-against every tokenizer's 0.97-plus: jparser is throwing away 279 gold
-boundaries the hint source already hands it. Changing hint sources is worth at
-most 1.8 points of recall. Using the existing ones as §4.3 describes is worth
-eleven. That is the Phase 1 target, and it is where the §7.3 recombiner and the
-new cost model should be aimed.
+against every tokenizer's 0.97-plus. Changing hint sources is worth at most 1.8
+points of recall; the distance between jparser and its existing hint source is
+eleven. Whatever else Phase 1 does, it is not going to be about the tokenizer.
+
+**Do not read that eleven points as headroom.** §9 decomposes the gap and finds
+most of it is not a defect at all — it is §5.2's compound preservation being
+penalised by a corpus adjudicated at short-unit granularity. Read §9 before
+sizing any Phase 1 work from this table.
 
 Tooling: `corpus_staging/measure_sudachi.py` and `sudachi_examples.py`, run
 under a venv at `%LOCALAPPDATA%\Temp\claude\D--Code-oss-clipyomi\phase0\sudachi-venv`.
@@ -489,7 +492,96 @@ Raw output in `corpus_staging/sudachi_result.txt`. SudachiPy 0.6.11 is the
 Python binding over sudachi.rs, not a separate port, so no parity assumption is
 carried. Nothing was distributed; no sudachi code is in the tree.
 
-## 9. Loose ends
+## 9. The boundary gap is mostly not a gap — and the metric has a problem
+
+§8 ended by recommending Phase 1 aim at jparser's 0.8614 boundary recall
+against the hint source's 0.9707, on the reading that 266 gold boundaries were
+reaching the engine and being thrown away. **That reading was wrong, and the
+diagnostic written to size the work is what disproved it.**
+
+`crates/jparser/examples/boundary_diag.rs` takes every gold boundary Vibrato has
+and jparser lacks, finds the jparser segment that swallowed it, and asks two
+questions: did that segment match a dictionary entry, and are the two halves
+themselves matchable units. It is an example rather than a subcommand because
+Phase 0 writes no code under `crates/jparser/src/`; the probe is `parse` on the
+substring, so the real matcher and its conjugation recursion decide, not a raw
+FST walk. Output kept at `corpus_staging/boundary_diag.txt`.
+
+```
+interior gold boundaries: 2013
+jparser has:              1734  (0.8614)
+vibrato has:              1954  (0.9707)
+vibrato has, jparser not: 266        from 230 distinct covering spans
+
+WHICH STAGE LOST IT              WHAT IT LOST THE BOUNDARY TO
+ 178  66.9%  cost model           104  39.1%  JMdict multi-word expression (pos=exp)
+  52  19.5%  lexical               92  34.6%  an ordinary longer headword
+  36  13.5%  fallback              21   7.9%  fallback: a mixed unmatched run
+                                   18   6.8%  numeral + counter as a date headword
+                                   16   6.0%  noun + する as the vs-noun headword
+                                   15   5.6%  fallback: an all-punctuation run
+```
+
+### 9.1 What the merges actually are
+
+Every one of them is a real JMdict entry that jparser found correctly:
+
+| jparser kept | as | gold wanted |
+| --- | --- | --- |
+| `音がした` | 音がする [2826774] | 音 / が / した |
+| `ことになっている` | ことになっている [2215350] | こと / に / なっている |
+| `首を振った` | 首を振る [2253980] | 首 / を / 振った |
+| `これまでに` | これまでに [2008170] | これまで / に |
+| `天と地` | 天と地 [1896300] | 天 / と / 地 |
+| `2月`, `18日` | ２月 [1461560], １８日 [2737790] | 2 / 月, 18 / 日 |
+
+**This is §5.2's compound preservation working, and the corpus is penalising
+it.** The corpus was adjudicated at the tokenizer's short-unit granularity —
+which is the natural thing to do when the sampler shows you Vibrato's cuts — and
+that standard is now baked into the metric every later phase is measured by.
+
+Roughly 45% of the 266 (the `exp` and vs-noun merges) plus 7% (numeral +
+counter) are jparser doing what the design asks. Only the 36-boundary fallback
+bucket is unambiguously a defect, and it is cheap: runs of punctuation lumped
+into a single unmatched segment (`」、`, `、「喜`, `丨FIFA`). Splitting unmatched
+runs at script and punctuation transitions recovers most of it.
+
+### 9.2 The problem this creates for Phase 1
+
+The master plan's decision log already rejected boundary F1 because it
+"punishes JMdict compound preservation (§5.2)". **Span accuracy against a
+short-unit corpus has the same defect**, and it was not noticed because nothing
+had yet decomposed a disagreement.
+
+Phase 1's done-when clause is "both Phase 0 metrics at or above baseline". As
+the corpus stands, a Phase 1 engine is rewarded for splitting `音がする` into
+`音 / が / した` — for removing the compound preservation §5.2 names as the
+reason the DP exists at all. Optimising this metric directly optimises against
+the product.
+
+### 9.3 Three ways out, and a recommendation
+
+1. **Re-adjudicate at JMdict-headword granularity** wherever a JMdict entry
+   covers the span. Expensive, and it edges toward the §7.2 tautology — the
+   corpus would agree with the engine by construction.
+2. **Add a compound-tolerant second metric** to `score`: a jparser span that
+   merges several gold spans counts as correct when the merged surface is
+   itself an entry the index carries. Cheap — `score.rs` already resolves entry
+   ids, and it is harness code, which Phase 0 is allowed to touch. Report both
+   numbers side by side and let the pair say what a single number cannot.
+3. **Accept it**, read span accuracy as an explicitly short-unit measure, and
+   never optimise it directly.
+
+**Recommend 2.** It keeps the existing baseline comparable across phases, needs
+no re-labelling, and it is the only option that makes the §5.2 behaviour
+visible rather than merely un-punished. The two numbers together also localise
+regressions: a Phase 1 change that moves strict accuracy without moving the
+tolerant one has changed granularity, not correctness.
+
+This is a decision about what every later phase is measured against, so it is
+the author's, and it wants making before Phase 1 writes any code.
+
+## 10. Loose ends
 
 - **Deferred minors, all judged safe to stand:** two `#[allow(clippy::err_expect)]` in
   `corpus.rs` (the fix is the one-word `.expect_err`); `use std::io::Write;` inside a
