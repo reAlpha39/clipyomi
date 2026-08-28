@@ -326,7 +326,7 @@ gold spans:     2481
 superseded:     12
 span accuracy:  0.8734  (2167 / 2481)
 entry top-1:    0.7914  (1502 / 1898)
-  by decision:  j 1.0000 (980 / 980)  v 0.7421 (612 / 825)  e 0.8506 (575 / 676)
+  by decision:  j 1.0000 (980 / 980)  v 0.7418 (612 / 825)  e 0.8506 (575 / 676)
 ```
 
 Numerator and denominator beside every ratio, so a corpus change is visible as a
