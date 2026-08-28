@@ -15,7 +15,7 @@ requires a *committed* corpus. Master plan §9.1, §9.2 and §9.6 are all answer
 ## 1. What exists now
 
 Thirteen commits, `0e8b1cb`..`7ed79c4` (originally `4933d91`..`765da93`, rewritten by the §9 scrub). Tests: **320** under default
-features, **351** under `--features mecab`, all passing. `cargo check -p jparser
+features, **353** under `--features mecab`, all passing. `cargo check -p jparser
 --no-default-features` clean; `cargo clippy -p jparser --all-targets -- -D warnings`
 clean with and without `--features mecab`.
 
