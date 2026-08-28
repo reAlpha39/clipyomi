@@ -147,15 +147,15 @@ pub fn run(index_dir: &Path, diff_path: &Path, gold_path: &Path) -> Result<(), B
         println!("v: {}", render_spans(&record.text, &record.vibrato));
         println!("   conflicts at {:?}", record.conflicts);
 
-        let cuts = loop {
+        let (cuts, decision) = loop {
             let Some(answer) = ask("[j] jparser  [v] vibrato  [e] edit  [s] skip  [q] quit > ")
             else {
                 return Ok(());
             };
             match answer.as_str() {
-                "j" => break record.jparser.clone(),
-                "v" => break record.vibrato.clone(),
-                "s" => break Vec::new(),
+                "j" => break (record.jparser.clone(), Some("j".to_string())),
+                "v" => break (record.vibrato.clone(), Some("v".to_string())),
+                "s" => break (Vec::new(), None),
                 "q" => return Ok(()),
                 "e" => {
                     let Some(line) =
@@ -164,7 +164,7 @@ pub fn run(index_dir: &Path, diff_path: &Path, gold_path: &Path) -> Result<(), B
                         return Ok(());
                     };
                     match parse_cuts(&line, chars) {
-                        Ok(cuts) => break cuts,
+                        Ok(cuts) => break (cuts, Some("e".to_string())),
                         Err(e) => println!("  {e}"),
                     }
                 }
@@ -197,7 +197,13 @@ pub fn run(index_dir: &Path, diff_path: &Path, gold_path: &Path) -> Result<(), B
                 }
                 if let Some(rest) = answer.strip_prefix('#') {
                     match rest.parse::<u32>() {
-                        Ok(id) => break Some(id),
+                        Ok(id) => match index.entry(id)? {
+                            Some(_) => break Some(id),
+                            None => {
+                                println!("    {id} is not in this index");
+                                continue;
+                            }
+                        },
                         Err(_) => {
                             println!("    {rest:?} is not an ent_seq");
                             continue;
@@ -220,6 +226,7 @@ pub fn run(index_dir: &Path, diff_path: &Path, gold_path: &Path) -> Result<(), B
             text: record.text.clone(),
             source: record.source.clone(),
             spans,
+            decision,
         };
         // Validate before appending: an invalid record in the gold file is a
         // hard error at score time, and catching it here costs one check.

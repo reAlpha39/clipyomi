@@ -23,6 +23,7 @@
 //! ratio. Never combined: a change that improves one and harms the other is a
 //! finding, not noise.
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
 
@@ -36,6 +37,14 @@ use crate::corpus::{read_gold, validate, GoldRecord};
 /// longest label at 14 chars; 16 leaves two spaces after it.
 const LABEL_WIDTH: usize = 16;
 
+/// One decision's span-accuracy tally within [`Metrics::by_decision`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct DecisionBreakdown {
+    pub decision: String,
+    pub hits: usize,
+    pub total: usize,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Metrics {
     pub sentences: usize,
@@ -47,6 +56,49 @@ pub struct Metrics {
     pub span_hits: usize,
     pub top1_hits: usize,
     pub top1_total: usize,
+    /// Span accuracy split by `label`'s decision (Critical 1 in the Phase 0
+    /// review): `j` blesses the hints-off parse verbatim, so a `j`-blessed
+    /// sentence scores 1.0 under `score` hints-off by construction. Recording
+    /// the split makes that bias visible instead of hiding inside the
+    /// headline number. Empty when no gold record carries a `decision` (a
+    /// hand-authored corpus, for instance), and printed and serialized only
+    /// then. Ordered `j`, `v`, `e`, then anything else alphabetically —
+    /// [`run`] sorts it before either output is produced.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub by_decision: Vec<DecisionBreakdown>,
+}
+
+/// Bump one decision's span tally in `by_decision`, inserting it if this is
+/// its first span. A linear scan over a handful of decisions costs less than
+/// the map bookkeeping it would replace.
+fn bump_decision(by_decision: &mut Vec<DecisionBreakdown>, decision: &str, hit: bool) {
+    let entry = match by_decision.iter_mut().find(|d| d.decision == decision) {
+        Some(entry) => entry,
+        None => {
+            by_decision.push(DecisionBreakdown {
+                decision: decision.to_string(),
+                hits: 0,
+                total: 0,
+            });
+            by_decision.last_mut().expect("just pushed")
+        }
+    };
+    entry.total += 1;
+    if hit {
+        entry.hits += 1;
+    }
+}
+
+/// `j`, `v`, `e`, then anything else alphabetically — the order design's
+/// Critical 1 fix prints the breakdown in, so `j`'s optimistic bias is always
+/// the first thing a reader sees.
+fn decision_rank(decision: &str) -> (u8, &str) {
+    match decision {
+        "j" => (0, decision),
+        "v" => (1, decision),
+        "e" => (2, decision),
+        _ => (3, decision),
+    }
 }
 
 /// Fold one sentence's gold and parse into `m`.
@@ -54,13 +106,14 @@ pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
     m.sentences += 1;
     for span in &gold.spans {
         m.gold_spans += 1;
-        let Some(seg) = parsed
+        let seg = parsed
             .segments
             .iter()
-            .find(|s| s.start == span.start && s.len == span.len)
-        else {
-            continue;
-        };
+            .find(|s| s.start == span.start && s.len == span.len);
+        if let Some(decision) = gold.decision.as_deref() {
+            bump_decision(&mut m.by_decision, decision, seg.is_some());
+        }
+        let Some(seg) = seg else { continue };
         m.span_hits += 1;
         // A null gold span asserts nothing about ranking, so it leaves both
         // halves of entry top-1 untouched.
@@ -74,6 +127,41 @@ pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
     }
 }
 
+/// Confirm every `ent_seq` a gold record names actually resolves in `index`.
+/// Design §12: absent is a hard error, not a zero score — it means the
+/// extractor was not re-run after the corpus grew, and scoring it as a miss
+/// would misattribute a stale fixture to the engine. `cache` remembers each
+/// id's presence across records, since the same id recurs across a corpus and
+/// a miss would otherwise be a fresh decode off the mmap every time.
+fn ensure_ent_seqs_exist(
+    index: &Index,
+    cache: &mut HashMap<u32, bool>,
+    record: &GoldRecord,
+) -> Result<(), Box<dyn Error>> {
+    for span in &record.spans {
+        let Some(ent_seq) = span.ent_seq else {
+            continue;
+        };
+        let present = match cache.get(&ent_seq) {
+            Some(&present) => present,
+            None => {
+                let present = index.entry(ent_seq)?.is_some();
+                cache.insert(ent_seq, present);
+                present
+            }
+        };
+        if !present {
+            return Err(format!(
+                "gold record {:?} names ent_seq {ent_seq}, which is not in this index \
+                 (likely cause: a stale subset — re-run tools/extract_jmdict_subset.py)",
+                record.text
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
+
 /// `num / den` to four places, with the fraction beside it. `n/a` padded to the
 /// same eight columns a ratio occupies, so the fractions stay aligned.
 fn ratio(num: usize, den: usize) -> String {
@@ -84,8 +172,11 @@ fn ratio(num: usize, den: usize) -> String {
     }
 }
 
-/// The human form. A frozen interface: `cli_score.rs` asserts it exactly, and
-/// the recorded baseline is transcribed from it.
+/// The human form. A frozen interface for the first five lines: `cli_score.rs`
+/// asserts them exactly, and the recorded baseline is transcribed from them.
+/// The `by decision:` line is additive — printed only when `m.by_decision` is
+/// non-empty, in whatever order it is given (design's Critical 1 fix; [`run`]
+/// sorts it before calling this).
 pub fn render(m: &Metrics) -> String {
     let w = LABEL_WIDTH;
     let mut out = String::new();
@@ -102,6 +193,22 @@ pub fn render(m: &Metrics) -> String {
         "entry top-1:",
         ratio(m.top1_hits, m.top1_total)
     ));
+    if !m.by_decision.is_empty() {
+        let parts: Vec<String> = m
+            .by_decision
+            .iter()
+            .map(|d| {
+                format!(
+                    "{} {:.4} ({} / {})",
+                    d.decision,
+                    d.hits as f64 / d.total as f64,
+                    d.hits,
+                    d.total
+                )
+            })
+            .collect();
+        out.push_str(&format!("  by decision:  {}\n", parts.join("  ")));
+    }
     out
 }
 
@@ -131,8 +238,10 @@ pub fn run(
         superseded,
         ..Metrics::default()
     };
+    let mut ent_seq_cache: HashMap<u32, bool> = HashMap::new();
     for record in &records {
         validate(record)?;
+        ensure_ent_seqs_exist(&index, &mut ent_seq_cache, record)?;
         #[cfg(feature = "mecab")]
         let flags = tokenizer.as_ref().map(|t| t.hints(&record.text));
         #[cfg(feature = "mecab")]
@@ -150,6 +259,8 @@ pub fn run(
         )?;
         accumulate(record, &parsed, &mut m);
     }
+    m.by_decision
+        .sort_by(|a, b| decision_rank(&a.decision).cmp(&decision_rank(&b.decision)));
 
     if json {
         println!("{}", serde_json::to_string(&m)?);
@@ -178,6 +289,18 @@ mod tests {
                     ent_seq,
                 })
                 .collect(),
+            decision: None,
+        }
+    }
+
+    fn gold_with_decision(
+        text: &str,
+        spans: &[(usize, usize, Option<u32>)],
+        decision: &str,
+    ) -> GoldRecord {
+        GoldRecord {
+            decision: Some(decision.to_string()),
+            ..gold(text, spans)
         }
     }
 
@@ -315,6 +438,7 @@ mod tests {
             span_hits: 2167,
             top1_hits: 1502,
             top1_total: 1898,
+            ..Metrics::default()
         };
 
         assert_eq!(
@@ -338,6 +462,7 @@ mod tests {
             span_hits: 1,
             top1_hits: 0,
             top1_total: 0,
+            ..Metrics::default()
         };
 
         assert!(
@@ -345,5 +470,152 @@ mod tests {
             "got {}",
             render(&m)
         );
+    }
+
+    /// Critical 1's fix, at the `accumulate` level: a `j`-blessed record and a
+    /// `v`-blessed record land in separate `by_decision` buckets, and a record
+    /// with no `decision` touches neither.
+    #[test]
+    fn accumulate_splits_span_accuracy_by_decision() {
+        let mut m = Metrics::default();
+        accumulate(
+            &gold_with_decision("あい", &[(0, 1, None), (1, 1, None)], "j"),
+            &parsed(vec![seg(0, 1, &[]), seg(1, 1, &[])]),
+            &mut m,
+        );
+        accumulate(
+            // Only the first span matches; the second gold span (1,1) has no
+            // corresponding segment in this parse, so it is a miss for `v`.
+            &gold_with_decision("あい", &[(0, 1, None), (1, 1, None)], "v"),
+            &parsed(vec![seg(0, 1, &[])]),
+            &mut m,
+        );
+        accumulate(
+            &gold("う", &[(0, 1, None)]),
+            &parsed(vec![seg(0, 1, &[])]),
+            &mut m,
+        );
+
+        let mut by_decision = m.by_decision.clone();
+        by_decision.sort_by(|a, b| decision_rank(&a.decision).cmp(&decision_rank(&b.decision)));
+        assert_eq!(
+            by_decision,
+            vec![
+                DecisionBreakdown {
+                    decision: "j".to_string(),
+                    hits: 2,
+                    total: 2,
+                },
+                DecisionBreakdown {
+                    decision: "v".to_string(),
+                    hits: 1,
+                    total: 2,
+                },
+            ],
+            "the undecided record contributes to neither bucket"
+        );
+    }
+
+    /// The breakdown line is additive and appears only when there is one to
+    /// show, in the order it is given — `run` is what sorts it into `j, v, e`.
+    #[test]
+    fn render_prints_the_decision_breakdown_only_when_present() {
+        let mut m = Metrics {
+            sentences: 2,
+            gold_spans: 2,
+            superseded: 0,
+            span_hits: 1,
+            top1_hits: 0,
+            top1_total: 0,
+            ..Metrics::default()
+        };
+        assert!(!render(&m).contains("by decision"), "nothing to show yet");
+
+        m.by_decision = vec![
+            DecisionBreakdown {
+                decision: "j".to_string(),
+                hits: 1,
+                total: 1,
+            },
+            DecisionBreakdown {
+                decision: "v".to_string(),
+                hits: 0,
+                total: 1,
+            },
+        ];
+        assert!(
+            render(&m).contains("  by decision:  j 1.0000 (1 / 1)  v 0.0000 (0 / 1)\n"),
+            "got {}",
+            render(&m)
+        );
+    }
+
+    fn tiny_index(dir: &std::path::Path) -> Index {
+        const XML: &str = concat!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+            "<JMdict>",
+            "<entry><ent_seq>1</ent_seq>",
+            "<r_ele><reb>あ</reb></r_ele>",
+            "<sense><pos>&n;</pos><gloss>ah</gloss></sense></entry>",
+            "</JMdict>",
+        );
+        let table = ConjugationTable::load_embedded().expect("embedded table");
+        jparser::index::build::build_from_reader(
+            XML.as_bytes(),
+            &table,
+            &jparser::stem::StemOptions::default(),
+            dir,
+        )
+        .expect("the fixture must build");
+        Index::open(dir).expect("open the built index")
+    }
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("jparser-score-unit-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    /// Design §12: an ent_seq absent from the index is a hard error naming
+    /// both the record's text and the offending id, not a silent miss.
+    #[test]
+    fn an_absent_ent_seq_is_a_hard_error() {
+        let dir = scratch("absent-ent-seq");
+        let index = tiny_index(&dir);
+        let mut cache = HashMap::new();
+
+        let err = ensure_ent_seqs_exist(&index, &mut cache, &gold("あ", &[(0, 1, Some(999))]))
+            .expect_err("999 is not in the tiny index");
+
+        let msg = err.to_string();
+        assert!(msg.contains("あ"), "names the text: {msg}");
+        assert!(msg.contains("999"), "names the ent_seq: {msg}");
+    }
+
+    #[test]
+    fn a_present_ent_seq_passes_and_is_cached() {
+        let dir = scratch("present-ent-seq");
+        let index = tiny_index(&dir);
+        let mut cache = HashMap::new();
+        let record = gold("あ", &[(0, 1, Some(1))]);
+
+        ensure_ent_seqs_exist(&index, &mut cache, &record).expect("1 is in the tiny index");
+        // Second span, same id: must still pass from the cache alone.
+        ensure_ent_seqs_exist(&index, &mut cache, &record).expect("cached hit still passes");
+
+        assert_eq!(cache.get(&1), Some(&true));
+    }
+
+    /// A `null` gold span names no entry at all, so it can never trip the
+    /// absent-ent_seq hard error.
+    #[test]
+    fn a_null_ent_seq_never_triggers_the_hard_error() {
+        let dir = scratch("null-ent-seq");
+        let index = tiny_index(&dir);
+        let mut cache = HashMap::new();
+
+        ensure_ent_seqs_exist(&index, &mut cache, &gold("あ", &[(0, 1, None)]))
+            .expect("a null span names nothing to look up");
     }
 }
