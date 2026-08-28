@@ -2070,7 +2070,7 @@ def main(argv):
 def demo():
     """Self-check for `clean`, the only branching logic here."""
     assert clean("テスト太郎「これはためしの文です」") == (
-        "「いや、それ以前に、こんなの考えたこともないか?」",
+        "「これはためしの文です」",
         "テスト太郎",
     )
     assert clean("「ここにもためしの文があります」") == ("「ここにもためしの文があります」", "")
