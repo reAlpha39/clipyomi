@@ -14,8 +14,8 @@ requires a *committed* corpus. Master plan §9.1, §9.2 and §9.6 are all answer
 
 ## 1. What exists now
 
-Thirteen commits, `0e8b1cb`..`7ed79c4` (originally `4933d91`..`765da93`, rewritten by the §10 scrub). Tests: **320** under default
-features, **353** under `--features mecab`, all passing. `cargo check -p jparser
+Thirteen commits, `0e8b1cb`..`7ed79c4` (originally `4933d91`..`765da93`, rewritten by the §10 scrub). Tests: **324** under default
+features, **357** under `--features mecab`, all passing. `cargo check -p jparser
 --no-default-features` clean; `cargo clippy -p jparser --all-targets -- -D warnings`
 clean with and without `--features mecab`.
 
@@ -578,8 +578,55 @@ visible rather than merely un-punished. The two numbers together also localise
 regressions: a Phase 1 change that moves strict accuracy without moving the
 tolerant one has changed granularity, not correctness.
 
-This is a decision about what every later phase is measured against, so it is
-the author's, and it wants making before Phase 1 writes any code.
+### 9.4 Built — and it costs 16.5 points
+
+Option 2 is implemented in `score.rs`. A gold span strict accuracy scored as a
+miss counts as a hit when a single **matched** segment swallows it whole and
+that segment's own endpoints are both gold boundaries. Three conditions, each
+load-bearing and each with a test: an unmatched fallback run is not forgiven
+(it is the §9.1 punctuation-lumping defect, not an analysis), a merge that ends
+inside a gold span is not forgiven (it cut one), and the strict number is still
+printed beside it.
+
+Both output forms are additive and silent when there is no coarsening — which
+is itself the reading "strict and tolerant agree" — so an exact-parse corpus
+serializes byte-identically to before the field existed.
+
+```
+span accuracy:  0.6810  (1473 / 2163)
+entry top-1:    0.9159  (1046 / 1142)
+  by decision:  e 0.6810 (1473 / 2163)
+span tolerant:  0.8465  (1831 / 2163)
+  coarsening:   358 gold spans inside 167 dictionary merges
+```
+
+| | span accuracy | compound-tolerant | coarsening |
+| --- | --- | --- | --- |
+| hints off | 0.6810 (1473 / 2163) | **0.8465** (1831 / 2163) | 358 spans, 167 merges |
+| hints on | 0.6963 (1506 / 2163) | **0.8678** (1877 / 2163) | 371 spans, 173 merges |
+| delta | +0.0153 | **+0.0213** | |
+
+**16.5 points of what looked like error was benign coarsening.** The engine's
+real span behaviour on a deliberately hard, disagreement-sampled corpus is
+0.85, not 0.68.
+
+**The hint benefit was being understated.** +2.13 points tolerant against +1.53
+strict. §8.3's comparison — the one Phase 0 exists to produce — comes out more
+strongly in favour of hints than the strict metric said, so this correction
+strengthens the existing conclusion rather than revising it.
+
+**Design §11.4 still holds, and this was the real risk.** The tolerant metric
+depends on a merged surface having matched an entry, so it was not obvious the
+subset index would agree with the full 67 MB one — an entry needed only for a
+merge might never have been named by gold and so never kept. It agrees exactly:
+`coarse_forgiven` 358 and `coarse_merges` 167 on both indexes, hints-off and
+hints-on, every other field identical too. The offline gate survives the new
+metric.
+
+Tests: 324 default, 357 under `--features mecab`, both clippy gates clean.
+`cli_score.rs`'s by-decision fixture turned out to be the smallest possible
+demonstration of the whole finding — its gold splits `高い` into `高` / `い`
+while the index carries `高い` — so it now pins both numbers.
 
 ## 10. Loose ends
 

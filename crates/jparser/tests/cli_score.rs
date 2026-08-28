@@ -146,6 +146,13 @@ fn an_ent_seq_absent_from_the_index_is_a_hard_error() {
 /// Critical 1's fix: span accuracy split by the `label` decision that
 /// produced each record, printed after the two headline metrics and only
 /// when at least one record carries a `decision`.
+///
+/// This fixture also happens to be the smallest demonstration of handoff §9's
+/// finding, so it pins the compound-tolerant lines too. Gold splits `高い`
+/// into `高` / `い`; the index carries `高い`, so the parse matches it whole.
+/// Strict span accuracy calls that two misses. The merge starts and ends on
+/// gold boundaries and cut no gold span, so tolerant calls it two hits — and
+/// the two numbers printed together are the point.
 #[test]
 fn score_reports_a_span_accuracy_breakdown_by_decision() {
     let dir = scratch("cli-score-by-decision");
@@ -170,6 +177,8 @@ fn score_reports_a_span_accuracy_breakdown_by_decision() {
             "span accuracy:  0.3333  (1 / 3)\n",
             "entry top-1:    1.0000  (1 / 1)\n",
             "  by decision:  j 1.0000 (1 / 1)  v 0.0000 (0 / 2)\n",
+            "span tolerant:  1.0000  (3 / 3)\n",
+            "  coarsening:   2 gold spans inside 1 dictionary merge\n",
         )
     );
 }
