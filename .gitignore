@@ -38,3 +38,10 @@ vn_data/
 # by the same `jparser-cli score` as the committed corpus but never committed
 # (Phase 0 design §3.2). The committed corpus is the reproducible contract.
 crates/jparser/tests/fixtures/gold_local.jsonl
+
+# Phase 0 task 8 staging: the fetched/derived sentence pools, the diff output,
+# and the one-off fetch scripts. The committed artefacts are the adjudicated
+# gold.jsonl, its regenerated subset, and the provenance rows in
+# gold_sources.md (Phase 0 design §4.4). corpus_staging/README.md records the
+# findings so they survive the directory.
+corpus_staging/
