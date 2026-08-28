@@ -233,6 +233,68 @@ pub fn run(index_dir: &Path, diff_path: &Path, gold_path: &Path) -> Result<(), B
 mod tests {
     use super::*;
 
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("jparser-label-unit-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    /// Pins the tautology guard directly: two candidates on one span, built
+    /// so jparser's own ranked order and ent_seq-ascending order disagree.
+    ///
+    /// A plain tie is not discriminating here — `rank.rs`'s `sort_matches`
+    /// groups by `entry_id` first (Pass A), so two candidates with identical
+    /// flags already come back ent_seq-ascending with no help from
+    /// `candidates`'s own sort. `re_pri` on the *higher* ent_seq breaks that:
+    /// it marks that entry `COMMON`, which `RANK_FLAG_MASK` ranks ahead of an
+    /// unmarked entry, so jparser's ranked order becomes `[2000002, 2000001]`
+    /// while ent_seq order is `[2000001, 2000002]`. Only `candidates`'s
+    /// `out.sort_by_key(|(id, _)| *id)` produces the latter; delete that line
+    /// and this test fails (verified by hand — see the Task 7 report).
+    #[test]
+    fn candidates_are_sorted_by_ent_seq_not_by_jparsers_rank() {
+        const XML: &str = concat!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+            "<JMdict>",
+            "<entry><ent_seq>2000002</ent_seq>",
+            "<r_ele><reb>かみ</reb><re_pri>news1</re_pri></r_ele>",
+            "<sense><pos>&n;</pos><gloss>god</gloss></sense></entry>",
+            "<entry><ent_seq>2000001</ent_seq>",
+            "<r_ele><reb>かみ</reb></r_ele>",
+            "<sense><pos>&n;</pos><gloss>hair</gloss></sense></entry>",
+            "</JMdict>",
+        );
+
+        let table =
+            ConjugationTable::load_embedded().expect("the embedded conjugation table must load");
+        let dir = scratch("ent-seq-not-rank");
+        let report = jparser::index::build::build_from_reader(
+            XML.as_bytes(),
+            &table,
+            &jparser::stem::StemOptions::default(),
+            &dir,
+        )
+        .expect("the fixture must build");
+        assert_eq!(
+            report.skipped_entries, 0,
+            "the fixture must not be malformed"
+        );
+        let index = Index::open(&dir).expect("open the built index");
+
+        let ids: Vec<u32> = candidates(&index, &table, "かみ", 0, 2)
+            .expect("candidates must parse the span")
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        assert_eq!(
+            ids,
+            vec![2000001, 2000002],
+            "ent_seq ascending, not jparser's ranked order"
+        );
+    }
+
     #[test]
     fn cuts_become_spans() {
         assert_eq!(spans_from_cuts(&[0, 3, 4, 7]), vec![(0, 3), (3, 1), (4, 3)]);
