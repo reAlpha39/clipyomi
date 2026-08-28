@@ -68,3 +68,8 @@ path = "tests/entry_id.rs"
 name = "cli_score"
 path = "tests/cli_score.rs"
 required-features = ["cli"]
+
+[[test]]
+name = "cli_label"
+path = "tests/cli_label.rs"
+required-features = ["cli"]
