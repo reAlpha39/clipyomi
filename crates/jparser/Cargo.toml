@@ -59,3 +59,7 @@ path = "tests/cli_hints.rs"
 # `--no-default-features --features hints-source` builds the test without the
 # binary and it fails to compile. `cli_generations` above already pairs them.
 required-features = ["hints-source", "cli"]
+
+[[test]]
+name = "entry_id"
+path = "tests/entry_id.rs"

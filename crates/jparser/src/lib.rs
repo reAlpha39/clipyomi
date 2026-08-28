@@ -105,6 +105,13 @@ pub struct Entry {
     pub senses: Vec<Sense>,
     /// The match's flags after the DP's stale-`COUNTER` clearing.
     pub flags: WordFlags,
+    /// The JMdict `ent_seq` this candidate came from.
+    ///
+    /// Read straight off the element by `jmdict.rs` into `RawEntry::id`, so it
+    /// is the same stable public identifier a JMdict consumer would cite. The
+    /// Phase 0 harness scores entry top-1 against it (`gold.jsonl`'s
+    /// `ent_seq`); exposing it changes nothing about what `parse` computes.
+    pub entry_id: u32,
 }
 
 /// Everything `parse` can fail at. Reading the memory-mapped index payload is
@@ -210,6 +217,7 @@ fn assemble_entry(m: &Match, data: &EntryData, table: &ConjugationTable, text: &
         pos,
         senses: data.senses.clone(),
         flags: m.flags,
+        entry_id: m.entry_id,
     }
 }
 
@@ -692,6 +700,7 @@ mod tests {
                     pos: vec!["n".to_string()],
                     senses: vec![],
                     flags: WordFlags::PRIMARY,
+                    entry_id: 0,
                 }],
             }],
         };
