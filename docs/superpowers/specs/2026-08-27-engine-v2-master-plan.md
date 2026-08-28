@@ -647,19 +647,98 @@ No layer ships without its licence established in writing first.
    `hints.rs` now resolves the column at load time with a
    `TA_HINTS_READING_FIELD` override, and carries a test pinning that a column
    the dictionary lacks derives no flags at all rather than partial ones.
-7. **Does sudachi.rs change the answer to question 6?** Not considered in this
-   plan's first draft. Pure Rust, zero FFI, and its Mode A/B/C multi-granularity
-   is aimed at exactly the short-unit-versus-long-unit tension §5.2 describes:
-   Mode C keeps `東京都` whole, Mode A splits it. Two caveats keep it out of
-   Phase 1. **It is Apache-2.0 with no MIT leg**, and `src-tauri/Cargo.toml`
-   records twice that Apache-2.0 alone is incompatible with this repository's
-   GPL-2.0-only — so it cannot enter the tree until the relicence has landed,
-   which is Phase 1's output, not its input. And Mode C emits *SudachiDict* long
-   units, not JMdict headwords, so it narrows the compound-preservation gap
-   without closing it; the JMdict-aware scoring layer stays either way (§4.3).
-   **Measure it out-of-tree at the Phase 0/1 boundary**, where nothing is
-   distributed and the licence question does not arise, and record the number
-   here.
+7. ~~**Does sudachi.rs change the answer to question 6?**~~ **ANSWERED — no.
+   Stay on Vibrato for Phase 1.** Measured out-of-tree at the Phase 0/1
+   boundary against the 150-sentence corpus.
+
+   Pure Rust, zero FFI, and its Mode A/B/C multi-granularity is aimed at exactly
+   the short-unit-versus-long-unit tension §5.2 describes: Mode C keeps `東京都`
+   whole, Mode A splits it. Two caveats kept it out of Phase 1 in advance. **It
+   is Apache-2.0 with no MIT leg**, and `src-tauri/Cargo.toml` records twice
+   that Apache-2.0 alone is incompatible with this repository's GPL-2.0-only —
+   so it cannot enter the tree until the relicence has landed, which is Phase
+   1's output, not its input. (§9.2's answer, `MIT OR Apache-2.0`, removes that
+   obstacle from Phase 1 onward.) And Mode C emits *SudachiDict* long units, not
+   JMdict headwords.
+
+   **How it was measured.** §9.6 swapped one Vibrato dictionary for another and
+   re-scored, which is a file path. Sudachi is a different engine with a
+   different dictionary format, so the equivalent experiment means writing a
+   sudachi-backed hints path — Phase 1 work, on a crate that cannot enter the
+   tree yet. What answers the question without any of that is the quality of the
+   boundaries themselves, since §4.3's whole claim is that a hint source's job
+   is to supply boundary evidence to the DP. **A hint source can only help where
+   it has the boundary**, so boundary recall bounds what any wiring could
+   achieve. Interior boundaries only; 0 and `len` are excluded because every
+   tokenizer emits them. `corpus_staging/measure_sudachi.py`, against 2,013
+   interior gold boundaries and 1,042 gold spans of two or more characters.
+
+   | source | recall | precision | F1 | gold span exact | gold span uncut |
+   | --- | ---: | ---: | ---: | ---: | ---: |
+   | jparser (hints off) | 0.8614 | 0.8206 | 0.8405 | 0.5902 | 0.7879 |
+   | **Vibrato / IPADIC** | 0.9707 | **0.8426** | **0.9021** | 0.6708 | **0.7015** |
+   | sudachi Mode A | **0.9886** | 0.8073 | 0.8888 | 0.6478 | 0.6603 |
+   | sudachi Mode B | 0.9856 | 0.8232 | 0.8971 | **0.6727** | 0.6910 |
+   | sudachi Mode C | 0.9796 | 0.8254 | 0.8960 | 0.6603 | 0.6996 |
+
+   *exact* is the share of multi-character gold spans emitted as exactly one
+   token — the §5.2 compound question. *uncut* is the share with no tokenizer
+   boundary strictly inside, which is the §4.2 benign-coarsening distinction
+   applied to the hint source: a tokenizer that merges two gold spans is still a
+   usable constraint, one that cuts inside a gold span is not.
+
+   **Sudachi has better recall and worse precision, and loses on F1.** Every
+   mode finds more of the gold boundaries than Vibrato — Mode A misses only 23
+   of 2,013 — and every mode pays for it in spurious boundaries, emitting 2,389
+   to 2,465 against Vibrato's 2,319. Vibrato wins F1 outright.
+
+   **Mode C is not the best mode, and the reason is the one this question
+   anticipated.** Its exact-match rate (0.6603) is *below* Mode B's and below
+   Vibrato's. Mode C's long units are SudachiDict named entities, and they
+   swallow JMdict headwords whole: 41 gold spans disappear inside a longer Mode C
+   unit, including `武田`/`信玄` inside 武田信玄, `東京都`/`新宿` inside 東京都新宿区,
+   `JR`/`東日本`, `湘南`/`新宿` inside 湘南新宿ライン, and `17`/`290` inside
+   17万290. The long-unit vocabulary is real and it is not JMdict's.
+
+   **The two engines fail on disjoint classes, which is the finding worth
+   keeping.** Mode C matches 55 gold spans exactly that Vibrato misses and
+   misses 43 that Vibrato matches. The 55 are dominated by unregistered
+   reduplicated mimetics — `ぱひゅぱひゅぱひゅ`, `どぷんどぷんどぷん`,
+   `ぬちゃぬちゃぬちゃ` — which sudachi's OOV handling groups into one unknown
+   token where Vibrato splits them. That is not a marginal class for this
+   project: §5.3's measurement over the whole `vn_data` pool found reduplicated
+   mimetics are ~65% of real jparser-versus-Vibrato conflicts. The 43 are the
+   named-entity compounds above. So the honest summary is that neither engine
+   dominates; sudachi is better at unknown-word grouping and worse at not
+   inventing compound boundaries.
+
+   **What decides it is a number in the same table that is not about sudachi at
+   all.** jparser's own boundary recall is 0.8614 while every tokenizer sits at
+   0.97 or above. jparser is missing 279 gold boundaries that the hint source
+   already has. Switching hint sources is worth at most 1.8 points of recall;
+   using the existing hints as §4.3 describes is worth eleven. Phase 1 should
+   spend its effort there.
+
+   **Revisit in Phase 2, and only on evidence.** If Phase 1's measured error
+   analysis shows unregistered mimetic runs surviving as a residual class, the
+   sudachi comparison is the place to look, and by then the relicence has landed
+   so the Apache-2.0 leg is no longer an obstacle.
+
+   **Caveats, both of which strengthen the conclusion rather than weaken it.**
+   This measures boundary quality, not end-to-end span accuracy; a
+   sudachi-backed hints path could still score differently, though it cannot
+   recover a boundary the tokenizer never emitted. And the corpus is
+   disagreement-sampled on `Bj \ Bv ≠ ∅`, which selects sentences where jparser
+   cut somewhere Vibrato did not — so Vibrato's recall is measured on ground
+   chosen adversarially to it, while sudachi played no part in the sampling and
+   is measured neutrally. Vibrato still wins.
+
+   **Provenance.** SudachiPy 0.6.11 with SudachiDict-core, in a venv outside the
+   repository. SudachiPy 0.6.x is not a second implementation — its home page is
+   `github.com/WorksApplications/sudachi.rs/tree/develop/python` and it is the
+   Python binding over the Rust crate, so this measures sudachi.rs itself with no
+   port-parity assumption. Nothing was distributed and no sudachi code entered
+   the tree. Raw output in `corpus_staging/sudachi_result.txt`.
 
 ---
 
@@ -678,6 +757,7 @@ No layer ships without its licence established in writing first.
 | Reject Eppstein's algorithm for k-best | Same review. The lattice is a DAG, so exact k-best is a backward-Viterbi potential plus a priority queue over partial paths — about fifty lines, and what MeCab's N-best already does. Eppstein's persistent 4-ary heap buys asymptotics that never bind at tens of nodes and k≈3, at a much higher chance of being wrong |
 | Reject CI provenance auditing that diffs against ta-old | Same review proposed continuous AST comparison against the upstream repository. That requires the protected expression present in CI and in the workspace, which is the one fact §3.5 must be able to deny. If a mechanised check is wanted, fingerprint the upstream once from outside the clean room and compare against the fingerprints |
 | Target `MIT OR Apache-2.0` | The Rust ecosystem default, so no downstream has to reason about an unusual combination; the Apache leg adds a patent grant no §3.3 source supplies; and it is the only option that keeps §9.7 open, since MIT-only would foreclose Apache-2.0-only sudachi.rs forever and Apache-2.0-only would recreate the GPL-2.0-only incompatibility in the other direction (§9.2) |
+| Stay on Vibrato; do not adopt sudachi.rs in Phase 1 | Measured out-of-tree on the gold corpus: sudachi has higher boundary recall in every mode and lower precision in every mode, and loses on F1. Mode C is worse than Mode B because its SudachiDict long units swallow JMdict headwords — 41 gold spans vanish inside them. The two engines fail on disjoint classes, so neither dominates. The number that decides it is jparser's own 0.8614 recall against every tokenizer's 0.97+: the headroom is in using the hints, not in changing them (§9.7) |
 | Correct the model-adjudicated corpus rather than discard it | The author's review found 14 wrong spans in 2,163 (0.6%), from two causes that are both mechanical and both fixable in the scratch tables: null reasons written against a truncated candidate list, and one per-surface entry decision applied to a surface whose correct answer varies by context. Neither is a reason to distrust the other 2,149 (§5.3 note) |
 | Stay on IPADIC; do not adopt UniDic | Measured at the Phase 0/1 boundary on the gold corpus: UniDic scores one span worse and slightly worse on entry top-1, for 199 MB against 46 MB and a per-dictionary reading-column property IPADIC does not need (§9.6) |
 | Treat the tokenizer's reading column as a per-dictionary property, not a constant | IPADIC's reading is at field 7 and UniDic's at 9, and reading IPADIC at 9 silently disables every hint and scores exactly the no-hints baseline. A wrong constant is invisible in both metrics (§9.6) |
