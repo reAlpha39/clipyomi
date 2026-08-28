@@ -11,6 +11,8 @@
 // tested before anything depends on them.
 #[allow(dead_code)]
 mod corpus;
+#[cfg(feature = "mecab")]
+mod diff;
 mod score;
 
 use std::io::BufReader;
@@ -165,6 +167,30 @@ enum Command {
         /// Emit the metrics as one JSON object instead of the human form.
         #[arg(long)]
         json: bool,
+    },
+    /// Emit the pool sentences where jparser has a segmentation cut Vibrato
+    /// does not — the gold corpus's sampling signal.
+    ///
+    /// `--hints` is required: Vibrato is the second segmenter, so there is
+    /// nothing to diff against without it.
+    #[cfg(feature = "mecab")]
+    Diff {
+        /// Index directory.
+        index: PathBuf,
+        /// TSV pool: `source<TAB>text[<TAB>speaker]`.
+        pool: PathBuf,
+        /// Path to an uncompressed compiled Vibrato dictionary.
+        #[arg(long)]
+        hints: PathBuf,
+        /// Emit every sentence whose boundary sets differ at all, not only
+        /// those where jparser cut inside a Vibrato token. For verifying the
+        /// predicate by hand; not for sampling.
+        #[arg(long)]
+        all: bool,
+        /// Keep only the N densest disagreements. What was dropped is reported
+        /// on stderr.
+        #[arg(long)]
+        limit: Option<usize>,
     },
     /// Convert kana to romaji.
     Romaji {
@@ -374,6 +400,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             hints.as_deref(),
             json,
         )?,
+        #[cfg(feature = "mecab")]
+        Command::Diff {
+            index,
+            pool,
+            hints,
+            all,
+            limit,
+        } => diff::run(&index, &pool, &hints, all, limit)?,
         Command::Romaji { text, particle } => {
             let out = jparser::romaji::to_romaji(&text);
             let out = if particle {
