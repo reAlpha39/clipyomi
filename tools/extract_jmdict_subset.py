@@ -14,6 +14,12 @@ Usage:
         crates/jparser/assets/conjugations.json \\
         crates/jparser/tests/fixtures/jmdict_subset.xml
 
+    python3 tools/extract_jmdict_subset.py \\
+        /tmp/jmdict/JMdict_e.xml \\
+        gold.jsonl \\
+        crates/jparser/assets/conjugations.json \\
+        crates/jparser/tests/fixtures/jmdict_subset.xml
+
 Entries are copied verbatim by text slicing, never re-serialized: JMdict's
 parts of speech are entity references and a DTD-aware parser would expand
 them into prose, which is precisely the data jparser reads as POS codes.
@@ -89,6 +95,32 @@ def remove_suffixes(asset_path):
     return {s for s in out if s}
 
 
+def read_corpus(path):
+    """Sentences from a plain-text or JSONL corpus, deduplicated in order.
+
+    `.txt` is one sentence per line, '#' comments and blanks ignored — the
+    parse_sentences.txt format. `.jsonl` reads each record's "text" field, so
+    the gold corpus is its own single source of truth and no parallel sentence
+    list has to be kept in sync with it.
+
+    Duplicates are dropped rather than rejected: the substring closure is a
+    set, so a repeated sentence would only widen it redundantly.
+    """
+    p = Path(path)
+    raw = p.read_text(encoding="utf-8")
+    if p.suffix == ".jsonl":
+        texts = [
+            json.loads(line)["text"] for line in raw.splitlines() if line.strip()
+        ]
+    else:
+        texts = [
+            s
+            for s in (line.strip() for line in raw.splitlines())
+            if s and not s.startswith("#")
+        ]
+    return list(dict.fromkeys(texts))
+
+
 def wanted_keys(sentences):
     """Every unified substring of the corpus, plus the empty key.
 
@@ -127,11 +159,7 @@ def main(argv):
         return 2
     jmdict_path, sentences_path, asset_path, out_path = argv[1:]
 
-    sentences = [
-        line.strip()
-        for line in Path(sentences_path).read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
+    sentences = read_corpus(sentences_path)
     if not sentences:
         print("no sentences: check the corpus path", file=sys.stderr)
         return 1

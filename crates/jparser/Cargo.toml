@@ -63,3 +63,8 @@ required-features = ["hints-source", "cli"]
 [[test]]
 name = "entry_id"
 path = "tests/entry_id.rs"
+
+[[test]]
+name = "cli_score"
+path = "tests/cli_score.rs"
+required-features = ["cli"]
