@@ -14,7 +14,7 @@ requires a *committed* corpus. Master plan §9.1, §9.2 and §9.6 are all answer
 
 ## 1. What exists now
 
-Thirteen commits, `4933d91`..`765da93` on `develop`. Tests: **320** under default
+Thirteen commits, `0e8b1cb`..`7ed79c4` (originally `4933d91`..`765da93`, rewritten by the §9 scrub). Tests: **320** under default
 features, **351** under `--features mecab`, all passing. `cargo check -p jparser
 --no-default-features` clean; `cargo clippy -p jparser --all-targets -- -D warnings`
 clean with and without `--features mecab`.
@@ -46,7 +46,7 @@ commands.
 ## 3. Two defects found late, and what they change about how you label
 
 Both were found by the whole-branch review, both corrupt the corpus rather than the
-code, and both are fixed (`8890a67`). They matter to you because they change what to
+code, and both are fixed (`6676cc2`). They matter to you because they change what to
 watch while adjudicating.
 
 ### 3.1 `label`'s `j` key blesses the hints-off parse
@@ -498,8 +498,33 @@ carried. Nothing was distributed; no sudachi code is in the tree.
 - **`diff.rs`'s zero-token and clamp guards are unit-tested at the helper level only**,
   not through `tokenize`, because that needs the 46 MB dictionary. Call sites were
   verified by inspection.
-- **Captured text in git history.** Two verbatim `vn_data` dialogue lines were committed
-  in error and scrubbed in `4f9cd06`; no tracked file carries them now. They remain in
-  commits `b2e9534`..`cca9a22`. Since relicensing and publishing is Engine v2's whole
-  purpose, decide deliberately whether to `git filter-repo` those strings before any
-  publish. Nothing else in the tree is traceable to a copyrighted work.
+- **Captured text in git history — scrubbed, and the documented range was wrong.**
+  Two verbatim `vn_data` dialogue lines were committed in error and removed from the
+  tree in `ea635e4` (was `4f9cd06`). This entry used to say they remained in
+  `b2e9534`..`cca9a22`; enumerating every occurrence before the rewrite showed that
+  was understated in two ways. The taint started one commit earlier, at the design
+  doc `7f2d4e0`, and it reached `crates/jparser/src/bin/jparser-cli/diff.rs` as well
+  as `tools/extract_vn_pool.py` and the two docs — five distinct lines across four
+  files, because the character name `奈緒矢` also appeared bare, as a TSV fixture
+  value, and in prose. The tree-level scrub had removed the dialogue but the name
+  survived in history for several more commits.
+
+  `git filter-repo --replace-text` has now rewritten all 401 commits. The two
+  dialogue lines and the character name are gone from every reachable object;
+  `git log --all -S` finds nothing. The replacements are the same invented strings
+  the tree already uses (`テスト太郎`, `これはためしの文です`), so history is now
+  byte-consistent with `HEAD` rather than merely clean.
+
+  What this cost, and what it did not. `HEAD`'s tree hash is unchanged
+  (`f96d2784`), so no working content moved. `develop` (`a4df417`) and `main`
+  (`eea94eb`) kept their hashes and their upstream tracking, because the earliest
+  rewritten commit is not an ancestor of either — only this branch's 21 commits got
+  new ids. The `origin` remote is removed by `filter-repo` as a safety measure and
+  has been re-added. Every commit hash cited elsewhere in these docs that fell in
+  the rewrite range has been updated in the same commit that records this.
+
+  A pre-rewrite bundle of all refs is at
+  `%LOCALAPPDATA%\Temp\claude\D--Code-oss-clipyomi\phase0\pre-filter-repo-backup.bundle`.
+  It contains the strings, by definition — delete it once you are satisfied.
+
+  Nothing else in the tree is traceable to a copyrighted work.
