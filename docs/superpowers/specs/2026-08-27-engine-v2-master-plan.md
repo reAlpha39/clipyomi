@@ -396,6 +396,39 @@ a feature: `東京都` is a single JMdict headword, and short-unit academic gold
 splits it as `東京`+`都`. Scoring against that standard would penalise the
 correct behaviour for this tool.
 
+**Span accuracy inherited that defect, and a third metric answers it.** The
+rejection above was written about boundary F1 and stopped there. But the gold
+corpus of §5.3 is disagreement-sampled against a tokenizer, so it was
+adjudicated at the tokenizer's short-unit granularity — and strict span
+accuracy against a short-unit corpus penalises compound preservation exactly
+as boundary F1 would. Measured: it costs **16.5 points**.
+
+**Compound-tolerant span accuracy.** A gold span strict accuracy scored as a
+miss counts as a hit when a single *matched* segment swallows it whole and that
+segment's own endpoints are both gold boundaries — so it merged whole gold
+spans rather than cutting one. This is §4.2's benign-coarsening test applied to
+gold instead of to Vibrato. Three conditions, all load-bearing: unmatched
+fallback runs are not forgiven, a merge that ends inside a gold span is not
+forgiven, and the strict number is still reported beside it.
+
+Measured on the 150-sentence corpus:
+
+| | span accuracy | compound-tolerant | coarsening |
+| --- | --- | --- | --- |
+| hints off | 0.6810 (1473 / 2163) | **0.8465** (1831 / 2163) | 358 spans, 167 merges |
+| hints on | 0.6963 (1506 / 2163) | **0.8678** (1877 / 2163) | 371 spans, 173 merges |
+| delta | +0.0153 | **+0.0213** | |
+
+Two things follow. The engine's real span behaviour on a deliberately hard
+corpus is 0.85, not 0.68 — the missing 16.5 points were `音がする`,
+`ことになっている`, `首を振る`, `2月` and their kind. And **the hint benefit is
+larger than the strict metric reported**, +2.13 points rather than +1.53, so
+§8.3's conclusion is strengthened rather than revised.
+
+Never combined, and never used alone. Strict moving without tolerant moving
+means granularity changed, not correctness; the pair localises a regression a
+single number would only average away.
+
 **Oracle@k** joins in Phase 2 — is the gold parse present anywhere in the top-k
 whole-sentence readings? It measures whether k-best earns its complexity, and it
 is meaningless before k-best exists.
@@ -750,7 +783,8 @@ No layer ships without its licence established in writing first.
 | Study LunaTranslator, adopt nothing | GPL-3.0, so no reuse. Its thin-tokenizer + delegated-dictionary design would delete the conjugation chain and sense ranking that are ClipYomi's reason to exist (§4.4) |
 | Reject cross-engine consensus voting | JMdict longest-match and a deinflector share one dictionary — correlated voters echo rather than vote. Ties need a tiebreak, which rebuilds a cost model. k-best surfaces the same disagreements with a principled ranking |
 | Reject boundary F1 | Punishes JMdict compound preservation (§5.2) |
-| **Span accuracy inherits boundary F1's defect, and it was not noticed** | Measured by `examples/boundary_diag.rs` over the gold corpus: of the 266 gold boundaries Vibrato supplies and jparser drops, ~45% are jparser merging into a real JMdict multi-word expression or vs-noun headword (音がする, ことになっている, 首を振る, これまでに) and another 7% into a numeral+counter date headword (2月, 18日). The corpus was adjudicated at the tokenizer's short-unit granularity, so the metric penalises exactly the behaviour §5.2 calls the reason the DP exists. Only the 13.5% fallback bucket — runs of punctuation lumped into one unmatched segment — is unambiguously an engine defect. **Open: decide before Phase 1 whether to add a compound-tolerant second metric to `score`** (handoff §9.3) |
+| **Span accuracy inherits boundary F1's defect, and it was not noticed** | Measured by `examples/boundary_diag.rs` over the gold corpus: of the 266 gold boundaries Vibrato supplies and jparser drops, ~45% are jparser merging into a real JMdict multi-word expression or vs-noun headword (音がする, ことになっている, 首を振る, これまでに) and another 7% into a numeral+counter date headword (2月, 18日). The corpus was adjudicated at the tokenizer's short-unit granularity, so the metric penalises exactly the behaviour §5.2 calls the reason the DP exists. Only the 13.5% fallback bucket — runs of punctuation lumped into one unmatched segment — is unambiguously an engine defect |
+| **Answered: add compound-tolerant span accuracy, keep strict beside it** | Costs 16.5 points on this corpus (0.6810 strict against 0.8465 tolerant, hints off). Chosen over re-adjudicating the corpus at JMdict granularity, which is expensive and edges toward the §7.2 tautology of a corpus that agrees with the engine by construction; and over simply accepting the strict number, which leaves Phase 1's done-when clause rewarding the removal of compound preservation. It also revealed the hint benefit is understated: +2.13 points tolerant against +1.53 strict (§5.2) |
 | Reject `bunpo`, `deinflector`, `yomichan_rs` | GPL-3.0 lineage or provenance risk (§3.4) |
 | Write the conjugation table rather than port or depend | No permissive upstream exists (§3.4); conjugation rules are facts, and IPADIC supplies the forms permissively (§3.3) |
 | Phase 0 before any rewrite | A clean-room rewrite is different-by-construction; without a baseline, "better" is unfalsifiable (§5.1) |

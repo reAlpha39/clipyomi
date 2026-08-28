@@ -23,7 +23,7 @@
 //! ratio. Never combined: a change that improves one and harms the other is a
 //! finding, not noise.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::path::Path;
 
@@ -71,10 +71,42 @@ pub struct Metrics {
     /// hints-on/hints-off pair would silently sign-flip the reported hint
     /// delta (design §8.3, §5.3).
     pub hints: bool,
+    /// Gold spans that strict span accuracy scored as misses, but which a
+    /// single dictionary match swallowed whole — the merge starting and
+    /// ending on gold boundaries, so it cut no gold span.
+    ///
+    /// Handoff §9's finding: of the 266 gold boundaries Vibrato supplies and
+    /// jparser drops, roughly half are jparser merging into a real JMdict
+    /// multi-word expression (`音がする`, `ことになっている`, `首を振る`) or a
+    /// numeral+counter date headword (`2月`, `18日`). The corpus was
+    /// adjudicated at the tokenizer's short-unit granularity, so strict span
+    /// accuracy scores every one of those zero — penalising exactly the
+    /// compound preservation master plan §5.2 calls the reason the DP exists.
+    /// The decision log had already rejected boundary F1 for this and did not
+    /// notice span accuracy inherits it.
+    ///
+    /// This does **not** replace `span_hits`. Both are reported: a Phase 1
+    /// change that moves strict without moving tolerant has changed
+    /// granularity, not correctness, and the pair is what says so. Zero on an
+    /// exact parse, and skipped in both output forms when zero.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub coarse_forgiven: usize,
+    /// Distinct parse segments that did the forgiving. `coarse_forgiven`
+    /// alone cannot distinguish one 40-span merge from forty benign 2-span
+    /// ones, and those are different findings.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub coarse_merges: usize,
     /// The index directory's final path component — its generation name
     /// (e.g. `gen-3`), or `None` if the path has none. Recorded beside the
     /// numbers for the same reason as `hints`.
     pub index_generation: Option<String>,
+}
+
+/// `skip_serializing_if` for the coarsening counters, so a corpus the parse
+/// reproduces exactly serializes byte-identically to before they existed.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// Bump one decision's span tally in `by_decision`, inserting it if this is
@@ -113,6 +145,16 @@ fn decision_rank(decision: &str) -> (u8, &str) {
 /// Fold one sentence's gold and parse into `m`.
 pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
     m.sentences += 1;
+    // Every gold boundary, so a merge can be tested for cutting one. Starts
+    // plus the last span's end: gold spans are a contiguous cover, so that is
+    // the whole set.
+    let mut bounds: BTreeSet<usize> = gold.spans.iter().map(|s| s.start).collect();
+    if let Some(last) = gold.spans.last() {
+        bounds.insert(last.start + last.len);
+    }
+    // Per record, so a segment forgiving three spans counts as one merge.
+    let mut merges: BTreeSet<(usize, usize)> = BTreeSet::new();
+
     for span in &gold.spans {
         m.gold_spans += 1;
         let seg = parsed
@@ -121,6 +163,23 @@ pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
             .find(|s| s.start == span.start && s.len == span.len);
         if let Some(decision) = gold.decision.as_deref() {
             bump_decision(&mut m.by_decision, decision, seg.is_some());
+        }
+        if seg.is_none() {
+            // Benign coarsening: a matched segment that contains this gold
+            // span and whose own endpoints are gold boundaries merged whole
+            // gold spans rather than cutting one. A linear scan over a
+            // sentence's segments; corpora are hundreds of sentences, so the
+            // index this would otherwise want is not worth its bookkeeping.
+            if let Some(j) = parsed.segments.iter().find(|j| {
+                j.matched
+                    && j.start <= span.start
+                    && span.start + span.len <= j.start + j.len
+                    && bounds.contains(&j.start)
+                    && bounds.contains(&(j.start + j.len))
+            }) {
+                m.coarse_forgiven += 1;
+                merges.insert((j.start, j.len));
+            }
         }
         let Some(seg) = seg else { continue };
         m.span_hits += 1;
@@ -134,6 +193,7 @@ pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
             m.top1_hits += 1;
         }
     }
+    m.coarse_merges += merges.len();
 }
 
 /// Confirm every `ent_seq` a gold record names actually resolves in `index`.
@@ -217,6 +277,23 @@ pub fn render(m: &Metrics) -> String {
             })
             .collect();
         out.push_str(&format!("  by decision:  {}\n", parts.join("  ")));
+    }
+    // Additive like `by decision:`, and silent when there is no coarsening —
+    // which is itself the reading "strict and tolerant agree".
+    if m.coarse_forgiven > 0 {
+        out.push_str(&format!(
+            "{:<w$}{}\n",
+            "span tolerant:",
+            ratio(m.span_hits + m.coarse_forgiven, m.gold_spans)
+        ));
+        let s = |n: usize| if n == 1 { "" } else { "s" };
+        out.push_str(&format!(
+            "  coarsening:   {} gold span{} inside {} dictionary merge{}\n",
+            m.coarse_forgiven,
+            s(m.coarse_forgiven),
+            m.coarse_merges,
+            s(m.coarse_merges)
+        ));
     }
     out
 }
@@ -380,6 +457,73 @@ mod tests {
 
         assert_eq!((m.gold_spans, m.span_hits), (3, 1), "only (2,1) survives");
         assert_eq!((m.top1_total, m.top1_hits), (1, 1));
+    }
+
+    /// The §9 finding: a parse that merges whole gold spans into one
+    /// dictionary entry is a coarser analysis, not a wrong one, and strict
+    /// span accuracy scores it zero.
+    #[test]
+    fn a_dictionary_merge_across_whole_gold_spans_is_tolerantly_correct() {
+        let mut m = Metrics::default();
+        accumulate(
+            &gold(
+                "あいう",
+                &[(0, 1, Some(10)), (1, 1, Some(20)), (2, 1, Some(30))],
+            ),
+            &parsed(vec![seg(0, 3, &[40])]),
+            &mut m,
+        );
+
+        assert_eq!((m.gold_spans, m.span_hits), (3, 0), "strict scores none");
+        assert_eq!(m.coarse_forgiven, 3, "all three are inside the merge");
+        assert_eq!(m.coarse_merges, 1, "one segment did the forgiving");
+    }
+
+    /// Forgiveness is for *dictionary* merges. An unmatched run that happens
+    /// to span the same characters is the fallback path, not an analysis.
+    #[test]
+    fn an_unmatched_merge_is_not_forgiven() {
+        let mut m = Metrics::default();
+        accumulate(
+            &gold("あいう", &[(0, 1, None), (1, 1, None), (2, 1, None)]),
+            &parsed(vec![seg(0, 3, &[])]),
+            &mut m,
+        );
+
+        assert_eq!((m.span_hits, m.coarse_forgiven), (0, 0));
+        assert_eq!(m.coarse_merges, 0);
+    }
+
+    /// A merge that ends inside a gold span cut that span, which is a real
+    /// error however well the rest of it lines up. Only merges whose *both*
+    /// endpoints are gold boundaries are benign.
+    #[test]
+    fn a_merge_ending_inside_a_gold_span_is_not_forgiven() {
+        let mut m = Metrics::default();
+        accumulate(
+            // gold boundaries are 0, 1, 3 — the merge below ends at 2.
+            &gold("あいう", &[(0, 1, Some(10)), (1, 2, Some(20))]),
+            &parsed(vec![seg(0, 2, &[40]), seg(2, 1, &[50])]),
+            &mut m,
+        );
+
+        assert_eq!(m.span_hits, 0);
+        assert_eq!(
+            m.coarse_forgiven, 0,
+            "(0,1) sits inside a merge that cut (1,2), so it is not benign"
+        );
+    }
+
+    #[test]
+    fn an_exact_parse_leaves_the_coarsening_counters_at_zero() {
+        let mut m = Metrics::default();
+        accumulate(
+            &gold("あい", &[(0, 1, Some(10)), (1, 1, Some(20))]),
+            &parsed(vec![seg(0, 1, &[10]), seg(1, 1, &[20])]),
+            &mut m,
+        );
+
+        assert_eq!((m.span_hits, m.coarse_forgiven, m.coarse_merges), (2, 0, 0));
     }
 
     #[test]
