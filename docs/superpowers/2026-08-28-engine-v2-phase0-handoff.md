@@ -4,7 +4,11 @@
 **Design:** [`specs/2026-08-28-engine-v2-phase0-design.md`](specs/2026-08-28-engine-v2-phase0-design.md)
 **Plan:** [`plans/2026-08-28-engine-v2-phase0.md`](plans/2026-08-28-engine-v2-phase0.md)
 **Master plan:** [`specs/2026-08-27-engine-v2-master-plan.md`](specs/2026-08-27-engine-v2-master-plan.md) §5, §7 Phase 0, §9.1
-**Status:** Plan tasks 1–7 implemented and reviewed. Tasks 8–9 outstanding, deliberately.
+**Status:** Plan tasks 1–7 implemented and reviewed. Task 8's pools are built and
+the top 150 are model-adjudicated and now **author-reviewed** (§7 — 14 corrections
+applied). Promotion to `crates/jparser/tests/fixtures/gold.jsonl` is still the
+author's call, and until it happens Phase 0 is not closed: its done-when clause
+requires a *committed* corpus. Master plan §9.1, §9.2 and §9.6 are all answered.
 
 ---
 
@@ -195,7 +199,9 @@ author's ruling on correct Japanese segmentation, and a model's opinion must not
 be mistakable for the baseline every later phase is measured against. Review it
 before promoting; the numbers below are provisional on that review.
 
-150 records, 2,163 spans, 1,549 non-null, 614 null.
+150 records, 2,163 spans. **These numbers were superseded by the review in §7**,
+which found and corrected 14 wrong entry decisions; the corrected table is there.
+As first recorded: 1,549 non-null, 614 null.
 
 |  | span accuracy | entry top-1 |
 | --- | --- | --- |
@@ -326,7 +332,123 @@ A side observation worth having: the unknown-word guard is barely load-bearing.
 It skips 3.7% of IPADIC tokens, and switching UniDic's guard rate between 0.5%
 and 13.8% does not move either metric by a single span.
 
-## 7. Loose ends
+## 7. Review of the model-adjudicated corpus — 14 corrections
+
+The author asked for a reviewable audit before deciding whether to promote
+`gold_model.jsonl`. `corpus_staging/review_report.py` produces
+`corpus_staging/REVIEW.md`, which reorders the same 2,163 decisions so the ones
+the most spans depend on come first. Reviewing that report found **14 wrong
+entry decisions**, all now corrected in the scratch tables, `gold_model.jsonl`
+rebuilt, and every gate re-run.
+
+14 of 2,163 spans is 0.6%. The number matters less than the two causes, because
+both are mechanical, both were invisible to the existing self-audit, and both
+would have recurred in a second pass.
+
+### 7.1 Cause one — null reasons written against a truncated candidate list
+
+Six of the fourteen are spans labelled null with a stated reason of the form
+"the index offers only X, Y, Z". In each case the right entry was in the
+candidate list, deeper than the reason's author had looked, or in a later sense
+of an entry the reason had already dismissed on its first gloss.
+
+This is the same failure `audit_entries.py` was written to catch — a decision
+made from a first-sense view — but that audit only checks **non-null**
+decisions, so the null side had no guard at all. It does now: the report prints
+the full candidate list for every deliberate null.
+
+| span | was | is | why |
+| --- | --- | --- | --- |
+| `せい` @ `a:043426-2` | null | 1610040 所為 | "consequence; result; blame" — candidate #10 of 20 |
+| `たち` @ `a:000206-6` | null | 1416220 達 | pluralizing suffix — candidate #7 of 17, and 「お前たち」 is exactly it |
+| `おり` @ `b:wn25517-3` | null | 1577985 居る/おる | senses 2–3 are the `aux-v`; 「としており」 is that. Candidate #6 of 11 |
+| `いき` @ `a:045670-4` | null | 1578850 行く | 「いきかかる」 is 行きかかる. Candidate #8 of 16 |
+| `な` @ `a:000424-6` | null | 2029110 | sense **6** is "right?; isn't it?"; the reason dismissed the entry on sense 1, "don't" |
+| `な` @ `a:057582-7` | null | 2029110 | same |
+
+Three `な` spans stay null and are still right: 「おしゃれな」「立派な」「微細な」
+are the attributive, which 2029110 does not cover.
+
+### 7.2 Cause two — a per-surface decision on a surface whose answer varies
+
+The remaining eight are surfaces resolved once in `surface_entries.tsv` and
+inherited by every occurrence, where the correct entry actually differs between
+occurrences. `overrides.tsv` exists for exactly this and held four rows; it
+needed twelve.
+
+The reason this was missed is worth stating precisely, because the original
+write-up presents it as a verified property. It says no surface's **candidate
+list** varied between occurrences, and that is true. But a stable candidate list
+says nothing about a stable correct **answer** — the list is a function of the
+surface string, and the answer is a function of the context. The check that was
+run could not have detected this class, and reads as though it had.
+
+| span | was | is | context |
+| --- | --- | --- | --- |
+| `いった` @ `a:053148-4` | 1578850 行く | 1587040 言う | 「と一人の女房がいった」 — said, not went |
+| `から` @ `a:004601-8` | 1002980 (prt) | 1245280 空 | 「胃ももうからになった」 — empty |
+| `なんだ` @ `a:002722-8` | 2140410 | 2119750 何だ | 「なんだと？」 — the interjection |
+| `よう` @ `a:052446-7` | 1605840 様 | 2158950 良う | 「ようございます」 — adverbial よい |
+| `し` @ `b:wn44498-3` | 2086640 (prt) | 1157170 する | 「サービスを開始し、」 — 連用形 |
+| `そう` @ `c1:elo-09` ×2 | 1006610 | 2137720 然う | 「そうかな」「そう思わない」 — the adverb; 1006610 is the conjectural suffix, a different item |
+| `そう` @ `a:000585-5` | 1006610 | null | 「出るそうですぜ」 — hearsay. The index carries the conjectural and the adverbial and neither is this, so the corpus's own rule applies |
+
+`し` and `から` are the ones to remember: both are high-frequency particles with
+a homograph that is an ordinary content word, so the per-surface shortcut is
+most attractive and most wrong exactly where it costs most.
+
+### 7.3 What the corrections do to the numbers
+
+Span accuracy is untouched — these are entry decisions and the segmentation did
+not move. Entry top-1 shifts slightly, and **downward**, which is the honest
+direction: the corpus had been giving the parser a free pass on spans it scored
+as null where a real entry existed.
+
+|  | span accuracy | entry top-1 (was) |
+| --- | --- | --- |
+| hints off | 0.6810 (1473 / 2163) | **0.9159** (1046 / 1142) — was 0.9166 |
+| hints on | 0.6963 (1506 / 2163) | **0.9155** (1072 / 1171) — was 0.9169 |
+| delta | **+0.0153** (+33 spans) | **−0.0004** — was +0.0003 |
+
+The headline is unchanged: **hints buy +1.5 points of span accuracy and nothing
+measurable on entry top-1.** The entry delta crossing zero is two spans of
+movement on a 1,171 denominator and should not be read as a sign change.
+
+Non-null spans went 1,549 → 1,554, null 614 → 609: six nulls became entries and
+one entry became null.
+
+### 7.4 Gates re-run after the corrections
+
+- `build_gold.py` — every non-null choice is among its own span's candidate list.
+- `audit_entries.py` — 262 decisions, 0 POS-consistency flags, 0 entries absent
+  from the subset.
+- **Design §11.4 equivalence** — `score --json` over the full 67 MB `gen-1`
+  index and over the regenerated 2.66 MB subset returns identical metrics in
+  both hints states. Every field matches; only `index_generation` differs, which
+  is the label that makes a swapped pair detectable.
+- **Design §3.4 subset size** — 2,662,806 bytes, unchanged, so 250 sentences
+  still project to ~4.4 MB against the 8 MB cap.
+
+### 7.5 What is still unreviewed, and what it would cost
+
+The report's section 3 lists **54 of the 150 sentences** where the model cut a
+boundary neither segmenter proposed, or removed one both agreed on. Those are
+the model overruling its only two sources of evidence, so they carry the most
+risk per decision — but unlike sections 1 and 2 there is no mechanical check
+available, because the whole point is that no tokenizer has an opinion. Reading
+them is ~54 sentences of genuine adjudication.
+
+Spot-reading the top of that list, the invented cuts are defensible: splitting
+`?` from `」`, splitting a mimetic from its following `と`, splitting `ゼップ`
+from `・ブラッタ`. One is a real judgement call worth the author's eye —
+`タイムリー・ヒット` split at `b:wn10805-2`, which is the short-unit analysis
+where §5.2 states a preference for JMdict compound preservation.
+
+The 106 null spans of four or more characters are section 2.3 of the report and
+are also unchecked; they are mostly the tier C1 mimetics, where null is correct
+by construction.
+
+## 8. Loose ends
 
 - **Deferred minors, all judged safe to stand:** two `#[allow(clippy::err_expect)]` in
   `corpus.rs` (the fix is the one-word `.expect_err`); `use std::io::Write;` inside a
