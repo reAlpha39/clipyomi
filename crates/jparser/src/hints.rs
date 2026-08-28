@@ -21,6 +21,32 @@ use crate::BoundaryHints;
 /// not real word, so don't penalize" (`ta-old/exe/util/Dictionary.cpp:1115-1121`).
 const READING_FIELD: usize = 7;
 
+/// Environment override for [`READING_FIELD`], for the §9.6 IPADIC-versus-UniDic
+/// measurement at the Phase 0/1 boundary.
+///
+/// The index is a property of the dictionary, not of this code, and 7 is
+/// IPADIC's. Measured against unidic-mecab-2.1.2: its field 7 is the **lemma**
+/// (書字形), not a reading, and its surface pronunciation lives at 9. So a
+/// UniDic dictionary read with 7 finds a non-empty, non-`*` value on every
+/// token and the unknown-word guard below never fires — silent degradation with
+/// no error anywhere, which is the hazard the master plan §9.6 predicted.
+///
+/// A constant plus an override rather than a proper per-dictionary property:
+/// deciding where that property belongs is Phase 1's cost-model work, and this
+/// exists to produce the number that informs it.
+const READING_FIELD_ENV: &str = "TA_HINTS_READING_FIELD";
+
+/// Resolved once per [`VibratoTokenizer::load`], not per sentence and not into
+/// a global: a `OnceLock` would make the value untestable (the first test to
+/// touch it would pin it for the whole process) and reading the environment per
+/// token would cost a getenv per token.
+fn reading_field_from_env() -> usize {
+    std::env::var(READING_FIELD_ENV)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(READING_FIELD)
+}
+
 /// Positions where a word should not begin or end, derived from tokenization.
 ///
 /// Indexed by **char** position, matching [`BoundaryHints`] and `segment.rs`.
@@ -69,13 +95,14 @@ impl BoundaryHints for BoundaryFlags {
 fn flags_from_worker(
     worker: &vibrato::tokenizer::worker::Worker,
     char_len: usize,
+    reading_field: usize,
 ) -> BoundaryFlags {
     let mut bad_start = vec![false; char_len];
     let mut bad_end = vec![false; char_len];
 
     for i in 0..worker.num_tokens() {
         let token = worker.token(i);
-        let reading = token.feature().split(',').nth(READING_FIELD);
+        let reading = token.feature().split(',').nth(reading_field);
         if !matches!(reading, Some(r) if !r.is_empty() && r != "*") {
             continue;
         }
@@ -104,6 +131,9 @@ fn flags_from_worker(
 /// separate: a caller loads once and calls [`VibratoTokenizer::hints`] per text.
 pub struct VibratoTokenizer {
     tokenizer: vibrato::Tokenizer,
+    /// Which feature-string column carries the reading, for the unknown-word
+    /// guard. Resolved at load time from [`READING_FIELD_ENV`].
+    reading_field: usize,
 }
 
 impl VibratoTokenizer {
@@ -121,6 +151,7 @@ impl VibratoTokenizer {
             .map_err(|e| HintsError::Dictionary(e.to_string()))?;
         Ok(Self {
             tokenizer: vibrato::Tokenizer::new(dict),
+            reading_field: reading_field_from_env(),
         })
     }
 
@@ -132,7 +163,7 @@ impl VibratoTokenizer {
         let mut worker = self.tokenizer.new_worker();
         worker.reset_sentence(text);
         worker.tokenize();
-        flags_from_worker(&worker, text.chars().count())
+        flags_from_worker(&worker, text.chars().count(), self.reading_field)
     }
 }
 
@@ -226,6 +257,7 @@ mod tests {
     fn flags_for(text: &str) -> BoundaryFlags {
         let tokenizer = VibratoTokenizer {
             tokenizer: vibrato::Tokenizer::new(test_dictionary()),
+            reading_field: READING_FIELD,
         };
         tokenizer.hints(text)
     }
@@ -271,6 +303,48 @@ mod tests {
         assert!(!f.bad_end(999));
     }
 
+    /// A reading field pointing at a column the dictionary does not have makes
+    /// the guard fire on every token, so no flags at all are derived. That is
+    /// not hypothetical: `READING_FIELD` is 7 because that is IPADIC's reading
+    /// column, and measured against unidic-mecab-2.1.2 at the Phase 0/1
+    /// boundary (master plan §9.6) IPADIC read at field 9 disables every hint
+    /// and scores exactly the no-hints baseline, silently. This pins the
+    /// mechanism so that failure cannot be mistaken for "hints did not help".
+    #[test]
+    fn a_reading_field_the_dictionary_lacks_derives_no_flags_at_all() {
+        let dict = test_dictionary();
+        let tokenizer = vibrato::Tokenizer::new(dict);
+        let mut worker = tokenizer.new_worker();
+        worker.reset_sentence("東京都");
+        worker.tokenize();
+
+        let good = flags_from_worker(&worker, 3, READING_FIELD);
+        assert!(
+            good.bad_end(0) && good.bad_start(1),
+            "the real field must derive 東京's interior"
+        );
+
+        let bad = flags_from_worker(&worker, 3, 99);
+        let any = (0..3).any(|p| bad.bad_start(p) || bad.bad_end(p));
+        assert!(
+            !any,
+            "a field the dictionary lacks must derive nothing, not partial flags"
+        );
+    }
+
+    /// The override parses, and anything unparseable falls back rather than
+    /// panicking — a typo in an env var must not take the parser down.
+    #[test]
+    fn the_reading_field_override_falls_back_on_garbage() {
+        // Not via the environment: that is process-global and would race every
+        // other test in this binary. The parse is the part worth pinning.
+        let parse = |v: &str| v.parse::<usize>().ok().unwrap_or(READING_FIELD);
+        assert_eq!(parse("9"), 9);
+        assert_eq!(parse(""), READING_FIELD);
+        assert_eq!(parse("seven"), READING_FIELD);
+        assert_eq!(parse("-1"), READING_FIELD);
+    }
+
     /// A token whose reading is `*` is a guess, and ta-old refuses to penalize
     /// splits inside a guess. Without this guard the DP would be pushed away
     /// from splitting inside anything the tokenizer failed to recognize.
@@ -293,7 +367,7 @@ mod tests {
         let mut worker = tokenizer.new_worker();
         worker.reset_sentence("謎語");
         worker.tokenize();
-        let f = flags_from_worker(&worker, 2);
+        let f = flags_from_worker(&worker, 2, READING_FIELD);
 
         assert!(!f.bad_end(0), "a reading-less token must not be penalized");
         assert!(

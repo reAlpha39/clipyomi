@@ -588,12 +588,39 @@ No layer ships without its licence established in writing first.
    to MeCab. Deferred to Phase 2 deliberately: Phase 1's measured cost model
    should inform it. Current lean is the Vibrato fork — MIT, ~100 lines,
    upstreamable, and it keeps the build pure Rust.
-6. **IPADIC or UniDic (§3.3)?** UniDic has better readings, which matters for
-   furigana, and is BSD-available. But `hints.rs:22` hardcodes
-   `READING_FIELD = 7` for IPADIC's column layout, and UniDic's differs — the
-   silent-degradation hazard already recorded in the Phase 5B design §12.
-   Evaluate in Phase 0, where the harness can measure the difference instead of
-   arguing it.
+6. ~~**IPADIC or UniDic (§3.3)?**~~ **ANSWERED — stay on IPADIC.** Measured at
+   the Phase 0/1 boundary against the 150-sentence gold corpus, unidic-mecab-2.1.2
+   versus the pinned ipadic-mecab-2.7.0:
+
+   | hints | span accuracy | entry top-1 |
+   | --- | --- | --- |
+   | none | 0.6810 (1473 / 2163) | 0.9166 |
+   | IPADIC, field 7 | **0.6963 (1506 / 2163)** | **0.9169** |
+   | UniDic, field 9 (its true reading column) | 0.6958 (1505 / 2163) | 0.9151 |
+   | UniDic, field 7 (the naive setting) | 0.6958 (1505 / 2163) | 0.9151 |
+
+   UniDic is **one span worse** on span accuracy and slightly worse on entry
+   top-1, for 199 MB unpacked against IPADIC's 46 MB, plus a per-dictionary
+   reading-column property IPADIC does not need. No measurable benefit; the
+   "better readings" argument does not show up in either metric this project
+   scores on. Revisit only if furigana quality becomes a measured goal.
+
+   **The silent-degradation hazard is real, and worse in the other direction than
+   this question anticipated.** Measured feature layouts: IPADIC puts the surface
+   reading at field 7 and gives unknown words a *short* 7-field string, so the
+   guard fires via an absent column on 3.7% of tokens. UniDic's field 7 is the
+   **lemma** and its surface pronunciation is at 9. So:
+
+   - UniDic read at 7 drops the guard from 13.8% of tokens to 0.5% — degraded,
+     silent, and as it turns out immaterial: the score is identical either way.
+   - **IPADIC read at 9 disables every hint** (the guard fires on 100% of tokens,
+     because IPADIC strings are only 9 fields wide) and scores *exactly* the
+     no-hints baseline, 1473 spans, with no error anywhere. That direction costs
+     the entire +1.5-point hint benefit silently, and it is the one to fear.
+
+   `hints.rs` now resolves the column at load time with a
+   `TA_HINTS_READING_FIELD` override, and carries a test pinning that a column
+   the dictionary lacks derives no flags at all rather than partial ones.
 7. **Does sudachi.rs change the answer to question 6?** Not considered in this
    plan's first draft. Pure Rust, zero FFI, and its Mode A/B/C multi-granularity
    is aimed at exactly the short-unit-versus-long-unit tension §5.2 describes:
@@ -624,4 +651,6 @@ No layer ships without its licence established in writing first.
 | Reject the unified single-stage lattice (ULLE) | Proposed in [`2026-08-27-engine-v2-ulle-review.md`](2026-08-27-engine-v2-ulle-review.md): merge IPADIC morphemes, JMdict entries and deinflected spans into one lattice scored by the tokenizer's bigram matrix. The matrix is indexed by IPADIC context IDs and JMdict entries have none, so every entry needs a synthesised `(left_id, right_id)` — a large hand-authored table with no permissive upstream, which is the artefact the proposal exists to avoid. Without it the design collapses back into the two-objective engine it replaces. §4.3 states the arbitration rule instead |
 | Reject Eppstein's algorithm for k-best | Same review. The lattice is a DAG, so exact k-best is a backward-Viterbi potential plus a priority queue over partial paths — about fifty lines, and what MeCab's N-best already does. Eppstein's persistent 4-ary heap buys asymptotics that never bind at tens of nodes and k≈3, at a much higher chance of being wrong |
 | Reject CI provenance auditing that diffs against ta-old | Same review proposed continuous AST comparison against the upstream repository. That requires the protected expression present in CI and in the workspace, which is the one fact §3.5 must be able to deny. If a mechanised check is wanted, fingerprint the upstream once from outside the clean room and compare against the fingerprints |
+| Stay on IPADIC; do not adopt UniDic | Measured at the Phase 0/1 boundary on the gold corpus: UniDic scores one span worse and slightly worse on entry top-1, for 199 MB against 46 MB and a per-dictionary reading-column property IPADIC does not need (§9.6) |
+| Treat the tokenizer's reading column as a per-dictionary property, not a constant | IPADIC's reading is at field 7 and UniDic's at 9, and reading IPADIC at 9 silently disables every hint and scores exactly the no-hints baseline. A wrong constant is invisible in both metrics (§9.6) |
 | Sample the gold corpus against Vibrato, not against hints-on/hints-off | The hints pair produces the same wrong parse on `くるまではこう`, so it cannot surface the bug success criterion 3 names (§5.1). Vibrato disagrees with jparser there, which is exactly the signal wanted |
