@@ -448,7 +448,48 @@ The 106 null spans of four or more characters are section 2.3 of the report and
 are also unchecked; they are mostly the tier C1 mimetics, where null is correct
 by construction.
 
-## 8. Loose ends
+## 8. §9.7 answered: stay on Vibrato, and the reason is not about sudachi
+
+Measured out-of-tree against the corrected 150-sentence corpus. Full write-up,
+including the caveats, is master plan §9.7; the short version:
+
+| source | recall | precision | F1 | gold span exact |
+| --- | ---: | ---: | ---: | ---: |
+| jparser (hints off) | 0.8614 | 0.8206 | 0.8405 | 0.5902 |
+| **Vibrato / IPADIC** | 0.9707 | **0.8426** | **0.9021** | 0.6708 |
+| sudachi Mode A | **0.9886** | 0.8073 | 0.8888 | 0.6478 |
+| sudachi Mode B | 0.9856 | 0.8232 | 0.8971 | **0.6727** |
+| sudachi Mode C | 0.9796 | 0.8254 | 0.8960 | 0.6603 |
+
+Three things to carry into Phase 1.
+
+**Mode C is the wrong mode, for the predicted reason.** §9.7 warned that Mode C
+emits SudachiDict long units rather than JMdict headwords. Measured: 41 gold
+spans vanish inside a longer Mode C unit — `武田`/`信玄` inside 武田信玄,
+`東京都`/`新宿` inside 東京都新宿区, `JR`/`東日本`, `17`/`290` inside 17万290.
+Mode C's exact-match rate lands below Mode B's *and* below Vibrato's.
+
+**The engines fail on disjoint classes.** Mode C gets 55 gold spans exactly that
+Vibrato misses, and misses 43 that Vibrato gets. The 55 are almost all
+unregistered reduplicated mimetics, which sudachi's OOV handling groups into one
+token where Vibrato splits them — and §4.1 above measured that class as ~65% of
+real conflicts in `vn_data`. So this is not a clean loss for sudachi; it is two
+engines with opposite weaknesses.
+
+**What actually decides it is jparser's own row.** Boundary recall 0.8614
+against every tokenizer's 0.97-plus: jparser is throwing away 279 gold
+boundaries the hint source already hands it. Changing hint sources is worth at
+most 1.8 points of recall. Using the existing ones as §4.3 describes is worth
+eleven. That is the Phase 1 target, and it is where the §7.3 recombiner and the
+new cost model should be aimed.
+
+Tooling: `corpus_staging/measure_sudachi.py` and `sudachi_examples.py`, run
+under a venv at `%LOCALAPPDATA%\Temp\claude\D--Code-oss-clipyomi\phase0\sudachi-venv`.
+Raw output in `corpus_staging/sudachi_result.txt`. SudachiPy 0.6.11 is the
+Python binding over sudachi.rs, not a separate port, so no parity assumption is
+carried. Nothing was distributed; no sudachi code is in the tree.
+
+## 9. Loose ends
 
 - **Deferred minors, all judged safe to stand:** two `#[allow(clippy::err_expect)]` in
   `corpus.rs` (the fix is the one-word `.expect_err`); `use std::io::Write;` inside a
