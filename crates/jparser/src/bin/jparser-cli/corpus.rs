@@ -47,6 +47,18 @@ pub struct GoldRecord {
     /// A contiguous cover of `text` in ascending `start` order — the same
     /// invariant `jparser::ParseResult` documents. Enforced by [`validate`].
     pub spans: Vec<GoldSpan>,
+    /// Which key the adjudicator pressed to settle this sentence's spans: `"j"`
+    /// (blessed jparser's), `"v"` (blessed Vibrato's), `"e"` (retyped the cuts).
+    ///
+    /// Recorded because `j` blesses the *hints-off* parse verbatim (`diff` runs
+    /// with no hints), so a `j`-blessed sentence scores 1.0 under `score`
+    /// hints-off by construction. That biases §8.3's hints-on-minus-hints-off
+    /// comparison, and the bias is only visible if the decision is recorded.
+    /// A high `j` rate is evidence of rubber-stamping, not of a good parser.
+    ///
+    /// `None` for a hand-authored record that no adjudicator produced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
 }
 
 /// One sampled disagreement. Disposable: `label` consumes it and the gold
@@ -235,6 +247,7 @@ mod tests {
                     ent_seq,
                 })
                 .collect(),
+            decision: None,
         }
     }
 
@@ -249,6 +262,44 @@ mod tests {
 
         assert_eq!(records, vec![record]);
         assert_eq!(superseded, 0);
+    }
+
+    /// A hand-written gold line predating the `decision` field must still
+    /// parse, with `decision: None` — `serde(default)` is load-bearing here.
+    #[test]
+    fn a_record_with_no_decision_field_reads_as_none() {
+        let dir = scratch("no-decision-field");
+        let path = dir.join("gold.jsonl");
+        std::fs::write(
+            &path,
+            "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n",
+        )
+        .expect("write");
+
+        let (records, _) = read_gold(&path).expect("read");
+
+        assert_eq!(records[0].decision, None);
+    }
+
+    /// `decision` round-trips, and a record with a decision does not emit
+    /// `"decision":null` for one without — `skip_serializing_if` covers it.
+    #[test]
+    fn a_decision_round_trips_and_is_omitted_when_absent() {
+        let dir = scratch("decision-round-trip");
+        let path = dir.join("gold.jsonl");
+        let mut with_decision = gold("言った", &[(0, 3, Some(1000010))]);
+        with_decision.decision = Some("j".to_string());
+        append(&path, &with_decision).expect("append");
+        append(&path, &gold("は", &[(0, 1, None)])).expect("append");
+
+        let (records, _) = read_gold(&path).expect("read");
+
+        assert_eq!(records[0].decision.as_deref(), Some("j"));
+        assert_eq!(records[1].decision, None);
+        let raw = std::fs::read_to_string(&path).expect("read raw");
+        let lines: Vec<&str> = raw.lines().collect();
+        assert!(lines[0].contains("\"decision\":\"j\""), "got {}", lines[0]);
+        assert!(!lines[1].contains("\"decision\""), "got {}", lines[1]);
     }
 
     /// The append-only contract: the later record wins and the earlier one is

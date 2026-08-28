@@ -102,7 +102,7 @@ fn blessing_jparser_spans_and_picking_an_entry_writes_one_gold_record() {
 
     assert_eq!(
         written.trim(),
-        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}"
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}],\"decision\":\"j\"}"
     );
 }
 
@@ -175,3 +175,22 @@ fn a_hash_prefixed_ent_seq_is_accepted_directly() {
 
     assert!(written.contains("\"ent_seq\":1000030"), "got {written}");
 }
+
+/// `#<ent_seq>` is validated against the index, not accepted blind: a typo'd
+/// id (missing a digit here) must not become permanent, unmatchable gold. The
+/// adjudicator is re-prompted and a good answer still gets through.
+#[test]
+fn a_hash_prefixed_ent_seq_absent_from_the_index_is_rejected_and_reprompted() {
+    let dir = scratch("cli-label-bad-manual-id");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,3]");
+    let gold = dir.join("gold.jsonl");
+
+    let written = label(&index, &diff, &gold, "j\n#100001\n1\n");
+
+    assert!(
+        written.contains("\"ent_seq\":1000010"),
+        "the bad id is rejected and the reprompted answer wins: {written}"
+    );
+}
+
