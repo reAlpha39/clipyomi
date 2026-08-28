@@ -7,12 +7,10 @@
 
 //! JParser Phase 1 harness. No UI, no Tauri, no network.
 
-// Task 7 wires `label` to these; the module lands first so its formats can be
-// tested before anything depends on them.
-#[allow(dead_code)]
 mod corpus;
 #[cfg(feature = "mecab")]
 mod diff;
+mod label;
 mod score;
 
 use std::io::BufReader;
@@ -183,14 +181,27 @@ enum Command {
         #[arg(long)]
         hints: PathBuf,
         /// Emit every sentence whose boundary sets differ at all, not only
-        /// those where jparser cut inside a Vibrato token. For verifying the
-        /// predicate by hand; not for sampling.
+        /// those where jparser cut inside a Vibrato token, sorted with the
+        /// predicate-excluded records first so `--limit` can reach them. For
+        /// verifying the predicate by hand; not for sampling.
         #[arg(long)]
         all: bool,
         /// Keep only the N densest disagreements. What was dropped is reported
         /// on stderr.
         #[arg(long)]
         limit: Option<usize>,
+    },
+    /// Adjudicate sampled disagreements into the gold corpus.
+    ///
+    /// Candidates are listed by ent_seq, never by rank: a rank-ordered list
+    /// would make gold a copy of the ranking under measurement.
+    Label {
+        /// Index directory.
+        index: PathBuf,
+        /// `jparser-cli diff` output.
+        disagreements: PathBuf,
+        /// Gold corpus JSONL, appended to. Created if absent.
+        gold: PathBuf,
     },
     /// Convert kana to romaji.
     Romaji {
@@ -408,6 +419,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             all,
             limit,
         } => diff::run(&index, &pool, &hints, all, limit)?,
+        Command::Label {
+            index,
+            disagreements,
+            gold,
+        } => label::run(&index, &disagreements, &gold)?,
         Command::Romaji { text, particle } => {
             let out = jparser::romaji::to_romaji(&text);
             let out = if particle {

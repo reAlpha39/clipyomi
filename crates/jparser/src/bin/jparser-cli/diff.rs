@@ -128,12 +128,25 @@ fn tokenize(tokenizer: &vibrato::Tokenizer, text: &str) -> (Vec<usize>, usize) {
     (cuts, unknown)
 }
 
-/// Emit the pool sentences worth labelling, as JSONL on stdout.
+/// Order `records` for the run's audience. See [`rank`].
 ///
-/// Ranked by conflict count descending, so `--limit N` is a stopping point
-/// rather than an arbitrary truncation. `--all` drops the predicate and emits
-/// every sentence whose boundary sets differ at all — kept only to verify by
-/// hand that the predicate is not filtering out real conflicts (design §11.2).
+/// Normal runs sort by conflict count descending, so `--limit N` is a
+/// stopping point rather than an arbitrary truncation. `--all` drops the
+/// predicate and emits every sentence whose boundary sets differ at all —
+/// kept only to verify by hand that the predicate is not filtering out real
+/// conflicts (design §11.2). Its extra records are exactly the
+/// predicate-excluded ones (empty `conflicts`), so `--all` sorts ascending
+/// instead: those records come first, where `--limit N` can actually see
+/// them, rather than last under the normal ordering.
+fn rank(records: &mut [DiffRecord], all: bool) {
+    records.sort_by(|a, b| {
+        let by_count = a.conflicts.len().cmp(&b.conflicts.len());
+        let by_count = if all { by_count } else { by_count.reverse() };
+        by_count.then_with(|| a.text.cmp(&b.text))
+    });
+}
+
+/// Emit the pool sentences worth labelling, as JSONL on stdout.
 pub fn run(
     index_dir: &Path,
     pool: &Path,
@@ -173,14 +186,7 @@ pub fn run(
         });
     }
 
-    // Descending by conflict count, then by text for a deterministic order —
-    // two sentences with the same count must not swap between runs.
-    records.sort_by(|a, b| {
-        b.conflicts
-            .len()
-            .cmp(&a.conflicts.len())
-            .then_with(|| a.text.cmp(&b.text))
-    });
+    rank(&mut records, all);
     if let Some(n) = limit {
         let dropped = records.len().saturating_sub(n);
         records.truncate(n);
@@ -270,6 +276,71 @@ mod tests {
                 ("c2:b".to_string(), "いい".to_string()),
             ]
         );
+    }
+
+    /// Minimal `DiffRecord` for ordering tests: only `text` and `conflicts`
+    /// matter to `rank`.
+    fn record(text: &str, conflicts: Vec<usize>) -> DiffRecord {
+        DiffRecord {
+            text: text.to_string(),
+            source: "test:1".to_string(),
+            jparser: Vec::new(),
+            vibrato: Vec::new(),
+            conflicts,
+            unknown_tokens: 0,
+        }
+    }
+
+    fn texts(records: &[DiffRecord]) -> Vec<&str> {
+        records.iter().map(|r| r.text.as_str()).collect()
+    }
+
+    /// `--all`'s whole point is surfacing the predicate-excluded records
+    /// (empty `conflicts`), so under `all == true` they must sort first, not
+    /// last.
+    #[test]
+    fn all_sorts_conflict_count_ascending() {
+        let mut records = vec![
+            record("two", vec![1, 2]),
+            record("zero", vec![]),
+            record("one", vec![9]),
+        ];
+
+        rank(&mut records, true);
+
+        assert_eq!(texts(&records), vec!["zero", "one", "two"]);
+    }
+
+    #[test]
+    fn normal_run_sorts_conflict_count_descending() {
+        let mut records = vec![
+            record("two", vec![1, 2]),
+            record("zero", vec![]),
+            record("one", vec![9]),
+        ];
+
+        rank(&mut records, false);
+
+        assert_eq!(texts(&records), vec!["two", "one", "zero"]);
+    }
+
+    /// Two records with equal conflict counts must not swap between runs.
+    #[test]
+    fn tied_conflict_counts_break_on_text_ascending_when_all() {
+        let mut records = vec![record("b", vec![1]), record("a", vec![1])];
+
+        rank(&mut records, true);
+
+        assert_eq!(texts(&records), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn tied_conflict_counts_break_on_text_ascending_when_not_all() {
+        let mut records = vec![record("b", vec![1]), record("a", vec![1])];
+
+        rank(&mut records, false);
+
+        assert_eq!(texts(&records), vec!["a", "b"]);
     }
 
     /// Only `start` and `len` matter to boundary extraction.
