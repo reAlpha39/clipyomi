@@ -42,7 +42,7 @@ insta = "1"
 
 [[bin]]
 name = "jparser-cli"
-path = "src/bin/jparser-cli.rs"
+path = "src/bin/jparser-cli/main.rs"
 required-features = ["cli"]
 
 [[test]]
