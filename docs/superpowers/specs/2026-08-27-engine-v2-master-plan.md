@@ -578,8 +578,34 @@ No layer ships without its licence established in writing first.
 1. **Corpus sourcing (§5.3).** Visual-novel text is copyrighted. Author's own
    reading history kept local, Aozora Bunko, or hand-written pastiche? Gates
    Phase 0's size, not its design.
-2. **Target licence.** MIT, Apache-2.0, or MIT OR Apache-2.0? Does not change
-   the work, but should be decided before Phase 1 so headers are written once.
+2. ~~**Target licence.**~~ **ANSWERED — `MIT OR Apache-2.0`.** The author's
+   decision, taken at the Phase 0/1 boundary so Phase 1 writes the nine
+   provenance headers once.
+
+   Three properties decided it. The dual licence is the Rust ecosystem's
+   default, so every crate this engine will sit beside already carries it and
+   no downstream has to reason about an unusual combination. The Apache leg
+   carries an express patent grant, which neither MIT alone nor any of the
+   sources in §3.3 provides. And it is the only option that leaves §9.7 open:
+   sudachi.rs is Apache-2.0 with no MIT leg, so an MIT-only target would
+   permanently foreclose adopting it while an Apache-2.0-only target would
+   reproduce, in the opposite direction, exactly the GPL-2.0-only
+   incompatibility `src-tauri/Cargo.toml` records twice.
+
+   Header form for Phase 1, on each of the nine files:
+
+   ```rust
+   // SPDX-License-Identifier: MIT OR Apache-2.0
+   //
+   // Written for ClipYomi without reference to Translation Aggregator's
+   // JParser. See docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md
+   // §3.5 for the clean-room discipline this file was written under.
+   ```
+
+   Note this decision does **not** relicense anything on its own. The tree is
+   GPL-2.0-only until the nine hard-taint files of §3.2 are gone, which is
+   Phase 1's output. Until then the header states the intended licence of the
+   new file, and the repository's licence is unchanged.
 3. **`jmdict.rs` and `index/*` disposition (§3.2 soft tier).** Rewriting is
    cleanly safe; scrubbing the citations is cheaper. This plan assumes
    scrubbing. If a reviewer disagrees, Phase 1 grows by ~1,300 lines.
@@ -651,6 +677,8 @@ No layer ships without its licence established in writing first.
 | Reject the unified single-stage lattice (ULLE) | Proposed in [`2026-08-27-engine-v2-ulle-review.md`](2026-08-27-engine-v2-ulle-review.md): merge IPADIC morphemes, JMdict entries and deinflected spans into one lattice scored by the tokenizer's bigram matrix. The matrix is indexed by IPADIC context IDs and JMdict entries have none, so every entry needs a synthesised `(left_id, right_id)` — a large hand-authored table with no permissive upstream, which is the artefact the proposal exists to avoid. Without it the design collapses back into the two-objective engine it replaces. §4.3 states the arbitration rule instead |
 | Reject Eppstein's algorithm for k-best | Same review. The lattice is a DAG, so exact k-best is a backward-Viterbi potential plus a priority queue over partial paths — about fifty lines, and what MeCab's N-best already does. Eppstein's persistent 4-ary heap buys asymptotics that never bind at tens of nodes and k≈3, at a much higher chance of being wrong |
 | Reject CI provenance auditing that diffs against ta-old | Same review proposed continuous AST comparison against the upstream repository. That requires the protected expression present in CI and in the workspace, which is the one fact §3.5 must be able to deny. If a mechanised check is wanted, fingerprint the upstream once from outside the clean room and compare against the fingerprints |
+| Target `MIT OR Apache-2.0` | The Rust ecosystem default, so no downstream has to reason about an unusual combination; the Apache leg adds a patent grant no §3.3 source supplies; and it is the only option that keeps §9.7 open, since MIT-only would foreclose Apache-2.0-only sudachi.rs forever and Apache-2.0-only would recreate the GPL-2.0-only incompatibility in the other direction (§9.2) |
+| Correct the model-adjudicated corpus rather than discard it | The author's review found 14 wrong spans in 2,163 (0.6%), from two causes that are both mechanical and both fixable in the scratch tables: null reasons written against a truncated candidate list, and one per-surface entry decision applied to a surface whose correct answer varies by context. Neither is a reason to distrust the other 2,149 (§5.3 note) |
 | Stay on IPADIC; do not adopt UniDic | Measured at the Phase 0/1 boundary on the gold corpus: UniDic scores one span worse and slightly worse on entry top-1, for 199 MB against 46 MB and a per-dictionary reading-column property IPADIC does not need (§9.6) |
 | Treat the tokenizer's reading column as a per-dictionary property, not a constant | IPADIC's reading is at field 7 and UniDic's at 9, and reading IPADIC at 9 silently disables every hint and scores exactly the no-hints baseline. A wrong constant is invisible in both metrics (§9.6) |
 | Sample the gold corpus against Vibrato, not against hints-on/hints-off | The hints pair produces the same wrong parse on `くるまではこう`, so it cannot surface the bug success criterion 3 names (§5.1). Vibrato disagrees with jparser there, which is exactly the signal wanted |
