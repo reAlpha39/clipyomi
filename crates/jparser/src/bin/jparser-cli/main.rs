@@ -7,6 +7,11 @@
 
 //! JParser Phase 1 harness. No UI, no Tauri, no network.
 
+// Task 7 wires `label` to these; the module lands first so its formats can be
+// tested before anything depends on them.
+#[allow(dead_code)]
+mod corpus;
+
 use std::io::BufReader;
 use std::path::PathBuf;
 
