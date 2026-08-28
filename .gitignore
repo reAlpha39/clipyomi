@@ -31,3 +31,10 @@ src-tauri/gen/schemas/
 
 # Autoresearch skill output (predict/loop/evals run directories)
 autoresearch/
+
+vn_data/
+
+# Phase 0: the local gold corpus over vn_data lines. Copyrighted text, scored
+# by the same `jparser-cli score` as the committed corpus but never committed
+# (Phase 0 design §3.2). The committed corpus is the reproducible contract.
+crates/jparser/tests/fixtures/gold_local.jsonl
