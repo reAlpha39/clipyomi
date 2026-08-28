@@ -186,6 +186,42 @@ into the gitignored `gold_local.jsonl`, and the subset-size check at 100 labelle
 sentences (design §3.4 — if 2.5x the printed `output bytes` exceeds 8 MB, cap the
 corpus and record the cap).
 
+#### A model-adjudicated pass over the top 150 exists, for review
+
+At the author's instruction the top 150 were adjudicated by the model. The
+result is in `corpus_staging/gold_model.jsonl` and **deliberately not** in
+`crates/jparser/tests/fixtures/gold.jsonl`: `label` exists to record the
+author's ruling on correct Japanese segmentation, and a model's opinion must not
+be mistakable for the baseline every later phase is measured against. Review it
+before promoting; the numbers below are provisional on that review.
+
+150 records, 2,163 spans, 1,549 non-null, 614 null.
+
+|  | span accuracy | entry top-1 |
+| --- | --- | --- |
+| hints off | 0.6810 (1473 / 2163) | 0.9166 (1044 / 1139) |
+| hints on | 0.6963 (1506 / 2163) | 0.9169 (1070 / 1167) |
+| delta | **+0.0153** (+33 spans) | +0.0003 |
+
+- **68% is not a quality verdict.** Every sentence here is one the two
+  segmenters disagreed on, so the corpus is deliberately hard. The number exists
+  for cross-phase comparability.
+- **The hint mechanism measures positive**, +1.5 points of span accuracy — the
+  §8.3 comparison Phase 0 exists to produce, and it favours hints.
+- **`by decision` reads `e` for all 150**, because neither segmenter was right
+  on any sampled sentence. So the §3.1 anchoring bias is structurally absent
+  here, not merely measured. Watch that line if your own pass uses `j`.
+- Entry decisions came from the ent_seq-sorted candidate lists, never from the
+  ranker's top pick. 990 ambiguous spans reduced to 267 distinct surfaces, none
+  of whose candidate lists varied by occurrence; nine surfaces are null because
+  the index has no correct entry and the nearest miss would have been a lie.
+
+**Two design gates were run for the first time and both pass.** §11.4's
+equivalence check: `score --json` over the full 67 MB index and over the
+subset returns byte-identical metrics, hints-on and hints-off. §3.4's
+subset-size check: 150 sentences give a 2.66 MB subset, so 250 projects to
+~4.4 MB, under the 8 MB cap — no capping needed.
+
 #### Four findings from pre-staging, which change your expectations
 
 1. **Adjudication costs ~60% more than the design estimated.** §3.4 assumed ~10
