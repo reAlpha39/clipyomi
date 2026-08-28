@@ -11,6 +11,7 @@
 // tested before anything depends on them.
 #[allow(dead_code)]
 mod corpus;
+mod score;
 
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -148,6 +149,22 @@ enum Command {
         #[cfg(feature = "mecab")]
         #[arg(long)]
         hints: Option<PathBuf>,
+    },
+    /// Score a gold corpus against the current engine: span accuracy and
+    /// entry top-1, reported separately.
+    Score {
+        /// Index directory.
+        index: PathBuf,
+        /// Gold corpus JSONL.
+        gold: PathBuf,
+        /// Path to an uncompressed compiled Vibrato dictionary. Given, the
+        /// hints-on half of the baseline pair is measured; absent, hints-off.
+        #[cfg(feature = "mecab")]
+        #[arg(long)]
+        hints: Option<PathBuf>,
+        /// Emit the metrics as one JSON object instead of the human form.
+        #[arg(long)]
+        json: bool,
     },
     /// Convert kana to romaji.
     Romaji {
@@ -344,6 +361,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        Command::Score {
+            index,
+            gold,
+            #[cfg(feature = "mecab")]
+            hints,
+            json,
+        } => score::run(
+            &index,
+            &gold,
+            #[cfg(feature = "mecab")]
+            hints.as_deref(),
+            json,
+        )?,
         Command::Romaji { text, particle } => {
             let out = jparser::romaji::to_romaji(&text);
             let out = if particle {
