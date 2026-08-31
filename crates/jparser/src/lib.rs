@@ -25,6 +25,7 @@
 use std::collections::HashMap;
 
 pub mod conjugation;
+pub mod engine;
 #[cfg(feature = "mecab")]
 pub mod hints;
 pub mod index;
@@ -112,6 +113,13 @@ pub struct Entry {
     /// Phase 0 harness scores entry top-1 against it (`gold.jsonl`'s
     /// `ent_seq`); exposing it changes nothing about what `parse` computes.
     pub entry_id: u32,
+    /// The deinflection chain that produced `headword` from the matched
+    /// surface, innermost step first. Empty for an uninflected match and on
+    /// the v1 path, which does not compute it.
+    ///
+    /// Phase 1b's formatter turns this into `conjugation`'s English label; see
+    /// docs/superpowers/specs/2026-09-01-engine-v2-phase1a-design.md §8.
+    pub steps: Vec<crate::engine::ConjStep>,
 }
 
 /// Everything `parse` can fail at. Reading the memory-mapped index payload is
@@ -218,6 +226,7 @@ fn assemble_entry(m: &Match, data: &EntryData, table: &ConjugationTable, text: &
         senses: data.senses.clone(),
         flags: m.flags,
         entry_id: m.entry_id,
+        steps: Vec::new(),
     }
 }
 
@@ -701,6 +710,7 @@ mod tests {
                     senses: vec![],
                     flags: WordFlags::PRIMARY,
                     entry_id: 1000010,
+                    steps: Vec::new(),
                 }],
             }],
         };

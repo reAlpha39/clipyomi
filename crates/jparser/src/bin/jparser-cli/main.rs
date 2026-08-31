@@ -51,6 +51,16 @@ struct Cli {
     command: Command,
 }
 
+/// Which segmentation engine a subcommand runs.
+///
+/// v1 is the default for all of Phase 1a: the switchover is Phase 1b's, so no
+/// build ships with `conjugation: None`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum EngineChoice {
+    V1,
+    V2,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Build an index from a JMdict XML file.
@@ -149,6 +159,9 @@ enum Command {
         #[cfg(feature = "mecab")]
         #[arg(long)]
         hints: Option<PathBuf>,
+        /// Segmentation engine. `v2` is the Phase 1a clean-room core.
+        #[arg(long, value_enum, default_value_t = EngineChoice::V1)]
+        engine: EngineChoice,
     },
     /// Score a gold corpus against the current engine: span accuracy and
     /// entry top-1, reported separately.
@@ -165,6 +178,9 @@ enum Command {
         /// Emit the metrics as one JSON object instead of the human form.
         #[arg(long)]
         json: bool,
+        /// Segmentation engine. `v2` is the Phase 1a clean-room core.
+        #[arg(long, value_enum, default_value_t = EngineChoice::V1)]
+        engine: EngineChoice,
     },
     /// Emit the pool sentences where jparser has a segmentation cut Vibrato
     /// does not — the gold corpus's sampling signal.
@@ -350,6 +366,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             text,
             #[cfg(feature = "mecab")]
             hints,
+            engine,
         } => {
             let table = ConjugationTable::load_embedded()?;
             let index = Index::open(&index)?;
@@ -367,7 +384,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(not(feature = "mecab"))]
             let hints: Option<&dyn jparser::BoundaryHints> = None;
 
-            let result = jparser::parse(&index, &table, &text, &ParseOptions::default(), hints)?;
+            let opts = ParseOptions::default();
+            let result = match engine {
+                EngineChoice::V1 => jparser::parse(&index, &table, &text, &opts, hints)?,
+                // `bounds` is `None` for now; Task 16 wires the real boundary
+                // source.
+                EngineChoice::V2 => jparser::engine::parse_v2(&index, &text, &opts, None)?,
+            };
             for seg in &result.segments {
                 if !seg.matched {
                     println!(
@@ -404,12 +427,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(feature = "mecab")]
             hints,
             json,
+            engine,
         } => score::run(
             &index,
             &gold,
             #[cfg(feature = "mecab")]
             hints.as_deref(),
             json,
+            engine,
         )?,
         #[cfg(feature = "mecab")]
         Command::Diff {
