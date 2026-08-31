@@ -27,6 +27,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::path::Path;
 
+use crate::EngineChoice;
 use jparser::conjugation::ConjugationTable;
 use jparser::index::load::Index;
 use jparser::{ParseOptions, ParseResult};
@@ -309,6 +310,7 @@ pub fn run(
     gold_path: &Path,
     #[cfg(feature = "mecab")] hints: Option<&Path>,
     json: bool,
+    engine: EngineChoice,
 ) -> Result<(), Box<dyn Error>> {
     let table = ConjugationTable::load_embedded()?;
     let index = Index::open(index_dir)?;
@@ -345,13 +347,13 @@ pub fn run(
         #[cfg(not(feature = "mecab"))]
         let hints: Option<&dyn jparser::BoundaryHints> = None;
 
-        let parsed = jparser::parse(
-            &index,
-            &table,
-            &record.text,
-            &ParseOptions::default(),
-            hints,
-        )?;
+        let opts = ParseOptions::default();
+        // `bounds` is `None` for now; Task 16 wires the real boundary source.
+        let bounds: Option<&dyn jparser::engine::Boundaries> = None;
+        let parsed = match engine {
+            EngineChoice::V1 => jparser::parse(&index, &table, &record.text, &opts, hints)?,
+            EngineChoice::V2 => jparser::engine::parse_v2(&index, &record.text, &opts, bounds)?,
+        };
         accumulate(record, &parsed, &mut m);
     }
     m.by_decision
@@ -418,6 +420,7 @@ mod tests {
                     senses: Vec::new(),
                     flags: WordFlags::default(),
                     entry_id,
+                    steps: Vec::new(),
                 })
                 .collect(),
         }

@@ -125,6 +125,21 @@ fn flags_from_worker(
     BoundaryFlags { bad_start, bad_end }
 }
 
+/// Token boundaries as the Engine v2 DP wants them: `set[p]` is true when a
+/// token ends at character `p` and the next begins there.
+///
+/// `BoundaryFlags` answers "is this position interior to a token", which loses
+/// single-character tokens entirely — master plan §4.3 cause 1, and the reason
+/// `くるまではこう` merged `は`+`こう` for free. This answers the question the
+/// constraint actually asks.
+pub struct BoundarySet(Vec<bool>);
+
+impl crate::engine::Boundaries for BoundarySet {
+    fn is_boundary(&self, pos: usize) -> bool {
+        self.0.get(pos).copied().unwrap_or(false)
+    }
+}
+
 /// A loaded Vibrato dictionary, ready to tokenize.
 ///
 /// Loading is expensive and reading the dictionary is not, so the two are
@@ -164,6 +179,24 @@ impl VibratoTokenizer {
         worker.reset_sentence(text);
         worker.tokenize();
         flags_from_worker(&worker, text.chars().count(), self.reading_field)
+    }
+
+    /// Character-offset boundary set for `text`.
+    pub fn boundaries(&self, text: &str) -> BoundarySet {
+        let char_len = text.chars().count();
+        let mut set = vec![false; char_len + 1];
+        set[0] = true;
+        set[char_len] = true;
+
+        let mut worker = self.tokenizer.new_worker();
+        worker.reset_sentence(text);
+        worker.tokenize();
+        for i in 0..worker.num_tokens() {
+            let range = worker.token(i).range_char();
+            set[range.start] = true;
+            set[range.end] = true;
+        }
+        BoundarySet(set)
     }
 }
 
@@ -260,6 +293,47 @@ mod tests {
             reading_field: READING_FIELD,
         };
         tokenizer.hints(text)
+    }
+
+    /// A `VibratoTokenizer` whose dictionary recognizes exactly `words`, built
+    /// the same way [`test_dictionary`] and
+    /// [`a_token_without_a_reading_marks_nothing`]'s fixture are.
+    /// `VibratoTokenizer::boundaries` never consults the reading field, so the
+    /// feature columns after 名詞 don't matter here.
+    fn tokenizer_over(words: &[&str]) -> VibratoTokenizer {
+        let lex: String = words
+            .iter()
+            .map(|w| format!("{w},0,0,5000,名詞,一般,*,*,*,*,*,*,*\n"))
+            .collect();
+        const MATRIX: &str = "1 1\n0 0 0\n";
+        const CHAR: &str = "DEFAULT 0 1 0\nKANJI 0 0 2\n0x4E00..0x9FFF KANJI\n";
+        const UNK: &str = "DEFAULT,0,0,5000,記号,*,*,*,*,*,*\n\
+                           KANJI,0,0,5000,名詞,一般,*,*,*,*,*\n";
+
+        let dict = vibrato::SystemDictionaryBuilder::from_readers(
+            lex.as_bytes(),
+            MATRIX.as_bytes(),
+            CHAR.as_bytes(),
+            UNK.as_bytes(),
+        )
+        .expect("tokenizer_over dictionary must build");
+        VibratoTokenizer {
+            tokenizer: vibrato::Tokenizer::new(dict),
+            reading_field: READING_FIELD,
+        }
+    }
+
+    #[test]
+    fn a_single_character_token_still_yields_both_its_boundaries() {
+        // The failure master plan §4.3 names: `bad_start`/`bad_end` mark
+        // interiors, so a one-character token marks nothing at all.
+        let t = tokenizer_over(&["東京", "都"]);
+        let b = t.boundaries("東京都");
+        use crate::engine::Boundaries;
+        assert!(b.is_boundary(0));
+        assert!(b.is_boundary(2), "東京 ends and 都 begins at 2");
+        assert!(b.is_boundary(3));
+        assert!(!b.is_boundary(1), "1 is interior to 東京");
     }
 
     /// 東京 spans chars 0..2, so only its interior boundary is marked: a word
