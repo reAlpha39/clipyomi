@@ -18,8 +18,8 @@
 /// the block opens with WO, then the small vowels and small TU, then follows
 /// gojūon order starting from U+FF71 A. The final two entries are the
 /// halfwidth voiced and semi-voiced sound marks (U+FF9E, U+FF9F), which are
-/// combining marks rather than letters — see `fold`'s doc comment on the
-/// halfwidth match arm for how those two are handled.
+/// marks rather than letters — see `fold`'s doc comment on the halfwidth
+/// match arm for how those two are handled.
 const HALFWIDTH_TO_FULLWIDTH: [char; 58] = [
     'ヲ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ', 'ャ', 'ュ', 'ョ', 'ッ', // U+FF66..=U+FF6F
     'ー', // U+FF70
@@ -34,8 +34,8 @@ const HALFWIDTH_TO_FULLWIDTH: [char; 58] = [
     'ラ', 'リ', 'ル', 'レ', 'ロ', // U+FF97..=U+FF9B
     'ワ', // U+FF9C
     'ン', // U+FF9D
-    '\u{309B}', // U+FF9E halfwidth voiced sound mark -> fullwidth combining form
-    '\u{309C}', // U+FF9F halfwidth semi-voiced sound mark -> fullwidth combining form
+    '\u{309B}', // U+FF9E halfwidth voiced sound mark -> fullwidth spacing form
+    '\u{309C}', // U+FF9F halfwidth semi-voiced sound mark -> fullwidth spacing form
 ];
 
 /// Fold `c` toward its katakana index-key form: hiragana shifts `+0x60` into
@@ -52,10 +52,12 @@ const HALFWIDTH_TO_FULLWIDTH: [char; 58] = [
 ///
 /// `char -> char` by construction, no lookahead: the FST walk applies this
 /// per transition (spec §5), so it cannot compose e.g. halfwidth `ｶ` + `ﾞ`
-/// into `ガ`. The halfwidth voiced/semi-voiced marks fold to their fullwidth
-/// *combining* mark equivalents (U+309B / U+309C) rather than being left
-/// alone, so that a halfwidth-typed `ｶﾞ` and a fullwidth-typed `カ゛` fold to
-/// the same two-character sequence.
+/// into `ガ`. The halfwidth voiced/semi-voiced marks fold to the fullwidth
+/// *spacing* marks U+309B / U+309C — deliberately not NFKC's combining marks
+/// U+3099 / U+309A. `fold` never has the previous character in hand, so a
+/// combining-mark result would silently attach to whatever precedes it
+/// wherever the folded text is later rendered or re-normalized; the spacing
+/// forms stay inert as their own two-character unit instead.
 pub fn fold(c: char) -> char {
     match c {
         // Hiragana -> katakana: a constant +0x60 offset across the block.
@@ -154,6 +156,17 @@ mod tests {
         assert_eq!(fold('か'), 'カ');
         assert_eq!(fold('ｶ'), 'カ');
         assert_eq!(fold('カ'), 'カ');
+    }
+
+    #[test]
+    fn the_halfwidth_sound_marks_fold_to_the_spacing_forms() {
+        // Deliberate divergence from NFKC, which maps these to the combining
+        // marks U+3099/U+309A. `fold` is char -> char with no lookahead, so
+        // it cannot compose ｶ + ﾞ into ガ either way; the spacing forms are
+        // chosen because they stand on their own instead of silently
+        // attaching to whatever character happens to precede them later.
+        assert_eq!(fold('\u{FF9E}'), '\u{309B}');
+        assert_eq!(fold('\u{FF9F}'), '\u{309C}');
     }
 
     #[test]
