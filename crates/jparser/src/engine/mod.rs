@@ -19,6 +19,8 @@
 use crate::index::load::Index;
 use crate::{ParseError, ParseOptions, ParseResult, Segment};
 
+pub mod kana;
+
 pub type ClassId = u16;
 pub type FormId = u16;
 
