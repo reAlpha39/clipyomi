@@ -1,14 +1,14 @@
-# Engine v2 Phase 0 — Handoff (harness complete, corpus and baseline outstanding)
+# Engine v2 Phase 0 — Handoff (complete)
 
 **Date:** 2026-08-28
 **Design:** [`specs/2026-08-28-engine-v2-phase0-design.md`](specs/2026-08-28-engine-v2-phase0-design.md)
 **Plan:** [`plans/2026-08-28-engine-v2-phase0.md`](plans/2026-08-28-engine-v2-phase0.md)
 **Master plan:** [`specs/2026-08-27-engine-v2-master-plan.md`](specs/2026-08-27-engine-v2-master-plan.md) §5, §7 Phase 0, §9.1
-**Status:** Plan tasks 1–7 implemented and reviewed. Task 8's pools are built and
-the top 150 are model-adjudicated and now **author-reviewed** (§7 — 14 corrections
-applied). Promotion to `crates/jparser/tests/fixtures/gold.jsonl` is still the
-author's call, and until it happens Phase 0 is not closed: its done-when clause
-requires a *committed* corpus. Master plan §9.1, §9.2 and §9.6 are all answered.
+**Status:** **Closed.** All nine plan tasks are done. The 150-sentence corpus is
+committed at `crates/jparser/tests/fixtures/gold.jsonl` with its subset index
+beside it, the baseline is recorded against it (§11), and design §14's deviations
+are folded into the master plan. Master plan §9.1, §9.2, §9.6 and §9.7 are all
+answered. Two items stay open and neither blocks Phase 1 — see §11.4.
 
 ---
 
@@ -30,9 +30,13 @@ clean with and without `--features mecab`.
 | JSONL + BOM + gold-`ent_seq` support in the subset extractor | `tools/extract_jmdict_subset.py` |
 | Provenance manifest with the measured register classes | `crates/jparser/tests/fixtures/gold_sources.md` |
 
-## 2. What is not done, and why
+## 2. What was outstanding, and how it was settled
 
-**Plan tasks 8 (build the corpus) and 9 (record the baseline) were not executed.**
+*Kept as written, because the reasoning still governs how the committed corpus
+must be read.*
+
+**Plan tasks 8 (build the corpus) and 9 (record the baseline) were not executed
+by the model on its own initiative.**
 
 Task 8 step 5 is adjudication: `label` exists to record *your* ruling on correct
 Japanese segmentation. A model filling it in produces a model's opinion labelled
@@ -40,8 +44,14 @@ Japanese segmentation. A model filling it in produces a model's opinion labelled
 would be permanent and invisible — worse than the ranked-list tautology §7.2 was
 written to prevent. Tier selection in steps 1–4 is the same judgement in weaker form.
 
-So the harness is finished and tested; the corpus is yours to author. §5 below has the
-commands.
+**Settled at the author's instruction: adjudicate with the model, review it, and
+commit it labelled.** The alternative was not a better corpus — it was no
+baseline, and Phase 1's done-when clause cannot be evaluated without one. A full
+author pass over the 246 sampled sentences is ~4,000 span decisions (§5, finding
+1). What makes the promotion safe is that the risk is stated where the number is
+read rather than hidden: `gold_sources.md` now carries a section naming exactly
+which axis was reviewed and which was not. §11 records what was committed and
+what remains unchecked.
 
 ## 3. Two defects found late, and what they change about how you label
 
@@ -133,6 +143,10 @@ now sorts ascending, so the excluded records come first and `--all --limit 200` 
 what it says.
 
 ## 5. Running tasks 8 and 9
+
+*Both were run — see §11 for what was committed. This section is kept because
+the commands, the asset paths and the four findings at the end are what anyone
+extending the corpus past 150 sentences needs.*
 
 Assets already on this machine; no downloads needed:
 
@@ -730,3 +744,98 @@ Anyone quoting the tolerant number should quote this paragraph with it.
   It contains the strings, by definition — delete it once you are satisfied.
 
   Nothing else in the tree is traceable to a copyrighted work.
+
+## 11. Phase close — what was committed, and what was not
+
+### 11.1 The corpus
+
+`corpus_staging/gold_model.jsonl` was promoted verbatim to
+`crates/jparser/tests/fixtures/gold.jsonl`: **150 records, 2,163 spans, 1,554
+non-null entry decisions, 609 null**, every record's `decision` field reading
+`e`. `build_gold.py` was re-run from the scratch tables and reproduces the
+promoted file byte-for-byte, so the committed corpus is regenerable from its
+inputs rather than being a hand-edited artefact.
+
+`gold_jmdict_subset.xml` was regenerated against it — 5,402 entries, 633 of them
+named directly by gold, **2,662,806 bytes**, unchanged from §7.4's figure. Design
+§3.4's cap is 8 MB, so a 250-sentence corpus still projects to ~4.4 MB and no
+capping is needed.
+
+`gold_sources.md` gained two things: attribution rows for the 56 works and
+articles the committed 150 actually cite — filtered from
+`corpus_staging/manifest_rows.md`, which covers all 246 sampled sentences, so no
+row claims a source the corpus does not use — and a section, **"How this corpus
+was adjudicated"**, stating in plain words that the entry decisions were
+author-reviewed and mechanically audited while the span decisions were not. The
+four tier C1 classes are covered by that file's existing prose rather than by
+rows, which is why 60 source prefixes resolve to 56 rows.
+
+### 11.2 The baseline
+
+Measured against the committed corpus, not the staging copy:
+
+| | span accuracy | compound-tolerant | coarsening | entry top-1 |
+| --- | --- | --- | --- | --- |
+| hints off | 0.6810 (1473 / 2163) | 0.8465 (1831 / 2163) | 358 spans, 167 merges | 0.9159 (1046 / 1142) |
+| hints on | 0.6963 (1506 / 2163) | 0.8678 (1877 / 2163) | 371 spans, 173 merges | 0.9155 (1072 / 1171) |
+| delta | **+0.0153** | **+0.0213** | +13 spans, +6 merges | −0.0004 |
+
+Identical to §7.3 and §9.4, which is the expected result and the point of
+re-running it: the promotion moved no numbers.
+
+Artefact hashes are in design §8.3. In short: `gold.jsonl` sha256 `6332128b…`,
+subset sha256 `d445c45a…`, hint dictionary sha256 `f3ddd9ca…`
+(ipadic-mecab-2.7.0-20070801).
+
+### 11.3 Gates, all re-run on the committed artefacts
+
+| Gate | Result |
+| --- | --- |
+| Design §11.4 equivalence | **Pass.** `score --json` over the full `gen-1` index and the committed subset returns identical values for every field in both hint states; only `index_generation` differs, which is the label that makes a swapped pair detectable |
+| Design §3.4 subset size | **Pass.** 2,662,806 bytes against an 8 MB cap |
+| `build_gold.py` | **Pass.** Every non-null choice is among its own span's candidate list; output byte-identical to the promoted file |
+| `audit_entries.py` | **Pass.** 262 decisions, 0 POS-consistency flags, 0 entries absent from the subset |
+| `cargo test -p jparser` | 324 passing |
+| `cargo test -p jparser --features mecab` | 357 passing |
+| `cargo clippy -p jparser --all-targets -- -D warnings` | Clean, with and without `--features mecab` |
+| `cargo check -p jparser --no-default-features` | Clean |
+
+### 11.4 What is not committed, and what stays unchecked
+
+Neither blocks Phase 1; both should be visible to it.
+
+- **Tier C2's local baseline was not built.** `gold_local.jsonl` is local-only by
+  design §3.2 and outside the done-when clause, which requires a *committed*
+  corpus. Until it exists there is no check that the committed corpus has not
+  drifted from the real capture distribution — which is the one thing the
+  committed tiers cannot verify about themselves.
+- **96 of the 246 sampled sentences remain unadjudicated** in
+  `corpus_staging/disagreements.jsonl`. They are the low-conflict-density tail,
+  so they are also the cheapest per sentence and the least informative.
+- **The 54 span decisions of §7.5 are still unreviewed.** These are the
+  sentences where the model cut a boundary neither segmenter proposed, or
+  removed one both agreed on — the decisions made with no evidence from either
+  source, and the ones with no mechanical check available. If a Phase 1 result
+  ever looks wrong, read these first: `corpus_staging/REVIEW.md` section 3 lists
+  them, and at ~54 sentences against ~4,000 span decisions for a full pass they
+  are by a wide margin the best risk-per-minute review available.
+
+### 11.5 Documents brought up to date
+
+- **Design §8.3** — the baseline table, filled with all four measurements plus
+  the artefact hashes. §14 marked folded in. A broken cross-reference to a
+  non-existent §8.4 corrected to §11.4.
+- **Master plan §5.3** — the whole-sentence denominator and `ent_seq: null` as a
+  positive label; §9.1's answer summarised; the two sampling hazards (Aozora's
+  edition flag, and "cover class X" not being "write sentences containing X").
+- **Master plan §5.4** — the refinement predicate, `label` reading a line rather
+  than a keystroke, and candidates ordered by `ent_seq` rather than by rank.
+- **Master plan §7 Phase 0** — marked complete, the "no code under
+  `crates/jparser/src/`" rule amended to "no change to the parser library" with
+  its two named exceptions, the baseline recorded, and the three constraints on
+  how it may be read.
+- **Master plan §9.1** — answered: five tiers, four committed, with the measured
+  adjudication cost.
+- **Master plan §10** — six decision-log rows, the first of which records the
+  decision to commit a model-adjudicated corpus labelled for what it is.
+

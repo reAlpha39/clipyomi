@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-28
 **Master plan:** [`2026-08-27-engine-v2-master-plan.md`](2026-08-27-engine-v2-master-plan.md) §5, §7 Phase 0, §9.1
-**Status:** Design draft, not approved, not implemented
+**Status:** Implemented and closed. Baseline recorded in §8.3; §14's deviations folded into the master plan.
 
 ---
 
@@ -19,7 +19,7 @@ corpus, the measurement, and the current engine's score. Nothing else.
 
 The recorded baseline is the contract Phase 1 and Phase 2 are held to. If it is
 wrong, optimistic, or irreproducible, every later phase is unfalsifiable — which
-is why §5 argues subset-index equivalence explicitly and §8.4 gates it with an
+is why §8.2 argues subset-index equivalence explicitly and §11.4 gates it with an
 empirical check rather than the argument alone.
 
 ## 2. Scope
@@ -590,25 +590,47 @@ than the alternative.
 
 ### 8.3 The baseline pair
 
-Four numbers recorded, in the phase handoff and in §14's master-plan update.
-The table is filled by task 9 and is deliberately empty here — a design cannot
-predict its own baseline:
+Recorded by task 9 against the committed corpus. `score` grew a third number
+after this design was written — the compound-tolerant accuracy of §9.3 in the
+phase handoff — and it is recorded here beside the other two because the strict
+number alone rewards a Phase 1 engine for splitting the compounds master plan
+§5.2 exists to preserve:
 
-| | span accuracy | entry top-1 |
-| --- | --- | --- |
-| hints off | | |
-| hints on | | |
+| | span accuracy | compound-tolerant | coarsening | entry top-1 |
+| --- | --- | --- | --- | --- |
+| hints off | 0.6810 (1473 / 2163) | 0.8465 (1831 / 2163) | 358 spans, 167 merges | 0.9159 (1046 / 1142) |
+| hints on | 0.6963 (1506 / 2163) | 0.8678 (1877 / 2163) | 371 spans, 173 merges | 0.9155 (1072 / 1171) |
+| delta | **+0.0153** | **+0.0213** | +13 spans, +6 merges | −0.0004 |
 
-Hints-on minus hints-off is what the hint mechanism is currently worth — two
-numbers, not a corpus sampler (master plan §5.1). Recorded against the committed
-corpus. Tier C2's local baseline is recorded in the same table, marked
-irreproducible, as the check that the committed corpus has not drifted from the
-real distribution.
+**Hints-on minus hints-off is what the hint mechanism is currently worth**, and
+it is positive on both span metrics — more strongly on the tolerant one, so the
+correction strengthens the conclusion rather than revising it. Entry top-1 moves
+two spans on a 1,171 denominator; that is noise, not a sign change.
 
-The index generation and the corpus commit hash are recorded beside them. JMdict
-is rebuilt daily and `ent_seq` values are stable but entries do get added; the
-committed subset is what freezes the measurement, and naming the artefacts is
-what makes a later "the number moved" answerable.
+Neither absolute number is a quality verdict. Every sentence was sampled because
+the two segmenters disagreed on it, and `by decision` reads `e` for all 150, so
+no sentence was settled by blessing either segmenter's own cuts (§7.1's `j`
+anchoring bias is structurally absent here rather than merely small).
+
+**Artefacts, so that a later "the number moved" is answerable:**
+
+| | |
+| --- | --- |
+| `gold.jsonl` | sha256 `6332128b90d17acda00b881cbf148ac169c60371a56f5f1468aaaf451d3b38a1`, 150 records, 2,163 spans |
+| `gold_jmdict_subset.xml` | sha256 `d445c45a91fa7e91867212ed6de107436a452ec9be4b92be12ce1337c1151d87`, 2,662,806 bytes, 5,402 entries |
+| index generation | `gold-index`, built from the subset above; equivalence-checked against the full JMdict index `gen-1` |
+| hint dictionary | Vibrato / ipadic-mecab-2.7.0-20070801, sha256 `f3ddd9cacbd6eff696e49bb9266824eed28dceaa89c55e75e4a13384cc7f9d02` |
+
+**§11.4's equivalence check passes on the committed artefacts.** `score --json`
+over the full 67 MB `gen-1` index and over the 2.66 MB committed subset returns
+identical values for every field in both hint states; only `index_generation`
+differs, which is the label that makes a swapped pair detectable. The offline
+gate is met.
+
+**Tier C2's local baseline is not recorded.** `gold_local.jsonl` was not built —
+it is local-only by §3.2 and outside the done-when clause, which requires a
+*committed* corpus. It stays an open item, and until it exists there is no check
+that the committed corpus has not drifted from the real capture distribution.
 
 ---
 
@@ -806,7 +828,13 @@ section forbids.
 
 ---
 
-## 14. Deviations to record in the master plan at phase close
+## 14. Deviations to record in the master plan at phase close — **FOLDED IN**
+
+All seven are now in the master plan: 1 in §7 Phase 0 and the decision log; 2 in
+§5.3 and §9.1; 3, 5 and 7 in §5.4 and the decision log; 4 in §5.3 and the decision
+log; 6 in §5.3 and the decision log. Three further deviations this phase earned
+are recorded there too — the measured sampling-predicate value, the tier C1
+correction, and §9's finding that span accuracy inherits boundary F1's defect.
 
 1. **§7 Phase 0 "no code under `crates/jparser/src/`"** is amended to "no change
    to the parser library", with two exceptions named: `src/bin/jparser-cli*`

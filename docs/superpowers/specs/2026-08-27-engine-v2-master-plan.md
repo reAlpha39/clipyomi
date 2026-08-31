@@ -460,10 +460,37 @@ Labels are `(span, ent_seq)` pairs. Entry IDs are stable and unambiguous;
 boundary positions would require first settling a segmentation convention, which
 §5.2 explicitly declines to do.
 
-**Open question (§9.1): corpus sourcing.** Visual-novel text is copyrighted.
-Options are the author's own reading history kept local and uncommitted, Aozora
-Bunko for public-domain prose, or hand-written pastiche. This is unresolved and
-gates Phase 0's size, not its design.
+**The denominator is the whole sentence, and `ent_seq: null` is a positive
+label.** Phase 0 sharpened this: gold covers every span of a sampled sentence,
+not only the spans the two segmenters disagreed on, and "no JMdict entry belongs
+first here" is a claim the corpus records rather than a gap it leaves. Without
+both, span accuracy has no stable denominator and a parser that emits fewer
+entries scores better by emitting less.
+
+**§9.1 is answered — five tiers, four committed.** Aozora Bunko (新字新仮名
+editions), ja.Wikinews under CC BY 2.5, hand-written pastiche, and noise derived
+from those three are committed; real `vn_data` lines stay local as tier C2 and
+are never committed. Two sources this plan did not list were adopted for
+specific gaps: Wikinews carries the news register Aozora has none of, and
+hand-derived noise covers the OCR and vertical-text genres this plan proposed
+deferring. The Phase 0 design §3 carries the argument and the derivation table.
+
+**Two sampling hazards found while building it, both worth carrying forward:**
+
+- **Aozora's 新字新仮名 flag describes the edition, not the content.** Classical
+  passages quoted inside a modern edition and kana iteration marks (`慌てゝ`)
+  both leak through, and both segmenters flail on pre-war orthography — so an
+  unfiltered Aozora sample returns disproportionately many of them, a
+  distribution ClipYomi never sees and would then be tuned against. A work
+  usually has several catalogue rows and the 旧字旧仮名 edition often sorts
+  first, so resolving a title to "the first matching row" silently violates the
+  filter.
+- **"Cover class X" is not "write sentences containing X", and only the sampler
+  tells you which you did.** The first pastiche draft aimed at reduplicated
+  mimetics using ordinary ones (`どきどき`, `ぐるぐる`) and sampled at 12%,
+  because those are JMdict headwords and both segmenters agree on them. The
+  conflicting shape is a short mora unit repeated many times with little kanji
+  anchor, ideally one JMdict lacks. Rewriting took the tier from 12% to 59%.
 
 ### 5.4 Shape
 
@@ -485,8 +512,25 @@ emits the sentences where the two disagree. Boundary-level disagreement is the
 sampling signal only; the labels themselves stay `(span, ent_seq)` pairs per
 §5.3, and the adjudicator is free to rule that neither segmenter was right.
 
-`label` prints both parses and reads a keystroke. Output is append-only JSONL so
-an interrupted session loses nothing.
+**The predicate is refinement, not equality** — sample a sentence when jparser
+proposes a boundary Vibrato does not, *Bj* \ *Bv* ≠ ∅. Phase 0 sharpened this
+from plain boundary disagreement, which selects nearly the whole pool for the
+same reason §5.2 rejects boundary F1: jparser merging a Vibrato token pair into
+one JMdict entry is compound preservation working, and sampling on it fills the
+corpus with sentences where jparser is right. Measured over 67k captured lines,
+the sharpened predicate selects 36% where equality selects almost everything,
+and the 36% is where the real conflicts are.
+
+`label` prints both parses and **reads a line**, not a keystroke — so the
+adjudicator is testable without a TTY, which is what let the whole flow be
+integration-tested. Output is append-only JSONL so an interrupted session loses
+nothing.
+
+**`label` lists candidate entries ordered by `ent_seq`, never by the ranker's
+own score.** Showing the adjudicator a rank-ordered list makes entry top-1
+measure the parser against itself: the label is anchored on the answer being
+graded. Sorting by a stable id that carries no quality signal is what keeps the
+metric independent, and it costs nothing.
 
 ---
 
@@ -515,20 +559,54 @@ sequenced, each phase is verified by the one before it.
 
 ## 7. Phase detail
 
-### Phase 0 — Harness and baseline
+### Phase 0 — Harness and baseline — **COMPLETE**
 
 **In:** the three CLI subcommands (§5.4); the JSONL label format; genre
 extension of the sentence corpus, sampled by jparser-against-Vibrato
 disagreement (§5.1); a recorded baseline of both metrics for the current engine,
 with and without hints.
 
-**Out:** any change to parsing behaviour. Phase 0 writes no code under
-`crates/jparser/src/`.
+**Out:** any change to parsing behaviour. **Amended:** the rule reads *no change
+to the parser library*, not "no code under `crates/jparser/src/`" — read
+literally the latter forbids Phase 0's own deliverable, since §5.4 specifies the
+harness as `jparser-cli` subcommands and the bin lives under that path. Two
+exceptions are named and no others: `src/bin/jparser-cli*`, and one additive
+read-only `entry_id` field on `jparser::Entry` that `score` needs to compare
+entry decisions at all. Parsing behaviour is untouched.
 
 **Done when:** `jparser-cli score` prints span accuracy and entry top-1 for the
-current engine over a committed gold corpus, reproducibly and offline.
+current engine over a committed gold corpus, reproducibly and offline. **Met.**
 
-That baseline number is the contract every later phase is measured against.
+**The baseline, measured over the committed 150-sentence corpus:**
+
+| | span accuracy | compound-tolerant | entry top-1 |
+| --- | --- | --- | --- |
+| hints off | 0.6810 (1473 / 2163) | 0.8465 (1831 / 2163) | 0.9159 (1046 / 1142) |
+| hints on | 0.6963 (1506 / 2163) | 0.8678 (1877 / 2163) | 0.9155 (1072 / 1171) |
+| delta | +0.0153 | +0.0213 | −0.0004 |
+
+That pair is the contract every later phase is measured against. Three things
+constrain how it may be read, and Phase 1 should not quote a number without
+them:
+
+1. **Quote both span metrics, never the strict one alone.** Against a corpus
+   adjudicated at short-unit granularity, strict accuracy rewards splitting the
+   JMdict compounds §5.2 exists to preserve — so optimising it directly
+   optimises against the product. The tolerant metric in turn over-forgives by
+   roughly 1.3 points, because ~28 of its 167 merges are spurious. A rising
+   merge count is a warning, not a win.
+2. **The corpus is model-adjudicated and author-reviewed on entry decisions
+   only.** `crates/jparser/tests/fixtures/gold_sources.md` states exactly what
+   was checked and what was not; 54 of the 150 sentences carry a cut neither
+   segmenter proposed and no mechanical check covers them.
+3. **Absolute values are not a quality verdict.** Every sentence was sampled
+   because the two segmenters disagreed on it. The numbers exist to be
+   comparable across phases.
+
+**Two items stay open** and neither blocks Phase 1: tier C2's local baseline
+(`gold_local.jsonl`, never committed) was not built, so there is no check that
+the committed corpus has not drifted from the real capture distribution; and 96
+of the 246 sampled sentences remain unadjudicated in staging.
 
 ### Phase 1 — Clean-room core
 
@@ -620,9 +698,37 @@ No layer ships without its licence established in writing first.
 
 ## 9. Open questions
 
-1. **Corpus sourcing (§5.3).** Visual-novel text is copyrighted. Author's own
-   reading history kept local, Aozora Bunko, or hand-written pastiche? Gates
-   Phase 0's size, not its design.
+1. ~~**Corpus sourcing (§5.3).**~~ **ANSWERED — all three, plus two sources this
+   plan did not list.** Visual-novel text is copyrighted, so it is used as a
+   *sampling pool* and never committed: `diff` runs over the 66,114 cleaned
+   capture lines to find which register classes actually generate conflicts, and
+   the pastiche tier is then written to cover those classes. Register and style
+   are not copyrightable; transcribed lines are. That gets real-distribution
+   coverage into a committed corpus without committing a word of it.
+
+   Five tiers, four committed:
+
+   | Tier | Source | Committed | Covers |
+   | --- | --- | --- | --- |
+   | A | Aozora Bunko, 新字新仮名 only | yes — public domain | literary prose, long sentences, 「」 speech |
+   | B | ja.Wikinews | yes — CC BY 2.5, own notice | news register, proper nouns, numerals, katakana loans |
+   | C1 | hand-written pastiche | yes — project licence | visual-novel dialogue, casual and contracted speech |
+   | C2 | real `vn_data` lines | **never** | the true input distribution, locally only |
+   | D | noise derived from A–C1 | yes — follows its parent | OCR noise, vertical-text artefacts |
+
+   The two additions are B and D. Aozora is literary prose from roughly
+   1900–1955 and carries no news register at all, so answering §5.3's request
+   for that genre with 1920s fiction would leave it unmeasured under a label
+   claiming coverage. And OCR noise, which §9.1's original lean proposed
+   deferring until real clipboard capture exists, is both the genre most likely
+   to break silently and the cheapest to cover — it is derived by hand from
+   lines already committed.
+
+   **What it actually cost, against the estimate.** The design assumed ~10 spans
+   per sentence; the measured median is 14 and the mean 16.3, so the sampled 246
+   sentences are ~4,000 span decisions rather than 2,500 — 60% more. The
+   committed corpus stops at the top 150 by conflict density, which still covers
+   every tier. Anyone sizing a corpus extension should use the measured figure.
 2. ~~**Target licence.**~~ **ANSWERED — `MIT OR Apache-2.0`.** The author's
    decision, taken at the Phase 0/1 boundary so Phase 1 writes the nine
    provenance headers once.
@@ -810,3 +916,9 @@ No layer ships without its licence established in writing first.
 | Stay on IPADIC; do not adopt UniDic | Measured at the Phase 0/1 boundary on the gold corpus: UniDic scores one span worse and slightly worse on entry top-1, for 199 MB against 46 MB and a per-dictionary reading-column property IPADIC does not need (§9.6) |
 | Treat the tokenizer's reading column as a per-dictionary property, not a constant | IPADIC's reading is at field 7 and UniDic's at 9, and reading IPADIC at 9 silently disables every hint and scores exactly the no-hints baseline. A wrong constant is invisible in both metrics (§9.6) |
 | Sample the gold corpus against Vibrato, not against hints-on/hints-off | The hints pair produces the same wrong parse on `くるまではこう`, so it cannot surface the bug success criterion 3 names (§5.1). Vibrato disagrees with jparser there, which is exactly the signal wanted |
+| **Commit the model-adjudicated corpus, labelled for exactly what it is** | The alternative to promoting it was not a better corpus but no baseline, and Phase 1's done-when clause cannot be evaluated without one. What makes it safe to promote is that the risk is stated where the number is read rather than hidden: `gold_sources.md` records that entry decisions were author-reviewed and mechanically audited (262 decisions, 0 POS flags) while the span decisions were not, and names the 54 sentences carrying a cut neither segmenter proposed. `gold.jsonl` is append-only and last-wins, so a correction is one appended record plus a re-run — the corpus is frozen for comparability, not permanently (§7 Phase 0) |
+| Sample on refinement, not on boundary inequality | Sample a sentence when jparser proposes a boundary Vibrato does not (*Bj* \ *Bv* ≠ ∅). Plain inequality selects nearly the whole pool, because jparser merging a Vibrato token pair into one JMdict entry is compound preservation working — sampling on it fills the corpus with sentences where jparser is right. Measured over 66k capture lines: 36% selected, and it is the 36% carrying the real conflicts (§5.4) |
+| List candidate entries by `ent_seq`, never by the ranker's own score | A rank-ordered candidate list anchors the adjudicator on the answer being graded, so entry top-1 would measure the parser against itself. Sorting by a stable id that carries no quality signal costs nothing and keeps the metric independent (§5.4) |
+| Label whole sentences, and treat `ent_seq: null` as a positive label | Labelling only the disputed spans leaves span accuracy without a stable denominator, and treating "no entry belongs here" as an unlabelled gap rewards a parser for emitting fewer entries. Both are recorded claims instead (§5.3) |
+| Read Phase 0's "no code under `crates/jparser/src/`" as "no change to the parser library" | Read literally the rule forbids Phase 0's own deliverable, since §5.4 specifies the harness as `jparser-cli` subcommands and the bin lives under that path. Two exceptions, no others: `src/bin/jparser-cli*`, and one additive read-only `entry_id` field on `Entry` without which `score` cannot compare entry decisions at all. Parsing behaviour is untouched (§7 Phase 0) |
+| Filter Aozora on content, not on the 新字新仮名 catalogue flag | The flag describes the edition. Classical passages quoted inside a modern edition and kana iteration marks both leak through, both segmenters flail on pre-war orthography, and an unfiltered sample therefore returns disproportionately many of them — a distribution ClipYomi never sees and would then be tuned against. A work usually has several catalogue rows and the 旧字旧仮名 edition often sorts first, so "the first matching row" silently violates the filter (§5.3) |
