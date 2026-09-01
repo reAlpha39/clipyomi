@@ -107,16 +107,22 @@ fn relax(best: &mut [Option<Node>], from: usize, to: usize, step_cost: i32, step
 }
 
 /// The min-cost contiguous cover of `chars`, choosing among `by_start`'s
-/// candidates (indexed by start position, as [`lex::candidates`] produces
-/// them) under the boundaries `bounds` allows.
+/// candidates under the boundaries `bounds` allows.
+///
+/// `by_start[i]` is every candidate starting at character offset `i` into
+/// `chars`, the shape [`lex::candidates`] produces; `by_start` is indexed
+/// independently of `chars.len()` here, and a position past the end of a
+/// short `by_start` is simply treated as having no candidates rather than
+/// trusted to line up. That decoupling is what makes the next guarantee
+/// unconditional rather than dependent on the two arguments matching:
 ///
 /// A forbidden candidate (`is_allowed` false) is never relaxed, so it can
 /// never appear in the returned path regardless of price. The result covers
 /// `0..chars.len()` exactly once, in ascending order, with no gaps or
 /// overlaps — every position up to [`MAX_UNMATCHED_RUN`] ahead of any
-/// reachable position is itself reachable via an unmatched run, so position
-/// `chars.len()` is always reached and the backtrack below never runs off
-/// the front.
+/// reachable position is itself reachable via an unmatched run regardless of
+/// what `by_start` offers there, so position `chars.len()` is always reached
+/// and the backtrack below never runs off the front.
 pub fn best_path(
     chars: &[char],
     by_start: &[Vec<Candidate>],
@@ -129,10 +135,11 @@ pub fn best_path(
 
     let mut best: Vec<Option<Node>> = (0..=n).map(|_| None).collect();
 
-    for (from, cands) in by_start.iter().enumerate().take(n) {
+    for from in 0..n {
         if cost_at(&best, from).is_none() {
             continue;
         }
+        let cands = by_start.get(from).map(Vec::as_slice).unwrap_or(&[]);
 
         for cand in cands {
             if !is_allowed(cand, bounds) {
