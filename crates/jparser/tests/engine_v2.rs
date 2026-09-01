@@ -131,6 +131,67 @@ fn a_kana_unified_match_is_marked_inexact() {
     assert!(!hit.exact, "はい (hiragana) != the raw katakana query ハイ");
 }
 
+// The candidate at `start` whose span reaches the end of `text` -- what
+// `chain.rs`'s tests need to pin `steps_for`'s contract. Takes `dir` (unlike
+// the brief's two-argument sketch) so each test can build into its own
+// scratch subdirectory, the same reason `cands` above does: `scratch` wipes
+// its directory on every call, and cargo runs tests in parallel.
+fn candidate_for(dir: &Path, text: &str, start: usize) -> jparser::engine::lex::Candidate {
+    let total = text.chars().count();
+    cands(dir, text)[start]
+        .iter()
+        .find(|c| c.start + c.len == total)
+        .unwrap_or_else(|| panic!("no candidate at {start} spanning to the end of {text:?}"))
+        .clone()
+}
+
+#[test]
+fn steps_are_innermost_first() {
+    // 食べさせられませんでした: the verb's own inflection first, then each
+    // auxiliary outward. Phase 1b renders left to right from this order.
+    let dir = scratch("chain-innermost");
+    build_v2(&dir);
+    let cand = candidate_for(&dir, "食べさせられませんでした", 0);
+    let steps = jparser::engine::chain::steps_for(&cand);
+    assert!(steps.len() >= 5);
+    assert!(steps[0].range.start <= steps[1].range.start);
+    assert_eq!(steps[0].range.start, 2, "食べ is the stem");
+    assert_eq!(steps.last().unwrap().range.end, 12);
+}
+
+#[test]
+fn the_ranges_tile_the_conjugated_tail_without_gaps() {
+    let dir = scratch("chain-tiling");
+    build_v2(&dir);
+    let cand = candidate_for(&dir, "食べさせられませんでした", 0);
+    let steps = jparser::engine::chain::steps_for(&cand);
+    for pair in steps.windows(2) {
+        assert_eq!(pair[0].range.end, pair[1].range.start, "no gap, no overlap");
+    }
+}
+
+#[test]
+fn an_uninflected_match_has_no_steps() {
+    let dir = scratch("chain-uninflected");
+    build_v2(&dir);
+    let cand = candidate_for(&dir, "東京", 0);
+    assert!(jparser::engine::chain::steps_for(&cand).is_empty());
+}
+
+#[test]
+fn the_ranges_are_absolute_not_relative_to_the_spans_start() {
+    // The brief's original name for this test ("...offset by the span's
+    // start") assumed `steps_for` shifts each range by `cand.start`. It
+    // doesn't -- see `chain.rs`'s contract doc. 食べ sits at absolute
+    // positions 2..4 regardless of where the candidate's own span begins,
+    // so た's step starts at 4, not at 4 + 2.
+    let dir = scratch("chain-absolute");
+    build_v2(&dir);
+    let cand = candidate_for(&dir, "私は食べた", 2);
+    let steps = jparser::engine::chain::steps_for(&cand);
+    assert_eq!(steps[0].range.start, 4, "食べ starts at 2, た at 4");
+}
+
 #[test]
 fn katakana_conjugation_is_not_deinflected_yet() {
     // Deliberate gap, not a bug, kept for Phase 1a: `Table`'s conjugation

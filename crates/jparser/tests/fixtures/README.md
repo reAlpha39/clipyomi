@@ -40,6 +40,14 @@ python3 tools/extract_jmdict_subset.py \
   crates/jparser/tests/fixtures/jmdict_subset.xml
 ```
 
+One entry is hand-added rather than extractor-derived: `食べる` (ent_seq
+1358280, `v1`, gloss "to eat"), appended just before `</JMdict>`. It backs
+`tests/engine_v2.rs`'s `chain.rs` tests, which need an ichidan verb whose
+chain includes a zero-consumption 連用形 terminal, and it has no sentence in
+`parse_sentences.txt` behind it. Regenerating this fixture from a real
+`JMdict_e.xml` will drop it — re-add it by hand afterward, or add a sentence
+using 食べる to `parse_sentences.txt` first.
+
 ## `parse_sentences.txt`
 
 The snapshot corpus. Adding a sentence requires re-running the extractor against
