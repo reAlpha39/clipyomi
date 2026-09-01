@@ -17,8 +17,9 @@
 //! Phase 1b's, so that no build ships without a conjugation label.
 
 use crate::index::load::Index;
-use crate::{ParseError, ParseOptions, ParseResult, Segment};
+use crate::{ParseError, ParseOptions, ParseResult};
 
+pub mod assemble;
 pub mod build;
 pub mod chain;
 pub mod cost;
@@ -58,30 +59,18 @@ pub struct ConjStep {
     pub range: std::ops::Range<usize>,
 }
 
-/// One unmatched segment covering the whole input. Replaced in Task 14.
-fn stub_result(text: &str) -> ParseResult {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.is_empty() {
-        return ParseResult {
-            segments: Vec::new(),
-        };
-    }
-    ParseResult {
-        segments: vec![Segment {
-            start: 0,
-            len: chars.len(),
-            surface: text.to_string(),
-            reading: None,
-            matched: false,
-            entries: Vec::new(),
-        }],
-    }
-}
-
 /// Parse `text` with the Engine v2 core.
 ///
 /// Signature-compatible with [`crate::parse`] apart from the boundary
 /// parameter, which is a constraint source rather than an advisory hint.
+///
+/// Three stages, each already a separate module: [`lex::candidates`] finds
+/// every dictionary match at every span, [`lattice::best_path`] chooses the
+/// min-cost cover among them, and [`assemble::to_segment`] resolves each
+/// step of that cover into the public [`Segment`]/[`Entry`] shape.
+///
+/// [`Segment`]: crate::Segment
+/// [`Entry`]: crate::Entry
 pub fn parse_v2(
     index: &Index,
     table: &table::Table,
@@ -89,8 +78,15 @@ pub fn parse_v2(
     opts: &ParseOptions,
     bounds: Option<&dyn Boundaries>,
 ) -> Result<ParseResult, ParseError> {
-    let _ = (index, table, opts, bounds);
-    Ok(stub_result(text))
+    let _ = opts;
+    let chars: Vec<char> = text.chars().collect();
+    let by_start = lex::candidates(index, table, &chars)?;
+    let path = lattice::best_path(&chars, &by_start, bounds);
+    let mut segments = Vec::with_capacity(path.len());
+    for step in &path {
+        segments.push(assemble::to_segment(index, &chars, step, &by_start)?);
+    }
+    Ok(ParseResult { segments })
 }
 
 #[cfg(test)]
@@ -104,22 +100,6 @@ mod tests {
         fn is_boundary(&self, _pos: usize) -> bool {
             true
         }
-    }
-
-    #[test]
-    fn the_stub_covers_the_input_exactly_once() {
-        let r = stub_result("東京都に住む");
-        assert_eq!(r.segments.len(), 1);
-        assert_eq!(r.segments[0].start, 0);
-        assert_eq!(r.segments[0].len, 6, "length is in characters, not bytes");
-        assert_eq!(r.segments[0].surface, "東京都に住む");
-        assert!(!r.segments[0].matched);
-        assert!(r.segments[0].entries.is_empty());
-    }
-
-    #[test]
-    fn empty_input_produces_no_segments() {
-        assert!(stub_result("").segments.is_empty());
     }
 
     #[test]

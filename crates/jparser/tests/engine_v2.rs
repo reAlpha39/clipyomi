@@ -131,6 +131,79 @@ fn a_kana_unified_match_is_marked_inexact() {
     assert!(!hit.exact, "はい (hiragana) != the raw katakana query ハイ");
 }
 
+/// Opens a fresh v2 index, builds a fresh `Table`, and runs `parse_v2` with
+/// no boundary source -- the shape every assemble test below needs and
+/// nothing more.
+fn parse_v2_over(dir: &Path, text: &str) -> jparser::ParseResult {
+    let index = open_v2(dir);
+    let table = jparser::engine::table::Table::new();
+    jparser::engine::parse_v2(&index, &table, text, &jparser::ParseOptions::default(), None)
+        .expect("parse_v2")
+}
+
+#[test]
+fn a_matched_segment_carries_its_entry_and_senses() {
+    // Not 東京 (the brief's own example): 東 and 京 are each independently a
+    // COMMON-priority entry in this fixture (ent_seq 1447440 and 1233320),
+    // so splitting into two one-character COMMON matches costs 2 less than
+    // one COMMON two-character match -- `cost.rs`'s COMMON discount applies
+    // per match, not per character, and nothing in Phase 1a's cost model
+    // (Task 16's to tune) prefers the compound here. 学校 has no such
+    // competing split: 学 alone is COMMON but 校 alone is not, so the
+    // one-match/two-match costs tie and `lattice::relax`'s longer-run
+    // tie-break keeps it whole -- confirmed against this fixture directly
+    // rather than assumed.
+    let dir = scratch("assemble-basic");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "学校");
+    let seg = &r.segments[0];
+    assert!(seg.matched);
+    assert_eq!(seg.surface, "学校");
+    assert!(!seg.entries.is_empty());
+    assert!(!seg.entries[0].senses.is_empty());
+    assert!(!seg.entries[0].pos.is_empty());
+    // ent_seq 1206730 in tests/fixtures/jmdict_subset.xml, <keb>学校</keb>.
+    assert_eq!(seg.entries[0].entry_id, 1206730, "the ent_seq entry top-1 is scored on");
+}
+
+#[test]
+fn phase_1a_emits_no_conjugation_label_but_does_emit_the_steps() {
+    let dir = scratch("assemble-steps");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "書いた");
+    let e = &r.segments[0].entries[0];
+    assert_eq!(e.headword, "書く");
+    assert_eq!(e.conjugation, None, "Phase 1b writes the formatter");
+    assert!(!e.steps.is_empty(), "and Phase 1a hands it the steps");
+}
+
+#[test]
+fn an_unmatched_run_has_no_entries_and_no_reading() {
+    let dir = scratch("assemble-unmatched");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "」、「");
+    assert!(r
+        .segments
+        .iter()
+        .any(|s| !s.matched && s.entries.is_empty() && s.reading.is_none()));
+}
+
+#[test]
+fn pos_is_the_union_of_every_sense_in_first_seen_order() {
+    let dir = scratch("assemble-pos");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "学校"); // see the fragmentation note above -- 東京 splits
+    let pos = &r.segments[0].entries[0].pos;
+    let mut seen: Vec<&String> = Vec::new();
+    for code in pos {
+        assert!(
+            !seen.contains(&code),
+            "{code} appears twice in {pos:?}, not just adjacently deduplicated"
+        );
+        seen.push(code);
+    }
+}
+
 // The candidate at `start` whose span reaches the end of `text` -- what
 // `chain.rs`'s tests need to pin `steps_for`'s contract. Takes `dir` (unlike
 // the brief's two-argument sketch) so each test can build into its own
