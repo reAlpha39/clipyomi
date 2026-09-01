@@ -60,6 +60,16 @@ pub struct Candidate {
 /// matched entry does not actually have is discarded -- a 一段 reading of a
 /// 五段 verb is not a reading of it -- but an inexact kana match is kept and
 /// marked, never dropped.
+///
+/// **Ordering guarantee:** within `out[start]`, candidates are ordered
+/// longest span first. The same headword can legitimately recur at several
+/// lengths from the same start -- `Table`'s top-level search accepts any
+/// class's any form as a terminal, so a mid-chain fragment (書いた's onbin
+/// "書い" alone) can independently reconstruct the same headword as the full
+/// chain ("書いた") one step further -- and both are kept, not just the
+/// fuller one. A caller that wants the fullest parse for a headword (as
+/// `a_conjugated_verb_is_found_with_its_chain` does via `.find()`) can rely
+/// on it being first.
 pub fn candidates(
     index: &Index,
     table: &Table,
