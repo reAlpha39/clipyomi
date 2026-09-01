@@ -389,7 +389,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 EngineChoice::V1 => jparser::parse(&index, &table, &text, &opts, hints)?,
                 // `bounds` is `None` for now; Task 16 wires the real boundary
                 // source.
-                EngineChoice::V2 => jparser::engine::parse_v2(&index, &text, &opts, None)?,
+                EngineChoice::V2 => {
+                    let v2_table = jparser::engine::table::Table::new();
+                    jparser::engine::parse_v2(&index, &v2_table, &text, &opts, None)?
+                }
             };
             for seg in &result.segments {
                 if !seg.matched {

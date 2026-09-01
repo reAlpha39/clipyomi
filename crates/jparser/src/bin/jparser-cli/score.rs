@@ -313,6 +313,7 @@ pub fn run(
     engine: EngineChoice,
 ) -> Result<(), Box<dyn Error>> {
     let table = ConjugationTable::load_embedded()?;
+    let v2_table = jparser::engine::table::Table::new();
     let index = Index::open(index_dir)?;
     let (records, superseded) = read_gold(gold_path)?;
 
@@ -352,7 +353,9 @@ pub fn run(
         let bounds: Option<&dyn jparser::engine::Boundaries> = None;
         let parsed = match engine {
             EngineChoice::V1 => jparser::parse(&index, &table, &record.text, &opts, hints)?,
-            EngineChoice::V2 => jparser::engine::parse_v2(&index, &record.text, &opts, bounds)?,
+            EngineChoice::V2 => {
+                jparser::engine::parse_v2(&index, &v2_table, &record.text, &opts, bounds)?
+            }
         };
         accumulate(record, &parsed, &mut m);
     }

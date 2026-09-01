@@ -56,7 +56,9 @@ pub struct ConjStep {
 fn stub_result(text: &str) -> ParseResult {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
-        return ParseResult { segments: Vec::new() };
+        return ParseResult {
+            segments: Vec::new(),
+        };
     }
     ParseResult {
         segments: vec![Segment {
@@ -76,11 +78,12 @@ fn stub_result(text: &str) -> ParseResult {
 /// parameter, which is a constraint source rather than an advisory hint.
 pub fn parse_v2(
     index: &Index,
+    table: &table::Table,
     text: &str,
     opts: &ParseOptions,
     bounds: Option<&dyn Boundaries>,
 ) -> Result<ParseResult, ParseError> {
-    let _ = (index, opts, bounds);
+    let _ = (index, table, opts, bounds);
     Ok(stub_result(text))
 }
 
