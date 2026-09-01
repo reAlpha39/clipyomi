@@ -22,6 +22,20 @@
 # they do not fit the surface/ent_seq/split shape this file uses, matching
 # this task's brief, which already excludes them from its own template.
 #
+# The accounting is not closed. 26 rows here + the 3 excluded katakana rows +
+# the 1 excluded 目的 row = 30, past the source document's own "roughly 28" --
+# and a first pass at this file (task 15) missed タッとい/1598620 (added on
+# review) among the 92, so the 92-row bucket may still hold rows this pass
+# also missed. Treat 26 as a lower bound on the class within this file's
+# shape, not a closed count.
+#
+# The third column is documentation, not a literal reconstruction of the
+# surface: it is not checked by the test, and for some rows (はこ, どうし,
+# ことし, いっしょ) it names wider sentence context or a lemma form that does
+# not fit the surface's own character count. See task-15-report.md's fix
+# addendum for why asserting it mechanically was judged not cheap enough to
+# do here.
+#
 # Nothing here is captured text or ta-old expression: these are ordinary
 # Japanese strings this project measured about its own engine.
 #
@@ -51,3 +65,4 @@
 いっしょ	1163400	い + っしょ
 きかかる	1547820	き + かかる
 それに	1007040	それ + に
+タッとい	1598620	タッ + とい

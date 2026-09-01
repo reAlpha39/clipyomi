@@ -221,48 +221,60 @@ fn segment_cuts(segments: &[jparser::Segment]) -> Vec<usize> {
 
 #[cfg(feature = "mecab")]
 #[test]
-#[ignore = "24 of 25 rows land exactly on Vibrato's own isolated-surface cuts. \
-            いんじゃない does not: Vibrato cuts it at [0, 2, 4, 6] (いん/じゃ/ない), \
-            but v2 still crosses the boundary at 2, matching いんじゃ (0..4, chained \
-            through いん [2511890] 淫/婬) as one candidate and leaving ない separate \
-            -- got [0, 4, 6] [\"いんじゃ\", \"ない\"]. This is the defect class itself \
-            surviving for one surface, not the shattering defect \
-            `a_compound_of_two_common_kanji_should_not_shatter` pins above: the DP \
-            still prices crossing that one interior cut as cheaper than respecting \
-            it. Per this task's brief (`task-15-brief.md` step 4), the fix is \
-            raising PRONOUNCE_CROSS (`cost.rs`) against the corpus in Task 16, not \
-            special-casing this surface out of the fixture -- cost.rs is off limits \
-            to this task. Unignore once that lands and this passes unmodified."]
+#[ignore = "22 of 26 rows pass both checks (one matched span, and landing on \
+            Vibrato's own isolated-surface cuts). Four do not -- all four live \
+            defects, not test artefacts:  \
+            はこ: v2 returns ONE matched segment, headword はく [1399760] 履く \
+            (top of entry_ids [1399760, 1607260, 2646460, 2833893]) -- the \
+            literal defect this fixture exists to pin, straight from the brief's \
+            own eight documented rows, missed while the test only compared cut \
+            positions (Vibrato's own isolated cut is also [0, 2], so `got == want` \
+            hid it).  \
+            うん: v2 returns ONE matched segment via entry_ids \
+            [1473950, 1588410, 2759530, 1470570, 1578290, 2600390, 2612280] \
+            (雲/運/interjection readings of うん) -- isolated Vibrato cut also \
+            [0, 2], same blind spot.  \
+            んで: v2 returns ONE matched segment via entry_ids [1009970, 2836540] \
+            (ので/んで 'because') -- isolated Vibrato cut also [0, 2], same blind \
+            spot.  \
+            いんじゃない: partial merge, not a single matched span -- got \
+            [0, 4, 6] [\"いんじゃ\", \"ない\"], Vibrato's isolated cut is \
+            [0, 2, 4, 6] (いん/じゃ/ない); the cut comparison is what catches this \
+            one, the literal one-matched-span check cannot (two segments, not \
+            one). Every case is the DP pricing a spurious merge (or a partial \
+            one) as cheaper than respecting a real interior cut -- `cost.rs`'s \
+            PRONOUNCE_CROSS/CROSS terms, tuned against the corpus in Task 16 per \
+            this task's brief step 4 ('raise it in Task 16 ... rather than \
+            special-casing the surfaces'). cost.rs is off limits to this task. \
+            Unignore once Task 16 lands and this passes unmodified."]
 fn the_particle_absorbing_merges_are_gone() {
     // Handoff §9.5's defect class. The metric cannot catch this: the tolerant
     // accuracy *credits* these merges, because their endpoints are both gold
     // boundaries. Spec §2.3.
     //
-    // The brief's own sketch asserts only non-merger (`segments.len() != 1`),
-    // and that is vacuous in this tree: `a_compound_of_two_common_kanji_should_not_shatter`
-    // above already pins a separate, real cost-model defect (flat COMMON
-    // discount) that shatters 63 of 81 multi-character spans v1 keeps whole
-    // across the whole gold corpus under `bounds = None` -- *nothing* comes
-    // back as one segment there, so a bare non-merger check would pass
-    // whether or not this defect were reintroduced.
+    // The brief's own sketch asserts only the literal defect signature (one
+    // matched segment covering the whole surface). That check is real, not
+    // vacuous, once real per-surface `bounds` are supplied (see below) -- an
+    // earlier pass on this task replaced it outright with the cut comparison
+    // below on the mistaken belief that it was vacuous too (conflating a
+    // `bounds = None` measurement -- 63 of 81 multi-character spans shattered
+    // across the whole gold corpus -- with this test's `bounds = Some(..)`
+    // path, where `cost::is_allowed` forbids cutting inside a Vibrato token
+    // and the shattering defect above cannot reach). That swap introduced a
+    // real blind spot: any row where Vibrato, given only the isolated
+    // surface, reproduces the very merge under test now passes for the wrong
+    // reason. Both checks run now, unioned -- see the loop below -- because
+    // each catches something the other cannot: the literal check catches
+    // はこ/うん/んで (one matched segment; Vibrato's isolated cut coincides
+    // with the wrong merge, so the cut comparison alone missed all three),
+    // and the cut comparison catches いんじゃない (a partial merge -- two
+    // segments, not one -- that still crosses a real interior Vibrato cut).
     //
-    // Supplying real, isolated-surface Vibrato boundaries (`boundaries_over`,
-    // the same helper `kurumadehakou_parses_as_four_words` uses) sidesteps
-    // that rather than reproducing it: `cost::is_allowed` only permits a
-    // candidate whose own start *and* end both land on a `bounds` cut, so v2
-    // cannot cut *inside* a single Vibrato token here regardless of the
-    // shattering defect above -- the only freedom the DP keeps is whether to
-    // *cross* an interior cut by matching a longer span, which is exactly the
-    // spurious-merge decision this defect class is about. So "the correct
-    // segmentation" for each isolated surface is definitionally "wherever
-    // Vibrato itself cuts it", and comparing v2's own segment cuts against
-    // Vibrato's cut set is a real assertion rather than the vacuous one --
-    // and it needs no hand-transcription of the fixture's third column, which
-    // documents the wider sentence each merge was measured in (sometimes a
-    // lemma, sometimes text outside the isolated surface) rather than always
-    // being a literal reconstruction of the surface alone -- see the
-    // fixture's header and `spurious_merges.txt`'s own commit for the
-    // per-row reasoning.
+    // The cut comparison needs no hand-transcription of the fixture's third
+    // column, which documents the wider sentence each merge was measured in
+    // (sometimes a lemma, sometimes text outside the isolated surface) rather
+    // than always being a literal reconstruction of the surface alone -- see
+    // the fixture's header.
     const FIXTURE: &str = include_str!("fixtures/spurious_merges.txt");
     let dir = scratch("spurious");
     build_v2(&dir);
@@ -277,10 +289,24 @@ fn the_particle_absorbing_merges_are_gone() {
         let want = cuts_of(surface, &bounds);
         let r = parse_v2_with_bounds(&dir, surface, Some(&bounds));
         let got = segment_cuts(&r.segments);
-        if got != want {
+        // Union, not either alone. The brief's own literal signature (one
+        // matched segment covering the whole surface) is the defect itself
+        // and the cut comparison cannot see it whenever Vibrato, given only
+        // the isolated surface with no sentence context, reproduces the same
+        // wrong merge -- はこ, うん and んで all do. The cut comparison stays
+        // because it catches what the literal check cannot: いんじゃない's
+        // partial merge, which is neither a single matched segment nor a
+        // Vibrato-reproduced merge, only a real interior boundary crossed.
+        let one_matched_span = r.segments.len() == 1 && r.segments[0].matched;
+        if one_matched_span || got != want {
             let surfaces: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
+            let ids: Vec<Vec<u32>> = r
+                .segments
+                .iter()
+                .map(|s| s.entries.iter().map(|e| e.entry_id).collect())
+                .collect();
             wrong.push(format!(
-                "{surface}: v2 cut at {got:?} {surfaces:?}, Vibrato cuts at {want:?}"
+                "{surface}: v2 cut at {got:?} {surfaces:?} entry_ids={ids:?}, Vibrato cuts at {want:?}"
             ));
         }
     }
