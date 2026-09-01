@@ -52,18 +52,29 @@ const UNMATCHED: i32 = 30;
 /// what makes leaving a script change inside one span cost more than
 /// breaking there, which a flat per-character price cannot do on its own.
 /// Priced well under `UNMATCHED` so it only ever tips a tie between
-/// equal-length partitions, never competes with `UNMATCHED` itself; the exact
-/// magnitude is Task 16's to tune against the corpus, per master plan §3.5.
-/// Unlike `CROSS` and `PRONOUNCE_CROSS`, no corpus measurement backs this
-/// specific value yet — chosen for sign and rough magnitude only.
+/// equal-length partitions, never competes with `UNMATCHED` itself. Task 16b
+/// (the tuning pass, split from the original Task 16) found no corpus
+/// evidence bearing on this term either way -- the two diagnosed defects
+/// (master plan §3.5, handoff §9) were both in `COMMON`/`CROSS`, not here —
+/// so it was left untouched. Unlike `CROSS` and `PRONOUNCE_CROSS`, no corpus
+/// measurement backs this specific value — chosen for sign and rough
+/// magnitude only, and still open for a future pass with evidence to spend.
 const SCRIPT_TRANSITION: i32 = 10;
 
 /// Cost of crossing one tokenizer boundary.
 ///
 /// Priced, never forbidden: master plan §4.3's asymmetry requires `東京都` to
-/// merge across the `東京|都` boundary and win. Tuned in Task 16 against the
-/// corpus, with `東京都` and `音がする` as the merges that must survive it.
-const CROSS: i32 = 4;
+/// merge across the `東京|都` boundary and win. Task 16b measured this down
+/// from 4 to 0 against the 2,163-span gold corpus (trials 2 and 11): with
+/// `COMMON` length-proportional (below), a real compound overwhelmingly ties
+/// its split alternative exactly on `COVER`+`COMMON` alone, so any positive
+/// `CROSS` disqualified it outright rather than merely taxing it -- trial 11
+/// (`CROSS = 1`) collapsed hints-on span tolerant from 0.8521 to 0.8049 and
+/// the merge count from 53 to 19. At `CROSS = 0` the tie is real, and
+/// `lattice::relax`'s longer-run tie-break resolves it toward the compound.
+/// `PRONOUNCE_CROSS` (below) is what still keeps a spurious PRONOUNCE-only
+/// crossing (`はこう`-shaped) out even though this term no longer taxes it.
+const CROSS: i32 = 0;
 
 /// Extra cost, per boundary crossed, when a PRONOUNCE-only match crosses a
 /// tokenizer boundary.
@@ -78,12 +89,56 @@ const CROSS: i32 = 4;
 /// Handoff §9.6's refusal to add a heuristic to the *metric* is unaffected:
 /// there the object is a merged span the corpus carries no label for. Here the
 /// flag is already computed.
+///
+/// Task 16b measured this term's magnitude as flat across the whole safe
+/// range: 10, 5, 2 and 1 (trials 5, 7, 8, 9) all reproduced trial 2's exact
+/// corpus numbers *and* the `spurious_merges.txt` fixture's exact 4-of-26
+/// failures, no different from the original 25. Only the sign matters here,
+/// not the size: trial 6 (`PRONOUNCE_CROSS = 0`) broke 6 additional fixture
+/// rows (`はいた`, `はこう`, `ももう`, `になって`, `になった`, `してい`) for a
+/// corpus tolerant gain (0.8521 → 0.8682 hints-on) now attributable to that
+/// same spurious class reappearing, not to real compounds -- see
+/// task-16b-report.md. Left at the original value since nothing measured
+/// argues for changing it, and it carries a larger margin against any
+/// spurious-merge shape this corpus and fixture do not already cover.
 const PRONOUNCE_CROSS: i32 = 25;
 
-/// Discount for a match whose entry carries a priority marker.
+/// Discount per character for a match whose entry carries a priority marker.
 ///
 /// A frequency signal JMdict supplies directly, and the only evidence
 /// available for choosing between two equally-covering readings.
+///
+/// Task 16b trial 1: changed from a flat per-match `-2` (applied once
+/// regardless of length) to `COMMON * cand.len` in `cost` (per character).
+/// The flat form is exactly master plan §4.3 cause 2's bug: 東京 as one
+/// COMMON match cost `2 - 2 = 0`, but 東(COMMON) + 京(COMMON) as two COMMON
+/// matches cost `(1-2) + (1-2) = -2`, so the split always won. Scaled by
+/// length, both cost `-2` -- a tie `lattice::relax`'s longer-run tie-break
+/// resolves toward the compound. Measured against the 2,163-span gold
+/// corpus: hints-off span tolerant rose from 0.6015 (1301/2163) to 0.7975
+/// (1725/2163) and hints-off strict, which was not expected to move, rose
+/// too (0.5895 → 0.7272) -- both directions confirm this length-scaling was
+/// blocking whole-word matches from shattering into common single-character
+/// fragments, not only multi-word compounds.
+///
+/// Magnitude was then tested separately: trial 3 (`-1`) reproduced trial 1's
+/// numbers exactly on this corpus, and trial 4 (`0`, disabling the term
+/// entirely) *regressed* hints-off strict below the v1 baseline (0.6657 vs
+/// baseline's 0.6810) while only partially recovering tolerant, because
+/// removing all evidence let some genuinely wrong merges win the length
+/// tie-break too. Kept at `-2`: the sign and length-proportionality are what
+/// the corpus rewards, not the specific magnitude (task-16b-report.md's
+/// trial log has both directions).
+///
+/// What this term structurally *cannot* fix, at any magnitude: an entry like
+/// 東京都 (ent_seq 1447740 in `gold_jmdict_subset.xml`) that carries no
+/// `ke_pri`/`re_pri` of its own while its parts (東, 京都) individually do.
+/// The split's aggregate COMMON discount is then strictly larger than the
+/// compound's zero, by an amount proportional to whatever `COMMON` is set
+/// to -- the sign of that comparison does not depend on the magnitude. This
+/// is JMdict's own priority-tagging gap (a well-known place name is simply
+/// untagged), not something this cost term has the information to see; it
+/// is part of why hints-off/on tolerant still trail baseline after tuning.
 const COMMON: i32 = -2;
 
 /// Penalty for a match whose source characters differ from the stored surface
@@ -91,7 +146,16 @@ const COMMON: i32 = -2;
 ///
 /// Every §9.5 absurdity is inexact against its headword; every §9.1
 /// legitimate merge is exact modulo conjugation. Independent of
-/// PRONOUNCE_CROSS and measured separately in Task 16.
+/// PRONOUNCE_CROSS.
+///
+/// Task 16b trial 10 halved this to 4 and measured a small regression on
+/// both span metrics hints-off (strict 1573→1572, tolerant 1725→1722 spans),
+/// not the gain the flat-per-match reasoning that motivated `COMMON`'s
+/// change would predict for this term too (a flat penalty already
+/// *disadvantages* merges relative to splits, the opposite bias from
+/// `COMMON`, so halving it should have made merges relatively more
+/// attractive -- it did not move the corpus meaningfully in that direction).
+/// Reverted to 8; nothing measured argues for changing it.
 const INEXACT: i32 = 8;
 
 /// Whether a tokenizer allows `cand`'s span to exist at all.
@@ -114,10 +178,11 @@ pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
 /// The price of matching `cand`, given where a tokenizer put its boundaries.
 ///
 /// Sums `COVER` per character, `INEXACT` for a folded-not-exact match,
-/// `COMMON` for a priority entry, and `CROSS` for each interior tokenizer
-/// boundary the span swallows, with `PRONOUNCE_CROSS` added on top of `CROSS`
-/// per boundary when the match is PRONOUNCE-only. With `bounds == None` there
-/// is nothing to cross, so only the per-character and per-match terms apply.
+/// `COMMON` per character for a priority entry, and `CROSS` for each interior
+/// tokenizer boundary the span swallows, with `PRONOUNCE_CROSS` added on top
+/// of `CROSS` per boundary when the match is PRONOUNCE-only. With
+/// `bounds == None` there is nothing to cross, so only the per-character and
+/// per-match terms apply.
 pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     let mut total = COVER * cand.len as i32;
 
@@ -125,7 +190,7 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
         total += INEXACT;
     }
     if cand.flags.contains(WordFlags::COMMON) {
-        total += COMMON;
+        total += COMMON * cand.len as i32;
     }
 
     if let Some(bounds) = bounds {
@@ -220,14 +285,27 @@ mod tests {
     }
 
     #[test]
-    fn crossing_a_boundary_costs_something_but_is_allowed() {
+    fn crossing_a_boundary_is_allowed_and_never_a_discount() {
+        // Renamed from `..._costs_something_but_is_allowed`: at Task 16b's
+        // measured CROSS=0, a PRIMARY match's crossing is cost-*neutral*, not
+        // cost-*positive* -- `CROSS` no longer strictly separates the two.
+        // Trial 2 (CROSS=4 -> 0) is why: the gold corpus's real compounds
+        // overwhelmingly tie their split alternative on COVER+COMMON alone,
+        // so any positive CROSS priced them out categorically (trial 11,
+        // CROSS=1, collapsed hints-on tolerant from 0.8521 to 0.8049 and
+        // merges from 53 to 19) rather than merely taxing them. What must
+        // still hold -- and is asserted below -- is that a crossing is never
+        // *rewarded*: `is_allowed` still permits it, and `cost` never prices
+        // it below the no-crossing case. A PRONOUNCE-flagged crossing paying
+        // strictly more is `a_pronounce_match_that_crosses_is_priced_far_above_a_primary_one`'s
+        // job, not this test's.
         let b = At(&[0, 4, 5, 7]);
         let c = cand(4, 3, WordFlags::PRIMARY, true);
         assert!(
             is_allowed(&c, Some(&b)),
             "merging across a boundary is legal"
         );
-        assert!(cost(&c, Some(&b)) > cost(&c, None));
+        assert!(cost(&c, Some(&b)) >= cost(&c, None), "never a discount for crossing");
     }
 
     #[test]
