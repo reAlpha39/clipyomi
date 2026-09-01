@@ -243,20 +243,32 @@ mod tests {
 
     // Master plan §4.3 requires a compound to be able to pay the crossing
     // price and still win -- that is the reason this DP prices a boundary
-    // crossing instead of forbidding it. At today's constants that is
-    // impossible for *any* compound: merging costs COVER (coverage-neutral)
-    // plus CROSS=4 per boundary crossed, and COMMON=-2 is the only discount
-    // a merge can earn, so no single crossing can ever be paid off. The fix
-    // is magnitude, not shape: PRONOUNCE_CROSS and INEXACT already carry the
-    // discrimination between a good merge (東京都, exact, non-PRONOUNCE) and
-    // a spurious one (はこう, an inexact PRONOUNCE reading), so CROSS itself
-    // can come down a long way without letting はこう back in. Task 16 owns
-    // that tuning against the corpus; this test names the exact condition
-    // that must flip it green.
+    // crossing instead of forbidding it. At the original constants (CROSS=4,
+    // flat COMMON=-2) that was impossible for *any* compound: merging cost
+    // COVER (coverage-neutral) plus CROSS=4 per boundary crossed, and
+    // COMMON=-2 flat was the only discount a merge could earn once, never
+    // enough to pay off even one crossing.
+    //
+    // Task 16b's fix, measured against the 2,163-span gold corpus (see
+    // `cost.rs`'s constant comments and task-16b-report.md): COMMON became
+    // length-proportional (`COMMON * cand.len`), which ties a compound
+    // against its equally-evidenced parts on the COVER+COMMON terms alone,
+    // and CROSS came down to 0 -- not a magnitude tweak but a full removal,
+    // because the gold corpus's real compounds overwhelmingly tie their
+    // split alternative exactly, so any positive CROSS priced them out
+    // categorically rather than merely taxing them (CROSS=1 collapsed
+    // hints-on tolerant accuracy from 0.8521 to 0.8049 on the corpus).
+    // Below, 東京都 (COMMON) costs `3 - 2*3 + 0 = -3` against the split's
+    // 東京(PRIMARY only, `2`) + 都(PRIMARY only, `1`) = `3` -- a clean win
+    // here because only the compound carries COMMON, not a tie needing the
+    // tie-break. On the real gold corpus most surviving merges instead tie
+    // exactly on COVER+COMMON (both sides equally evidenced) and are decided
+    // by `relax`'s longer-run tie-break -- see task-16b-report.md's trial
+    // log for why CROSS had to reach exactly 0, not merely fall, for those
+    // to resolve in the compound's favour. `PRONOUNCE_CROSS` (unchanged at
+    // 25) still keeps はこう-shaped spurious PRONOUNCE merges out even with
+    // CROSS=0, since it applies independently per crossing.
     #[test]
-    #[ignore = "compound preservation needs constants Task 16 has not tuned yet: at \
-                CROSS=4 the merge costs 5 against the split's 3, and COMMON=-2 is the \
-                only discount a merge can earn. Task 16 must make this pass."]
     fn a_compound_may_merge_across_a_boundary_and_win() {
         struct At(&'static [usize]);
         impl crate::engine::Boundaries for At {
