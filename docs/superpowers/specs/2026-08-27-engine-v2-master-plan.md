@@ -103,6 +103,17 @@ substance. But the evidence claim as originally written was wrong, and Phase
 1's done-when (§7) is now written to sweep both strings, over this pair of
 crates as well as `crates/jparser/` and `xtask/`.
 
+**Second correction, made at the Phase 1a whole-branch review.** The same
+header sits on 11 files under `src-tauri/` (10 under `src/` plus `build.rs`)
+and on `tools/extract_jmdict_subset.py` — the second "Clean" row above lists
+`src-tauri/src/**`'s 25 behavioural `ta-old` mentions but never checked it, or
+`tools/`, for the header string at all. A phase that satisfies only the
+four-crate wording could ship an `MIT OR Apache-2.0` `Cargo.toml` (§9 open
+question 2) while `src-tauri/build.rs` still opens with a GPL-2.0 notice
+declaring itself "ported from Translation Aggregator." Both directories are
+folded into Phase 1's done-when below, worded as a tree-wide sweep this time
+so a directory list can't fall behind a third time.
+
 ### 3.3 Permissive replacement sources
 
 **IPADIC is permissive**, and the app already ships it. From the `COPYING` file
@@ -718,10 +729,16 @@ rank-ordered candidate list exists to avoid (design §2.2).
 
 **Phase 1's own done-when is unchanged in substance and lands whole, at the
 end of 1b:** no `ta-old` reference and no `ported from Translation
-Aggregator` header remains under `crates/jparser/`, `xtask/`,
-`crates/jmdict-source`, or `crates/vibrato-source` — the sweep §3.2's
-correction above shows the original wording missed; both Phase 0 metrics are
-at or above baseline, in both hint states; `くるまではこう` parses as
+Aggregator` header remains **anywhere in the tree** — not a directory list,
+which §3.2's two corrections above show has now fallen behind twice (first
+missing `crates/jmdict-source`/`crates/vibrato-source`, then missing
+`src-tauri/`, including `build.rs`, and `tools/`), but both strings, grepped
+tree-wide with zero hits. Corrected counts of the header string alone, as of
+Phase 1a: 24 files under `crates/jparser/`, 1 under `xtask/`, 4 under
+`crates/jmdict-source`, 6 under `crates/vibrato-source`, 11 under
+`src-tauri/` (10 under `src/` plus `build.rs`), 1 under `tools/`
+(`extract_jmdict_subset.py`) — 47 files total. Both Phase 0 metrics are at
+or above baseline, in both hint states; `くるまではこう` parses as
 `くる / まで / は / こう`.
 
 #### Phase 1a — Clean-room segmentation core
@@ -815,9 +832,11 @@ column written by hand from a grammar reference before the formatter exists,
 committed as a fixture; the switchover — the nine hard-taint files of §3.2
 deleted, `assets/conjugations.json` deleted, `xtask`'s ta-old converter
 deleted, every `ta-old` citation and every `ported from Translation
-Aggregator` header gone from `crates/jparser/`, `xtask/`,
-`crates/jmdict-source`, and `crates/vibrato-source`; the provenance headers of
-§9 open question 2 written on the replacement files.
+Aggregator` header gone tree-wide — `crates/jparser/`, `xtask/`,
+`crates/jmdict-source`, `crates/vibrato-source`, `src-tauri/` (including
+`build.rs`), and `tools/` included, checked by grepping both strings over the
+whole repository rather than an enumerated directory list; the provenance
+headers of §9 open question 2 written on the replacement files.
 
 **Out:** k-best (Phase 2). Extra token layers (Phase 3). Any UI change.
 
