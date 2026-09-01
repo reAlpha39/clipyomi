@@ -42,11 +42,12 @@ use crate::{Entry, Segment};
 /// `by_start.get(start)` rather than trusted to cover `step`'s start: a
 /// caller may reasonably pass a table shorter than `chars`.
 ///
-/// `Segment::entries`' order is currently just "the DP's own winner first,
-/// then whatever order `by_start` held the rest in" -- Phase 1a has no
-/// ranking pass over the alternatives. A later task is expected to impose a
-/// real order there; nothing should be built on the current arrangement
-/// beyond `entries[0]` being the match the DP actually chose.
+/// `Segment::entries`' order comes from [`order`], not from the DP's own
+/// pick or from `by_start`'s incidental order: `entries[0]` is whichever
+/// same-span candidate `order` ranks highest, which need not be `cand`
+/// itself. `cand` still decides the span the DP wrote into `step` -- its
+/// `start`/`len` set `Segment::start`/`len`/`surface`/`matched` -- only
+/// which entry a caller sees *first* for that span is `order`'s call.
 pub fn to_segment(
     index: &Index,
     chars: &[char],
@@ -70,16 +71,23 @@ pub fn to_segment(
         });
     };
 
-    // `cand` itself is always first (see this function's doc comment on
-    // `entries`' order), and `Segment::reading` is documented as coming from
-    // `entries[0].reading`.
+    // Every same-span candidate, `cand` included, gathered and ordered
+    // *before* any `Entry` is built -- `entries[0].reading` becomes
+    // `Segment::reading` below, so the order has to be settled first for
+    // that to mean what it says.
     let siblings = by_start.get(start).map(Vec::as_slice).unwrap_or(&[]);
-    let mut entries = Vec::with_capacity(1);
-    entries.push(build_entry(index, chars, cand)?);
+    let mut group = Vec::with_capacity(1);
+    group.push(cand.clone());
     for sibling in siblings {
         if sibling.len == cand.len && sibling != cand {
-            entries.push(build_entry(index, chars, sibling)?);
+            group.push(sibling.clone());
         }
+    }
+    order(&mut group);
+
+    let mut entries = Vec::with_capacity(group.len());
+    for c in &group {
+        entries.push(build_entry(index, chars, c)?);
     }
 
     let reading = entries[0].reading.clone();
@@ -91,6 +99,38 @@ pub fn to_segment(
         matched: true,
         entries,
     })
+}
+
+/// Decide which same-span candidate a caller sees first.
+///
+/// In sequence: an exact surface match before one only reached by folding
+/// kana together; a `COMMON`-priority headword before a rarer one; a
+/// `PRIMARY` headword (the word itself) before a `PRONOUNCE` one (a kanji
+/// entry's own reading, offered only as a fallback); a shallower
+/// deinflection chain before a deeper one, since an uninflected reading of
+/// the same surface is the likelier one; and, last, ascending `entry_id` --
+/// JMdict's own `ent_seq` -- as a tiebreak. Every earlier clause is a fact
+/// JMdict or the match itself supplies, never a frequency table this
+/// project does not have; the last clause carries no quality judgement of
+/// its own, it exists only to make the order total.
+///
+/// `entry_id` sorting last is exactly what makes the key total: two
+/// distinct entries never share one, so no two candidates from different
+/// entries can ever tie all the way down. A literal duplicate candidate
+/// (same entry, same chain) ties on every field including `entry_id`, but
+/// is then indistinguishable from itself in the output either way -- so
+/// `sort_unstable_by_key` never has a real tie left for stability to matter
+/// to, and is safe here.
+pub fn order(cands: &mut [Candidate]) {
+    cands.sort_unstable_by_key(|c| {
+        (
+            !c.exact,
+            !c.flags.contains(WordFlags::COMMON),
+            c.flags.contains(WordFlags::PRONOUNCE),
+            c.steps.len(),
+            c.entry_id,
+        )
+    });
 }
 
 /// One [`Entry`] for `cand`: its dictionary data resolved through `index`,
