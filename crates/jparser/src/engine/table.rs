@@ -228,6 +228,14 @@ pub fn class_for_pos(pos: &str) -> Option<ClassId> {
 /// deriving each auxiliary's own conjugated surfaces from its *lemma*
 /// (stripping the class's `remove`), not from the class in the abstract.
 ///
+/// せる/れる each need a *second* row for 未然レル接続, alongside their
+/// ordinary 未然形 one: サ変 is irregular here (さ+せる/さ+れる, both サ変
+/// classes carry a distinct 未然レル接続 precisely for this attachment
+/// point — never し+せる), so する/される, させる/愛させる and any other
+/// [noun]+する passive or causative can only be found through it. させる
+/// and られる don't need it — they're the ichidan-contracted forms and
+/// never attach to a サ変 stem.
+///
 /// た/て each need two rows. They attach to 連用タ接続 where a class
 /// distinguishes it from plain 連用形 (五段's onbin: 書いた, not 書きた) and
 /// to plain 連用形 where a class doesn't need the distinction (一段,
@@ -244,8 +252,10 @@ pub fn class_for_pos(pos: &str) -> Option<ClassId> {
 /// chain search.
 const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("せる", "一段", "未然形"),
+    ("せる", "一段", "未然レル接続"),
     ("させる", "一段", "未然形"),
     ("れる", "一段", "未然形"),
+    ("れる", "一段", "未然レル接続"),
     ("られる", "一段", "未然形"),
     ("ない", "特殊・ナイ", "未然形"),
     ("ぬ", "特殊・ヌ", "未然形"),
@@ -723,8 +733,60 @@ mod tests {
 
     #[test]
     fn the_search_is_bounded() {
-        let c = chars("ててててててててててててててて");
-        let hits = table().chains_ending_at(&c, c.len(), 4);
-        assert!(hits.iter().all(|h| h.consumed <= 4));
+        // ててて... alone can't show the bound is doing anything: て's own
+        // conjugation identity (不変化型/基本形) never satisfies a
+        // downstream `required` filter, so て cannot chain onto another て
+        // regardless of budget -- the natural max depth is 2 either way.
+        // 食べさせられませんでした genuinely chains past a small budget, so
+        // a small budget must cut it strictly shorter than a large one.
+        let c = chars("食べさせられませんでした");
+        let small = table().chains_ending_at(&c, c.len(), 3);
+        let large = table().chains_ending_at(&c, c.len(), 16);
+
+        assert!(
+            small.iter().all(|h| h.consumed <= 3),
+            "small budget exceeded"
+        );
+        assert!(
+            large.iter().all(|h| h.consumed <= 16),
+            "large budget exceeded"
+        );
+
+        let small_max = small.iter().map(|h| h.consumed).max().unwrap();
+        let large_max = large.iter().map(|h| h.consumed).max().unwrap();
+        assert!(
+            small_max < large_max,
+            "a larger budget must reach deeper: small={small_max}, large={large_max}"
+        );
+    }
+
+    #[test]
+    fn the_passive_and_causative_of_suru_are_found() {
+        // する's causative/passive are irregular -- さ+せる, さ+れる, never
+        // し+せる/し+れる -- because サ変 classes carry a distinct
+        // 未然レル接続 form precisely for this attachment point.
+        for surface in ["された", "させた"] {
+            let c = chars(surface);
+            let hits = table().chains_ending_at(&c, c.len(), 8);
+            assert!(
+                hits.iter().any(|h| key(&c, h) == "する"),
+                "{surface} -> する"
+            );
+        }
+    }
+
+    #[test]
+    fn a_noun_plus_suru_compound_from_the_fixtures_chains_through_its_passive() {
+        // 愛する (あいする, vs-s) is a real entry --
+        // tests/fixtures/gold_jmdict_subset.xml, ent_seq 1150450. Its
+        // passive, 愛される, is the [noun]+する pattern the missing
+        // 未然レル接続 row broke for every compound する verb, not just
+        // bare する.
+        let c = chars("愛される");
+        let hits = table().chains_ending_at(&c, c.len(), 8);
+        assert!(
+            hits.iter().any(|h| key(&c, h) == "愛する"),
+            "愛される -> 愛する"
+        );
     }
 }
