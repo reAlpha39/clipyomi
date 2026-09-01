@@ -23,6 +23,7 @@ pub mod build;
 pub mod cost;
 pub mod flags;
 pub mod kana;
+pub mod lattice;
 pub mod lex;
 pub mod romaji;
 pub mod table;
