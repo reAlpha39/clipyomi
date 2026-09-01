@@ -132,17 +132,16 @@ impl Index {
         &self.header
     }
 
-    /// Every dictionary key that is a prefix of `text`, shortest first,
-    /// including the empty key when one is indexed.
+    /// [`prefixes_of`] with the key normalization supplied by the caller.
     ///
-    /// This single walk replaces ta-old's binary-search-per-length loop:
-    /// stepping the transducer one character at a time, every node that is
-    /// final marks a complete headword or stem. `""` is a prefix of every
-    /// string, so the root node's finality is checked before consuming any
-    /// character; an irregular verb whose whole surface is its own
-    /// remove-suffix (する/vs-i, 来る や くる/vk) generates exactly this
-    /// empty-key stem, and it is the only way that stem is ever returned.
-    pub fn prefixes_of(&self, text: &str) -> Result<Vec<PrefixHit>, IndexError> {
+    /// The two engines fold differently and an index is built with the fold
+    /// its own engine uses, so the walk has to take it as a parameter. At the
+    /// Phase 1b switchover this becomes the only form.
+    pub fn prefixes_of_with(
+        &self,
+        text: &str,
+        fold: fn(char) -> char,
+    ) -> Result<Vec<PrefixHit>, IndexError> {
         let mut node = self.fst.root();
         let mut output = 0u64;
         let mut hits = Vec::new();
@@ -157,7 +156,7 @@ impl Index {
 
         for (consumed, ch) in text.chars().enumerate() {
             let mut buf = [0u8; 4];
-            for &byte in unify(ch).encode_utf8(&mut buf).as_bytes() {
+            for &byte in fold(ch).encode_utf8(&mut buf).as_bytes() {
                 let Some(i) = node.find_input(byte) else {
                     return Ok(hits);
                 };
@@ -174,6 +173,20 @@ impl Index {
             }
         }
         Ok(hits)
+    }
+
+    /// Every dictionary key that is a prefix of `text`, shortest first,
+    /// including the empty key when one is indexed.
+    ///
+    /// This single walk replaces ta-old's binary-search-per-length loop:
+    /// stepping the transducer one character at a time, every node that is
+    /// final marks a complete headword or stem. `""` is a prefix of every
+    /// string, so the root node's finality is checked before consuming any
+    /// character; an irregular verb whose whole surface is its own
+    /// remove-suffix (する/vs-i, 来る や くる/vk) generates exactly this
+    /// empty-key stem, and it is the only way that stem is ever returned.
+    pub fn prefixes_of(&self, text: &str) -> Result<Vec<PrefixHit>, IndexError> {
+        self.prefixes_of_with(text, unify)
     }
 
     fn records_at(&self, offset: u64) -> Result<Vec<StoredRecord>, IndexError> {
