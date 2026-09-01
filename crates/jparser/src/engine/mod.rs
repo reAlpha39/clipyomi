@@ -21,6 +21,8 @@ use crate::{ParseError, ParseOptions, ParseResult, Segment};
 
 pub mod kana;
 pub mod romaji;
+pub mod table;
+mod table_data;
 
 pub type ClassId = u16;
 pub type FormId = u16;
