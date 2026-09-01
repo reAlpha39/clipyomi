@@ -31,9 +31,14 @@ use super::kana;
 /// digraph, the small vowels, and the historical ヰ/ヱ. `ッ`, `ー` and `ン`
 /// are handled outside the table, in [`render`].
 ///
-/// Deliberately excluded: `ヴ`, `ヵ`, `ヶ`, `ヮ`, `ヷ`, `ヸ`, `ヹ`, `ヺ` — later
-/// additions for foreign loanwords and place-name abbreviations, outside
-/// the classic gojūon this table romanizes. They pass through unchanged,
+/// `ヴ` (the systematic voiced extension of `ウ`, parallel to カ→ガ) and its
+/// small-vowel digraphs `ヴァ`/`ヴィ`/`ヴェ`/`ヴォ` are included: unlike the
+/// exclusions below, `ヴ` has one unambiguous reading and is common in
+/// loanword headwords (`ヴァイオリン`).
+///
+/// Deliberately excluded: `ヵ`/`ヶ` (contextually ambiguous — a small-kana
+/// counter/place-name abbreviation for "ka"/"ke", not a fixed reading) and
+/// `ヮ`, `ヷ`, `ヸ`, `ヹ`, `ヺ` (genuinely rare). They pass through unchanged,
 /// like any other character `TABLE` doesn't cover.
 const TABLE: &[(&str, &str)] = &[
     // -- Digraphs: a row's consonant kana + small ya/yu/yo --
@@ -73,6 +78,10 @@ const TABLE: &[(&str, &str)] = &[
     ("リャ", "rya"),
     ("リュ", "ryu"),
     ("リョ", "ryo"),
+    ("ヴァ", "va"),
+    ("ヴィ", "vi"),
+    ("ヴェ", "ve"),
+    ("ヴォ", "vo"),
     // -- Singles: vowels, then each row a-i-u-e-o --
     ("ア", "a"),
     ("イ", "i"),
@@ -146,6 +155,7 @@ const TABLE: &[(&str, &str)] = &[
     ("ヰ", "wi"),
     ("ヱ", "we"),
     ("ヲ", "wo"),
+    ("ヴ", "vu"),
     // -- Small vowels, and standalone small ya/yu/yo (not part of a digraph) --
     ("ァ", "a"),
     ("ィ", "i"),
@@ -341,10 +351,18 @@ mod tests {
     }
 
     #[test]
+    fn vu_and_its_digraphs_romanize_instead_of_leaking_katakana() {
+        // ヴァイオリン is a real JMdict headword; `ヴ` is the systematic
+        // voiced extension of `ウ`, not one of the excluded ambiguous or
+        // rare characters below, so it must not fall back to pass-through.
+        assert_eq!(to_romaji("ヴァイオリン"), "vaiorin");
+    }
+
+    #[test]
     fn the_whole_katakana_block_is_covered_or_deliberately_excluded() {
-        // Later additions for foreign loanwords / place-name abbreviations
-        // that `TABLE` intentionally leaves out; see its doc comment.
-        const EXCLUDED: [char; 8] = ['ヴ', 'ヵ', 'ヶ', 'ヮ', 'ヷ', 'ヸ', 'ヹ', 'ヺ'];
+        // Contextually ambiguous (ヵ/ヶ) or genuinely rare (the rest); see
+        // `TABLE`'s doc comment for why each one is left unmapped.
+        const EXCLUDED: [char; 7] = ['ヵ', 'ヶ', 'ヮ', 'ヷ', 'ヸ', 'ヹ', 'ヺ'];
 
         for cp in 0x30A1u32..=0x30FA {
             let c = char::from_u32(cp).expect("valid code point");
