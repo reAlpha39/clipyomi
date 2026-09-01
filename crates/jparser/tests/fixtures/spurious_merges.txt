@@ -1,0 +1,53 @@
+# Handoff §9.5's particle-absorbing merge class: jparser absorbing a preceding
+# particle or fragment into the following word and matching a kana-unified
+# headword that is semantically absurd. Vibrato has the boundary in every one.
+#
+# Regenerated from examples/boundary_diag.rs over tests/fixtures/gold.jsonl and
+# tests/fixtures/gold_jmdict_subset.xml (the committed gold corpus and its
+# v1 index), against corpus_staging/disagreements.jsonl -- a local, gitignored
+# Phase 0 measurement artifact already present in this environment and
+# byte-identical in its gold half to the committed corpus. That run reproduces
+# handoff §9's headline table exactly (266 boundaries, 178/52/36 by stage,
+# 92 in the "ordinary longer headword" kind). This project's own §9.5 sample
+# listed ten rows out of "roughly 28" from that 92-row bucket without
+# enumerating the rest; the remaining rows below were hand-classified against
+# that same 92-row bucket for this task, cross-checked against each matched
+# ent_seq's actual JMdict gloss (via tests/fixtures/gold_jmdict_subset.xml)
+# and, where the gloss alone did not settle it, against the exact gold-span
+# boundaries of the originating sentence in tests/fixtures/gold.jsonl. Two
+# variant surfaces of an already-documented ent_seq (a different exact text
+# hitting the same spurious match) are included alongside it. Three katakana
+# homophone-collision rows (クで/タは/ヌの) and one differently-shaped row
+# (的で, from 目的 mis-split) that handoff §9.5 also names are excluded here:
+# they do not fit the surface/ent_seq/split shape this file uses, matching
+# this task's brief, which already excludes them from its own template.
+#
+# Nothing here is captured text or ta-old expression: these are ordinary
+# Japanese strings this project measured about its own engine.
+#
+# surface	ent_seq	what it actually is
+はいた	1399760	は + いた
+はこう	1399760	は + こう
+ももう	1567610	も + もう
+はこ	1585650	は + この
+がい	1204330	が + いった
+になって	1599900	に + なる
+になった	1599900	に + なった
+してい	1308000	して + いた
+どうし	1451380	どう + しました
+ことし	1579130	こと + してる
+はそう	2791750	は + そう
+いんじゃない	2511890	い + んじゃない
+もうどう	1571370	もう + どう
+らが	2601290	ら + が
+せいか	1375650	せい + か
+のうち	1470740	の + うち
+ことだった	2229780	こと + だった
+ことだ	2229780	こと + だ
+がいい	1203350	が + いい
+それを	2855684	それ + を
+うん	1001090	う + ん
+んで	1009970	ん + で
+いっしょ	1163400	い + っしょ
+きかかる	1547820	き + かかる
+それに	1007040	それ + に
