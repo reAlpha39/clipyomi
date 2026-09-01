@@ -65,6 +65,10 @@ name = "entry_id"
 path = "tests/entry_id.rs"
 
 [[test]]
+name = "engine_v2"
+path = "tests/engine_v2.rs"
+
+[[test]]
 name = "cli_score"
 path = "tests/cli_score.rs"
 required-features = ["cli"]
