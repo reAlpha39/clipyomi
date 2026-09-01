@@ -41,6 +41,12 @@ use crate::{Entry, Segment};
 /// `step`'s span are found by indexing into it directly. Guarded with
 /// `by_start.get(start)` rather than trusted to cover `step`'s start: a
 /// caller may reasonably pass a table shorter than `chars`.
+///
+/// `Segment::entries`' order is currently just "the DP's own winner first,
+/// then whatever order `by_start` held the rest in" -- Phase 1a has no
+/// ranking pass over the alternatives. A later task is expected to impose a
+/// real order there; nothing should be built on the current arrangement
+/// beyond `entries[0]` being the match the DP actually chose.
 pub fn to_segment(
     index: &Index,
     chars: &[char],
@@ -64,11 +70,9 @@ pub fn to_segment(
         });
     };
 
-    // `cand` itself is always first: it is the candidate the DP actually
-    // chose, and `Segment::reading` is documented as coming from
-    // `entries[0].reading`. The rest of `by_start[start]` at the same `len`
-    // are alternatives, in whatever order candidate generation produced --
-    // this phase has no ranking pass over them.
+    // `cand` itself is always first (see this function's doc comment on
+    // `entries`' order), and `Segment::reading` is documented as coming from
+    // `entries[0].reading`.
     let siblings = by_start.get(start).map(Vec::as_slice).unwrap_or(&[]);
     let mut entries = Vec::with_capacity(1);
     entries.push(build_entry(index, chars, cand)?);
@@ -96,9 +100,11 @@ fn build_entry(index: &Index, chars: &[char], cand: &Candidate) -> Result<Entry,
     // A candidate's `entry_id` always names an entry in the same index it
     // was matched from -- `lex::candidates` reads both from `index` in the
     // same call. A well-formed index never disagrees with itself.
-    let entry_data = index
-        .entry(cand.entry_id)?
-        .expect("a candidate's entry_id must resolve in the index that produced it");
+    let entry_data = index.entry(cand.entry_id)?.expect(
+        "invariant: lex::candidates only ever emits a Candidate whose entry_id it just \
+         read out of this same `index`, so `index.entry(cand.entry_id)` resolving to None \
+         here means the index disagreed with itself between the two calls",
+    );
 
     let reading = reading_for(&entry_data, cand, chars);
     let pos = union_pos(&entry_data.senses);
