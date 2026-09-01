@@ -18,6 +18,13 @@
 //! the DP should prefer. Master plan §4.3's asymmetry lives in that split: a
 //! span may never start or end inside a tokenizer token, but merging two
 //! tokens into one span is always allowed and only ever priced.
+//!
+//! Design §7.2's cost formula also names a `particle-in-context` evidence
+//! term, alongside `common` (`COMMON` below) and `exact` (`INEXACT` below).
+//! This phase implements the latter two only: `WordFlags::PARTICLE` is
+//! carried on records but nothing in this module reads it, so a particle's
+//! surrounding context prices no differently than any other match. Not
+//! implemented, not forgotten.
 
 use crate::engine::kana;
 use crate::engine::lex::Candidate;
@@ -58,18 +65,25 @@ const UNMATCHED: i32 = 30;
 /// `UNMATCHED` alone prices a run only by its length, so a mixed run like
 /// `丨FIFA` costs exactly the same whether it is kept whole or split at its
 /// kanji/roman boundary — nothing about a per-character price prefers the
-/// split. Handoff §9.1's 36-of-266 count is runs of exactly this shape
-/// (`」、`, `、「喜`) collapsed into one unmatched segment; this surcharge is
-/// what makes leaving a script change inside one span cost more than
-/// breaking there, which a flat per-character price cannot do on its own.
-/// Priced well under `UNMATCHED` so it only ever tips a tie between
-/// equal-length partitions, never competes with `UNMATCHED` itself. Task 16b
-/// (the tuning pass, split from the original Task 16) found no corpus
-/// evidence bearing on this term either way -- the two diagnosed defects
-/// (master plan §3.5, handoff §9) were both in `COMMON`/`CROSS`, not here —
-/// so it was left untouched. Unlike `CROSS` and `PRONOUNCE_CROSS`, no corpus
-/// measurement backs this specific value — chosen for sign and rough
-/// magnitude only, and still open for a future pass with evidence to spend.
+/// split. This surcharge is what makes leaving a script change inside one
+/// span cost more than breaking there, which a flat per-character price
+/// cannot do on its own (see `an_unmatched_run_prefers_splitting_at_its_
+/// script_change` below).
+///
+/// Whole-branch review correction: an earlier version of this comment cited
+/// handoff §9.1's `」、`/`、「喜` punctuation runs as this term's measured
+/// motivation. `classify` below has no punctuation class — `」`, `、` and
+/// `「` all classify as `Script::Other` — so a pure-punctuation pair like
+/// `」、` earns no surcharge whole or split; the citation was false and is
+/// removed rather than repeated. Priced well under `UNMATCHED` so it only
+/// ever tips a tie between equal-length partitions, never competes with
+/// `UNMATCHED` itself. Task 16b (the tuning pass, split from the original
+/// Task 16) found no corpus evidence bearing on this term either way -- the
+/// two diagnosed defects (master plan §3.5, handoff §9) were both in
+/// `COMMON`/`CROSS`, not here — so it was left untouched. Unlike `CROSS`
+/// and `PRONOUNCE_CROSS`, no corpus measurement backs this specific value
+/// — chosen for sign and rough magnitude only, and still open for a future
+/// pass with evidence to spend.
 const SCRIPT_TRANSITION: i32 = 10;
 
 /// Cost of crossing one tokenizer boundary.
@@ -109,7 +123,7 @@ const CROSS: i32 = 0;
 /// rows (`はいた`, `はこう`, `ももう`, `になって`, `になった`, `してい`) for a
 /// corpus tolerant gain (0.8521 → 0.8682 hints-on) now attributable to that
 /// same spurious class reappearing, not to real compounds -- see
-/// task-16b-report.md. Left at the original value since nothing measured
+/// handoff §10. Left at the original value since nothing measured
 /// argues for changing it, and it carries a larger margin against any
 /// spurious-merge shape this corpus and fixture do not already cover.
 const PRONOUNCE_CROSS: i32 = 25;
@@ -138,8 +152,8 @@ const PRONOUNCE_CROSS: i32 = 25;
 /// baseline's 0.6810) while only partially recovering tolerant, because
 /// removing all evidence let some genuinely wrong merges win the length
 /// tie-break too. Kept at `-2`: the sign and length-proportionality are what
-/// the corpus rewards, not the specific magnitude (task-16b-report.md's
-/// trial log has both directions).
+/// the corpus rewards, not the specific magnitude (handoff §10's trial log
+/// has both directions).
 ///
 /// What this term structurally *cannot* fix, at any magnitude: an entry like
 /// 東京都 (ent_seq 1447740 in `gold_jmdict_subset.xml`) that carries no
@@ -366,8 +380,9 @@ mod tests {
         // 2 * PRONOUNCE_CROSS = 50, more than UNMATCHED charges for two whole
         // fallback characters, so a legitimate multi-boundary reading-form
         // merge could in principle lose to an unmatched run rather than
-        // merely cost more. Task 16 is where a flat surcharge would be
-        // reconsidered, if that is ever seen happening against the corpus.
+        // merely cost more. Not yet seen happening against the corpus, and
+        // no task currently owns revisiting it -- see handoff §8's "three
+        // size/shape assumptions" bullet.
         let b = At(&[0, 1, 3, 5]);
         let primary = cost(&cand(0, 5, WordFlags::PRIMARY, true), Some(&b));
         let pronounce = cost(&cand(0, 5, WordFlags::PRONOUNCE, true), Some(&b));
@@ -396,6 +411,26 @@ mod tests {
         let chars: Vec<char> = "」、".chars().collect();
         assert!(
             unmatched_cost(&chars, 0, 2) > cost(&cand(0, 2, WordFlags::PRIMARY, true), None) * 10
+        );
+    }
+
+    /// Design §7.2/`SCRIPT_TRANSITION`'s own worked example: a genuinely
+    /// mixed-script run (kanji/CJK-radical followed by roman letters, the
+    /// OCR-noise shape §7.2 names) prices splitting at the script change
+    /// strictly cheaper than keeping it whole, by exactly `SCRIPT_TRANSITION`
+    /// -- the one script pairing `classify` actually distinguishes, unlike
+    /// the punctuation-only example the doc comment above no longer cites.
+    #[test]
+    fn an_unmatched_run_prefers_splitting_at_its_script_change() {
+        let chars: Vec<char> = "丨FIFA".chars().collect();
+        let whole = unmatched_cost(&chars, 0, chars.len());
+        let split = unmatched_cost(&chars, 0, 1) + unmatched_cost(&chars, 1, chars.len() - 1);
+        assert_eq!(
+            whole - split,
+            SCRIPT_TRANSITION,
+            "the only difference between keeping `丨FIFA` whole and splitting \
+             it at the kanji/roman boundary must be the one script-transition \
+             surcharge the whole run pays and the split does not"
         );
     }
 }

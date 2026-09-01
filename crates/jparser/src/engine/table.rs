@@ -49,8 +49,8 @@ pub struct Form {
 /// This list is not exhaustive by design. A JMdict verb/adjective POS code
 /// is only given a row here when a class in `CLASSES` can be justified for
 /// it without guessing at Japanese grammar the way `tools/gen_conjugation_table.py`
-/// couldn't (see task-4-report.md for the full reasoning and the codes
-/// deliberately left out — `POS_WITHOUT_A_CLASS` below names them).
+/// couldn't (see the Phase 1a handoff §11 for the full reasoning and the
+/// codes deliberately left out — `POS_WITHOUT_A_CLASS` below names them).
 pub const JMDICT_POS_CLASS: &[(&str, &str)] = &[
     ("v1", "一段"),
     ("v5k", "五段・カ行イ音便"),
@@ -215,11 +215,13 @@ pub fn class_for_pos(pos: &str) -> Option<ClassId> {
 /// class generates the auxiliary's own conjugated surfaces.
 ///
 /// `(lemma, the auxiliary's own IPADIC class, the 活用形 name it demands of
-/// whatever comes before it)`. Written from a Japanese grammar reference:
-/// IPADIC carries the auxiliary's own conjugation forms but not what they
-/// attach to (master plan §3.3) — fields 2–4 are `*` on every auxiliary and
-/// there is no 使役/受身/丁寧/否定 tag anywhere. This is the smaller half of
-/// the §7.3 gap; the labels themselves are Phase 1b's.
+/// whatever comes before it)`. Written from a Japanese grammar reference;
+/// which one was not recorded at the time, and no task brief or report
+/// names it, so none is cited here rather than guessed. IPADIC carries the
+/// auxiliary's own conjugation forms but not what they attach to (master
+/// plan §3.3) — fields 2–4 are `*` on every auxiliary and there is no
+/// 使役/受身/丁寧/否定 tag anywhere. This is the smaller half of the §7.3
+/// gap; the labels themselves are Phase 1b's.
 ///
 /// せる/させる/れる/られる share 一段 with ordinary ichidan verbs — 食べる,
 /// させる and られる all conjugate identically, so there is no separate

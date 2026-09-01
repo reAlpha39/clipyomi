@@ -32,7 +32,8 @@ use crate::engine::Boundaries;
 /// consecutive shorter runs chained end to end, not as one step — so
 /// correctness never depends on this value, only how many hops a pathological
 /// gap takes. 64 is comfortably above any single unmatched stretch the corpus
-/// is expected to show; Task 16 revisits it if that assumption doesn't hold.
+/// is expected to show, but that expectation is unmeasured against the gold
+/// corpus -- see handoff §8's "three size/shape assumptions" bullet.
 const MAX_UNMATCHED_RUN: usize = 64;
 
 /// One step of a winning segmentation: either a dictionary match, or a run of
@@ -250,7 +251,7 @@ mod tests {
     // enough to pay off even one crossing.
     //
     // Task 16b's fix, measured against the 2,163-span gold corpus (see
-    // `cost.rs`'s constant comments and task-16b-report.md): COMMON became
+    // `cost.rs`'s constant comments and handoff §10): COMMON became
     // length-proportional (`COMMON * cand.len`), which ties a compound
     // against its equally-evidenced parts on the COVER+COMMON terms alone,
     // and CROSS came down to 0 -- not a magnitude tweak but a full removal,
@@ -263,7 +264,7 @@ mod tests {
     // here because only the compound carries COMMON, not a tie needing the
     // tie-break. On the real gold corpus most surviving merges instead tie
     // exactly on COVER+COMMON (both sides equally evidenced) and are decided
-    // by `relax`'s longer-run tie-break -- see task-16b-report.md's trial
+    // by `relax`'s longer-run tie-break -- see handoff §10's trial
     // log for why CROSS had to reach exactly 0, not merely fall, for those
     // to resolve in the compound's favour. `PRONOUNCE_CROSS` (unchanged at
     // 25) still keeps はこう-shaped spurious PRONOUNCE merges out even with

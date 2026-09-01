@@ -31,8 +31,9 @@ use crate::record::WordFlags;
 /// Longest deinflection chain `chains_ending_at` is asked to search, in
 /// characters consumed from a span's tail. Set from the corpus's deepest
 /// known chain (master plan §7.3's させ|られ|ませ|ん|でし|た, six steps) plus
-/// headroom for chains the fixtures don't yet exercise; Task 16 measures
-/// whether this value holds against the gold corpus.
+/// headroom for chains the fixtures don't yet exercise; whether this value
+/// holds against the full gold corpus is unmeasured -- see handoff §8's
+/// "three size/shape assumptions" bullet.
 const MAX_CHAIN: usize = 12;
 
 /// One dictionary entry that could match a span of the input, possibly

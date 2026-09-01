@@ -94,3 +94,29 @@ fn prints_an_unconjugated_particle_and_coalesces_the_skipped_tail() {
          start=1 len=2 zz unmatched\n"
     );
 }
+
+/// Whole-branch review finding 3: `--engine v2` against a v1-built index
+/// used to call `Index::open` (the v1 fingerprint) unconditionally and hand
+/// the result to `parse_v2` -- silently wrong output, not a rejection. Both
+/// commands now route through `open_for`, so this must fail loudly instead.
+#[test]
+fn parse_engine_v2_rejects_a_v1_built_index() {
+    let dir = index_dir("cli-parse-v2-against-v1-index");
+    let out = Command::new(BIN)
+        .arg("parse")
+        .arg(&dir)
+        .arg("あ")
+        .arg("--engine")
+        .arg("v2")
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(
+        !out.status.success(),
+        "a v1 index must not open under --engine v2"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("ConjugationMismatch"),
+        "expected a fingerprint mismatch, got: {stderr}"
+    );
+}

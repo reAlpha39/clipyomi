@@ -314,14 +314,10 @@ pub fn run(
 ) -> Result<(), Box<dyn Error>> {
     let table = ConjugationTable::load_embedded()?;
     let v2_table = jparser::engine::table::Table::new();
-    // The two engines assign conjugation ids from different tables and stamp
-    // different fingerprints (`index::load::Index::open_with`'s doc comment),
-    // so opening a v2 index through the v1-fingerprint `Index::open` fails
-    // with `ConjugationMismatch` even though the index is well-formed.
-    let index = match engine {
-        EngineChoice::V1 => Index::open(index_dir)?,
-        EngineChoice::V2 => Index::open_with(index_dir, jparser::engine::build::fingerprint())?,
-    };
+    // Shared with `main.rs`'s `Parse` command (finding 3) so the v1/v2
+    // fingerprint guard can't drift out of sync between the two call sites
+    // again -- see `crate::open_for`'s doc comment.
+    let index = crate::open_for(engine, index_dir)?;
     let (records, superseded) = read_gold(gold_path)?;
 
     #[cfg(feature = "mecab")]
