@@ -88,19 +88,39 @@ pub const JMDICT_POS_CLASS: &[(&str, &str)] = &[
     ("adj-ix", "形容詞・イイ"),
 ];
 
-/// Verb/adjective JMdict POS codes found in the two fixture corpora
-/// (`jmdict_subset.xml`, `gold_jmdict_subset.xml`) that deliberately have no
-/// row in [`JMDICT_POS_CLASS`], and why. A missing row is a visible gap
-/// tracked here, not a silently wrong one.
+/// Every JMdict POS code found in the two fixture corpora
+/// (`jmdict_subset.xml`, `gold_jmdict_subset.xml`) that has no row in
+/// [`JMDICT_POS_CLASS`], and why. A missing row is a visible gap tracked
+/// here, not a silently wrong one, and covers two different reasons:
+/// grammatical categories that were never going to conjugate at all, and
+/// codes that name a real verb/adjective category IPADIC just can't be
+/// pinned to one class for.
 ///
-/// - `v-unspec`, `vs`, `vi`, `vt`: not conjugation types at all. `v-unspec`
-///   is JMdict's own "no specific class" tag; `vs` tags a *noun* that takes
-///   する (confirmed against the fixture: it co-occurs with `n`, never
-///   carries its own conjugation); `vi`/`vt` are transitivity markers that
-///   always accompany a real verb-class code.
-/// - `vs-c`: "su verb — precursor to the modern suru". Every fixture entry
-///   carrying it also carries a real godan code (e.g. 熟す is tagged
-///   `v5s vs-c vi`) — its conjugation is already covered by that code.
+/// Never conjugate at all — plain grammatical categories (nouns, particles,
+/// adverbs, and the like):
+/// `n`, `n-pref`, `n-suf`, `adv`, `adv-to`, `conj`, `ctr`, `exp`, `int`,
+/// `num`, `pn`, `pref`, `prt`, `suf`, `unc`.
+///
+/// Verb/adjective-shaped, but too coarse to name one class:
+/// - `v-unspec`, `vs`, `vi`, `vt`: `v-unspec` is JMdict's own "no specific
+///   class" tag; `vs` tags a *noun* that takes する (confirmed against the
+///   fixture: it co-occurs with `n`, never carries its own conjugation);
+///   `vi`/`vt` are transitivity markers that always accompany a real
+///   verb-class code.
+/// - `aux`, `aux-v`, `aux-adj`, `cop`: JMdict's generic auxiliary/copula
+///   tags. Unlike `v5k` or `vk`, these don't name a specific conjugation
+///   paradigm — ます, ない, た, だ and です are all tagged `aux-v` (or
+///   `cop` for the copulas), but conjugate via entirely different IPADIC
+///   classes (特殊・マス, 特殊・ナイ, 特殊・タ, 特殊・ダ, 特殊・デス
+///   respectively). The POS code alone can't tell which one applies; only
+///   the specific lemma can, and this table maps codes, not lemmas.
+/// - `vs-c`: "su verb — precursor to the modern suru" covers a mix. Some
+///   entries carry a real godan code alongside it (熟す: `v5s vs-c vi`) and
+///   are already covered there. Others don't: 為す/す (ent_seq 2219050,
+///   `<s_inf>literary form of する</s_inf>`) and 屈す (ent_seq 2409930,
+///   `arch`) are tagged only `vs-c` (plus `vi`/`vt`), with no accompanying
+///   conjugation-class code — archaic literary す-forms IPADIC has no class
+///   for, the same "no defensible class" situation as `vn`/`v2*`/`v4*` below.
 /// - `vn`, all `v2*`, all `v4*`: archaic (文語) nidan/yodan/irregular
 ///   conjugation codes. IPADIC's 上二/下二/四段 classes are too sparse and
 ///   too loosely named to justify a 1:1 mapping without guessing at
@@ -119,15 +139,32 @@ pub const JMDICT_POS_CLASS: &[(&str, &str)] = &[
 /// - `adj-ku`, `adj-shiku`: archaic ku/shiku-katsuyou adjectives. No class
 ///   in the generated table represents them (the `文語・*` classes are all
 ///   auxiliaries, not adjectives — see above).
-///
-/// Scoped to exactly the codes `FIXTURE_VERB_ADJ_POS` below carries (not
-/// every archaic code JMdict's DTD defines), so it stays a precise account
-/// of these two fixtures rather than a speculative general list.
 pub const POS_WITHOUT_A_CLASS: &[&str] = &[
+    // Never conjugate at all.
+    "n",
+    "n-pref",
+    "n-suf",
+    "adv",
+    "adv-to",
+    "conj",
+    "ctr",
+    "exp",
+    "int",
+    "num",
+    "pn",
+    "pref",
+    "prt",
+    "suf",
+    "unc",
+    // Verb/adjective-shaped, too coarse to name one class.
     "v-unspec",
     "vs",
     "vi",
     "vt",
+    "aux",
+    "aux-v",
+    "aux-adj",
+    "cop",
     "vs-c",
     "vn",
     "v2a-s",
@@ -161,72 +198,6 @@ pub const POS_WITHOUT_A_CLASS: &[&str] = &[
     "adj-t",
     "adj-ku",
     "adj-shiku",
-];
-
-/// Every verb/adjective JMdict POS code the two fixture corpora actually use
-/// (`jmdict_subset.xml` and `gold_jmdict_subset.xml`, unioned; non-verbal
-/// codes like `n`, `adv`, `prt` excluded). Recorded here so the coverage
-/// test below measures against the fixtures, not just against whatever
-/// `JMDICT_POS_CLASS` happens to contain.
-#[cfg(test)]
-const FIXTURE_VERB_ADJ_POS: &[&str] = &[
-    "adj-f",
-    "adj-i",
-    "adj-ix",
-    "adj-ku",
-    "adj-na",
-    "adj-nari",
-    "adj-no",
-    "adj-pn",
-    "adj-shiku",
-    "adj-t",
-    "v-unspec",
-    "v1",
-    "v2a-s",
-    "v2b-k",
-    "v2g-k",
-    "v2g-s",
-    "v2h-k",
-    "v2h-s",
-    "v2k-k",
-    "v2k-s",
-    "v2m-s",
-    "v2n-s",
-    "v2r-k",
-    "v2r-s",
-    "v2s-s",
-    "v2t-k",
-    "v2t-s",
-    "v2w-s",
-    "v2z-s",
-    "v4b",
-    "v4h",
-    "v4k",
-    "v4r",
-    "v4s",
-    "v4t",
-    "v5aru",
-    "v5b",
-    "v5g",
-    "v5k",
-    "v5k-s",
-    "v5m",
-    "v5n",
-    "v5r",
-    "v5r-i",
-    "v5s",
-    "v5t",
-    "v5u",
-    "v5u-s",
-    "vi",
-    "vk",
-    "vn",
-    "vr",
-    "vs",
-    "vs-c",
-    "vs-i",
-    "vs-s",
-    "vt",
 ];
 
 pub fn class_for_pos(pos: &str) -> Option<ClassId> {
@@ -313,29 +284,56 @@ mod tests {
         }
     }
 
+    /// Every distinct JMdict POS code `path` actually uses, parsed at test
+    /// time with `crate::jmdict`'s streaming reader (already relied on to
+    /// decode `<pos>&code;</pos>` entity references correctly — see that
+    /// module's `decode_text`) rather than a hand-maintained snapshot. A
+    /// snapshot can silently go stale when a fixture is regenerated; this
+    /// can't.
+    fn pos_codes_in(path: &str) -> std::collections::BTreeSet<String> {
+        let file = std::fs::File::open(path).unwrap_or_else(|e| panic!("open {path}: {e}"));
+        let mut codes = std::collections::BTreeSet::new();
+        for entry in crate::jmdict::parse_entries(std::io::BufReader::new(file)) {
+            let entry = entry.unwrap_or_else(|e| panic!("parse {path}: {e}"));
+            for sense in entry.senses {
+                codes.extend(sense.pos);
+            }
+        }
+        codes
+    }
+
     #[test]
-    fn every_verb_adjective_pos_in_the_fixtures_is_mapped_or_a_documented_gap() {
+    fn every_pos_in_the_fixtures_is_mapped_or_a_documented_gap() {
         // Strengthens the test above, which only iterates JMDICT_POS_CLASS
         // itself and so only proves internal consistency. This one checks
-        // against what the fixtures actually use: every verb/adjective POS
-        // code must either have a row, or be named in POS_WITHOUT_A_CLASS —
-        // never silently absent from both.
+        // against what the fixtures actually use, extracted from the XML
+        // itself rather than a hardcoded list: every POS code must either
+        // have a row, or be named in POS_WITHOUT_A_CLASS — never silently
+        // absent from both.
+        let mut codes = pos_codes_in(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/jmdict_subset.xml"
+        ));
+        codes.extend(pos_codes_in(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/gold_jmdict_subset.xml"
+        )));
+
         let mut unaccounted = Vec::new();
-        for pos in FIXTURE_VERB_ADJ_POS {
+        for pos in &codes {
             let mapped = JMDICT_POS_CLASS.iter().any(|(p, _)| p == pos);
-            let documented_gap = POS_WITHOUT_A_CLASS.contains(pos);
+            let documented_gap = POS_WITHOUT_A_CLASS.contains(&pos.as_str());
             assert!(
                 !(mapped && documented_gap),
                 "{pos} is both mapped and listed in POS_WITHOUT_A_CLASS"
             );
             if !mapped && !documented_gap {
-                unaccounted.push(*pos);
+                unaccounted.push(pos.clone());
             }
         }
         assert!(
             unaccounted.is_empty(),
-            "verb/adjective POS codes in the fixtures with no row and no \
-             documented gap: {unaccounted:?}"
+            "POS codes in the fixtures with no row and no documented gap: {unaccounted:?}"
         );
     }
 }
