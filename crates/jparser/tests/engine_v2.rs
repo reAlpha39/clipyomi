@@ -237,7 +237,7 @@ fn segment_cuts(segments: &[jparser::Segment]) -> Vec<usize> {
             to find, `crossings == 0` and neither `CROSS` nor `PRONOUNCE_CROSS` \
             fire at all, at any magnitude -- confirmed empirically: these three \
             rows fail identically at PRONOUNCE_CROSS = 0, 1, 2, 5, 10, and 25 \
-            (task-16b-report.md's trial log). There is no interior-boundary \
+            (handoff §10's trial log). There is no interior-boundary \
             signal for cost.rs to price against; fixing this needs a different \
             mechanism (a real sentence-context boundary source, or a wider \
             fixture than the isolated 2-character surface this test supplies), \
@@ -272,7 +272,7 @@ fn the_particle_absorbing_merges_are_gone() {
     // below on the mistaken belief that it was vacuous too (conflating a
     // `bounds = None` measurement -- 63 of 81 multi-character spans shattered
     // across the 30-sentence snapshot at the time, since fallen to 18 of 81
-    // after Task 16b's tuning, see task-16b-report.md -- with this test's
+    // after Task 16b's tuning, see handoff §10 -- with this test's
     // `bounds = Some(..)` path, where `cost::is_allowed` forbids cutting
     // inside a Vibrato token and the shattering defect above cannot reach).
     // That swap introduced a
@@ -349,16 +349,18 @@ fn the_result_is_a_contiguous_cover_in_ascending_order() {
 
 #[test]
 fn a_matched_segment_carries_its_entry_and_senses() {
-    // Not 東京 (the brief's own example): 東 and 京 are each independently a
-    // COMMON-priority entry in this fixture (ent_seq 1447440 and 1233320),
-    // so splitting into two one-character COMMON matches costs 2 less than
-    // one COMMON two-character match -- `cost.rs`'s COMMON discount applies
-    // per match, not per character, and nothing in Phase 1a's cost model
-    // (Task 16's to tune) prefers the compound here. 学校 has no such
-    // competing split: 学 alone is COMMON but 校 alone is not, so the
-    // one-match/two-match costs tie and `lattice::relax`'s longer-run
-    // tie-break keeps it whole -- confirmed against this fixture directly
-    // rather than assumed.
+    // Not 東京 (the brief's own example, and `a_compound_of_two_common_kanji_
+    // should_not_shatter` below's): a distinct fixture word so this test's
+    // entry/senses assertions don't just duplicate that test's shattering
+    // assertion. 学校 has no competing split either way: 学 alone is COMMON
+    // but 校 alone is not, so the one-match/two-match costs tie under
+    // `cost.rs`'s length-proportional COMMON (`COMMON * cand.len`, Task 16b)
+    // and `lattice::relax`'s longer-run tie-break keeps it whole --
+    // confirmed against this fixture directly rather than assumed. (Before
+    // Task 16b's fix, COMMON was a flat per-match discount, and 東京 would
+    // have shattered here for the same reason it once did in the other
+    // test -- that historical reason for avoiding 東京 no longer applies,
+    // but 学校 stays for the reason above.)
     let dir = scratch("assemble-basic");
     build_v2(&dir);
     let r = parse_v2_over(&dir, "学校");
@@ -387,7 +389,7 @@ fn a_matched_segment_carries_its_entry_and_senses() {
 // costs `2*1 - 2*2 = -2`; 東(COMMON) + 京(COMMON) as two COMMON matches costs
 // `(1-2) + (1-2) = -2` too -- a tie, and `lattice::relax`'s longer-run
 // tie-break keeps 東京 whole. See `cost.rs`'s `COMMON` doc comment and
-// task-16b-report.md for the full trial log against the 2,163-span gold
+// handoff §10 for the full trial log against the 2,163-span gold
 // corpus.
 #[test]
 fn a_compound_of_two_common_kanji_should_not_shatter() {
@@ -506,8 +508,10 @@ fn katakana_conjugation_is_not_deinflected_yet() {
     // would also turn every katakana loanword ending in タ (データ, メーター,
     // カルタ) into a spurious past-tense candidate -- exactly the
     // kana-unified false-match class handoff §9.5 already measured as this
-    // engine's worst defect. Task 16's per-tier measurement is what would
-    // reopen this trade-off.
+    // engine's worst defect. Handoff §8's deferred katakana-deinflection
+    // item is what would reopen this trade-off: Tier D's 8 sentences / 169
+    // spans showed no visible penalty from leaving it unfolded, but that
+    // sample is too thin to call it settled either way.
     //
     // `chains_ending_at` separately always offers a zero-consumption
     // substitution for any class whose own form has an empty suffix (an
@@ -526,10 +530,13 @@ fn katakana_conjugation_is_not_deinflected_yet() {
     );
 }
 
-// Not 東京 (the brief's own example): 東京 shatters into 東 + 京 in this
-// fixture (see `a_compound_of_two_common_kanji_should_not_shatter`'s ignored
-// test), so `segments[0]` for it is 東 alone, not 東京 -- inspecting its
-// entries would not exercise what this test means to. る is used instead:
+// Not 東京 (the brief's own example): under the tuned cost model (Task 16b),
+// 東京 no longer shatters in this fixture -- `a_compound_of_two_common_kanji_
+// should_not_shatter` now passes rather than staying ignored -- so
+// `segments[0]` for it is 東京 as one two-character match, not 東 alone.
+// That still does not exercise what this test means to: it needs a single
+// *one-character* span with two colliding candidates of different flags,
+// not a whole compound. る is used instead:
 // ent_seq 2249020 (kanji 流, reading る -- a PRONOUNCE candidate) and ent_seq
 // 2849996 (kana-only suffix る -- a PRIMARY candidate) collide on this exact
 // one-character span, neither carries a priority tag, and both are reached

@@ -234,6 +234,26 @@ enum Command {
     },
 }
 
+/// Opens the index built for `engine`, and no other.
+///
+/// The two engines assign conjugation ids from different tables and stamp
+/// different fingerprints (`Index::open_with`'s doc comment), so opening a
+/// v2 index through the v1-fingerprint `Index::open` — or vice versa —
+/// either fails loudly on a fingerprint mismatch or, worse, succeeds against
+/// the wrong contract. `main.rs`'s `Parse` command and `score.rs`'s `run`
+/// both go through this single function so the guard `the_two_engines_
+/// cannot_read_each_others_indexes` asserts cannot silently drift out of
+/// sync between the two call sites again (whole-branch review finding 3).
+fn open_for(
+    engine: EngineChoice,
+    dir: &std::path::Path,
+) -> Result<Index, jparser::index::IndexError> {
+    match engine {
+        EngineChoice::V1 => Index::open(dir),
+        EngineChoice::V2 => Index::open_with(dir, jparser::engine::build::fingerprint()),
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().command {
         Command::BuildIndex {
@@ -390,7 +410,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             engine,
         } => {
             let table = ConjugationTable::load_embedded()?;
-            let index = Index::open(&index)?;
+            let index = open_for(engine, &index)?;
 
             #[cfg(feature = "mecab")]
             let tokenizer = match &hints {
@@ -405,14 +425,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(not(feature = "mecab"))]
             let hints: Option<&dyn jparser::BoundaryHints> = None;
 
+            // v2's own boundary source, from the same tokenizer -- mirrors
+            // `score.rs`'s Task 16a wiring so `--engine v2 --hints` behaves
+            // the same way here as it does under `score` (finding 3).
+            #[cfg(feature = "mecab")]
+            let bound_set = tokenizer.as_ref().map(|t| t.boundaries(&text));
+            #[cfg(feature = "mecab")]
+            let bounds: Option<&dyn jparser::engine::Boundaries> =
+                bound_set.as_ref().map(|b| b as &dyn jparser::engine::Boundaries);
+            #[cfg(not(feature = "mecab"))]
+            let bounds: Option<&dyn jparser::engine::Boundaries> = None;
+
             let opts = ParseOptions::default();
             let result = match engine {
                 EngineChoice::V1 => jparser::parse(&index, &table, &text, &opts, hints)?,
-                // `bounds` is `None` for now; Task 16 wires the real boundary
-                // source.
                 EngineChoice::V2 => {
                     let v2_table = jparser::engine::table::Table::new();
-                    jparser::engine::parse_v2(&index, &v2_table, &text, &opts, None)?
+                    jparser::engine::parse_v2(&index, &v2_table, &text, &opts, bounds)?
                 }
             };
             for seg in &result.segments {

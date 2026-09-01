@@ -8,35 +8,16 @@ columns (see the header comment of table_data.rs for the layout). IPADIC's
 COPYING permits reproduction and distribution with notice retention; the
 notice text is reproduced verbatim at crates/jparser/assets/IPADIC_NOTICE.
 
-sha256 of the 26 CSVs as fetched (`sha256sum *.csv` in the scratchpad the
-files were downloaded to — recorded for provenance, not checked at run time):
-
-    5a654779dd6e5eb8e4c1309779bc4b344298a6418c982a357cf49ea7ae425f36  Adj.csv
-    ae284933f4d4f9b1b402e595620bcf98cac65d3f82821f432782267b59d46fd  Adnominal.csv
-    c534ec1095e298bc681c281084bd5e398c54fcf26c97a897e9ac198333ce1f3  Adverb.csv
-    076f1efe2f1981a6172dba931e10b8d2e514a2d2814dd64c74e347a62dac462  Auxil.csv
-    cdb4a095d2d191a79f1da769bc34f42aa4b8e61113f71bc68d2205287f38955  Conjunction.csv
-    e034d918f3880d2c04844030bd1857c9fd9a2ce32726618dc91d618782b2897  Filler.csv
-    58faea7cb83deda9f04d3a9db93082ea4afc7af8cd8f2513f9a030b415a38fa  Interjection.csv
-    e1be88858408754f45f4f322b15c20c4030e8f60e76af4ad98567bd374a70b4  Noun.adjv.csv
-    34df6bed9e23839c9c0ef64271c76d9f94236426cd36e00221d7f5e41cc37c6  Noun.adverbal.csv
-    2b3079bc7e30bbd0072d30b0ca859477cc9ca63ab2306f153491ffb97ea13c6  Noun.csv
-    eb4743b16020cf9af4c55e97e29e8aac1e504dc8ab1a0b207bea7630226f15  Noun.demonst.csv
-    36c90a2cc394fdce0bbc8c744630136561bd91473d32258a627f0acb9c70be3  Noun.nai.csv
-    792040c47410b60235af15ba84eb2771f035434e18bd3e22e84fa0968fbf208  Noun.name.csv
-    5004ee2fd5f5fecaee7b8b4c541ba08b7cb94ae2f5db1008b51a11a940ee434  Noun.number.csv
-    1225cb1b02b374885ba12b3f2023dc1fb65c63bd0a249a9833b24fdda8d29cc  Noun.org.csv
-    07d6dcd1084dafab81fb4d81dda33e938f2a973f0d744f6a55979aa9a437fc9  Noun.others.csv
-    42f2dcd0c4aff0a3499ebe78a52b7d40bf5199d377c3bf9e8168838e61985db  Noun.place.csv
-    ef2c9f64fbc13988f2ade0eb626c9acb539da833b74a23fef473e4146c49cea  Noun.proper.csv
-    8cef570bf12a83b8adf569d55921cfd3fa27c769b4e3ed7a3c52d60af28cc2d  Noun.verbal.csv
-    8e7cfcee3c441c13c1b615af4a02a505b1c14e7a77da1f02cedc25ed83378bf  Others.csv
-    475a194354489fe94006265f6c6eb33518d87699a0cefd8b7c6ca2cf6e121d1  Postp-col.csv
-    09d6c1873321edd52421735302eb800f66ae2d5e5bbcb24d7d88fe4a4ffbbf2  Postp.csv
-    137f976c93d6de387c283a1d587df9ee4f406e36e39322c2024866af5282316  Prefix.csv
-    abf4adea49c49e9007c85b9b06fa18c4b030e1c3adf235463acc58ac34e980b  Suffix.csv
-    193a138437edf447f499506e9edcdfd189663ce11253b4312608d7d366922ca  Symbol.csv
-    c61a0174fa0081eff979eda28fc74ba4ff3563b723f435d77ea2b378bc1e494  Verb.csv
+A prior version of this docstring carried a 26-line "sha256 of the CSVs as
+fetched" block. Removed at the whole-branch review (finding 15): 25 of the
+26 lines were 62 or 63 hex characters, not the 64 a sha256 digest always is
+— not verifiable output, so a false provenance claim is worse than none.
+Re-hashing was not attempted here either, since nothing downstream checks
+these digests at run time (the docstring said so) and the pinned commit
+above plus IPADIC_NOTICE's retained copyright notice are what provenance
+actually depends on. If per-file digests are wanted again, recompute them
+from a fresh `git clone` at the pinned commit and paste real `sha256sum`
+output, not reconstructed by hand.
 
 Nothing here is derived from Translation Aggregator. See master plan §3.5.
 
@@ -216,7 +197,7 @@ def main(argv):
         per_class, removes, conflicts = pivot(read_rows(ipadic_dir))
         if conflicts:
             print(f"error: {len(conflicts)} unresolved conflicts; "
-                  "add named exceptions to LEMMA_EXCEPTIONS or fix the pivot", file=sys.stderr)
+                  "add named exceptions to FORM_OVERRIDES or fix the pivot", file=sys.stderr)
             for c in conflicts:
                 print(f"  {c}", file=sys.stderr)
             return 1

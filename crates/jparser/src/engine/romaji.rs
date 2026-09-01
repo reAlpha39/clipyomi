@@ -12,9 +12,11 @@
 
 //! Kana to Hepburn romaji, for display only.
 //!
-//! Written from a published Hepburn romanization chart, keyed on katakana:
-//! callers fold with [`kana::fold`] first, so hiragana, halfwidth katakana
-//! and katakana all land on the same table entries.
+//! Written from a Hepburn romanization chart; the specific edition was not
+//! recorded at the time, and no task brief or report names one, so none is
+//! cited here rather than guessed. Keyed on katakana: callers fold with
+//! [`kana::fold`] first, so hiragana, halfwidth katakana and katakana all
+//! land on the same table entries.
 
 use super::kana;
 
@@ -30,6 +32,16 @@ use super::kana;
 /// semi-voiced rows (g/z/d/b/p), every one of those rows' small-ya/yu/yo
 /// digraph, the small vowels, and the historical ヰ/ヱ. `ッ`, `ー` and `ン`
 /// are handled outside the table, in [`render`].
+///
+/// `ヲ`/`ヰ`/`ヱ` → `wo`/`wi`/`we`, not modified Hepburn's `o`/`i`/`e`: a
+/// deliberate divergence, not an oversight. This is a learner-facing tool,
+/// and `ヲ` is overwhelmingly the particle を, which learners are taught to
+/// read as "wo" even though it is pronounced "o" — the systematic w-row
+/// form is the more useful display, not the more phonetically accurate one.
+/// `ヰ`/`ヱ` only ever occur in pre-war orthography, which this project's
+/// corpus filters out by design (master plan §5.3's tier sourcing), so the
+/// choice for those two costs nothing in practice; kept parallel with `ヲ`
+/// and ワ for one consistent w-row rather than carving out an exception.
 ///
 /// `ヴ` (the systematic voiced extension of `ウ`, parallel to カ→ガ) and its
 /// small-vowel digraphs `ヴァ`/`ヴィ`/`ヴェ`/`ヴォ` are included: unlike the
