@@ -54,6 +54,8 @@ const UNMATCHED: i32 = 30;
 /// Priced well under `UNMATCHED` so it only ever tips a tie between
 /// equal-length partitions, never competes with `UNMATCHED` itself; the exact
 /// magnitude is Task 16's to tune against the corpus, per master plan §3.5.
+/// Unlike `CROSS` and `PRONOUNCE_CROSS`, no corpus measurement backs this
+/// specific value yet — chosen for sign and rough magnitude only.
 const SCRIPT_TRANSITION: i32 = 10;
 
 /// Cost of crossing one tokenizer boundary.
@@ -170,6 +172,11 @@ fn classify(c: char) -> Script {
 /// inside the run whose script class differs — the surcharge that prefers
 /// breaking a mixed run like `丨FIFA` at its script change over lumping it
 /// into one unmatched segment.
+///
+/// # Panics
+///
+/// Panics if `start + len` exceeds `chars.len()`; the segmentation DP is
+/// expected to construct only valid ranges.
 pub fn unmatched_cost(chars: &[char], start: usize, len: usize) -> i32 {
     let mut total = UNMATCHED * len as i32;
     for pair in chars[start..start + len].windows(2) {
@@ -253,6 +260,32 @@ mod tests {
             cost(&reading, Some(&b)) - crossing,
             PRONOUNCE_CROSS,
             "and the PRONOUNCE variant of the same span pays exactly the extra"
+        );
+    }
+
+    #[test]
+    fn pronounce_cross_scales_with_each_boundary_crossed() {
+        // Every other test in this file uses a fixture with exactly one
+        // interior boundary, so none of them can tell per-crossing scaling
+        // apart from a flat one-time surcharge. This pins the current
+        // choice explicitly: PRONOUNCE_CROSS is charged once per boundary
+        // crossed, same as CROSS itself.
+        //
+        // The defect class it targets (Handoff §9.5) is entirely
+        // single-crossing, so per-crossing scaling does no known harm today.
+        // But it does not come free: at two crossings the term alone adds
+        // 2 * PRONOUNCE_CROSS = 50, more than UNMATCHED charges for two whole
+        // fallback characters, so a legitimate multi-boundary reading-form
+        // merge could in principle lose to an unmatched run rather than
+        // merely cost more. Task 16 is where a flat surcharge would be
+        // reconsidered, if that is ever seen happening against the corpus.
+        let b = At(&[0, 1, 3, 5]);
+        let primary = cost(&cand(0, 5, WordFlags::PRIMARY, true), Some(&b));
+        let pronounce = cost(&cand(0, 5, WordFlags::PRONOUNCE, true), Some(&b));
+        assert_eq!(
+            pronounce - primary,
+            2 * PRONOUNCE_CROSS,
+            "two boundaries crossed, so the PRONOUNCE surcharge applies twice"
         );
     }
 
