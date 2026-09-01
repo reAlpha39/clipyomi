@@ -1,0 +1,177 @@
+// ClipYomi — Engine v2, Phase 1a.
+// Copyright (C) 2026
+//
+// This program is free software; you can redistribute it and/or modify it
+// under the terms of the GNU General Public License version 2 as published
+// by the Free Software Foundation.
+//
+// Written for ClipYomi without reference to Translation Aggregator's JParser.
+// See docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md §3.5 for the
+// clean-room discipline this file was written under. The SPDX header of §9.2
+// is written in Phase 1b, when the crate stops being GPL-2.0-only.
+
+//! Candidate generation: every dictionary entry that could match some span
+//! of the input, including through deinflection.
+//!
+//! The segmentation DP (later tasks) can only choose among what this module
+//! produces, so a match is never suppressed here for looking dubious -- it is
+//! generated and flagged instead. `exact` is that flag: false whenever a
+//! candidate exists only because [`kana::fold`] unified hiragana and
+//! katakana, which is the signal spec §7.4's cost term prices.
+
+use std::collections::HashMap;
+
+use crate::engine::kana;
+use crate::engine::table::{class_for_pos, ChainHit, Table, CLASSES};
+use crate::engine::{ClassId, ConjStep};
+use crate::index::load::Index;
+use crate::index::{EntryData, IndexError, StoredRecord};
+use crate::record::WordFlags;
+
+/// Longest deinflection chain `chains_ending_at` is asked to search, in
+/// characters consumed from a span's tail. Set from the corpus's deepest
+/// known chain (master plan §7.3's させ|られ|ませ|ん|でし|た, six steps) plus
+/// headroom for chains the fixtures don't yet exercise; Task 16 measures
+/// whether this value holds against the gold corpus.
+const MAX_CHAIN: usize = 12;
+
+/// One dictionary entry that could match a span of the input, possibly
+/// through deinflection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    pub start: usize,
+    pub len: usize,
+    pub entry_id: u32,
+    pub flags: WordFlags,
+    pub steps: Vec<ConjStep>,
+    /// False when the source characters differ from the stored surface
+    /// before folding -- the FST matched only because kana was unified, not
+    /// because the two strings actually agree.
+    pub exact: bool,
+    pub headword: String,
+}
+
+/// Every candidate covering some span of `chars`, indexed by start position.
+///
+/// For each span `[start, end)`, every deinflection chain `table` can strip
+/// from its tail turns the remainder into a dictionary key (the bare span
+/// itself for the empty chain); every `StoredRecord` the index has under
+/// that key, once folded, becomes one `Candidate`. A chain whose class the
+/// matched entry does not actually have is discarded -- a 一段 reading of a
+/// 五段 verb is not a reading of it -- but an inexact kana match is kept and
+/// marked, never dropped.
+pub fn candidates(
+    index: &Index,
+    table: &Table,
+    chars: &[char],
+) -> Result<Vec<Vec<Candidate>>, IndexError> {
+    let len = chars.len();
+    let mut out: Vec<Vec<Candidate>> = vec![Vec::new(); len];
+
+    // `chains_ending_at(chars, end, ..)` depends only on where a span ends,
+    // never on where it starts, so it is computed once per end position and
+    // shared by every start that reaches it instead of once per (start, end)
+    // pair.
+    let chains_by_end: Vec<Vec<ChainHit>> = (1..=len)
+        .map(|end| table.chains_ending_at(chars, end, MAX_CHAIN))
+        .collect();
+
+    let mut class_cache: HashMap<u32, Vec<ClassId>> = HashMap::new();
+
+    for start in 0..len {
+        // Longest span first: a span's own suffix can independently satisfy
+        // a shorter span ending mid-chain (e.g. 書いた's onbin fragment 書い
+        // alone reconstructs 書く too, one step short of the full た-chain),
+        // so the same headword can legitimately recur at several lengths.
+        // Both are kept -- the DP chooses among them -- but the fuller match
+        // is pushed first.
+        for end in (start + 1..=len).rev() {
+            for hit in &chains_by_end[end - 1] {
+                // `hit.consumed` can never exceed `end`: `Table::search`
+                // walks leftward from `end` and stops before running past
+                // its start, so this subtraction never wraps.
+                let stem_end = end - hit.consumed;
+                if stem_end < start {
+                    continue;
+                }
+                let stem: String = chars[start..stem_end].iter().collect();
+                let key = match hit.stem_class {
+                    Some(class) => format!("{stem}{}", CLASSES[class as usize].remove),
+                    None => stem,
+                };
+                let key_len = key.chars().count();
+
+                for prefix_hit in index.prefixes_of_with(&key, kana::fold)? {
+                    // Only the hit spanning the whole key: the FST also
+                    // returns every dictionary key that is a prefix of it,
+                    // and those are prefixes of the constructed key, not
+                    // matches for it.
+                    if prefix_hit.key_chars != key_len {
+                        continue;
+                    }
+                    for record in &prefix_hit.records {
+                        if !allows_chain(index, &mut class_cache, record, hit.stem_class)? {
+                            continue;
+                        }
+                        out[start].push(Candidate {
+                            start,
+                            len: end - start,
+                            entry_id: record.entry_id,
+                            flags: WordFlags(record.flags),
+                            steps: hit.steps.clone(),
+                            exact: record.surface == key,
+                            headword: record.surface.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(out)
+}
+
+/// Whether `record`'s entry actually conjugates in `stem_class` -- `None`
+/// (the empty chain, an uninflected lookup) never requires one. Looked up
+/// through `index.entry`, memoized per `entry_id` since the same headword
+/// recurs across many spans.
+fn allows_chain(
+    index: &Index,
+    cache: &mut HashMap<u32, Vec<ClassId>>,
+    record: &StoredRecord,
+    stem_class: Option<ClassId>,
+) -> Result<bool, IndexError> {
+    let Some(class) = stem_class else {
+        return Ok(true);
+    };
+    if let Some(classes) = cache.get(&record.entry_id) {
+        return Ok(classes.contains(&class));
+    }
+    let classes = match index.entry(record.entry_id)? {
+        Some(entry) => entry_classes(&entry),
+        // A record whose entry is missing has no classes to check against;
+        // treated as disqualifying rather than trusted, since a well-formed
+        // index never produces this.
+        None => Vec::new(),
+    };
+    let allowed = classes.contains(&class);
+    cache.insert(record.entry_id, classes);
+    Ok(allowed)
+}
+
+/// Every conjugation class any sense of `entry` maps to, deduplicated. Mirrors
+/// `engine::flags`'s POS-to-class derivation, but reads it back off the
+/// index's stored `EntryData` rather than the original JMdict entry.
+fn entry_classes(entry: &EntryData) -> Vec<ClassId> {
+    let mut classes = Vec::new();
+    for sense in &entry.senses {
+        for pos in &sense.pos {
+            if let Some(class) = class_for_pos(pos) {
+                if !classes.contains(&class) {
+                    classes.push(class);
+                }
+            }
+        }
+    }
+    classes
+}

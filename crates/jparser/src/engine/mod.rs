@@ -22,6 +22,7 @@ use crate::{ParseError, ParseOptions, ParseResult, Segment};
 pub mod build;
 pub mod flags;
 pub mod kana;
+pub mod lex;
 pub mod romaji;
 pub mod table;
 mod table_data;

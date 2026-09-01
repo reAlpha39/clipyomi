@@ -12,6 +12,11 @@
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
+fn open_v2(dir: &Path) -> jparser::index::load::Index {
+    jparser::index::load::Index::open_with(dir, jparser::engine::build::fingerprint())
+        .expect("open v2 index")
+}
+
 const FIXTURE: &str = include_str!("fixtures/jmdict_subset.xml");
 
 fn scratch(name: &str) -> PathBuf {
@@ -76,4 +81,45 @@ fn the_two_engines_cannot_read_each_others_indexes() {
         matches!(err, jparser::index::IndexError::ConjugationMismatch { .. }),
         "expected a fingerprint mismatch, got {err:?}"
     );
+}
+
+// `cands` opens with `open_v2` (`Index::open_with` plus the v2 fingerprint)
+// rather than the bare `Index::open` the task-8 brief's snippet shows:
+// `Index::open` checks the index against v1's conjugation fingerprint, and a
+// v2-built index fails that guard by design (see the test above) -- v1's
+// open can never read a v2 index.
+fn cands(dir: &Path, text: &str) -> Vec<Vec<jparser::engine::lex::Candidate>> {
+    let index = open_v2(dir);
+    let table = jparser::engine::table::Table::new();
+    let chars: Vec<char> = text.chars().collect();
+    jparser::engine::lex::candidates(&index, &table, &chars).expect("candidates")
+}
+
+#[test]
+fn a_plain_headword_is_found_at_its_position() {
+    let dir = scratch("lex-plain");
+    build_v2(&dir);
+    let c = cands(&dir, "東京都に住む");
+    assert!(c[0].iter().any(|x| x.headword == "東京" && x.len == 2));
+}
+
+#[test]
+fn a_conjugated_verb_is_found_with_its_chain() {
+    let dir = scratch("lex-conj");
+    build_v2(&dir);
+    let c = cands(&dir, "書いた");
+    let hit = c[0].iter().find(|x| x.headword == "書く").expect("書いた -> 書く");
+    assert_eq!(hit.len, 3, "the candidate spans the whole conjugated surface");
+    assert!(!hit.steps.is_empty());
+}
+
+#[test]
+fn a_kana_unified_match_is_marked_inexact() {
+    // はいた matching 履く through the reading はく is the §9.5 defect class.
+    // lex must find it -- suppressing it here would hide the case the cost
+    // model exists to price -- but it must be marked.
+    let dir = scratch("lex-inexact");
+    build_v2(&dir);
+    let c = cands(&dir, "ハイタ");
+    assert!(c[0].iter().any(|x| !x.exact), "a katakana match of a hiragana key is inexact");
 }
