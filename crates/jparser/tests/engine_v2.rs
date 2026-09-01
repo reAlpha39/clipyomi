@@ -166,6 +166,31 @@ fn a_matched_segment_carries_its_entry_and_senses() {
     assert_eq!(seg.entries[0].entry_id, 1206730, "the ent_seq entry top-1 is scored on");
 }
 
+// The general shape, not just this one word: with `COVER` priced per
+// character, a flat *per-match* discount (`COMMON`, -2) rewards more matches
+// over fewer, and a flat per-match penalty (`INEXACT`, +8) rewards fewer
+// over more -- exactly the "fewer words wins" bug this engine exists to
+// remove, reintroduced from the discount side. The model is
+// granularity-neutral only when every candidate on both sides of a split
+// carries identical per-match flags, which real text never guarantees.
+// Common single kanji are everywhere in Japanese, so this generalises well
+// past 東京.
+#[test]
+#[ignore = "cost.rs's COMMON discount (-2) is flat per match, not \
+            length-proportional: 東京 as one COMMON match costs 2*1 - 2 = 0, \
+            but 東 (COMMON, ent_seq 1447440) + 京 (COMMON, ent_seq 1233320) as \
+            two COMMON matches costs (1 - 2) + (1 - 2) = -2, so the split wins \
+            and 東京 shatters. Candidate fix: make COMMON length-proportional \
+            (-2 * len), which ties the merge against its parts instead of \
+            losing to them. Task 16 owns cost.rs tuning; unignore once it lands."]
+fn a_compound_of_two_common_kanji_should_not_shatter() {
+    let dir = scratch("assemble-compound-shatter");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "東京");
+    assert_eq!(r.segments.len(), 1, "東京 must not shatter into 東 + 京");
+    assert_eq!(r.segments[0].surface, "東京");
+}
+
 #[test]
 fn phase_1a_emits_no_conjugation_label_but_does_emit_the_steps() {
     let dir = scratch("assemble-steps");
