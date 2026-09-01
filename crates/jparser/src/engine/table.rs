@@ -18,7 +18,10 @@
 //! for the licence notice its retention requires. Nothing here is derived
 //! from Translation Aggregator.
 
+use std::collections::HashMap;
+
 pub use crate::engine::table_data::CLASSES;
+use crate::engine::ConjStep;
 pub use crate::engine::{ClassId, FormId};
 
 /// One IPADIC conjugation class (活用型).
@@ -208,6 +211,294 @@ pub fn class_for_pos(pos: &str) -> Option<ClassId> {
         .map(|i| i as ClassId)
 }
 
+/// Which 活用形 of the preceding word each auxiliary attaches to, and which
+/// class generates the auxiliary's own conjugated surfaces.
+///
+/// `(lemma, the auxiliary's own IPADIC class, the 活用形 name it demands of
+/// whatever comes before it)`. Written from a Japanese grammar reference:
+/// IPADIC carries the auxiliary's own conjugation forms but not what they
+/// attach to (master plan §3.3) — fields 2–4 are `*` on every auxiliary and
+/// there is no 使役/受身/丁寧/否定 tag anywhere. This is the smaller half of
+/// the §7.3 gap; the labels themselves are Phase 1b's.
+///
+/// せる/させる/れる/られる share 一段 with ordinary ichidan verbs — 食べる,
+/// させる and られる all conjugate identically, so there is no separate
+/// "causative"/"passive" class to point at. The class name alone can't tell
+/// an auxiliary from a headword; [`Table::new`] tells them apart by
+/// deriving each auxiliary's own conjugated surfaces from its *lemma*
+/// (stripping the class's `remove`), not from the class in the abstract.
+///
+/// た/て each need two rows. They attach to 連用タ接続 where a class
+/// distinguishes it from plain 連用形 (五段's onbin: 書いた, not 書きた) and
+/// to plain 連用形 where a class doesn't need the distinction (一段,
+/// サ変・スル, 特殊・デス have no 連用タ接続 at all: 食べた, でした) —
+/// IPADIC only names 連用タ接続 where the two forms actually differ, so
+/// either row alone leaves half the classes unreachable.
+///
+/// じゃ/や are IPADIC's dialectal だ variants; in real text they follow a
+/// bare noun or な-adjective, neither of which is a conjugation class this
+/// table can name a form of, so there is no verb-conjugation attachment
+/// site to point them at. 基本形 (だ/です's slot) is a placeholder — it
+/// keeps the coverage test below honest about which class it is claiming
+/// for, without pretending either row will ever actually fire in the
+/// chain search.
+const ATTACHES_TO: &[(&str, &str, &str)] = &[
+    ("せる", "一段", "未然形"),
+    ("させる", "一段", "未然形"),
+    ("れる", "一段", "未然形"),
+    ("られる", "一段", "未然形"),
+    ("ない", "特殊・ナイ", "未然形"),
+    ("ぬ", "特殊・ヌ", "未然形"),
+    ("ん", "不変化型", "未然形"),
+    ("う", "不変化型", "未然ウ接続"),
+    ("よう", "不変化型", "未然ウ接続"),
+    ("ます", "特殊・マス", "連用形"),
+    ("たい", "特殊・タイ", "連用形"),
+    ("た", "特殊・タ", "連用タ接続"),
+    ("た", "特殊・タ", "連用形"),
+    ("だ", "特殊・ダ", "連用タ接続"),
+    ("て", "不変化型", "連用タ接続"),
+    ("て", "不変化型", "連用形"),
+    ("で", "不変化型", "連用タ接続"),
+    ("です", "特殊・デス", "基本形"),
+    ("じゃ", "特殊・ジャ", "基本形"),
+    ("や", "特殊・ヤ", "基本形"),
+];
+
+/// A hit recorded at one node of [`Table`]'s reverse trie.
+#[derive(Clone, Copy)]
+enum TrieHit {
+    /// Some class's form ends here. The characters before it are the stem
+    /// of a headword in that class — this can end a chain, because the
+    /// innermost step is the main word's own inflection and it can be any
+    /// class.
+    Terminal { class: ClassId, form: FormId },
+    /// One specific auxiliary's own conjugated surface ends here (built
+    /// from an `ATTACHES_TO` row, not from `CLASSES` directly). The chain
+    /// can continue only if the text immediately before it ends in
+    /// `requires` — the 活用形 that auxiliary attaches to.
+    Continuation {
+        class: ClassId,
+        form: FormId,
+        requires: &'static str,
+    },
+}
+
+#[derive(Default)]
+struct Node {
+    children: HashMap<char, usize>,
+    hits: Vec<TrieHit>,
+}
+
+/// Inserts `hit` at the node reached by walking `suffix` back to front,
+/// creating nodes as needed. A zero-length `suffix` inserts at the root.
+fn insert(nodes: &mut Vec<Node>, suffix: &str, hit: TrieHit) {
+    let mut node = 0;
+    for ch in suffix.chars().rev() {
+        node = match nodes[node].children.get(&ch) {
+            Some(&existing) => existing,
+            None => {
+                let new_node = nodes.len();
+                nodes.push(Node::default());
+                nodes[node].children.insert(ch, new_node);
+                new_node
+            }
+        };
+    }
+    nodes[node].hits.push(hit);
+}
+
+fn form_named(required: Option<&str>, class: ClassId, form: FormId) -> bool {
+    match required {
+        None => true,
+        Some(name) => CLASSES[class as usize].forms[form as usize].name == name,
+    }
+}
+
+/// One deinflection chain found by [`Table::chains_ending_at`].
+///
+/// `consumed` characters were stripped from the tail of the span; `steps[0]`
+/// is the innermost step — the main word's own inflection — and the last
+/// element is the outermost auxiliary. `stem_class` is `None` for the empty
+/// chain (an uninflected word: the dictionary key is the surface as it
+/// stands) and `Some(class)` otherwise, where the dictionary key is
+/// `stem + CLASSES[class].remove`.
+pub struct ChainHit {
+    pub consumed: usize,
+    pub steps: Vec<ConjStep>,
+    pub stem_class: Option<ClassId>,
+}
+
+/// A reverse suffix trie over every class's conjugation forms, plus every
+/// known auxiliary's own conjugated surfaces (see [`ATTACHES_TO`]).
+pub struct Table {
+    nodes: Vec<Node>,
+}
+
+impl Default for Table {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Table {
+    /// Builds the trie once from `CLASSES` and `ATTACHES_TO`. Infallible:
+    /// both are compiled in, and a broken `ATTACHES_TO` row (a class name
+    /// `CLASSES` doesn't have) is a bug in this file, not a runtime
+    /// condition — it panics rather than threading a `Result` through
+    /// every caller for a mistake only a programmer editing this table can
+    /// make.
+    pub fn new() -> Table {
+        let mut nodes = vec![Node::default()];
+
+        for (class_id, class) in CLASSES.iter().enumerate() {
+            for (form_id, form) in class.forms.iter().enumerate() {
+                insert(
+                    &mut nodes,
+                    form.suffix,
+                    TrieHit::Terminal {
+                        class: class_id as ClassId,
+                        form: form_id as FormId,
+                    },
+                );
+            }
+        }
+
+        for &(lemma, class_name, requires) in ATTACHES_TO {
+            let class_id = CLASSES
+                .iter()
+                .position(|c| c.name == class_name)
+                .unwrap_or_else(|| {
+                    panic!("ATTACHES_TO names {class_name}, which CLASSES does not have")
+                });
+            let class = &CLASSES[class_id];
+            // An auxiliary's own class describes *a* stem+suffix shape, not
+            // this specific one: strip that class's `remove` from the
+            // lemma to find the stem this auxiliary conjugates from (せる's
+            // is "せ", られる's is "られ", even though both are 一段).
+            let stem = lemma.strip_suffix(class.remove).unwrap_or(lemma);
+            for (form_id, form) in class.forms.iter().enumerate() {
+                let surface = format!("{stem}{}", form.suffix);
+                if surface.is_empty() {
+                    // No current row produces this — every ATTACHES_TO
+                    // lemma leaves at least one character after its
+                    // class's `remove` is stripped, or supplies a
+                    // non-empty form suffix to make up for it — but an
+                    // empty surface would let `search` consume zero
+                    // characters and recurse at the same position forever.
+                    // Refuse it outright rather than trust that a future
+                    // row can't introduce one.
+                    continue;
+                }
+                insert(
+                    &mut nodes,
+                    &surface,
+                    TrieHit::Continuation {
+                        class: class_id as ClassId,
+                        form: form_id as FormId,
+                        requires,
+                    },
+                );
+            }
+        }
+
+        Table { nodes }
+    }
+
+    /// Every deinflection chain whose surface ends at character `end`,
+    /// consuming no more than `max_consumed` characters from its tail.
+    /// Always includes the empty chain (`consumed: 0`, `stem_class: None`):
+    /// an uninflected word is a plain headword, found by the same call.
+    pub fn chains_ending_at(
+        &self,
+        chars: &[char],
+        end: usize,
+        max_consumed: usize,
+    ) -> Vec<ChainHit> {
+        let mut hits = vec![ChainHit {
+            consumed: 0,
+            steps: Vec::new(),
+            stem_class: None,
+        }];
+        hits.extend(self.search(chars, end, max_consumed, None));
+        hits
+    }
+
+    /// Bounded depth-first walk of the reverse trie, from `end` leftward.
+    ///
+    /// `required`, when set, is the 活用形 name an auxiliary to our right
+    /// demands of whatever ends here — terminal and continuation hits are
+    /// filtered by it identically, since either shape can be what an
+    /// auxiliary attaches to (a plain word's own form, or another
+    /// auxiliary's).
+    ///
+    /// Walks one character at a time so every suffix length in between is
+    /// tried, not just the longest match — 高かった's "かっ" and a bare
+    /// "っ" terminate at different classes, and both are valid candidates.
+    fn search(
+        &self,
+        chars: &[char],
+        end: usize,
+        budget: usize,
+        required: Option<&str>,
+    ) -> Vec<ChainHit> {
+        let mut out = Vec::new();
+        let mut node = 0;
+        let mut len = 0;
+        loop {
+            for hit in &self.nodes[node].hits {
+                match *hit {
+                    TrieHit::Terminal { class, form } => {
+                        if form_named(required, class, form) {
+                            out.push(ChainHit {
+                                consumed: len,
+                                steps: vec![ConjStep {
+                                    class,
+                                    form,
+                                    range: end - len..end,
+                                }],
+                                stem_class: Some(class),
+                            });
+                        }
+                    }
+                    TrieHit::Continuation {
+                        class,
+                        form,
+                        requires,
+                    } => {
+                        // len == 0 is the loop-prevention guard: a
+                        // zero-length auxiliary match would recurse at this
+                        // same `end` forever (see `Table::new`'s comment —
+                        // no current row can produce one, but this is the
+                        // check that keeps it true regardless).
+                        if len == 0 || !form_named(required, class, form) {
+                            continue;
+                        }
+                        for mut sub in self.search(chars, end - len, budget - len, Some(requires)) {
+                            sub.consumed += len;
+                            sub.steps.push(ConjStep {
+                                class,
+                                form,
+                                range: end - len..end,
+                            });
+                            out.push(sub);
+                        }
+                    }
+                }
+            }
+            if len >= budget || len >= end {
+                break;
+            }
+            let Some(&next) = self.nodes[node].children.get(&chars[end - len - 1]) else {
+                break;
+            };
+            node = next;
+            len += 1;
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,5 +626,105 @@ mod tests {
             unaccounted.is_empty(),
             "POS codes in the fixtures with no row and no documented gap: {unaccounted:?}"
         );
+    }
+
+    #[test]
+    fn every_tokushu_class_has_an_attaches_to_row() {
+        // A future regeneration that adds a 特殊・ class silently can't
+        // chain through it -- this is the check that would fail instead.
+        for class in CLASSES.iter().filter(|c| c.name.starts_with("特殊・")) {
+            assert!(
+                ATTACHES_TO.iter().any(|(_, name, _)| *name == class.name),
+                "{} has no ATTACHES_TO row and can never chain",
+                class.name
+            );
+        }
+    }
+
+    fn table() -> Table {
+        Table::new()
+    }
+
+    fn chars(s: &str) -> Vec<char> {
+        s.chars().collect()
+    }
+
+    /// The stem the chain leaves behind, plus its class's remove-suffix:
+    /// the exact string `lex.rs` will look up in the FST. `stem_class` is
+    /// `None` for the empty chain (task-5 amendment 1) -- a plain
+    /// headword, whose key is the surface exactly as it stands.
+    fn key(c: &[char], hit: &ChainHit) -> String {
+        let stem: String = c[..c.len() - hit.consumed].iter().collect();
+        match hit.stem_class {
+            None => stem,
+            Some(id) => format!("{stem}{}", CLASSES[id as usize].remove),
+        }
+    }
+
+    #[test]
+    fn an_uninflected_word_yields_the_empty_chain() {
+        let c = chars("東京");
+        let hits = table().chains_ending_at(&c, 2, 8);
+        assert!(hits
+            .iter()
+            .any(|h| h.consumed == 0 && h.steps.is_empty() && h.stem_class.is_none()));
+    }
+
+    #[test]
+    fn a_single_step_recovers_the_dictionary_form() {
+        let c = chars("食べた");
+        let hits = table().chains_ending_at(&c, 3, 8);
+        assert!(
+            hits.iter().any(|h| key(&c, h) == "食べる"),
+            "食べた -> 食べる"
+        );
+    }
+
+    #[test]
+    fn the_godan_ta_form_is_found_through_its_own_class() {
+        let c = chars("書いた");
+        let hits = table().chains_ending_at(&c, 3, 8);
+        assert!(hits.iter().any(|h| key(&c, h) == "書く"), "書いた -> 書く");
+    }
+
+    #[test]
+    fn a_long_auxiliary_chain_resolves_to_the_verb() {
+        // Master plan §7.3's example. Phase 1a must find it; naming it is 1b's.
+        let c = chars("食べさせられませんでした");
+        let hits = table().chains_ending_at(&c, c.len(), 16);
+        let hit = hits
+            .iter()
+            .find(|h| key(&c, h) == "食べる")
+            .expect("the chain must reach 食べる");
+        assert!(
+            hit.steps.len() >= 5,
+            "one step per auxiliary, got {}",
+            hit.steps.len()
+        );
+        assert_eq!(
+            hit.steps[0].range.start, 2,
+            "the innermost step starts after 食べ"
+        );
+    }
+
+    #[test]
+    fn suru_resolves_from_an_empty_stem() {
+        let c = chars("した");
+        let hits = table().chains_ending_at(&c, 2, 8);
+        assert!(hits.iter().any(|h| key(&c, h) == "する"));
+    }
+
+    #[test]
+    fn an_adjective_conjugates() {
+        let c = chars("高かった");
+        let hits = table().chains_ending_at(&c, 4, 8);
+        assert!(hits.iter().any(|h| key(&c, h) == "高い"));
+    }
+
+    #[test]
+    fn the_search_is_bounded() {
+        let c = chars("ててててててててててててててて");
+        let hits = table().chains_ending_at(&c, c.len(), 4);
+        assert!(hits.iter().all(|h| h.consumed <= 4));
     }
 }
