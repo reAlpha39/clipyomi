@@ -32,6 +32,11 @@ use crate::record::WordFlags;
 /// are separate tokens and merging across a boundary is always permitted
 /// (§4.3's asymmetry, the rule that saves `東京都`). Removing the bias
 /// structurally is the only form of the fix that satisfies success criterion 3.
+///
+/// Task 16b considered this constant and left it untouched: `COVER`'s
+/// per-character shape is what the other terms' own length-proportionality
+/// (`COMMON`, this task's own fix) is built to stay neutral against, and no
+/// trial found evidence bearing on its magnitude specifically.
 const COVER: i32 = 1;
 
 /// Cost of one character in an unmatched run.
@@ -40,6 +45,12 @@ const COVER: i32 = 1;
 /// Handoff §9.1 measured the opposite failure: 36 of 266 lost gold boundaries
 /// were runs of punctuation lumped into one unmatched segment (`」、`, `、「喜`),
 /// the one unambiguous defect in that decomposition.
+///
+/// Task 16b considered this constant and left it untouched: no trial in this
+/// task's cost-model tuning pass touched split-vs-merge decisions between two
+/// *matched* candidates, which is where every measured defect lived, so
+/// nothing bore on `UNMATCHED`'s own magnitude. It remains exactly the
+/// Task 9-era value, unmeasured against the gold corpus.
 const UNMATCHED: i32 = 30;
 
 /// Extra cost for each script transition inside a single unmatched run.
