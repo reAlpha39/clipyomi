@@ -12,6 +12,8 @@
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
+use jparser::record::WordFlags;
+
 fn open_v2(dir: &Path) -> jparser::index::load::Index {
     jparser::index::load::Index::open_with(dir, jparser::engine::build::fingerprint())
         .expect("open v2 index")
@@ -317,4 +319,78 @@ fn katakana_conjugation_is_not_deinflected_yet() {
             .all(|x| x.steps.iter().all(|s| s.range.is_empty())),
         "no candidate should explain any of ハイタ's characters through a real conjugation ending"
     );
+}
+
+// Not 東京 (the brief's own example): 東京 shatters into 東 + 京 in this
+// fixture (see `a_compound_of_two_common_kanji_should_not_shatter`'s ignored
+// test), so `segments[0]` for it is 東 alone, not 東京 -- inspecting its
+// entries would not exercise what this test means to. る is used instead:
+// ent_seq 2249020 (kanji 流, reading る -- a PRONOUNCE candidate) and ent_seq
+// 2849996 (kana-only suffix る -- a PRIMARY candidate) collide on this exact
+// one-character span, neither carries a priority tag, and both are reached
+// by a direct, unfolded lookup, so `order`'s COMMON tier never interferes
+// with the PRIMARY/PRONOUNCE clause this test is about.
+#[test]
+fn an_exact_match_outranks_an_inexact_one() {
+    let dir = scratch("order-exact");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "る");
+    let e = &r.segments[0].entries;
+    let has_primary = e.iter().any(|x| x.flags.contains(WordFlags::PRIMARY));
+    let has_pronounce = e.iter().any(|x| x.flags.contains(WordFlags::PRONOUNCE));
+    assert!(
+        has_primary && has_pronounce,
+        "fixture must offer both kinds or this test proves nothing"
+    );
+    let first_inexact = e.iter().position(|x| x.flags.contains(WordFlags::PRONOUNCE));
+    let last_exact = e.iter().rposition(|x| x.flags.contains(WordFlags::PRIMARY));
+    assert!(
+        last_exact.expect("checked above") < first_inexact.expect("checked above"),
+        "every PRIMARY entry precedes every PRONOUNCE one"
+    );
+}
+
+#[test]
+fn the_order_is_stable_and_total() {
+    let dir = scratch("order-stable");
+    build_v2(&dir);
+    let a = parse_v2_over(&dir, "東京都に住む");
+    let b = parse_v2_over(&dir, "東京都に住む");
+    assert_eq!(a, b, "two identical parses order identically");
+}
+
+// Not は (the brief's own example): this fixture carries exactly one
+// PARTICLE-flagged entry for は (ent_seq 2028920), so filtering on
+// `WordFlags::PARTICLE` there leaves a single-element list and the sort
+// assertion below would pass vacuously. で offers four -- ent_seq 2028980
+// (COMMON), 2654270 and 2844355 (neither COMMON, both an uninflected
+// zero-step match on the exact surface), and 2854413 (inexact -- its
+// stored surface is デ, reached only through kana folding). 2654270 and
+// 2844355 tie on every earlier clause (exact, COMMON, PRIMARY, chain
+// length), so ascending `entry_id` is the only thing deciding 2654270
+// before 2844355 between them.
+//
+// This fixture's per-key candidate order already happens to run ascending
+// by `entry_id` before `order` touches it (JMdict's source document is
+// itself `ent_seq`-ordered), so this test mainly confirms `order` never
+// disturbs that -- `an_exact_match_outranks_an_inexact_one` above is the
+// one that fails without `order` actually running.
+#[test]
+fn ties_break_on_entry_id_ascending() {
+    let dir = scratch("order-ties");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "で");
+    let ids: Vec<u32> = r.segments[0]
+        .entries
+        .iter()
+        .filter(|e| e.flags.contains(WordFlags::PARTICLE))
+        .map(|e| e.entry_id)
+        .collect();
+    assert!(
+        ids.len() >= 2,
+        "fixture must offer several particle entries or this test proves nothing"
+    );
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    assert_eq!(ids, sorted, "particles with equal evidence sort by ent_seq");
 }

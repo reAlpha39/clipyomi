@@ -85,9 +85,10 @@ pub struct Segment {
     /// because no stored reading could be stripped back to a stem.
     pub reading: Option<String>,
     pub matched: bool,
-    /// Every dictionary entry aligning to this exact span, ranked by
-    /// `sort_matches`: the primary candidate first, then alternatives. Empty
-    /// when `!matched`.
+    /// Every dictionary entry aligning to this exact span, ordered most
+    /// likely first: a caller that wants one entry to show by default can
+    /// always take `entries[0]`, and the rest follow in descending order of
+    /// likelihood. Empty when `!matched`.
     pub entries: Vec<Entry>,
 }
 
