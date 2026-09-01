@@ -70,6 +70,16 @@ pub struct Candidate {
 /// fuller one. A caller that wants the fullest parse for a headword (as
 /// `a_conjugated_verb_is_found_with_its_chain` does via `.find()`) can rely
 /// on it being first.
+///
+/// **Dedup guarantee:** within `out[start]`, no two candidates ever share
+/// both the same `len` *and* the same `entry_id` -- different chains can
+/// independently reconstruct the same entry over the exact same span (an
+/// empty-consumption class substitution rediscovering a plain lookup's own
+/// key, say), and only the shallowest chain for that `(len, entry_id)` pair
+/// survives; see [`dedup_shallowest`]. `len` is part of that key precisely
+/// so it never collapses the case above -- 書い and 書いた both reconstruct
+/// 書く but at *different* lengths, so they are different keys and both
+/// keep their place.
 pub fn candidates(
     index: &Index,
     table: &Table,
@@ -136,9 +146,51 @@ pub fn candidates(
                 }
             }
         }
+        out[start] = dedup_shallowest(std::mem::take(&mut out[start]));
     }
 
     Ok(out)
+}
+
+/// Collapse `bucket` (one `start`'s worth of candidates) so no two entries
+/// share both `len` and `entry_id`, keeping whichever chain has fewer
+/// `steps` -- an uninflected or shallower reading of the same span is the
+/// likelier one, the same call `assemble::order` makes at display time. A
+/// true tie (equal `steps.len()`, which only happens for a literal
+/// duplicate chain) keeps whichever copy was seen first; the two are
+/// otherwise indistinguishable.
+///
+/// Insertion order of the *keys* is preserved -- the first `(len,
+/// entry_id)` pair encountered keeps its position in the output -- so this
+/// never disturbs the longest-span-first guarantee above: a fuller and a
+/// shorter reconstruction of the same headword differ in `len`, so they are
+/// different keys, and this function never touches the relative order
+/// between different keys, dropped or kept.
+fn dedup_shallowest(bucket: Vec<Candidate>) -> Vec<Candidate> {
+    let mut best: HashMap<(usize, u32), Candidate> = HashMap::new();
+    let mut order: Vec<(usize, u32)> = Vec::new();
+    for cand in bucket {
+        let key = (cand.len, cand.entry_id);
+        match best.get(&key) {
+            Some(existing) if existing.steps.len() <= cand.steps.len() => {
+                // Already holding an equal-or-shallower chain for this
+                // exact (len, entry_id) pair -- `cand` adds nothing.
+            }
+            _ => {
+                if !best.contains_key(&key) {
+                    order.push(key);
+                }
+                best.insert(key, cand);
+            }
+        }
+    }
+    order
+        .into_iter()
+        .map(|key| {
+            best.remove(&key)
+                .expect("every key in `order` was inserted into `best` right before")
+        })
+        .collect()
 }
 
 /// Whether `record`'s entry actually conjugates in `stem_class` -- `None`

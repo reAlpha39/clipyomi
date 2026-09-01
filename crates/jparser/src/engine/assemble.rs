@@ -318,4 +318,107 @@ mod tests {
         let c = candidate(0, 2, WordFlags::PRIMARY, steps);
         assert_eq!(reading_for(&e, &c, &chars), None);
     }
+
+    // `order`'s five clauses, isolated one at a time against hand-built
+    // candidates rather than against whatever a fixture's FST happens to
+    // hand back. This matters concretely for the lowest-priority clause:
+    // `engine_v2.rs`'s `ties_break_on_entry_id_ascending` integration test
+    // turned out to pass even with `order` disabled entirely, because that
+    // fixture's per-key candidate order already comes out ascending by
+    // `entry_id` on its own (JMdict's source XML is itself `ent_seq`-order,
+    // and the index preserves that). These tests exist so each clause is
+    // proven by construction, not by coincidence: every test below sets up
+    // a "trap" where a *lower*-priority signal (often `entry_id` itself)
+    // favors the wrong candidate, so the test only passes if the clause
+    // under test is actually what `order` is applying.
+    fn order_candidate(entry_id: u32, exact: bool, flags: WordFlags, step_count: usize) -> Candidate {
+        Candidate {
+            start: 0,
+            len: 1,
+            entry_id,
+            flags,
+            steps: vec![
+                ConjStep {
+                    class: 0,
+                    form: 0,
+                    range: 0..0,
+                };
+                step_count
+            ],
+            exact,
+            headword: String::new(),
+        }
+    }
+
+    #[test]
+    fn order_puts_an_exact_match_before_an_inexact_one_regardless_of_id() {
+        // The inexact candidate carries the *smaller* entry_id -- if `order`
+        // fell through to the entry_id tiebreak instead of applying the
+        // exact/inexact clause, this would sort backwards.
+        let mut cands = vec![
+            order_candidate(1, false, WordFlags::PRIMARY, 0),
+            order_candidate(2, true, WordFlags::PRIMARY, 0),
+        ];
+        order(&mut cands);
+        assert_eq!(
+            cands[0].entry_id, 2,
+            "the exact match sorts first despite the higher entry_id"
+        );
+    }
+
+    #[test]
+    fn order_puts_common_before_not_regardless_of_id() {
+        let mut common = WordFlags::PRIMARY;
+        common.insert(WordFlags::COMMON);
+        let mut cands = vec![
+            order_candidate(1, true, WordFlags::PRIMARY, 0), // not COMMON, smaller id
+            order_candidate(2, true, common, 0),              // COMMON, larger id
+        ];
+        order(&mut cands);
+        assert_eq!(
+            cands[0].entry_id, 2,
+            "the COMMON match sorts first despite the higher entry_id"
+        );
+    }
+
+    #[test]
+    fn order_puts_primary_before_pronounce_regardless_of_id() {
+        let mut cands = vec![
+            order_candidate(1, true, WordFlags::PRONOUNCE, 0), // smaller id
+            order_candidate(2, true, WordFlags::PRIMARY, 0),   // larger id
+        ];
+        order(&mut cands);
+        assert_eq!(
+            cands[0].entry_id, 2,
+            "the PRIMARY match sorts first despite the higher entry_id"
+        );
+    }
+
+    #[test]
+    fn order_puts_a_shorter_chain_before_a_longer_one_regardless_of_id() {
+        let mut cands = vec![
+            order_candidate(1, true, WordFlags::PRIMARY, 2), // two-step chain, smaller id
+            order_candidate(2, true, WordFlags::PRIMARY, 0), // uninflected, larger id
+        ];
+        order(&mut cands);
+        assert_eq!(
+            cands[0].entry_id, 2,
+            "the shallower chain sorts first despite the higher entry_id"
+        );
+    }
+
+    #[test]
+    fn order_breaks_ties_on_entry_id_ascending() {
+        // Every field but entry_id is identical, and the input is handed in
+        // descending id order -- only the tiebreak clause can produce
+        // ascending output here.
+        let mut cands = vec![
+            order_candidate(30, true, WordFlags::PRIMARY, 0),
+            order_candidate(10, true, WordFlags::PRIMARY, 0),
+            order_candidate(20, true, WordFlags::PRIMARY, 0),
+        ];
+        order(&mut cands);
+        let ids: Vec<u32> = cands.iter().map(|c| c.entry_id).collect();
+        assert_eq!(ids, vec![10, 20, 30]);
+    }
 }

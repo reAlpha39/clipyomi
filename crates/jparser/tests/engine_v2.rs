@@ -330,6 +330,11 @@ fn katakana_conjugation_is_not_deinflected_yet() {
 // one-character span, neither carries a priority tag, and both are reached
 // by a direct, unfolded lookup, so `order`'s COMMON tier never interferes
 // with the PRIMARY/PRONOUNCE clause this test is about.
+//
+// This is an end-to-end check against a real fixture; what actually proves
+// the PRIMARY-before-PRONOUNCE clause in isolation (a hand-built trap where
+// a lower-priority signal favors the wrong candidate) is
+// `assemble::tests::order_puts_primary_before_pronounce_regardless_of_id`.
 #[test]
 fn an_exact_match_outranks_an_inexact_one() {
     let dir = scratch("order-exact");
@@ -372,9 +377,13 @@ fn the_order_is_stable_and_total() {
 //
 // This fixture's per-key candidate order already happens to run ascending
 // by `entry_id` before `order` touches it (JMdict's source document is
-// itself `ent_seq`-ordered), so this test mainly confirms `order` never
-// disturbs that -- `an_exact_match_outranks_an_inexact_one` above is the
-// one that fails without `order` actually running.
+// itself `ent_seq`-ordered), so this test passes whether or not the
+// tiebreak clause runs at all -- it is an end-to-end sanity check, not
+// proof. What actually proves the clause is
+// `assemble::tests::order_breaks_ties_on_entry_id_ascending`, a unit test
+// against `order` directly with hand-built candidates handed in descending
+// id order (and identical on every other field), which can only pass if
+// the ascending-`entry_id` tiebreak is really being applied.
 #[test]
 fn ties_break_on_entry_id_ascending() {
     let dir = scratch("order-ties");
@@ -393,4 +402,50 @@ fn ties_break_on_entry_id_ascending() {
     let mut sorted = ids.clone();
     sorted.sort_unstable();
     assert_eq!(ids, sorted, "particles with equal evidence sort by ent_seq");
+}
+
+// で is where the duplication was actually observed while building the
+// ordering tests above: `lex::candidates` independently reconstructed
+// ent_seq 1338240/2831062/2871509 (all headword でる) twice each at start 0,
+// through two different empty-consumption chain hits landing on the same
+// key. Without `lex::dedup_shallowest`, `Segment::entries` for で carries
+// each of those three ent_seq values twice -- the same dictionary entry
+// showing up twice in what a caller reads as the candidate list.
+#[test]
+fn no_two_entries_in_a_segment_share_an_entry_id() {
+    let dir = scratch("lex-no-duplicate-entries");
+    build_v2(&dir);
+    let r = parse_v2_over(&dir, "で");
+    let ids: Vec<u32> = r.segments[0].entries.iter().map(|e| e.entry_id).collect();
+    let mut unique = ids.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(
+        ids.len(),
+        unique.len(),
+        "each entry_id must appear at most once in a segment's entries, got {ids:?}"
+    );
+}
+
+// The dedup above keys on `(len, entry_id)`, not `(start, entry_id)` alone,
+// precisely so this still holds: 書いた's onbin fragment 書い (len 2) and
+// the full chain 書いた (len 3) both reconstruct headword 書く (the same
+// entry_id) from the same start, and both must survive as distinct
+// candidates -- collapsing the key down to `(start, entry_id)` would drop
+// one of them silently.
+#[test]
+fn the_same_headword_at_two_different_lengths_is_not_deduplicated_away() {
+    let dir = scratch("lex-keeps-both-lengths");
+    build_v2(&dir);
+    let c = cands(&dir, "書いた");
+    let lens: Vec<usize> = c[0]
+        .iter()
+        .filter(|x| x.headword == "書く")
+        .map(|x| x.len)
+        .collect();
+    assert!(
+        lens.contains(&3) && lens.contains(&2),
+        "both 書いた's full chain (len 3) and its 書い fragment (len 2) must \
+         survive the dedup, got lens {lens:?}"
+    );
 }
