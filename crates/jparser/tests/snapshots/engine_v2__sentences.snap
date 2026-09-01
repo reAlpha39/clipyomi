@@ -1,0 +1,1281 @@
+---
+source: crates/jparser/tests/engine_v2.rs
+expression: out
+---
+=== 猫が好きです。
+start=0 len=1 猫 matched reading=ねこ
+    猫 (-) [ねこ] cat (esp. the domestic cat, Felis catus)
+    猫 (-) [ねこま] cat
+start=1 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=2 len=2 好き matched reading=すき
+    好き (-) [すき] liking
+    好き (-) [ずき] love of
+    好く (-) [すき] to like
+    好い (-) [よき] good
+start=4 len=1 で matched reading=-
+    で (-) [-] at
+    で (-) [-] coming out
+    でる (-) [-] to leave
+    で (-) [-] and
+    で (-) [-] without doing ...
+    ... 3 more
+start=5 len=1 す matched reading=-
+    す (-) [-] vinegar
+    す (-) [-] nest
+    す (-) [-] one's nature
+    する (-) [-] to do
+    する (-) [-] to print
+    ... 12 more
+start=6 len=1 。 unmatched
+
+=== 本を読みました。
+start=0 len=1 本 matched reading=もと
+    本 (-) [もと] origin
+    本 (-) [ほん] book
+start=1 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=2 len=2 読み matched reading=よみ
+    読み (-) [よみ] reading
+    読む (-) [よみ] to read
+start=4 len=1 ま matched reading=-
+    ま (-) [-] time
+    ま (-) [-] demon
+    ま (-) [-] just (e.g. "just wait here")
+    ま (-) [-] just
+    マ (-) [-] for real
+start=5 len=1 し matched reading=-
+    し (-) [-] and
+    し (-) [-] city
+    し (-) [-] death
+    し (-) [-] magazine
+    し (-) [-] four
+    ... 39 more
+start=6 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=7 len=1 。 unmatched
+
+=== これは面白い映画だ。
+start=0 len=2 これ matched reading=-
+    これ (-) [-] this
+    こる (-) [-] to become stiff (of muscles)
+    くる (-) [-] to come (spatially or temporally)
+    これ (-) [-] hey
+    こる (-) [-] to pack
+start=2 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 9 more
+start=3 len=1 面 matched reading=おもて
+    面 (-) [おもて] face
+    面 (-) [つら] face
+    面 (-) [めん] face
+    面 (-) [づら] looking like a ...
+start=4 len=1 白 matched reading=しろ
+    白 (-) [しろ] white
+    白い (-) [しろ] white
+    白 (-) [しら] white
+    白 (-) [はく] white
+start=5 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=6 len=1 映 matched reading=うつ
+    映る (-) [うつ] to be reflected
+start=7 len=1 画 matched reading=かく
+    画 (-) [かく] stroke (of a kanji)
+    画 (-) [え] picture
+start=8 len=1 だ matched reading=-
+    だ (-) [-] be
+    だ (-) [-] did
+    だる (-) [-] to do ... for (someone of equal or lower status)
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
+    だ (-) [-] poor
+    ... 2 more
+start=9 len=1 。 unmatched
+
+=== 新しい車を買った。
+start=0 len=1 新 matched reading=しん
+    新 (-) [しん] new
+    新 (-) [さら] new
+start=1 len=1 し matched reading=-
+    し (-) [-] and
+    し (-) [-] city
+    し (-) [-] death
+    し (-) [-] magazine
+    し (-) [-] four
+    ... 39 more
+start=2 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=3 len=1 車 matched reading=くるま
+    車 (-) [くるま] car
+    車 (-) [しゃ] car
+start=4 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=5 len=2 買っ matched reading=かっ
+    買う (-) [かっ] to buy
+start=7 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=8 len=1 。 unmatched
+
+=== 冷たい水を飲まない。
+start=0 len=2 冷た matched reading=つめた
+    冷たい (-) [つめた] cold (to the touch)
+start=2 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=3 len=1 水 matched reading=みず
+    水 (-) [みず] water (esp. cool or cold)
+    水 (-) [すい] Wednesday
+start=4 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=5 len=2 飲ま matched reading=のま
+    飲む (-) [のま] to drink
+start=7 len=1 な matched reading=-
+    な (-) [-] don't
+    な (-) [-] greens
+    な (-) [-] name
+    なる (-) [-] to become
+    ない (-) [-] nonexistent
+    ... 7 more
+start=8 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=9 len=1 。 unmatched
+
+=== 彼は学校に来る。
+start=0 len=1 彼 matched reading=かれ
+    彼 (-) [かれ] he
+    彼 (-) [あれ] that
+    彼 (-) [かの] that well-known ...
+start=1 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 9 more
+start=2 len=2 学校 matched reading=がっこう
+    学校 (-) [がっこう] school
+start=4 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    に (-) [-] two
+    にる (-) [-] to resemble
+    にる (-) [-] to boil
+    ... 6 more
+start=5 len=2 来る matched reading=くる
+    来る (-) [くる] to come (spatially or temporally)
+    来る (-) [きたる] next (e.g. "next April")
+start=7 len=1 。 unmatched
+
+=== 明日友達が来ます。
+start=0 len=2 明日 matched reading=あした
+    明日 (-) [あした] tomorrow
+start=2 len=1 友 matched reading=とも
+    友 (-) [とも] friend
+    友 (-) [ゆう] friend
+start=3 len=1 達 matched reading=たち
+    達 (-) [たち] pluralizing suffix (esp. for people and animals; formerly honorific)
+start=4 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=5 len=1 来 matched reading=らい
+    来 (-) [らい] next (year, spring, etc.)
+    来る (-) [きた] next (e.g. "next April")
+start=6 len=1 ま matched reading=-
+    ま (-) [-] time
+    ま (-) [-] demon
+    ま (-) [-] just (e.g. "just wait here")
+    ま (-) [-] just
+    マ (-) [-] for real
+start=7 len=1 す matched reading=-
+    す (-) [-] vinegar
+    す (-) [-] nest
+    す (-) [-] one's nature
+    する (-) [-] to do
+    する (-) [-] to print
+    ... 12 more
+start=8 len=1 。 unmatched
+
+=== 彼はまだ来ていない。
+start=0 len=1 彼 matched reading=かれ
+    彼 (-) [かれ] he
+    彼 (-) [あれ] that
+    彼 (-) [かの] that well-known ...
+start=1 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 9 more
+start=2 len=1 ま matched reading=-
+    ま (-) [-] time
+    ま (-) [-] demon
+    ま (-) [-] just (e.g. "just wait here")
+    ま (-) [-] just
+    マ (-) [-] for real
+start=3 len=1 だ matched reading=-
+    だ (-) [-] be
+    だ (-) [-] did
+    だる (-) [-] to do ... for (someone of equal or lower status)
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
+    だ (-) [-] poor
+    ... 2 more
+start=4 len=1 来 matched reading=らい
+    来 (-) [らい] next (year, spring, etc.)
+    来る (-) [きた] next (e.g. "next April")
+start=5 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=6 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=7 len=1 な matched reading=-
+    な (-) [-] don't
+    な (-) [-] greens
+    な (-) [-] name
+    なる (-) [-] to become
+    ない (-) [-] nonexistent
+    ... 7 more
+start=8 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=9 len=1 。 unmatched
+
+=== 勉強をする時間がない。
+start=0 len=2 勉強 matched reading=べんきょう
+    勉強 (-) [べんきょう] study
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=2 する matched reading=-
+    する (-) [-] to do
+    する (-) [-] to print
+    する (-) [-] to rub
+    する (-) [-] to pickpocket
+    する (-) [-] to shave
+start=5 len=1 時 matched reading=とき
+    時 (-) [とき] time
+    時 (-) [じ] hour
+    時 (-) [どき] time for ...
+start=6 len=1 間 matched reading=あいだ
+    間 (-) [あいだ] space (between)
+    間 (-) [ま] time
+    間 (-) [かん] interval
+    間 (-) [はざま] gap
+    間 (-) [けん] ken (6 shaku, approx. 1.818 m)
+start=7 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=8 len=1 な matched reading=-
+    な (-) [-] don't
+    な (-) [-] greens
+    な (-) [-] name
+    なる (-) [-] to become
+    ない (-) [-] nonexistent
+    ... 7 more
+start=9 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=10 len=1 。 unmatched
+
+=== 昨日は宿題をしました。
+start=0 len=2 昨日 matched reading=きのう
+    昨日 (-) [きのう] yesterday
+start=2 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 9 more
+start=3 len=1 宿 matched reading=やど
+    宿 (-) [やど] lodging
+    宿る (-) [やど] to dwell (in)
+    宿 (-) [しゅく] outcasts common around the Kyoto region from the Kamakura period to the Edo period
+    宿 (-) [しゅく] lodging
+start=4 len=1 題 matched reading=だい
+    題 (-) [だい] title
+start=5 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=6 len=1 し matched reading=-
+    し (-) [-] and
+    し (-) [-] city
+    し (-) [-] death
+    し (-) [-] magazine
+    し (-) [-] four
+    ... 39 more
+start=7 len=1 ま matched reading=-
+    ま (-) [-] time
+    ま (-) [-] demon
+    ま (-) [-] just (e.g. "just wait here")
+    ま (-) [-] just
+    マ (-) [-] for real
+start=8 len=1 し matched reading=-
+    し (-) [-] and
+    し (-) [-] city
+    し (-) [-] death
+    し (-) [-] magazine
+    し (-) [-] four
+    ... 39 more
+start=9 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=10 len=1 。 unmatched
+
+=== 彼に何も言われなかった。
+start=0 len=1 彼 matched reading=かれ
+    彼 (-) [かれ] he
+    彼 (-) [あれ] that
+    彼 (-) [かの] that well-known ...
+start=1 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    に (-) [-] two
+    にる (-) [-] to resemble
+    にる (-) [-] to boil
+    ... 6 more
+start=2 len=1 何 matched reading=なに
+    何 (-) [なに] what
+    何 (-) [なん] what
+start=3 len=1 も matched reading=-
+    も (-) [-] too
+    も (-) [-] mourning
+    も (-) [-] algae
+    もる (-) [-] to serve (in a bowl, on a plate, etc.)
+    もる (-) [-] to leak
+    ... 2 more
+start=4 len=1 言 matched reading=げん
+    言 (-) [げん] word
+start=5 len=2 われ matched reading=-
+    われ (-) [-] I
+    わる (-) [-] to divide
+    われる (-) [-] to break
+    われ (-) [-] broken piece
+start=7 len=1 な matched reading=-
+    な (-) [-] don't
+    な (-) [-] greens
+    な (-) [-] name
+    なる (-) [-] to become
+    ない (-) [-] nonexistent
+    ... 7 more
+start=8 len=2 かっ matched reading=-
+    かる (-) [-] to cut (grass, hair, etc.)
+    かる (-) [-] to spur on
+    かう (-) [-] to keep (a pet or other animal)
+    かつ (-) [-] to win
+    かう (-) [-] to buy
+    ... 5 more
+start=10 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=11 len=1 。 unmatched
+
+=== 手紙を書かせられた。
+start=0 len=1 手 matched reading=て
+    手 (-) [て] hand
+start=1 len=1 紙 matched reading=かみ
+    紙 (-) [かみ] paper
+    紙 (-) [し] newspaper
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=2 書か matched reading=かか
+    書く (-) [かか] to write
+start=5 len=1 せ matched reading=-
+    せ (-) [-] shallows
+    せ (-) [-] back
+    する (-) [-] to do
+    せる (-) [-] to compete
+    せ (-) [-] so
+    ... 6 more
+start=6 len=1 ら matched reading=-
+    ら (-) [-] pluralizing suffix
+    ら (-) [-] probably
+    ら (-) [-] lightweight fabric or clothing
+    ら (-) [-] small spiral-shelled snail
+    ら (-) [-] Latin (language)
+    ... 1 more
+start=7 len=1 れ matched reading=-
+    れる (-) [-] indicates passive voice (incl. the "suffering passive")
+    レ (-) [-] re (2nd note of a major scale in movable-do solfège)
+    レ (-) [-] real (currency of Brazil)
+    レ (-) [-] check mark
+start=8 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=9 len=1 。 unmatched
+
+=== 日本語を話せますか。
+start=0 len=1 日 matched reading=ひ
+    日 (-) [ひ] day
+    日 (-) [にち] Sunday
+    日 (-) [か] day of month
+    日 (-) [んち] nth day (of the month)
+start=1 len=1 本 matched reading=もと
+    本 (-) [もと] origin
+    本 (-) [ほん] book
+start=2 len=1 語 matched reading=ご
+    語 (-) [ご] word
+    語る (-) [かた] to talk about
+    語 (-) [かたり] talk
+start=3 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=4 len=1 話 matched reading=はなし
+    話 (-) [はなし] talk
+    話 (-) [わ] counter for stories, episodes of TV series, etc.
+start=5 len=1 せ matched reading=-
+    せ (-) [-] shallows
+    せ (-) [-] back
+    する (-) [-] to do
+    せる (-) [-] to compete
+    せ (-) [-] so
+    ... 6 more
+start=6 len=1 ま matched reading=-
+    ま (-) [-] time
+    ま (-) [-] demon
+    ま (-) [-] just (e.g. "just wait here")
+    ま (-) [-] just
+    マ (-) [-] for real
+start=7 len=1 す matched reading=-
+    す (-) [-] vinegar
+    す (-) [-] nest
+    す (-) [-] one's nature
+    する (-) [-] to do
+    する (-) [-] to print
+    ... 12 more
+start=8 len=1 か matched reading=-
+    か (-) [-] indicates a question
+    か (-) [-] addition
+    か (-) [-] acceptable
+    か (-) [-] department (of a university or hospital)
+    か (-) [-] lesson
+    ... 26 more
+start=9 len=1 。 unmatched
+
+=== 早く帰りたかった。
+start=0 len=1 早 matched reading=はや
+    早 (-) [はや] already
+    早い (-) [はや] fast
+    早 (-) [はよ] early
+    早る (-) [はや] to be impatient
+start=1 len=1 く matched reading=-
+    く (-) [-] section (i.e. of text)
+    く (-) [-] ward
+    く (-) [-] nine
+    くる (-) [-] to reel
+    くる (-) [-] to come (spatially or temporally)
+    ... 6 more
+start=2 len=1 帰 matched reading=かえ
+    帰る (-) [かえ] to return
+start=3 len=1 り matched reading=-
+    り (-) [-] advantage
+    り (-) [-] Japanese league
+    り (-) [-] reason
+    り (-) [-] understood
+    り (-) [-] government official
+    ... 6 more
+start=4 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=5 len=2 かっ matched reading=-
+    かる (-) [-] to cut (grass, hair, etc.)
+    かる (-) [-] to spur on
+    かう (-) [-] to keep (a pet or other animal)
+    かつ (-) [-] to win
+    かう (-) [-] to buy
+    ... 5 more
+start=7 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=8 len=1 。 unmatched
+
+=== 雨が降りそうだ。
+start=0 len=1 雨 matched reading=あめ
+    雨 (-) [あめ] rain
+start=1 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=2 len=1 降 matched reading=ふ
+    降る (-) [ふ] to fall (of rain, snow, ash, etc.)
+    降る (-) [くだ] to descend
+start=3 len=1 り matched reading=-
+    り (-) [-] advantage
+    り (-) [-] Japanese league
+    り (-) [-] reason
+    り (-) [-] understood
+    り (-) [-] government official
+    ... 6 more
+start=4 len=1 そ matched reading=-
+    そ (-) [-] ancestor
+    そる (-) [-] to warp
+    そる (-) [-] to shave
+    そ (-) [-] altar of sacrifice
+    そ (-) [-] white silk
+    ... 10 more
+start=5 len=1 う matched reading=-
+    う (-) [-] the Rabbit (fourth sign of the Chinese zodiac)
+    うる (-) [-] to sell
+    う (-) [-] indicates speculation
+    う (-) [-] cormorant (Phalacrocoracidae spp.)
+    う (-) [-] rabbit
+    ... 10 more
+start=6 len=1 だ matched reading=-
+    だ (-) [-] be
+    だ (-) [-] did
+    だる (-) [-] to do ... for (someone of equal or lower status)
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
+    だ (-) [-] poor
+    ... 2 more
+start=7 len=1 。 unmatched
+
+=== 高い山に登った。
+start=0 len=1 高 matched reading=たか
+    高 (-) [たか] quantity
+    高い (-) [たか] high
+    高 (-) [こう] high
+start=1 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=2 len=1 山 matched reading=やま
+    山 (-) [やま] mountain
+    山 (-) [さん] Mt.
+    山 (-) [むれ] mountain
+start=3 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    に (-) [-] two
+    にる (-) [-] to resemble
+    にる (-) [-] to boil
+    ... 6 more
+start=4 len=2 登っ matched reading=のぼっ
+    登る (-) [のぼっ] to ascend
+start=6 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=7 len=1 。 unmatched
+
+=== 水が飲みたい。
+start=0 len=1 水 matched reading=みず
+    水 (-) [みず] water (esp. cool or cold)
+    水 (-) [すい] Wednesday
+start=1 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=2 len=2 飲み matched reading=のみ
+    飲む (-) [のみ] to drink
+    飲み (-) [のみ] drink
+start=4 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=5 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=6 len=1 。 unmatched
+
+=== 毎日走っている。
+start=0 len=1 毎 matched reading=ごと
+    毎 (-) [ごと] each
+    毎 (-) [まい] every (usu. with events, e.g. every weekend)
+start=1 len=1 日 matched reading=ひ
+    日 (-) [ひ] day
+    日 (-) [にち] Sunday
+    日 (-) [か] day of month
+    日 (-) [んち] nth day (of the month)
+start=2 len=1 走 matched reading=はし
+    走る (-) [はし] to run
+    走 (-) [そう] run
+start=3 len=2 って matched reading=-
+    って (-) [-] you said
+start=5 len=2 いる matched reading=-
+    いる (-) [-] to shoot (arrow, bolt, dart)
+    いる (-) [-] to roast
+    いる (-) [-] to enter
+    いる (-) [-] to be needed
+    いる (-) [-] to be (of animate objects)
+    ... 5 more
+start=7 len=1 。 unmatched
+
+=== 電車が遅れています。
+start=0 len=2 電車 matched reading=でんしゃ
+    電車 (-) [でんしゃ] train
+start=2 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=3 len=2 遅れ matched reading=おくれ
+    遅れ (-) [おくれ] delay
+    遅れる (-) [おくれ] to be late
+start=5 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=6 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=7 len=1 ま matched reading=-
+    ま (-) [-] time
+    ま (-) [-] demon
+    ま (-) [-] just (e.g. "just wait here")
+    ま (-) [-] just
+    マ (-) [-] for real
+start=8 len=1 す matched reading=-
+    す (-) [-] vinegar
+    す (-) [-] nest
+    す (-) [-] one's nature
+    する (-) [-] to do
+    する (-) [-] to print
+    ... 12 more
+start=9 len=1 。 unmatched
+
+=== ドアを開けてください。
+start=0 len=2 ドア matched reading=-
+    ドア (-) [-] door
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=2 開け matched reading=ひらけ
+    開く (-) [ひらけ] to open
+    開ける (-) [あけ] to open (a door, etc.)
+    開ける (-) [ひらけ] to open out (of a view, scenery, etc.)
+    開く (-) [あけ] to open (e.g. doors)
+    開け (-) [ひらけ] beginning
+    ... 2 more
+start=5 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=6 len=1 く matched reading=-
+    く (-) [-] section (i.e. of text)
+    く (-) [-] ward
+    く (-) [-] nine
+    くる (-) [-] to reel
+    くる (-) [-] to come (spatially or temporally)
+    ... 6 more
+start=7 len=1 だ matched reading=-
+    だ (-) [-] be
+    だ (-) [-] did
+    だる (-) [-] to do ... for (someone of equal or lower status)
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
+    だ (-) [-] poor
+    ... 2 more
+start=8 len=1 さ matched reading=-
+    さ (-) [-] -ness
+    さ (-) [-] difference
+    する (-) [-] to do
+    さる (-) [-] to leave
+    さ (-) [-] arrow
+    ... 4 more
+start=9 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=10 len=1 。 unmatched
+
+=== 子供が公園で遊んでいる。
+start=0 len=1 子 matched reading=こ
+    子 (-) [こ] child
+    子 (-) [ね] the Rat (first sign of the Chinese zodiac)
+    子 (-) [み] fruit
+    子 (-) [し] child (esp. a boy)
+    子 (-) [す] honorific (or familiar) suffix used after a name
+    ... 1 more
+start=1 len=1 供 matched reading=とも
+    供 (-) [とも] companion
+start=2 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=3 len=1 公 matched reading=おおやけ
+    公 (-) [おおやけ] official
+    公 (-) [きみ] you
+    公 (-) [こう] public affair
+start=4 len=1 園 matched reading=その
+    園 (-) [その] garden
+    園 (-) [えん] garden
+start=5 len=1 で matched reading=-
+    で (-) [-] at
+    で (-) [-] coming out
+    でる (-) [-] to leave
+    で (-) [-] and
+    で (-) [-] without doing ...
+    ... 3 more
+start=6 len=2 遊ん matched reading=あそん
+    遊ぶ (-) [あそん] to play (games, sports)
+    遊む (-) [すさん] to grow wild
+    遊ぶ (-) [すさん] to grow wild
+start=8 len=1 で matched reading=-
+    で (-) [-] at
+    で (-) [-] coming out
+    でる (-) [-] to leave
+    で (-) [-] and
+    で (-) [-] without doing ...
+    ... 3 more
+start=9 len=2 いる matched reading=-
+    いる (-) [-] to shoot (arrow, bolt, dart)
+    いる (-) [-] to roast
+    いる (-) [-] to enter
+    いる (-) [-] to be needed
+    いる (-) [-] to be (of animate objects)
+    ... 5 more
+start=11 len=1 。 unmatched
+
+=== もう一度説明してください。
+start=0 len=1 も matched reading=-
+    も (-) [-] too
+    も (-) [-] mourning
+    も (-) [-] algae
+    もる (-) [-] to serve (in a bowl, on a plate, etc.)
+    もる (-) [-] to leak
+    ... 2 more
+start=1 len=1 う matched reading=-
+    う (-) [-] the Rabbit (fourth sign of the Chinese zodiac)
+    うる (-) [-] to sell
+    う (-) [-] indicates speculation
+    う (-) [-] cormorant (Phalacrocoracidae spp.)
+    う (-) [-] rabbit
+    ... 10 more
+start=2 len=1 一 matched reading=いち
+    一 (-) [いち] one
+    一 (-) [ひと] one
+    一 (-) [ひとつ] one
+    一 (-) [イー] one
+    一 (-) [いっち] most
+    ... 1 more
+start=3 len=1 度 matched reading=たび
+    度 (-) [たび] time (three times, each time, etc.)
+    度 (-) [ど] degree (angle, temperature, scale, etc.)
+    度 (-) [ど] extreme
+start=4 len=2 説明 matched reading=せつめい
+    説明 (-) [せつめい] explanation
+start=6 len=1 し matched reading=-
+    し (-) [-] and
+    し (-) [-] city
+    し (-) [-] death
+    し (-) [-] magazine
+    し (-) [-] four
+    ... 39 more
+start=7 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=8 len=1 く matched reading=-
+    く (-) [-] section (i.e. of text)
+    く (-) [-] ward
+    く (-) [-] nine
+    くる (-) [-] to reel
+    くる (-) [-] to come (spatially or temporally)
+    ... 6 more
+start=9 len=1 だ matched reading=-
+    だ (-) [-] be
+    だ (-) [-] did
+    だる (-) [-] to do ... for (someone of equal or lower status)
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
+    だ (-) [-] poor
+    ... 2 more
+start=10 len=1 さ matched reading=-
+    さ (-) [-] -ness
+    さ (-) [-] difference
+    する (-) [-] to do
+    さる (-) [-] to leave
+    さ (-) [-] arrow
+    ... 4 more
+start=11 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=12 len=1 。 unmatched
+
+=== 三人の学生が待っている。
+start=0 len=1 三 matched reading=さん
+    三 (-) [さん] three
+    三 (-) [サン] three
+start=1 len=1 人 matched reading=じん
+    人 (-) [じん] -ian (e.g. Italian)
+    人 (-) [ひと] person
+    人 (-) [にん] counter for people
+    人 (-) [と] person
+start=2 len=1 の matched reading=-
+    の (-) [-] indicates possessive
+    の (-) [-] field
+    のる (-) [-] to get on (train, plane, bus, ship, etc.)
+    のる (-) [-] to be placed on
+    の (-) [-] shaft (of an arrow; made of bamboo)
+    ... 1 more
+start=3 len=1 学 matched reading=がく
+    学 (-) [がく] learning
+start=4 len=1 生 matched reading=なま
+    生 (-) [なま] raw
+    生る (-) [な] to bear fruit
+    生 (-) [き] pure
+    生 (-) [ウブ] inexperienced (in life experience)
+    生 (-) [せい] life
+    ... 3 more
+start=5 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=6 len=2 待っ matched reading=まっ
+    待つ (-) [まっ] to wait
+start=8 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=9 len=2 いる matched reading=-
+    いる (-) [-] to shoot (arrow, bolt, dart)
+    いる (-) [-] to roast
+    いる (-) [-] to enter
+    いる (-) [-] to be needed
+    いる (-) [-] to be (of animate objects)
+    ... 5 more
+start=11 len=1 。 unmatched
+
+=== コーヒーを二杯ください。
+start=0 len=4 コーヒー matched reading=-
+    コーヒー (-) [-] coffee
+start=4 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=5 len=1 二 matched reading=に
+    二 (-) [に] two
+    二 (-) [アル] two
+    二 (-) [リャン] two
+start=6 len=1 杯 matched reading=さかずき
+    杯 (-) [さかずき] sake cup
+    杯 (-) [はい] sake cup
+    杯 (-) [つき] shallow bowl
+    杯 (-) [はた] counter for cupfuls, bowlfuls, spoonfuls, etc.
+start=7 len=1 く matched reading=-
+    く (-) [-] section (i.e. of text)
+    く (-) [-] ward
+    く (-) [-] nine
+    くる (-) [-] to reel
+    くる (-) [-] to come (spatially or temporally)
+    ... 6 more
+start=8 len=1 だ matched reading=-
+    だ (-) [-] be
+    だ (-) [-] did
+    だる (-) [-] to do ... for (someone of equal or lower status)
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
+    だ (-) [-] poor
+    ... 2 more
+start=9 len=1 さ matched reading=-
+    さ (-) [-] -ness
+    さ (-) [-] difference
+    する (-) [-] to do
+    さる (-) [-] to leave
+    さ (-) [-] arrow
+    ... 4 more
+start=10 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=11 len=1 。 unmatched
+
+=== 会議は十時に始まる。
+start=0 len=2 会議 matched reading=かいぎ
+    会議 (-) [かいぎ] meeting
+start=2 len=1 は matched reading=-
+    は (-) [-] indicates sentence topic
+    は (-) [-] tooth
+    は (-) [-] edge (of a knife or sword)
+    は (-) [-] group
+    は (-) [-] leaf
+    ... 9 more
+start=3 len=1 十 matched reading=じゅう
+    十 (-) [じゅう] ten
+    十 (-) [シー] ten
+start=4 len=1 時 matched reading=とき
+    時 (-) [とき] time
+    時 (-) [じ] hour
+    時 (-) [どき] time for ...
+start=5 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    に (-) [-] two
+    にる (-) [-] to resemble
+    にる (-) [-] to boil
+    ... 6 more
+start=6 len=3 始まる matched reading=はじまる
+    始まる (-) [はじまる] to begin
+start=9 len=1 。 unmatched
+
+=== 東京から大阪まで行く。
+start=0 len=1 東 matched reading=ひがし
+    東 (-) [ひがし] east
+    東 (-) [あずま] eastern Japan (esp. Kamakura or Edo, from perspective of Kyoto or Nara)
+    東 (-) [トン] east wind tile
+    東 (-) [とう] eastern
+start=1 len=1 京 matched reading=きょう
+    京 (-) [きょう] imperial capital (esp. Kyoto)
+    京 (-) [みやこ] capital (esp. Kyoto, Japan's former capital)
+start=2 len=1 か matched reading=-
+    か (-) [-] indicates a question
+    か (-) [-] addition
+    か (-) [-] acceptable
+    か (-) [-] department (of a university or hospital)
+    か (-) [-] lesson
+    ... 26 more
+start=3 len=1 ら matched reading=-
+    ら (-) [-] pluralizing suffix
+    ら (-) [-] probably
+    ら (-) [-] lightweight fabric or clothing
+    ら (-) [-] small spiral-shelled snail
+    ら (-) [-] Latin (language)
+    ... 1 more
+start=4 len=2 大阪 matched reading=おおさか
+    大阪 (-) [おおさか] Osaka (city, prefecture)
+start=6 len=1 ま matched reading=-
+    ま (-) [-] time
+    ま (-) [-] demon
+    ま (-) [-] just (e.g. "just wait here")
+    ま (-) [-] just
+    マ (-) [-] for real
+start=7 len=1 で matched reading=-
+    で (-) [-] at
+    で (-) [-] coming out
+    でる (-) [-] to leave
+    で (-) [-] and
+    で (-) [-] without doing ...
+    ... 3 more
+start=8 len=1 行 matched reading=ぎょう
+    行 (-) [ぎょう] line (of text)
+    行 (-) [くだり] passage
+    行 (-) [こう] going
+    行る (-) [や] to do
+start=9 len=1 く matched reading=-
+    く (-) [-] section (i.e. of text)
+    く (-) [-] ward
+    く (-) [-] nine
+    くる (-) [-] to reel
+    くる (-) [-] to come (spatially or temporally)
+    ... 6 more
+start=10 len=1 。 unmatched
+
+=== 音楽を聞きながら歩く。
+start=0 len=1 音 matched reading=おと
+    音 (-) [おと] sound
+    音 (-) [おん] sound
+    音 (-) [ね] sound
+start=1 len=1 楽 matched reading=らく
+    楽 (-) [らく] comfort
+    楽 (-) [がく] music
+start=2 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=3 len=2 聞き matched reading=きき
+    聞く (-) [きき] to hear
+    聞き (-) [きき] hearing
+start=5 len=1 な matched reading=-
+    な (-) [-] don't
+    な (-) [-] greens
+    な (-) [-] name
+    なる (-) [-] to become
+    ない (-) [-] nonexistent
+    ... 7 more
+start=6 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=7 len=1 ら matched reading=-
+    ら (-) [-] pluralizing suffix
+    ら (-) [-] probably
+    ら (-) [-] lightweight fabric or clothing
+    ら (-) [-] small spiral-shelled snail
+    ら (-) [-] Latin (language)
+    ... 1 more
+start=8 len=1 歩 matched reading=ほ
+    歩 (-) [ほ] step
+    歩 (-) [ふ] pawn
+    歩 (-) [あゆみ] walking
+    歩 (-) [ぶ] bu
+    歩 (-) [かち] foot soldier (Edo period)
+start=9 len=1 く matched reading=-
+    く (-) [-] section (i.e. of text)
+    く (-) [-] ward
+    く (-) [-] nine
+    くる (-) [-] to reel
+    くる (-) [-] to come (spatially or temporally)
+    ... 6 more
+start=10 len=1 。 unmatched
+
+=== 先生になりたいです。
+start=0 len=1 先 matched reading=さき
+    先 (-) [さき] point
+    先 (-) [さっき] a short while ago
+    先 (-) [せん] former
+start=1 len=1 生 matched reading=なま
+    生 (-) [なま] raw
+    生る (-) [な] to bear fruit
+    生 (-) [き] pure
+    生 (-) [ウブ] inexperienced (in life experience)
+    生 (-) [せい] life
+    ... 3 more
+start=2 len=1 に matched reading=-
+    に (-) [-] at
+    に (-) [-] load
+    に (-) [-] two
+    にる (-) [-] to resemble
+    にる (-) [-] to boil
+    ... 6 more
+start=3 len=1 な matched reading=-
+    な (-) [-] don't
+    な (-) [-] greens
+    な (-) [-] name
+    なる (-) [-] to become
+    ない (-) [-] nonexistent
+    ... 7 more
+start=4 len=1 り matched reading=-
+    り (-) [-] advantage
+    り (-) [-] Japanese league
+    り (-) [-] reason
+    り (-) [-] understood
+    り (-) [-] government official
+    ... 6 more
+start=5 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=6 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=7 len=1 で matched reading=-
+    で (-) [-] at
+    で (-) [-] coming out
+    でる (-) [-] to leave
+    で (-) [-] and
+    で (-) [-] without doing ...
+    ... 3 more
+start=8 len=1 す matched reading=-
+    す (-) [-] vinegar
+    す (-) [-] nest
+    す (-) [-] one's nature
+    する (-) [-] to do
+    する (-) [-] to print
+    ... 12 more
+start=9 len=1 。 unmatched
+
+=== パソコンが壊れてしまった。
+start=0 len=4 パソコン matched reading=-
+    パソコン (-) [-] personal computer
+    パソこん (-) [-] marriage between two people who met over the Internet
+start=4 len=1 が matched reading=-
+    が (-) [-] indicates the subject of a sentence
+    がる (-) [-] to show signs of being
+    が (-) [-] partial equivalent of the "no" particle in standard Japanese
+    が (-) [-] moth
+    が (-) [-] picture
+    ... 5 more
+start=5 len=2 壊れ matched reading=こわれ
+    壊れる (-) [こわれ] to be broken
+start=7 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=8 len=1 し matched reading=-
+    し (-) [-] and
+    し (-) [-] city
+    し (-) [-] death
+    し (-) [-] magazine
+    し (-) [-] four
+    ... 39 more
+start=9 len=2 まっ matched reading=-
+    まつ (-) [-] to wait
+    まう (-) [-] to dance (orig. a whirling dance)
+    まう (-) [-] to finish ...
+    まう (-) [-] to be dizzy
+start=11 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=12 len=1 。 unmatched
+
+=== 出て来るのを待っていた。
+start=0 len=1 出 matched reading=で
+    出 (-) [で] coming out
+    出る (-) [で] to leave
+    出 (-) [しゅつ] coming out
+start=1 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=2 len=2 来る matched reading=くる
+    来る (-) [くる] to come (spatially or temporally)
+    来る (-) [きたる] next (e.g. "next April")
+start=4 len=1 の matched reading=-
+    の (-) [-] indicates possessive
+    の (-) [-] field
+    のる (-) [-] to get on (train, plane, bus, ship, etc.)
+    のる (-) [-] to be placed on
+    の (-) [-] shaft (of an arrow; made of bamboo)
+    ... 1 more
+start=5 len=1 を matched reading=-
+    を (-) [-] indicates direct object of action
+start=6 len=2 待っ matched reading=まっ
+    待つ (-) [まっ] to wait
+start=8 len=1 て matched reading=-
+    て (-) [-] you said
+    て (-) [-] hand
+    てる (-) [-] to shine
+    て (-) [-] and
+    てる (-) [-] to be ...-ing
+start=9 len=1 い matched reading=-
+    い (-) [-] stomach
+    い (-) [-] medicine
+    い (-) [-] the Boar (twelfth sign of the Chinese zodiac)
+    い (-) [-] rank
+    い (-) [-] Italy
+    ... 33 more
+start=10 len=1 た matched reading=-
+    たい (-) [-] want to do ...
+    た (-) [-] multi-
+    た (-) [-] rice field
+    た (-) [-] other (esp. people and abstract matters)
+    たる (-) [-] to be sufficient
+    ... 4 more
+start=11 len=1 。 unmatched
