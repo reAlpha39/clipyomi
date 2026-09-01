@@ -97,6 +97,40 @@ pub fn build_from_reader<R: BufRead>(
     }
     let skipped_entries = reader.skipped_count();
 
+    let keys = by_key.len();
+    let entry_count = entries.len();
+    write_index(
+        by_key,
+        entries,
+        record_count,
+        crate::conjugation::embedded_asset_fingerprint(),
+        out_dir,
+    )?;
+
+    Ok(BuildReport {
+        keys,
+        records: record_count,
+        entries: entry_count,
+        skipped_entries,
+        stems,
+    })
+}
+
+/// Writes the five index files from an already-assembled payload: the FST plus
+/// the two length-prefixed bincode blobs (records, entries), the entry offset
+/// table, and the header.
+///
+/// Shared by both engines' builders so the on-disk format has exactly one
+/// writer. `fingerprint` is a parameter rather than a call to
+/// `conjugation::embedded_asset_fingerprint()` inside this function, because
+/// v2's builder must stamp its own table's fingerprint instead.
+pub(crate) fn write_index(
+    by_key: BTreeMap<String, Vec<StoredRecord>>,
+    entries: Vec<EntryData>,
+    record_count: usize,
+    fingerprint: u64,
+    out_dir: &Path,
+) -> Result<(), IndexError> {
     // Payload: length-prefixed bincode blobs; the FST value is the offset.
     let mut records_blob: Vec<u8> = Vec::new();
     let mut fst_builder =
@@ -135,17 +169,11 @@ pub fn build_from_reader<R: BufRead>(
         keys: by_key.len() as u32,
         records: record_count as u32,
         entries: entries.len() as u32,
-        conjugation_fingerprint: crate::conjugation::embedded_asset_fingerprint(),
+        conjugation_fingerprint: fingerprint,
     };
     std::fs::write(out_dir.join(HEADER_FILE), bincode::serialize(&header)?)?;
 
-    Ok(BuildReport {
-        keys: by_key.len(),
-        records: record_count,
-        entries: entries.len(),
-        skipped_entries,
-        stems,
-    })
+    Ok(())
 }
 
 /// Insert under the normalized key. Returns false if an identical record was
