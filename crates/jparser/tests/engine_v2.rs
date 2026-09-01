@@ -194,6 +194,103 @@ fn kurumadehakou_parses_as_four_words() {
     assert_eq!(cuts, ["くる", "まで", "は", "こう"]);
 }
 
+/// Every character offset `bounds` marks as a cut, `0` and `text`'s char
+/// length included. Mirrors `jparser-cli`'s own private
+/// `diff::boundaries_from_segments` (unreachable from this integration test
+/// binary), computed the other direction: from a `Boundaries` source rather
+/// than a `Segment` cover.
+#[cfg(feature = "mecab")]
+fn cuts_of(text: &str, bounds: &dyn jparser::engine::Boundaries) -> Vec<usize> {
+    (0..=text.chars().count())
+        .filter(|&p| bounds.is_boundary(p))
+        .collect()
+}
+
+/// The cut offsets a `ParseResult`'s own segments imply: every `start`, plus
+/// the final segment's `start + len`. See [`cuts_of`] -- comparing this
+/// against a real `Boundaries` source's own cuts is what
+/// `the_particle_absorbing_merges_are_gone` needs.
+#[cfg(feature = "mecab")]
+fn segment_cuts(segments: &[jparser::Segment]) -> Vec<usize> {
+    let mut out: Vec<usize> = segments.iter().map(|s| s.start).collect();
+    if let Some(last) = segments.last() {
+        out.push(last.start + last.len);
+    }
+    out
+}
+
+#[cfg(feature = "mecab")]
+#[test]
+#[ignore = "24 of 25 rows land exactly on Vibrato's own isolated-surface cuts. \
+            いんじゃない does not: Vibrato cuts it at [0, 2, 4, 6] (いん/じゃ/ない), \
+            but v2 still crosses the boundary at 2, matching いんじゃ (0..4, chained \
+            through いん [2511890] 淫/婬) as one candidate and leaving ない separate \
+            -- got [0, 4, 6] [\"いんじゃ\", \"ない\"]. This is the defect class itself \
+            surviving for one surface, not the shattering defect \
+            `a_compound_of_two_common_kanji_should_not_shatter` pins above: the DP \
+            still prices crossing that one interior cut as cheaper than respecting \
+            it. Per this task's brief (`task-15-brief.md` step 4), the fix is \
+            raising PRONOUNCE_CROSS (`cost.rs`) against the corpus in Task 16, not \
+            special-casing this surface out of the fixture -- cost.rs is off limits \
+            to this task. Unignore once that lands and this passes unmodified."]
+fn the_particle_absorbing_merges_are_gone() {
+    // Handoff §9.5's defect class. The metric cannot catch this: the tolerant
+    // accuracy *credits* these merges, because their endpoints are both gold
+    // boundaries. Spec §2.3.
+    //
+    // The brief's own sketch asserts only non-merger (`segments.len() != 1`),
+    // and that is vacuous in this tree: `a_compound_of_two_common_kanji_should_not_shatter`
+    // above already pins a separate, real cost-model defect (flat COMMON
+    // discount) that shatters 63 of 81 multi-character spans v1 keeps whole
+    // across the whole gold corpus under `bounds = None` -- *nothing* comes
+    // back as one segment there, so a bare non-merger check would pass
+    // whether or not this defect were reintroduced.
+    //
+    // Supplying real, isolated-surface Vibrato boundaries (`boundaries_over`,
+    // the same helper `kurumadehakou_parses_as_four_words` uses) sidesteps
+    // that rather than reproducing it: `cost::is_allowed` only permits a
+    // candidate whose own start *and* end both land on a `bounds` cut, so v2
+    // cannot cut *inside* a single Vibrato token here regardless of the
+    // shattering defect above -- the only freedom the DP keeps is whether to
+    // *cross* an interior cut by matching a longer span, which is exactly the
+    // spurious-merge decision this defect class is about. So "the correct
+    // segmentation" for each isolated surface is definitionally "wherever
+    // Vibrato itself cuts it", and comparing v2's own segment cuts against
+    // Vibrato's cut set is a real assertion rather than the vacuous one --
+    // and it needs no hand-transcription of the fixture's third column, which
+    // documents the wider sentence each merge was measured in (sometimes a
+    // lemma, sometimes text outside the isolated surface) rather than always
+    // being a literal reconstruction of the surface alone -- see the
+    // fixture's header and `spurious_merges.txt`'s own commit for the
+    // per-row reasoning.
+    const FIXTURE: &str = include_str!("fixtures/spurious_merges.txt");
+    let dir = scratch("spurious");
+    build_v2(&dir);
+
+    let mut wrong = Vec::new();
+    for line in FIXTURE
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+    {
+        let surface = line.split('\t').next().expect("surface");
+        let bounds = boundaries_over(surface);
+        let want = cuts_of(surface, &bounds);
+        let r = parse_v2_with_bounds(&dir, surface, Some(&bounds));
+        let got = segment_cuts(&r.segments);
+        if got != want {
+            let surfaces: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
+            wrong.push(format!(
+                "{surface}: v2 cut at {got:?} {surfaces:?}, Vibrato cuts at {want:?}"
+            ));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "did not land on Vibrato's own cuts:\n{}",
+        wrong.join("\n")
+    );
+}
+
 #[test]
 fn the_result_is_a_contiguous_cover_in_ascending_order() {
     let dir = scratch("cover");
