@@ -19,6 +19,7 @@
 use crate::index::load::Index;
 use crate::{ParseError, ParseOptions, ParseResult, Segment};
 
+pub mod flags;
 pub mod kana;
 pub mod romaji;
 pub mod table;
