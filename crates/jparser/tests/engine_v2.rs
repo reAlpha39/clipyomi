@@ -115,11 +115,47 @@ fn a_conjugated_verb_is_found_with_its_chain() {
 
 #[test]
 fn a_kana_unified_match_is_marked_inexact() {
-    // はいた matching 履く through the reading はく is the §9.5 defect class.
-    // lex must find it -- suppressing it here would hide the case the cost
-    // model exists to price -- but it must be marked.
+    // No deinflection fires here at all (see the gap test below) -- what
+    // this exercises is a plain headword collision. The span "ハイ" folds to
+    // the same FST key as the existing headword "はい" (a reading of 杯/盃,
+    // ent_seq 2019640), and that stored surface differs from the raw
+    // katakana query, so the match must come back marked inexact.
     let dir = scratch("lex-inexact");
     build_v2(&dir);
     let c = cands(&dir, "ハイタ");
-    assert!(c[0].iter().any(|x| !x.exact), "a katakana match of a hiragana key is inexact");
+    let hit = c[0]
+        .iter()
+        .find(|x| x.headword == "はい")
+        .expect("ハイ -> はい (杯/盃's reading) is the kana-unified match");
+    assert_eq!(hit.len, 2, "the match covers ハイ, not the whole katakana span");
+    assert!(!hit.exact, "はい (hiragana) != the raw katakana query ハイ");
+}
+
+#[test]
+fn katakana_conjugation_is_not_deinflected_yet() {
+    // Deliberate gap, not a bug, kept for Phase 1a: `Table`'s conjugation
+    // trie is hiragana-keyed with no folding in `Table::search`, so a fully
+    // katakana surface can never reach a Terminal/Continuation node through
+    // an actual suffix match. Folding the trie too would fix that, but it
+    // would also turn every katakana loanword ending in タ (データ, メーター,
+    // カルタ) into a spurious past-tense candidate -- exactly the
+    // kana-unified false-match class handoff §9.5 already measured as this
+    // engine's worst defect. Task 16's per-tier measurement is what would
+    // reopen this trade-off.
+    //
+    // `chains_ending_at` separately always offers a zero-consumption
+    // substitution for any class whose own form has an empty suffix (an
+    // ichidan-family bare 連用形 stem, e.g.) -- that fires for every input
+    // regardless of script, since it never compares a character at all, so
+    // it is unrelated to this gap. The check below is scoped to steps that
+    // actually consumed a character, which is what "deinflected" means here.
+    let dir = scratch("lex-katakana-gap");
+    build_v2(&dir);
+    let c = cands(&dir, "ハイタ");
+    assert!(
+        c.iter()
+            .flatten()
+            .all(|x| x.steps.iter().all(|s| s.range.is_empty())),
+        "no candidate should explain any of ハイタ's characters through a real conjugation ending"
+    );
 }
