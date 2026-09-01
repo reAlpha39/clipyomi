@@ -20,6 +20,7 @@ use crate::index::load::Index;
 use crate::{ParseError, ParseOptions, ParseResult, Segment};
 
 pub mod build;
+pub mod cost;
 pub mod flags;
 pub mod kana;
 pub mod lex;
