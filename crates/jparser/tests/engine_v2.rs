@@ -20,6 +20,7 @@ fn open_v2(dir: &Path) -> jparser::index::load::Index {
 }
 
 const FIXTURE: &str = include_str!("fixtures/jmdict_subset.xml");
+const SENTENCES: &str = include_str!("fixtures/parse_sentences.txt");
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join("jparser-engine-v2").join(name);
@@ -134,13 +135,78 @@ fn a_kana_unified_match_is_marked_inexact() {
 }
 
 /// Opens a fresh v2 index, builds a fresh `Table`, and runs `parse_v2` with
-/// no boundary source -- the shape every assemble test below needs and
-/// nothing more.
-fn parse_v2_over(dir: &Path, text: &str) -> jparser::ParseResult {
+/// whatever boundary source `bounds` names.
+fn parse_v2_with_bounds(
+    dir: &Path,
+    text: &str,
+    bounds: Option<&dyn jparser::engine::Boundaries>,
+) -> jparser::ParseResult {
     let index = open_v2(dir);
     let table = jparser::engine::table::Table::new();
-    jparser::engine::parse_v2(&index, &table, text, &jparser::ParseOptions::default(), None)
+    jparser::engine::parse_v2(&index, &table, text, &jparser::ParseOptions::default(), bounds)
         .expect("parse_v2")
+}
+
+/// `parse_v2_with_bounds` with no boundary source -- the shape every assemble
+/// test below needs and nothing more.
+fn parse_v2_over(dir: &Path, text: &str) -> jparser::ParseResult {
+    parse_v2_with_bounds(dir, text, None)
+}
+
+/// Locates the real Vibrato IPADIC dictionary: `TA_HINTS_DICT` if set (the
+/// same override `hints.rs`'s doc comments and the CLI's `--hints`/startup
+/// path already use), else the path `jparser-cli fetch-hints` publishes to by
+/// default on this machine.
+#[cfg(feature = "mecab")]
+fn dictionary_path() -> PathBuf {
+    if let Ok(path) = std::env::var("TA_HINTS_DICT") {
+        return PathBuf::from(path);
+    }
+    PathBuf::from(std::env::var("APPDATA").expect("APPDATA must be set on Windows"))
+        .join("dev.jparser.clipyomi")
+        .join("hints")
+        .join("current")
+        .join("system.dic")
+}
+
+/// Real Vibrato boundaries for `text`, needed only by the one test that pins
+/// master plan success criterion 3 against genuine IPADIC tokenization rather
+/// than a hand-built stand-in dictionary.
+#[cfg(feature = "mecab")]
+fn boundaries_over(text: &str) -> jparser::hints::BoundarySet {
+    let path = dictionary_path();
+    let tokenizer = jparser::hints::VibratoTokenizer::load(&path)
+        .unwrap_or_else(|e| panic!("load the vibrato dictionary at {}: {e}", path.display()));
+    tokenizer.boundaries(text)
+}
+
+#[cfg(feature = "mecab")]
+#[test]
+fn kurumadehakou_parses_as_four_words() {
+    // Master plan success criterion 3, and the sentence this whole phase
+    // exists for. Vibrato tokenizes it correctly and the v1 engine discards
+    // that, producing くる / まで / はこう (§4.3).
+    let dir = scratch("kurumadehakou");
+    build_v2(&dir);
+    let bounds = boundaries_over("くるまではこう");
+    let r = parse_v2_with_bounds(&dir, "くるまではこう", Some(&bounds));
+    let cuts: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
+    assert_eq!(cuts, ["くる", "まで", "は", "こう"]);
+}
+
+#[test]
+fn the_result_is_a_contiguous_cover_in_ascending_order() {
+    let dir = scratch("cover");
+    build_v2(&dir);
+    for text in ["東京都に住む", "」、「", "", "書いた本を読んだ"] {
+        let r = parse_v2_over(&dir, text);
+        let mut at = 0;
+        for s in &r.segments {
+            assert_eq!(s.start, at);
+            at += s.len;
+        }
+        assert_eq!(at, text.chars().count());
+    }
 }
 
 #[test]
@@ -448,4 +514,83 @@ fn the_same_headword_at_two_different_lengths_is_not_deduplicated_away() {
         "both 書いた's full chain (len 3) and its 書い fragment (len 2) must \
          survive the dedup, got lens {lens:?}"
     );
+}
+
+// v2's own snapshot over the curated 30-sentence corpus, reviewed on its own
+// terms (master plan §5.1: v1 is a disagreement source, not an oracle, so
+// this is a fresh snapshot rather than a copy of
+// `parse_snapshots__sentences.snap`). The rendering below mirrors
+// `parse_snapshots.rs`'s `render` so a human can diff the two by eye; it is
+// a separate copy rather than a shared one because the two integration test
+// binaries cannot share non-`pub` code, and making this rendering `pub` in
+// the library for fifteen lines would leak a display concern into the API --
+// the same trade-off `parse_snapshots.rs` documents for its own copy.
+
+/// Alternatives printed per span. See `parse_snapshots.rs`'s identical constant.
+const MAX_ALTERNATIVES: usize = 5;
+
+/// Printed wherever a reading or conjugation is `None`.
+const NONE_LABEL: &str = "-";
+
+fn sentences() -> impl Iterator<Item = &'static str> {
+    SENTENCES
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+}
+
+fn render_v2(text: &str, result: &jparser::ParseResult) -> String {
+    let mut out = String::new();
+    out.push_str("=== ");
+    out.push_str(text);
+    out.push('\n');
+    for seg in &result.segments {
+        if !seg.matched {
+            out.push_str(&format!(
+                "start={} len={} {} unmatched\n",
+                seg.start, seg.len, seg.surface
+            ));
+            continue;
+        }
+        out.push_str(&format!(
+            "start={} len={} {} matched reading={}\n",
+            seg.start,
+            seg.len,
+            seg.surface,
+            seg.reading.as_deref().unwrap_or(NONE_LABEL)
+        ));
+        for entry in seg.entries.iter().take(MAX_ALTERNATIVES) {
+            let gloss = entry
+                .senses
+                .first()
+                .and_then(|s| s.glosses.first())
+                .map(String::as_str)
+                .unwrap_or("");
+            out.push_str(&format!(
+                "    {} ({}) [{}] {gloss}\n",
+                entry.headword,
+                entry.conjugation.as_deref().unwrap_or(NONE_LABEL),
+                entry.reading.as_deref().unwrap_or(NONE_LABEL),
+            ));
+        }
+        if seg.entries.len() > MAX_ALTERNATIVES {
+            out.push_str(&format!(
+                "    ... {} more\n",
+                seg.entries.len() - MAX_ALTERNATIVES
+            ));
+        }
+    }
+    out
+}
+
+#[test]
+fn v2_snapshots_every_sentence() {
+    let dir = scratch("v2-snapshot");
+    build_v2(&dir);
+    let mut out = String::new();
+    for sentence in sentences() {
+        out.push_str(&render_v2(sentence, &parse_v2_over(&dir, sentence)));
+        out.push('\n');
+    }
+    insta::assert_snapshot!("sentences", out);
 }
