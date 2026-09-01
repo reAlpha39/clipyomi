@@ -314,7 +314,14 @@ pub fn run(
 ) -> Result<(), Box<dyn Error>> {
     let table = ConjugationTable::load_embedded()?;
     let v2_table = jparser::engine::table::Table::new();
-    let index = Index::open(index_dir)?;
+    // The two engines assign conjugation ids from different tables and stamp
+    // different fingerprints (`index::load::Index::open_with`'s doc comment),
+    // so opening a v2 index through the v1-fingerprint `Index::open` fails
+    // with `ConjugationMismatch` even though the index is well-formed.
+    let index = match engine {
+        EngineChoice::V1 => Index::open(index_dir)?,
+        EngineChoice::V2 => Index::open_with(index_dir, jparser::engine::build::fingerprint())?,
+    };
     let (records, superseded) = read_gold(gold_path)?;
 
     #[cfg(feature = "mecab")]
@@ -337,23 +344,33 @@ pub fn run(
         ..Metrics::default()
     };
     let mut ent_seq_cache: HashMap<u32, bool> = HashMap::new();
+    let opts = ParseOptions::default();
     for record in &records {
         validate(record)?;
         ensure_ent_seqs_exist(&index, &mut ent_seq_cache, record)?;
-        #[cfg(feature = "mecab")]
-        let flags = tokenizer.as_ref().map(|t| t.hints(&record.text));
-        #[cfg(feature = "mecab")]
-        let hints: Option<&dyn jparser::BoundaryHints> =
-            flags.as_ref().map(|f| f as &dyn jparser::BoundaryHints);
-        #[cfg(not(feature = "mecab"))]
-        let hints: Option<&dyn jparser::BoundaryHints> = None;
-
-        let opts = ParseOptions::default();
-        // `bounds` is `None` for now; Task 16 wires the real boundary source.
-        let bounds: Option<&dyn jparser::engine::Boundaries> = None;
         let parsed = match engine {
-            EngineChoice::V1 => jparser::parse(&index, &table, &record.text, &opts, hints)?,
+            EngineChoice::V1 => {
+                #[cfg(feature = "mecab")]
+                let flags = tokenizer.as_ref().map(|t| t.hints(&record.text));
+                #[cfg(feature = "mecab")]
+                let hints: Option<&dyn jparser::BoundaryHints> =
+                    flags.as_ref().map(|f| f as &dyn jparser::BoundaryHints);
+                #[cfg(not(feature = "mecab"))]
+                let hints: Option<&dyn jparser::BoundaryHints> = None;
+                jparser::parse(&index, &table, &record.text, &opts, hints)?
+            }
             EngineChoice::V2 => {
+                // The hints-off / hints-on pair for v2 (Task 16a): with
+                // `--hints`, `bounds` is the tokenizer's real boundary set;
+                // without it, `None`, so every DP constraint lifts (`cost.rs`
+                // `is_allowed`).
+                #[cfg(feature = "mecab")]
+                let bound_set = tokenizer.as_ref().map(|t| t.boundaries(&record.text));
+                #[cfg(feature = "mecab")]
+                let bounds: Option<&dyn jparser::engine::Boundaries> =
+                    bound_set.as_ref().map(|b| b as &dyn jparser::engine::Boundaries);
+                #[cfg(not(feature = "mecab"))]
+                let bounds: Option<&dyn jparser::engine::Boundaries> = None;
                 jparser::engine::parse_v2(&index, &v2_table, &record.text, &opts, bounds)?
             }
         };
