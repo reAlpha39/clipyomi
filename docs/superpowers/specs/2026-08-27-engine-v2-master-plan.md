@@ -88,10 +88,20 @@ integration, but `flags_from_worker` is documented as a port of
 `Dictionary.cpp:1115-1126`. Phase 1 dissolves the question rather than arguing
 it: tokenizer output stops being an advisory "hint" and becomes a DP constraint
 (§4.3), so that function has no successor.
-| **Clean** | `crates/jmdict-source`, `crates/vibrato-source` | — | Zero `ta-old` references. Verified by grep |
+| **Clean** | `crates/jmdict-source`, `crates/vibrato-source` | — | Zero `ta-old` references, verified by grep — but that grep tested the wrong string; see the correction below |
 | **Clean** | `src/**.ts`, `src/**.css`, `src-tauri/src/**` | — | 25 references, all behavioural: *"ta-old's rule"*, *"the same shape"*. Describes conventions, not copied expression |
 
 The clean tiers are roughly half the repository and carry forward untouched.
+
+**Correction, made at Phase 1a (design §11.1).** The grep behind the first
+"Clean" row above tested only `ta-old`. Ten files across `crates/jmdict-source`
+and `crates/vibrato-source` carry the header `Japanese text parser ported from
+Translation Aggregator` — a string containing no `ta-old` — so the original
+grep passed silently over them. The tier itself does not change: a boilerplate
+provenance header is not protected expression, and both crates remain clean in
+substance. But the evidence claim as originally written was wrong, and Phase
+1's done-when (§7) is now written to sweep both strings, over this pair of
+crates as well as `crates/jparser/` and `xtask/`.
 
 ### 3.3 Permissive replacement sources
 
@@ -303,6 +313,53 @@ If Phase 0 shows tokenizer-wrong cases are common enough to hurt span accuracy,
 the constraint softens to a large-but-finite penalty and the tuning happens
 against the corpus. That is a cost-model parameter, not a redesign.
 
+#### What Phase 1a found and measured
+
+**Hard constraints alone do not fix `くるまではこう` (design §11.2, §7.1).**
+The arbitration rule above forbids splitting *inside* a token but never forbids
+merging *across* one — that asymmetry is what lets `東京都` survive a tokenizer
+that cuts it as `東京 | 都`. But Vibrato tokenizes the motivating sentence as
+`は` at 4..5 and `こう` at 5..7, so `はこう` at 4..7 merges *across* a boundary
+and is legal under any strength of interior constraint. It has to lose on
+cost, not be forbidden by a constraint. Removing the fewer-words-wins bias
+itself is therefore not an optional second half of the fix: with a per-match
+constant retained, success criterion 3 fails with every constraint in place.
+
+**The asymmetry's price, measured (design §11.3, §7.5).** From the committed
+diagnostic (`examples/boundary_diag.rs`): of 2,013 interior gold boundaries,
+jparser holds 1,734 and Vibrato 1,954, with 266 held by Vibrato alone. 1,688
+are held by both, and **46 are held by jparser alone** — gold boundaries the
+current engine finds and Vibrato does not, which is exactly what a hard
+interior constraint forbids. At an absolute ceiling that is worth about two
+points of strict span accuracy, and less in practice, since a gold span needs
+both of its edges. This is the number the softening clause above should be
+judged against, not a guess.
+
+**Phase 1a measured the constraint's actual cost and declined to soften it
+(Phase 1a handoff, 2026-09-01, §5, §8).** Over every gold span with a v2
+dictionary candidate at its exact `(start, len)`, hints on: of 2,163 gold
+spans, 1,561 have such a candidate, and **64 of those (4.1% of the 1,561,
+2.96% of all gold spans) are hard-forbidden by the interior constraint even
+though the candidate exists** — a rejection, not a cost comparison the DP
+lost. This is a different unit from the 46-boundary figure above (boundary
+positions versus dictionary-candidate spans) and is not directly comparable to
+it, but it is real and larger in raw count. Tier breakdown: 11 tier A
+(literary prose), 15 tier B (news register), 38 tier C1 (hand-written
+pastiche) — so 26 of the 64, about 41%, fall in the ordinary-prose tiers
+rather than the mimetic/onomatopoeia class the corpus's weakest tokenizer
+signal would predict.
+
+Judgment: the softening clause's own precondition — the constraint costing
+enough to hurt span accuracy — is not met. Hints-on strict span accuracy
+passed the v1 baseline by +0.1068 (231 spans), an order of magnitude above
+the 64-span ceiling even if every forbidden span flipped to a win; and
+turning the constraint from a hard filter into a scored penalty is a genuine
+architectural change — it touches the existence/pricing split the cost
+model's own module documentation states, and three dedicated tests assert the
+current hard-forbid behaviour directly — not a constant to tune and revert.
+Not attempted in Phase 1a; recorded here, with its tier breakdown, so the
+next phase can decide with the number in hand rather than a guess.
+
 ### 4.4 Prior art — LunaTranslator
 
 The closest actively-maintained peer: a visual-novel translator with Japanese
@@ -440,6 +497,41 @@ discriminator tried cuts the wrong way. The guard is the `coarsening: N spans
 in M merges` line printed beside both accuracies: a change that lifts tolerant
 accuracy by inflating M has probably found more spurious matches, not more
 compounds.
+
+**Phase 1a measured why tolerant accuracy and entry top-1 stay hard to close,
+even after tuning (2026-09-01 Phase 1a handoff §4).** JMdict's priority
+tagging is inverted on exactly the compounds this section names as the reason
+compound preservation matters. `東京都` (ent_seq 1447740 in
+`gold_jmdict_subset.xml`) — Tokyo Metropolis, an extremely common word —
+carries no `ke_pri`/`re_pri` of its own, while its would-be parts 東 and 京都
+each do; `音がする` and `首を振る` are confirmed present as headwords in the
+same fixture and show the same shape. Since the engine's only
+frequency-shaped evidence signal is JMdict's priority marker, that signal
+actively rewards splitting the compounds this section exists to preserve —
+no magnitude of the signal can fix an inverted one. This is a real, measured
+structural limit, not a magnitude Phase 1a failed to find, and it is a real
+share of why tolerant accuracy and entry top-1 miss baseline in Phase 1a's
+own measurement (§7 Phase 1a). Phase 3's frequency-rank layer, below, is the
+signal that would close this gap.
+
+A second signal for the same class was tried and failed. `音がする` and
+`首を振る` both carry JMdict's `exp` tag — real, already-parsed evidence — so
+it was priced the same length-proportional way as the priority signal, at the
+magnitude needed to tie those compounds against their split. Measured
+against the gold corpus: strict span accuracy fell by 91 spans hints-off
+(1573→1482) and 92 spans hints-on (1737→1645), for at most 4 spans of
+tolerant gain either way, plus one false positive — an archaic `exp`-tagged
+copula matched through an unrelated conjugation chain. Gating the term to
+direct, unconjugated matches removed that false positive but not the shape:
+strict still fell by roughly 60 spans in both hint states for roughly 4 spans
+of tolerant gain. It was reverted rather than kept losing. `exp` is real
+evidence for the target class, but it is tagged far more broadly than "the
+multi-word phrase headwords this corpus's compound-preservation cases need" —
+short archaic auxiliaries and incidental grammatical constructions carry it
+too, at a rate that outweighs the target class on this corpus. The ceiling
+this leaves is scoped, not total: `東京都` is tagged `&n;`, not `&exp;`, so
+this signal was never going to reach it — the noun-compound subclass needs a
+genuinely different signal.
 
 **Oracle@k** joins in Phase 2 — is the gold parse present anywhere in the top-k
 whole-sentence readings? It measures whether k-best earns its complexity, and it
@@ -610,43 +702,155 @@ of the 246 sampled sentences remain unadjudicated in staging.
 
 ### Phase 1 — Clean-room core
 
-**In:** independently written replacements for the nine hard-taint files
-(§3.2); a conjugation table regenerated from IPADIC and a grammar reference; a
-new cost model in which Vibrato boundaries are strong evidence (§4.3); removal
-of `xtask`'s ta-old converter and of `assets/conjugations.json`; new file
-headers stating provenance (§3.5); scrubbing the soft-taint citations in
-`index/*`, `jmdict.rs`, and `lib.rs`; dissolving `hints.rs`' ported
-`flags_from_worker` into the DP's constraint handling (§3.2 note).
+**Split into Phase 1a and Phase 1b (design §1, §2, added 2026-09-01).**
+§7.3 below — recombining IPADIC's auxiliary tokens into a labelled chain — has
+two outputs: a span shape and an English string. The span shape is the DP's
+merge decision and is visible to span accuracy — worse, compound-tolerant
+accuracy scores it as a merge, the class it is measured to over-forgive by
+about 1.3 points (§5.2). Only the English string is invisible to both Phase 0
+metrics. So **1a owns the chain's span shape; 1b owns only the mapping from
+that shape to English** (design §2.1). And 1b's own gate — a class × chain
+grid generated mechanically for coverage, its expected English column written
+by hand from a grammar reference *before* the formatter exists — must not be
+written beside the code it grades: a table written alongside the recombiner
+would agree with it by construction, the same trap §5.4's rule against a
+rank-ordered candidate list exists to avoid (design §2.2).
+
+**Phase 1's own done-when is unchanged in substance and lands whole, at the
+end of 1b:** no `ta-old` reference and no `ported from Translation
+Aggregator` header remains under `crates/jparser/`, `xtask/`,
+`crates/jmdict-source`, or `crates/vibrato-source` — the sweep §3.2's
+correction above shows the original wording missed; both Phase 0 metrics are
+at or above baseline, in both hint states; `くるまではこう` parses as
+`くる / まで / は / こう`.
+
+#### Phase 1a — Clean-room segmentation core
+
+**In:** independently written replacements for the segmentation core: the
+lattice and its cost model, candidate generation, deinflection, the
+conjugation class-and-form table regenerated from IPADIC, headword flags,
+kana folding, romaji. A second engine (`parse_v2`), reachable behind
+`--engine v2` on `build-index`/`parse`/`score`, measured against the Phase 0
+baseline. v1 stays the default parser and is untouched throughout.
+
+**Out:** naming a conjugation chain in English (Phase 1b, below). The
+switchover that makes the new engine the default and deletes the old files.
+k-best (Phase 2). Any UI change.
+
+**Done when (design §10.1–§10.3, §10.5 — four conditions):**
+
+1. Both Phase 0 metrics, in both hint states, at or above baseline.
+2. `くるまではこう` parses as `くる / まで / は / こう`.
+3. The particle-absorbing merge class this section's decision log records
+   (handoff §9.5) is gone, checked against a committed fixture.
+4. The standing gates pass (`cargo test -p jparser`, with and without
+   `--features mecab`; `cargo clippy` with `-D warnings`, both feature states;
+   `cargo check --no-default-features`), plus an offline check that a
+   full-index build and the committed subset-index build score identically
+   (design §10.5).
+
+**Size, restated per module (design §9).**
+
+| New module | Replaces | Master plan est. | 1a lines |
+| --- | --- | ---: | ---: |
+| `lattice.rs` + `cost.rs` | `segment.rs`, `rank.rs` | ~650 | ~650 |
+| `lex.rs` | `matcher.rs`, `matcher/verb.rs` | ~600 | ~350 |
+| `table.rs` | `stem.rs`, `conjugation.rs`'s table | ~850 | ~550 |
+| `chain.rs` (span shape only) | *(new)* — §7.3's recombiner | ~300 (shared with 1b) | ~120 |
+| `flags.rs` | `record.rs` | ~350 | ~350 |
+| `kana.rs` + `romaji.rs` | same | ~560 | ~560 |
+| **1a total** | | | **~2,580** |
+
+Two deviations from the line counts an earlier draft of this plan estimated.
+`lex.rs` is smaller and `table.rs` larger than their old estimates, because
+deinflection moved from build time (`stem.rs`, recursed at parse time in
+`matcher/verb.rs`) to a single parse-time reverse-suffix-trie lookup in
+`table.rs` — one mechanism instead of two kept in step, and the `する`/`来る`
+empty-stem special case disappears with it (design §6). And **`stem.rs`'s
+work does not shrink because IPADIC supplies dictionary forms — it moves into
+the table** (design §11.5; see also §7.2 below): `hints` is optional and
+feature-gated, with `cargo check -p jparser --no-default-features` an
+enforced gate, so the engine must deinflect with no tokenizer present at all.
+IPADIC can never be the deinflection path, only ever an accelerator.
+
+**Measured outcome (Phase 1a handoff, 2026-09-01).** `jparser-cli score
+--engine v2` over the committed `gold.jsonl` (150 sentences, 2,163 spans)
+against a v2 index built from the committed `gold_jmdict_subset.xml`:
+
+| | strict | tolerant | entry top-1 | merges |
+| --- | --- | --- | --- | --- |
+| baseline, hints off | 0.6810 (1473/2163) | 0.8465 (1831/2163) | 0.9159 (1046/1142) | ≤167 |
+| **v2, hints off** | **0.7272 (1573/2163) PASS** | 0.7975 (1725/2163) MISS | 0.9075 (1108/1221) MISS | 75, pass |
+| baseline, hints on | 0.6963 (1506/2163) | 0.8678 (1877/2163) | 0.9155 (1072/1171) | ≤173 |
+| **v2, hints on** | **0.8031 (1737/2163) PASS** | 0.8521 (1843/2163) MISS | 0.9063 (1170/1291) MISS | 53, pass |
+
+**Done-when condition 1 is not met — 4 of the 8 cells miss.** Both hint
+states pass strict span accuracy by a wide margin (+0.0462 hints off,
++0.1068 hints on) and hold the merge ceiling; both miss tolerant span
+accuracy and entry top-1, by single digits of percentage points after
+tuning — §5.2 above explains the structural reason, found by measurement,
+not assumed. **Condition 2 is met** — `くるまではこう` parses as
+`くる / まで / は / こう` under the tuned constants. **Condition 3 is not
+met** — the particle-absorbing merge fixture passes 22 of its 26 rows; the
+test stays ignored. **Condition 4 is met** — the standing gates and the
+full-index/subset-index equivalence check both pass.
+
+**Two items deferred, left open with their reasons rather than attempted:**
+
+- The conjugation trie is hiragana-keyed with no folding, so a fully
+  katakana-written conjugated form never deinflects. Tier D (noise) is only
+  8 sentences / 169 spans in the gold corpus — too thin a sample to settle
+  whether this costs anything.
+- `ATTACHES_TO` lets `た` attach to `連用形` unconditionally, which licenses
+  the over-generation `書きた → 書く`. The candidate fix is making the
+  required form a predicate rather than a fixed form — `連用タ接続` where a
+  class has that form, `連用形` only where it does not.
+
+#### Phase 1b — Formatter, class × chain gate, and the switchover
+
+**In:** the auxiliary-chain formatter — `fmt(&[ConjStep]) -> Option<String>`,
+filling `Entry::conjugation`, which 1a leaves `None`; its own gate, a class ×
+chain grid generated mechanically for coverage with the expected English
+column written by hand from a grammar reference before the formatter exists,
+committed as a fixture; the switchover — the nine hard-taint files of §3.2
+deleted, `assets/conjugations.json` deleted, `xtask`'s ta-old converter
+deleted, every `ta-old` citation and every `ported from Translation
+Aggregator` header gone from `crates/jparser/`, `xtask/`,
+`crates/jmdict-source`, and `crates/vibrato-source`; the provenance headers of
+§9 open question 2 written on the replacement files.
 
 **Out:** k-best (Phase 2). Extra token layers (Phase 3). Any UI change.
 
-**Done when:** no `ta-old` reference remains under `crates/jparser/`; both
-Phase 0 metrics are at or above baseline; `くるまではこう` parses as
-`くる / まで / は / こう`.
+**Done when:** the class × chain gate passes, and the switchover lands in one
+commit with nothing shipped in between (design §4.1) — which is also when
+Phase 1's own done-when above is met.
 
-**Size.** An earlier draft of this plan estimated ~1,400 lines on the assumption
-that Vibrato's Viterbi would absorb segmentation wholesale. §4.1 killed that
-assumption — the DP stays — so the honest figure is larger:
+**Size, restated per module (design §9).**
 
-| Replaces | Old | New | Why it moves |
-| --- | ---: | ---: | --- |
-| `segment.rs` | 778 | ~400 | Simpler cost model; boundaries are constraints rather than a scoring leg |
-| `matcher.rs` + `matcher/verb.rs` | 1,107 | ~600 | Still walks the FST over spans; conjugation recursion shrinks where IPADIC supplies the base form |
-| `stem.rs` | 457 | ~250 | IPADIC gives dictionary forms directly; stems remain only for headwords it does not know |
-| `conjugation.rs` | 463 | ~600 | **Grows.** The §7.3 label mapping lives here |
-| `record.rs` | 409 | ~350 | Flag bookkeeping; new flag values, same shape |
-| `rank.rs` | 282 | ~250 | Little changes but the constants |
-| `kana.rs` + `romaji.rs` | 589 | ~560 | Kana and romaji tables are facts; rewritten from a chart |
-| *(new)* auxiliary-chain recombiner | — | ~300 | No predecessor. §7.3 |
-| **Total** | **4,085** | **~3,300** | |
+| New module | Replaces | 1b lines |
+| --- | --- | ---: |
+| `chain.rs` (English formatting) | *(new)* — §7.3's recombiner, formatter half | ~180 |
+| `conjugation.rs`'s label mapping | *(new)* — §7.3 | ~300 |
+| **1b total** | | **~480** |
 
-Plus the conjugation table itself (§7.2). §7.2 and §7.3 carry the two risks.
+Plus 1b's own expectation fixture. 1a's ~2,580 and 1b's ~480 total ~3,060, a
+little under the original ~3,300 estimate; the difference is rounding across
+rows, not a claim of a smaller phase.
+
+**Phase 1b has not started.** Design §9's own budget and gate (class × chain
+grid, expectation fixture) stand as planned; nothing in this file changes
+them. Whoever plans Phase 1b should read Phase 1a's measured outcome above
+before deciding whether v2 is ready to become the default — the gate it
+inherits (Phase 1's own done-when) is open on the metric half, not the
+relicence half.
 
 **§7.2 — Table size.** ta-old's table holds 32 types and 734 conjugations. The
 replacement need not match that count — it must cover what the corpus exercises
 plus the standard forms — but the order of magnitude is the planning number.
 IPADIC's own conjugation data supplies surface forms mechanically; the
-learner-facing English labels do not come from it.
+learner-facing English labels do not come from it. As design §11.5 records,
+this table's size does not shrink to ~250 lines the way an earlier reading of
+this section assumed — see Phase 1a's Size note above.
 
 **§7.3 — The label mapping is the product.** IPADIC yields 未然形 / 連用形 /
 基本形 — linguistic form names — and splits auxiliaries into separate tokens
@@ -654,7 +858,8 @@ learner-facing English labels do not come from it.
 learner-facing chain, *"Causative-Passive Polite Negative Past"*. Recombining
 IPADIC's auxiliary tokens into that chain, and naming the result in English, is
 new work with no permissive upstream. It is the single highest-risk item in this
-plan and the one most likely to need its own spec.
+plan and the one most likely to need its own spec — which is why, per Phase
+1b's In above, its gate is written before its code (design §2.2).
 
 ### Phase 2 — k-best readings
 
@@ -681,6 +886,14 @@ own licensing gate, adopted only if its data source is permissive:
 | Pitch accent | — | **Highest risk.** NHK's dictionary is not free, and community accent datasets have murky provenance — precisely the trap this plan exists to escape |
 
 No layer ships without its licence established in writing first.
+
+**Frequency rank stopped being a nice-to-have at Phase 1a (2026-09-01
+handoff §4).** It is the signal §5.2's compound-preservation finding shows is
+missing: JMdict's own priority marker is inverted on exactly the compounds
+this plan exists to preserve, so it actively rewards splitting them, and no
+cost-model magnitude can fix a signal that points the wrong way. A genuine
+frequency-rank layer is the candidate fix for that specific gap. Its
+licensing is still unresolved and this does not change that.
 
 ---
 
@@ -922,3 +1135,18 @@ No layer ships without its licence established in writing first.
 | Label whole sentences, and treat `ent_seq: null` as a positive label | Labelling only the disputed spans leaves span accuracy without a stable denominator, and treating "no entry belongs here" as an unlabelled gap rewards a parser for emitting fewer entries. Both are recorded claims instead (§5.3) |
 | Read Phase 0's "no code under `crates/jparser/src/`" as "no change to the parser library" | Read literally the rule forbids Phase 0's own deliverable, since §5.4 specifies the harness as `jparser-cli` subcommands and the bin lives under that path. Two exceptions, no others: `src/bin/jparser-cli*`, and one additive read-only `entry_id` field on `Entry` without which `score` cannot compare entry decisions at all. Parsing behaviour is untouched (§7 Phase 0) |
 | Filter Aozora on content, not on the 新字新仮名 catalogue flag | The flag describes the edition. Classical passages quoted inside a modern edition and kana iteration marks both leak through, both segmenters flail on pre-war orthography, and an unfiltered sample therefore returns disproportionately many of them — a distribution ClipYomi never sees and would then be tuned against. A work usually has several catalogue rows and the 旧字旧仮名 edition often sorts first, so "the first matching row" silently violates the filter (§5.3) |
+| Split Phase 1 into 1a and 1b | §7.3's label mapping is invisible to both Phase 0 metrics, and ~900 ungated lines inside a 3,300-line phase is the silent-degradation shape handoff §9.6 already caught once. 1b needs a gate of its own, and conjugation is finite and generative, so it is far cheaper than a corpus (design §1, §2) |
+| 1a owns the chain's span shape; 1b owns only the English | The recombiner has two outputs. Its span shape is the DP's merge decision and is measured by span accuracy — and by the tolerant metric, which over-forgives exactly that shape. Only the string is ungated (design §2.1) |
+| 1b's expectation table is written before the formatter, from a grammar reference | A table written beside the code agrees with it by construction — the same trap §5.4 avoids by never showing the adjudicator a rank-ordered candidate list. Generate the class × chain grid mechanically for coverage; hand-write only the English column (design §2.2) |
+| 1a's gate adds the §9.5 merge conditions | "Both metrics at or above baseline" can pass while the defect class survives, because compound-tolerant accuracy credits those merges. Merge count becomes a ceiling and the named surfaces must be gone (design §2.3, §10.3) |
+| Side-by-side staging: the new engine lands as new modules under new names, the nine hard-taint files keep compiling untouched | Master plan §5.1 already needs both engines alive from Phase 1 on, clean-room is then enforced by construction rather than willpower, and incremental measurement survives (design §4.1) |
+| The switchover commit belongs to 1b | Switching at the end of 1a leaves a window where the engine emits no conjugation label — the app without its distinguishing feature. Deferring keeps Phase 1's done-when whole and lands the relicence in one commit (design §4.1) |
+| v2 builds its own index; the format does not change | `verb_type` ids are table-relative and the header fingerprint already rejects a mismatch, so the existing guard prevents a cross-read for free. v2 emits no generated stems, so the field is present-and-unused rather than a format difference (design §5) |
+| Deinflection at parse time, via a reverse suffix trie | One mechanism instead of a build-time generator plus a parse-time recursion; one origin for 1b's chain; a smaller index; and the `する`/`来る` empty-stem special case disappears. Costs a deviation from this section's original Size table, recorded in Phase 1a's Size note above (design §6) |
+| Hints supply boundaries only, never match candidates | `parse` takes `hints: Option` behind a feature gate with `--no-default-features` enforced, so the table is the deinflection path regardless. Base-form candidates would make entry top-1 hint-dependent and 1b's input non-uniform, for a contraction win that can be revisited on evidence in Phase 2 (design §6.1) |
+| Cost accrues per character, not per match | A per-match constant is what makes `はこう` beat `は` + `こう`, and the interior constraint does not forbid that merge (§4.3). Removing the bias structurally is the only form of the fix that satisfies success criterion 3 (design §7.1, §7.2) |
+| Price a `PRONOUNCE`-only match that crosses a tokenizer boundary | Every one of handoff §9.5's ~28 spurious merges is a reading-form match of a kanji headword; every legitimate merge in handoff §9.1 is kanji-bearing. The flag is already computed and already on the wire, and kana-only words are `PRIMARY` so they are not caught. Handoff §9.6's refusal of a metric heuristic is unaffected (design §7.3) |
+| Commit the §9.5 surfaces as a fixture | The gate must run from a clean clone. They are this project's own measurement, carry no ta-old expression and no captured text, and the promotion is the one `gold.jsonl` already received (design §10.3) |
+| v1's snapshot is not promoted into v2's gate | It pins the port's behaviour, bugs included, as a specification. §5.1 makes v1 a disagreement source, not an oracle (design §10.4) |
+| The IPADIC CSVs are fetched out of tree; the generated table is committed | The shipped Vibrato asset is a compiled dictionary and yields no lexicon. IPADIC's licence permits reproduction with notice retention, and committing generator plus output keeps the table regenerable rather than hand-edited (design §6.2) |
+| **Compound-tolerant span accuracy is vindicated by Phase 1a's own numbers** | Before tuning, v2 hints-on scored 0.7947 strict against baseline's 0.6963 — a 9.8-point apparent improvement — while tolerant *fell* (0.8678→0.8003) and the merge count collapsed from 173 to 6. Without the second metric and the merge-count guard, that would have read as a large win while compound preservation had been destroyed — exactly the trap the row above ("Answered: add compound-tolerant span accuracy") exists to catch, now observed in a real phase rather than merely anticipated (Phase 1a handoff, 2026-09-01, §2) |
