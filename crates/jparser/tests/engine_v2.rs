@@ -62,8 +62,18 @@ fn the_two_engines_cannot_read_each_others_indexes() {
         "the two tables must not collide, or the guard is vacuous"
     );
 
-    jparser::index::load::Index::open(&v2_dir)
+    let err = jparser::index::load::Index::open(&v2_dir)
         .expect_err("v1's fingerprint must not open a v2-built index");
-    jparser::index::load::Index::open_with(&v1_dir, jparser::engine::build::fingerprint())
-        .expect_err("v2's fingerprint must not open a v1-built index");
+    assert!(
+        matches!(err, jparser::index::IndexError::ConjugationMismatch { .. }),
+        "expected a fingerprint mismatch, got {err:?}"
+    );
+
+    let err =
+        jparser::index::load::Index::open_with(&v1_dir, jparser::engine::build::fingerprint())
+            .expect_err("v2's fingerprint must not open a v1-built index");
+    assert!(
+        matches!(err, jparser::index::IndexError::ConjugationMismatch { .. }),
+        "expected a fingerprint mismatch, got {err:?}"
+    );
 }
