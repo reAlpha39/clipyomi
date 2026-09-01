@@ -93,6 +93,17 @@ impl Index {
     /// build has completed; see the note on `map` above for why swapping a
     /// live path is not a substitute.
     pub fn open(dir: &Path) -> Result<Self, IndexError> {
+        Self::open_with(dir, crate::conjugation::embedded_asset_fingerprint())
+    }
+
+    /// [`Index::open`] with the caller supplying the conjugation fingerprint it
+    /// expects the index to have been built against.
+    ///
+    /// The two engines assign conjugation ids from different tables, so each
+    /// must open only its own index — the guard is what makes a cross-read
+    /// impossible rather than silently wrong. At the Phase 1b switchover this
+    /// becomes the only form.
+    pub fn open_with(dir: &Path, expected_fingerprint: u64) -> Result<Self, IndexError> {
         let header: IndexHeader = bincode::deserialize(&std::fs::read(dir.join(HEADER_FILE))?)?;
         if header.version != INDEX_FORMAT_VERSION {
             return Err(IndexError::VersionMismatch {
@@ -100,7 +111,6 @@ impl Index {
                 expected: INDEX_FORMAT_VERSION,
             });
         }
-        let expected_fingerprint = crate::conjugation::embedded_asset_fingerprint();
         if header.conjugation_fingerprint != expected_fingerprint {
             return Err(IndexError::ConjugationMismatch {
                 found: header.conjugation_fingerprint,

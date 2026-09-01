@@ -16,7 +16,8 @@ mod score;
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use clap::{ArgGroup, Parser, Subcommand};
+use clap::error::ErrorKind;
+use clap::{ArgGroup, CommandFactory, Parser, Subcommand};
 use jmdict_source::SOURCE_DIR;
 use jparser::conjugation::ConjugationTable;
 use jparser::index::build::build_from_reader;
@@ -70,8 +71,13 @@ enum Command {
         /// Directory to write the index into.
         out: PathBuf,
         /// Disable the v5 mis-annotation fallback, to measure its effect.
+        /// Meaningless with `--engine v2`, which generates no stems at all.
         #[arg(long)]
         no_v5_fallback: bool,
+        /// Segmentation engine the index is built for. `v2` emits headwords
+        /// only: no generated stems, so `verb_type` is always absent.
+        #[arg(long, value_enum, default_value_t = EngineChoice::V1)]
+        engine: EngineChoice,
     },
     /// Open the newest usable index in ROOT, building from a source if needed.
     #[command(group(
@@ -234,13 +240,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             xml,
             out,
             no_v5_fallback,
+            engine,
         } => {
-            let table = ConjugationTable::load_embedded()?;
-            let opts = StemOptions {
-                v5_misannotation_fallback: !no_v5_fallback,
-            };
+            if engine == EngineChoice::V2 && no_v5_fallback {
+                Cli::command()
+                    .error(
+                        ErrorKind::ArgumentConflict,
+                        "--no-v5-fallback is meaningless with --engine v2: v2 generates no \
+                         stems at all",
+                    )
+                    .exit();
+            }
             let file = BufReader::new(std::fs::File::open(&xml)?);
-            let report = build_from_reader(file, &table, &opts, &out)?;
+            let report = match engine {
+                EngineChoice::V1 => {
+                    let table = ConjugationTable::load_embedded()?;
+                    let opts = StemOptions {
+                        v5_misannotation_fallback: !no_v5_fallback,
+                    };
+                    build_from_reader(file, &table, &opts, &out)?
+                }
+                EngineChoice::V2 => jparser::engine::build::build_from_reader(file, &out)?,
+            };
             println!("entries:             {}", report.entries);
             println!("skipped entries:     {}", report.skipped_entries);
             println!("keys:                {}", report.keys);
