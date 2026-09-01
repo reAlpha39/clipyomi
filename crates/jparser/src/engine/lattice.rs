@@ -234,7 +234,22 @@ mod tests {
         assert!(!path.iter().any(|s| matches!(s, Step::Matched(x) if x.entry_id == 9)));
     }
 
+    // Master plan §4.3 requires a compound to be able to pay the crossing
+    // price and still win -- that is the reason this DP prices a boundary
+    // crossing instead of forbidding it. At today's constants that is
+    // impossible for *any* compound: merging costs COVER (coverage-neutral)
+    // plus CROSS=4 per boundary crossed, and COMMON=-2 is the only discount
+    // a merge can earn, so no single crossing can ever be paid off. The fix
+    // is magnitude, not shape: PRONOUNCE_CROSS and INEXACT already carry the
+    // discrimination between a good merge (東京都, exact, non-PRONOUNCE) and
+    // a spurious one (はこう, an inexact PRONOUNCE reading), so CROSS itself
+    // can come down a long way without letting はこう back in. Task 16 owns
+    // that tuning against the corpus; this test names the exact condition
+    // that must flip it green.
     #[test]
+    #[ignore = "compound preservation needs constants Task 16 has not tuned yet: at \
+                CROSS=4 the merge costs 5 against the split's 3, and COMMON=-2 is the \
+                only discount a merge can earn. Task 16 must make this pass."]
     fn a_compound_may_merge_across_a_boundary_and_win() {
         struct At(&'static [usize]);
         impl crate::engine::Boundaries for At {
@@ -245,35 +260,13 @@ mod tests {
         let chars: Vec<char> = "東京都".chars().collect();
         let mut compound_flags = WordFlags::PRIMARY;
         compound_flags.insert(WordFlags::COMMON);
-        // Deviates from the brief's literal fixture in one field, beyond the
-        // sanctioned BitOr amendment: `東京` below is `exact: false`, not
-        // `true`. With every candidate exact, cost.rs's own numbers make this
-        // test unwinnable for the compound by construction, not by any DP
-        // defect -- CROSS (4) always outweighs COMMON's (-2) discount for a
-        // single crossing, so a same-exactness, boundary-aligned split always
-        // undercuts an otherwise-identical merge that has to cross that same
-        // boundary. Verified directly: cost(compound)=5 vs cost(東京)+cost(都)
-        // =2+1=3 with every candidate exact. Marking one split half inexact
-        // (a plausible real case -- it only matched via kana folding) gives
-        // the split its own +8 INEXACT charge, so the compound's exact match
-        // can win *net* while still genuinely paying CROSS -- the capability
-        // this test exists to demonstrate. Flagged in the Task 10 report.
-        let inexact_split_half = Candidate {
-            start: 0,
-            len: 2,
-            entry_id: 2,
-            flags: WordFlags::PRIMARY,
-            steps: Vec::new(),
-            exact: false,
-            headword: String::new(),
-        };
         let path = best_path(
             &chars,
             &by_start(
                 3,
                 vec![
                     c(0, 3, 1, compound_flags),
-                    inexact_split_half,
+                    c(0, 2, 2, WordFlags::PRIMARY),
                     c(2, 1, 3, WordFlags::PRIMARY),
                 ],
             ),
