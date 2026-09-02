@@ -63,7 +63,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fs;
 
-use jparser::conjugation::ConjugationTable;
+use jparser::engine::table::Table;
 use jparser::index::load::Index;
 use jparser::{parse, ParseOptions};
 
@@ -129,7 +129,7 @@ fn read_jsonl<T: serde::de::DeserializeOwned>(path: &str) -> Result<Vec<T>, Box<
 }
 
 /// Does `parse` cover this exact string with one matched segment?
-fn is_unit(index: &Index, table: &ConjugationTable, s: &str) -> Result<bool, Box<dyn Error>> {
+fn is_unit(index: &Index, table: &Table, s: &str) -> Result<bool, Box<dyn Error>> {
     if s.is_empty() {
         return Ok(false);
     }
@@ -154,7 +154,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: boundary_diag <index-dir> <gold.jsonl> <disagreements.jsonl>".into());
     };
 
-    let table = ConjugationTable::load_embedded()?;
+    let table = Table::new();
     let index = Index::open(std::path::Path::new(index_dir))?;
     let gold: Vec<GoldRecord> = read_jsonl(gold_path)?;
     let vibrato: HashMap<String, BTreeSet<usize>> = read_jsonl::<DiffRecord>(diff_path)?

@@ -1448,9 +1448,8 @@ fn describe_index_error(err: &jparser::index::IndexError) -> String {
 /// "place a JMdict_e.gz in `<source_dir>` manually to bypass the download"
 /// (`crates/jmdict-source/src/lib.rs`) — appending the same instructions
 /// again would say it twice on screen. Every other failure (a corrupt
-/// archive, a conjugation-table load failure, a dead worker) says nothing
-/// about the directory at all, so this is the only place those would ever
-/// learn about the manual escape hatch.
+/// archive, a dead worker) says nothing about the directory at all, so this
+/// is the only place those would ever learn about the manual escape hatch.
 fn with_fallback(reason: String, source_dir_display: &str) -> String {
     if reason.contains(source_dir_display) {
         format!("{reason}. Retry.")
@@ -1489,17 +1488,12 @@ pub async fn download_dictionary(
 
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         emit_status(&handle, "downloading");
-        let table = jparser::conjugation::ConjugationTable::load_embedded()
-            .map_err(|e| format!("loading the conjugation table failed: {e}"))?;
-        let opts = jparser::stem::StemOptions::default();
 
         // `resolve` reuses an already-downloaded archive before it reaches the
         // network, so a retry after a *build* failure is fast and offline.
         // `ensure_dictionary` runs the closure only when a rebuild is needed.
         let index = jparser::index::ensure_dictionary(
             &root,
-            &table,
-            &opts,
             jparser::index::generations::DEFAULT_KEEP_GENERATIONS,
             || {
                 let reader = jmdict_source::resolve(&source_dir)?;
@@ -1515,7 +1509,10 @@ pub async fn download_dictionary(
         )
         .map_err(|e| describe_index_error(&e))?;
 
-        Ok::<AppState, String>(AppState { index, table })
+        Ok::<AppState, String>(AppState {
+            index,
+            table: jparser::engine::table::Table::new(),
+        })
     })
     .await;
 

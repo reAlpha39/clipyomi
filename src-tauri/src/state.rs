@@ -16,7 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use jparser::conjugation::{ConjugationError, ConjugationTable};
+use jparser::engine::table::Table;
 use jparser::hints::{HintsError, VibratoTokenizer};
 use jparser::index::generations;
 use jparser::index::load::Index;
@@ -36,7 +36,7 @@ pub const HINTS_ENV: &str = "TA_HINTS_DICT";
 /// Read by `parse::run_worker`, spawned from `main.rs`'s `setup`.
 pub struct AppState {
     pub index: Index,
-    pub table: ConjugationTable,
+    pub table: Table,
 }
 
 /// A startup failure, kept as a rendered string so the webview can display it.
@@ -93,8 +93,6 @@ pub enum StartupError {
     NoIndex { root: PathBuf },
     #[error("opening the dictionary index failed: {0}")]
     Index(#[from] IndexError),
-    #[error("loading the conjugation table failed: {0}")]
-    Conjugation(#[from] ConjugationError),
     #[error("{HINTS_ENV} is set but the dictionary could not be loaded: {0}")]
     Hints(#[from] HintsError),
 }
@@ -117,7 +115,7 @@ pub fn is_missing_dictionary(error: &StartupError) -> bool {
         StartupError::Index(
             IndexError::ConjugationMismatch { .. } | IndexError::VersionMismatch { .. },
         ) => true,
-        StartupError::Index(_) | StartupError::Conjugation(_) | StartupError::Hints(_) => false,
+        StartupError::Index(_) | StartupError::Hints(_) => false,
     }
 }
 
@@ -133,7 +131,7 @@ pub fn load_state(root: &Path) -> Result<AppState, StartupError> {
     })?;
 
     let index = Index::open(&generation)?;
-    let table = ConjugationTable::load_embedded()?;
+    let table = Table::new();
 
     Ok(AppState { index, table })
 }
@@ -427,10 +425,6 @@ mod tests {
                 root: PathBuf::from("/nowhere"),
             },
             StartupError::Index(IndexError::Io(std::io::Error::other("boom"))),
-            StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
-                name: "x".to_string(),
-                pos: "y".to_string(),
-            }),
             StartupError::Hints(HintsError::Dictionary("boom".to_string())),
         ];
         for variant in variants {
@@ -646,12 +640,15 @@ mod tests {
         jparser::hints::write_test_dictionary(&tokenizer_path).expect("fixture dictionary");
         let tokenizer = VibratoTokenizer::load(&tokenizer_path).expect("load fixture");
 
-        let result = startup(Ok((Some(tokenizer), "branch-2 warning".to_string())), || {
-            Ok(AppState {
-                index: Index::open(&generation).expect("open"),
-                table: ConjugationTable::load_embedded().expect("table"),
-            })
-        });
+        let result = startup(
+            Ok((Some(tokenizer), "branch-2 warning".to_string())),
+            || {
+                Ok(AppState {
+                    index: Index::open(&generation).expect("open"),
+                    table: Table::new(),
+                })
+            },
+        );
 
         assert_eq!(result.hints_warning.0, "branch-2 warning");
         assert!(
@@ -686,10 +683,9 @@ mod tests {
     #[test]
     fn any_other_index_failure_stays_fatal() {
         let result = startup(Ok((None, String::new())), || {
-            Err(StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
-                name: "x".to_string(),
-                pos: "y".to_string(),
-            }))
+            Err(StartupError::Index(IndexError::Io(std::io::Error::other(
+                "boom",
+            ))))
         });
 
         assert!(
@@ -823,10 +819,6 @@ mod tests {
     fn every_other_startup_error_stays_fatal() {
         let fatal: Vec<StartupError> = vec![
             StartupError::Index(IndexError::Io(std::io::Error::other("boom"))),
-            StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
-                name: "x".to_string(),
-                pos: "y".to_string(),
-            }),
             StartupError::Hints(HintsError::Dictionary("boom".to_string())),
         ];
         for err in fatal {

@@ -15,12 +15,10 @@
 
 use std::path::{Path, PathBuf};
 
-use jparser::conjugation::ConjugationTable;
-use jparser::index::build::build_from_reader;
+use jparser::engine::build::build_from_reader;
 use jparser::index::generations::{build_new, latest, BUILD_PREFIX};
 use jparser::index::load::Index;
 use jparser::index::{ENTRIES_FILE, ENTRIES_INDEX_FILE, FST_FILE, HEADER_FILE, RECORDS_FILE};
-use jparser::stem::StemOptions;
 
 /// One dictionary.
 const XML_A: &str = concat!(
@@ -63,17 +61,9 @@ fn scratch(name: &str) -> PathBuf {
     dir
 }
 
-fn table_and_opts() -> (ConjugationTable, StemOptions) {
-    (
-        ConjugationTable::load_embedded().expect("table"),
-        StemOptions::default(),
-    )
-}
-
 /// Build `xml` directly into `dir` — the pre-generations behaviour.
 fn build_directly(dir: &Path, xml: &str) {
-    let (table, opts) = table_and_opts();
-    build_from_reader(xml.as_bytes(), &table, &opts, dir).expect("build");
+    build_from_reader(xml.as_bytes(), dir).expect("build");
 }
 
 /// Delete a file, or truncate it to half its length.
@@ -124,7 +114,9 @@ fn a_rebuild_into_a_live_directory_can_serve_data_from_neither_build() {
     // decodes B's `records.bin`, then resolves the resulting `entry_id`
     // against A's `entries.idx`. The `entry()` checks above cannot see the
     // splice at all, because `entry()` reads only A's two payload files.
-    let hits = index.prefixes_of("山").expect("prefixes_of");
+    let hits = index
+        .prefixes_of_with("山", jparser::engine::kana::fold)
+        .expect("prefixes_of_with");
     assert!(!hits.is_empty(), "B's keys.fst was not actually consulted");
     for hit in &hits {
         for record in &hit.records {
@@ -170,13 +162,11 @@ fn strand_interrupted_build(root: &Path, state: usize) -> PathBuf {
 /// not," which is asserted directly below via state 10's own orphan.
 #[test]
 fn no_interrupted_build_is_ever_served() {
-    let (table, opts) = table_and_opts();
-
     for state in 0..11 {
         let root = scratch(&format!("torn-state-{state}"));
 
         // A good generation is already published and being served.
-        let (good, _) = build_new(&root, XML_A.as_bytes(), &table, &opts).expect("build_new");
+        let (good, _) = build_new(&root, XML_A.as_bytes()).expect("build_new");
         assert_eq!(good, root.join("gen-1"));
 
         let orphan = strand_interrupted_build(&root, state);
@@ -226,8 +216,7 @@ fn no_interrupted_build_is_ever_served() {
         }
 
         // 4. A later build still succeeds despite the orphan.
-        let (next, _) =
-            build_new(&root, XML_A.as_bytes(), &table, &opts).expect("build after orphan");
+        let (next, _) = build_new(&root, XML_A.as_bytes()).expect("build after orphan");
         assert_eq!(
             next,
             root.join("gen-2"),

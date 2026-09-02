@@ -17,7 +17,6 @@ use crate::index::{
     EntryData, IndexError, IndexHeader, StoredRecord, ENTRIES_FILE, ENTRIES_INDEX_FILE, FST_FILE,
     HEADER_FILE, INDEX_FORMAT_VERSION, LEN_PREFIX_BYTES, RECORDS_FILE,
 };
-use crate::kana::unify;
 
 /// One dictionary key that is a prefix of the queried text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,17 +91,19 @@ impl Index {
     /// Build into a fresh directory and point readers at it only once the
     /// build has completed; see the note on `map` above for why swapping a
     /// live path is not a substitute.
+    ///
+    /// Checks the index was built against the current conjugation table
+    /// (`engine::build::fingerprint`); `open_with` takes the fingerprint
+    /// explicitly, for tests.
     pub fn open(dir: &Path) -> Result<Self, IndexError> {
-        Self::open_with(dir, crate::conjugation::embedded_asset_fingerprint())
+        Self::open_with(dir, crate::engine::build::fingerprint())
     }
 
     /// [`Index::open`] with the caller supplying the conjugation fingerprint it
     /// expects the index to have been built against.
     ///
-    /// The two engines assign conjugation ids from different tables, so each
-    /// must open only its own index — the guard is what makes a cross-read
-    /// impossible rather than silently wrong. At the Phase 1b switchover this
-    /// becomes the only form.
+    /// The guard is what makes reading a stale index impossible rather than
+    /// silently wrong.
     pub fn open_with(dir: &Path, expected_fingerprint: u64) -> Result<Self, IndexError> {
         let header: IndexHeader = bincode::deserialize(&std::fs::read(dir.join(HEADER_FILE))?)?;
         if header.version != INDEX_FORMAT_VERSION {
@@ -132,11 +133,16 @@ impl Index {
         &self.header
     }
 
-    /// [`prefixes_of`] with the key normalization supplied by the caller.
+    /// Every dictionary key that is a prefix of `text`, shortest first,
+    /// including the empty key when one is indexed, with the key
+    /// normalization supplied by the caller.
     ///
-    /// The two engines fold differently and an index is built with the fold
-    /// its own engine uses, so the walk has to take it as a parameter. At the
-    /// Phase 1b switchover this becomes the only form.
+    /// A single transducer walk, one character at a time: every node that is
+    /// final marks a complete headword. `""` is a prefix of every string, so
+    /// the root node's finality is checked before consuming any character.
+    ///
+    /// `fold` is a parameter rather than a constant because an index is built
+    /// with the fold its builder used, and the walk has to agree with it.
     pub fn prefixes_of_with(
         &self,
         text: &str,
@@ -173,20 +179,6 @@ impl Index {
             }
         }
         Ok(hits)
-    }
-
-    /// Every dictionary key that is a prefix of `text`, shortest first,
-    /// including the empty key when one is indexed.
-    ///
-    /// This single walk replaces ta-old's binary-search-per-length loop:
-    /// stepping the transducer one character at a time, every node that is
-    /// final marks a complete headword or stem. `""` is a prefix of every
-    /// string, so the root node's finality is checked before consuming any
-    /// character; an irregular verb whose whole surface is its own
-    /// remove-suffix (する/vs-i, 来る や くる/vk) generates exactly this
-    /// empty-key stem, and it is the only way that stem is ever returned.
-    pub fn prefixes_of(&self, text: &str) -> Result<Vec<PrefixHit>, IndexError> {
-        self.prefixes_of_with(text, unify)
     }
 
     fn records_at(&self, offset: u64) -> Result<Vec<StoredRecord>, IndexError> {

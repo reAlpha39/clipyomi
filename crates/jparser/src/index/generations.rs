@@ -24,10 +24,7 @@
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
-use crate::conjugation::ConjugationTable;
-use crate::index::build::build_from_reader;
 use crate::index::{BuildReport, IndexError};
-use crate::stem::StemOptions;
 
 /// Directory-name prefix for a published generation.
 pub const GENERATION_PREFIX: &str = "gen-";
@@ -182,12 +179,7 @@ static BUILD_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU
 /// of a single attempt would otherwise fail even though a valid generation
 /// now exists. Each retry recomputes the target rather than reusing the one
 /// that just lost.
-pub fn build_new(
-    root: &Path,
-    xml: impl BufRead,
-    table: &ConjugationTable,
-    opts: &StemOptions,
-) -> Result<(PathBuf, BuildReport), IndexError> {
+pub fn build_new(root: &Path, xml: impl BufRead) -> Result<(PathBuf, BuildReport), IndexError> {
     std::fs::create_dir_all(root)?;
 
     // A clock before the Unix epoch is not a reason to refuse to build a
@@ -206,7 +198,7 @@ pub fn build_new(
     // and a collision is a signal worth surfacing rather than absorbing.
     std::fs::create_dir(&build_dir)?;
 
-    let report = build_from_reader(xml, table, opts, &build_dir)?;
+    let report = crate::engine::build::build_from_reader(xml, &build_dir)?;
 
     let mut published = publish(&build_dir, root, next_generation(root)?);
     for _ in 1..PUBLISH_ATTEMPTS {
@@ -281,9 +273,6 @@ pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
 mod tests {
     use super::*;
 
-    use crate::conjugation::ConjugationTable;
-    use crate::stem::StemOptions;
-
     /// The smallest JMdict that produces a non-empty index.
     const MINI_XML: &str = concat!(
         r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -300,9 +289,7 @@ mod tests {
     );
 
     fn build_into(root: &Path) -> PathBuf {
-        let table = ConjugationTable::load_embedded().expect("table");
-        let opts = StemOptions::default();
-        let (path, _) = build_new(root, MINI_XML.as_bytes(), &table, &opts).expect("build_new");
+        let (path, _) = build_new(root, MINI_XML.as_bytes()).expect("build_new");
         path
     }
 
@@ -450,12 +437,10 @@ mod tests {
     #[test]
     fn two_concurrent_builds_use_distinct_temp_names() {
         let root = scratch("gen-nonce");
-        let table = ConjugationTable::load_embedded().expect("table");
-        let opts = StemOptions::default();
 
         let results = std::thread::scope(|s| {
             let handles: Vec<_> = (0..2)
-                .map(|_| s.spawn(|| build_new(&root, MINI_XML.as_bytes(), &table, &opts)))
+                .map(|_| s.spawn(|| build_new(&root, MINI_XML.as_bytes())))
                 .collect();
             handles
                 .into_iter()

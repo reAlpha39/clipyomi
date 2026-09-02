@@ -15,8 +15,6 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use jmdict_source::SOURCE_FILE;
-use jparser::conjugation::ConjugationTable;
-use jparser::stem::StemOptions;
 
 const XML: &str = concat!(
     r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -45,13 +43,8 @@ fn a_gzipped_archive_builds_an_index_through_ensure_dictionary() {
     e.write_all(XML.as_bytes()).expect("gz write");
     std::fs::write(source_dir.join(SOURCE_FILE), e.finish().expect("gz")).expect("write");
 
-    let table = ConjugationTable::load_embedded().expect("table");
-    let opts = StemOptions::default();
-
-    let index = jparser::index::ensure_dictionary(&root, &table, &opts, 2, || {
-        jmdict_source::resolve(&source_dir)
-    })
-    .expect("ensure_dictionary");
+    let index = jparser::index::ensure_dictionary(&root, 2, || jmdict_source::resolve(&source_dir))
+        .expect("ensure_dictionary");
 
     assert_eq!(
         index.entry(1000010).expect("entry").expect("present").id,
