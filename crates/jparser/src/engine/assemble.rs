@@ -13,17 +13,17 @@
 //! Candidates to entries: turning the winning path's [`Step`]s into the
 //! public [`Segment`]/[`Entry`] shape the application consumes.
 //!
-//! Per spec §8, [`Entry::conjugation`] stays `None` throughout Phase 1a --
-//! Phase 1b writes the formatter that renders `Entry::steps` into an English
-//! label. What this module owns instead is the one piece Phase 1a *does*
-//! have to get right: reading reconstruction. `EntryData::readings` holds a
-//! reading only for a kanji entry, and only in its dictionary form, so a
-//! conjugated match has to strip that dictionary form's own suffix and
-//! rebuild it from the matched surface's tail. A reading that does not
-//! strip cleanly is never guessed at -- `None` is what goes out, because a
-//! wrong reading renders as furigana the reader has no reason to doubt.
+//! `Entry::conjugation` is `label::fmt` over the chain `chain::steps_for`
+//! hands back (Phase 1b-i). What this module owns beyond that is reading
+//! reconstruction: `EntryData::readings` holds a reading only for a kanji
+//! entry, and only in its dictionary form, so a conjugated match has to
+//! strip that dictionary form's own suffix and rebuild it from the matched
+//! surface's tail. A reading that does not strip cleanly is never guessed
+//! at -- `None` is what goes out, because a wrong reading renders as
+//! furigana the reader has no reason to doubt.
 
 use crate::engine::chain;
+use crate::engine::label;
 use crate::engine::lattice::Step;
 use crate::engine::lex::Candidate;
 use crate::engine::table::CLASSES;
@@ -134,8 +134,8 @@ pub fn order(cands: &mut [Candidate]) {
 }
 
 /// One [`Entry`] for `cand`: its dictionary data resolved through `index`,
-/// its reading reconstructed per this module's contract, and `conjugation`
-/// left `None` for Phase 1b to fill.
+/// its reading reconstructed per this module's contract, and its
+/// conjugation label rendered from the chain by `label::fmt`.
 fn build_entry(index: &Index, chars: &[char], cand: &Candidate) -> Result<Entry, IndexError> {
     // A candidate's `entry_id` always names an entry in the same index it
     // was matched from -- `lex::candidates` reads both from `index` in the
@@ -148,16 +148,17 @@ fn build_entry(index: &Index, chars: &[char], cand: &Candidate) -> Result<Entry,
 
     let reading = reading_for(&entry_data, cand, chars);
     let pos = union_pos(&entry_data.senses);
+    let steps = chain::steps_for(cand);
 
     Ok(Entry {
         headword: cand.headword.clone(),
         reading,
-        conjugation: None,
+        conjugation: label::fmt(&steps),
         pos,
         senses: entry_data.senses,
         flags: cand.flags,
         entry_id: cand.entry_id,
-        steps: chain::steps_for(cand),
+        steps,
     })
 }
 

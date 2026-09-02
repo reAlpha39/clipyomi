@@ -401,14 +401,14 @@ fn a_compound_of_two_common_kanji_should_not_shatter() {
 }
 
 #[test]
-fn phase_1a_emits_no_conjugation_label_but_does_emit_the_steps() {
+fn the_v2_path_labels_a_conjugated_entry_from_its_steps() {
     let dir = scratch("assemble-steps");
     build_v2(&dir);
     let r = parse_v2_over(&dir, "書いた");
     let e = &r.segments[0].entries[0];
     assert_eq!(e.headword, "書く");
-    assert_eq!(e.conjugation, None, "Phase 1b writes the formatter");
-    assert!(!e.steps.is_empty(), "and Phase 1a hands it the steps");
+    assert!(!e.steps.is_empty(), "Phase 1a hands the formatter the steps");
+    assert_eq!(e.conjugation.as_deref(), Some("Past"), "Phase 1b-i names them");
 }
 
 #[test]
