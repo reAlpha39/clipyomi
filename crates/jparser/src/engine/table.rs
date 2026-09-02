@@ -720,11 +720,29 @@ mod tests {
         CLASSES.iter().position(|c| c.name == name).expect("class") as ClassId
     }
 
+    /// The learner-standard register design §3 fixes (also documented atop
+    /// `conjugation_labels.txt`) -- every word `label::fmt` can currently
+    /// emit. Kept here only so `check_fmt` can assert the precondition its
+    /// `split(' ')` repeat-check relies on.
+    const KNOWN_LABEL_WORDS: &[&str] = &[
+        "Causative", "Passive/Potential", "Negative", "Volitional", "Polite", "Want-to", "Past",
+        "Te-form", "Copula", "Conditional", "Imperative", "Adverbial",
+    ];
+
     /// Asserts `fmt` is total on `steps`: returns `None` or a non-empty label
     /// with no repeated word. Asserts nothing about which words.
     fn check_fmt(steps: &[ConjStep]) {
         if let Some(label) = crate::engine::label::fmt(steps) {
             assert!(!label.is_empty(), "empty Some for {steps:?}");
+            // split(' ') below only detects a repeat correctly because every
+            // known label word is one space-free token -- a future
+            // multi-word addition (e.g. "Past Progressive") would silently
+            // break it, so assert the precondition explicitly.
+            assert!(
+                KNOWN_LABEL_WORDS.iter().all(|w| !w.contains(' ')),
+                "label vocabulary grew a multi-word entry; split(' ')-based repeat detection \
+                 needs revisiting"
+            );
             let words: Vec<&str> = label.split(' ').collect();
             let unique: std::collections::BTreeSet<&str> = words.iter().copied().collect();
             assert_eq!(words.len(), unique.len(), "repeated word in {label:?} for {steps:?}");
@@ -916,7 +934,7 @@ mod tests {
     }
 
     #[test]
-    fn an_uninflected_or_single_step_chain_carries_no_auxiliary() {
+    fn the_innermost_step_of_a_chain_carries_no_auxiliary() {
         let c = chars("書いた");
         let hits = table().chains_ending_at(&c, 3, 3);
         let hit = hits.iter().find(|h| key(&c, h) == "書く").expect("書いた -> 書く");

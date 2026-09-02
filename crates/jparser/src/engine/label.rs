@@ -13,8 +13,8 @@
 // English vocabulary from "Japanese verb conjugation", English Wikipedia,
 // https://en.wikipedia.org/wiki/Japanese_verb_conjugation, read 2026-09;
 // terminology only. assets/conjugations.json, src/conjugation.rs and
-// src/matcher.rs were not opened while this file or
-// tests/fixtures/conjugation_labels.txt was written.
+// src/matcher/ (matcher.rs and matcher/verb.rs) were not opened while this
+// file or tests/fixtures/conjugation_labels.txt was written.
 
 //! The English conjugation label -- Phase 1b-i's half of master plan §7.3's
 //! recombiner. Reads [`ConjStep`]s, writes `Entry::conjugation`.

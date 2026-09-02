@@ -120,7 +120,13 @@ pub fn to_segment(
 /// (same entry, same chain) ties on every field including `entry_id`, but
 /// is then indistinguishable from itself in the output either way -- so
 /// `sort_unstable_by_key` never has a real tie left for stability to matter
-/// to, and is safe here.
+/// to, and is safe here. That safety leans on a precondition this function
+/// does not itself enforce: `lex::dedup_shallowest` has already collapsed
+/// every candidate sharing a `(len, entry_id)` down to one per shallowest
+/// chain before `order` ever sees them. Without that upstream collapse, two
+/// candidates with the same entry but *different* chains -- and therefore
+/// different `Entry::conjugation` labels -- could tie on every key above and
+/// still be visibly different in the output.
 pub fn order(cands: &mut [Candidate]) {
     cands.sort_unstable_by_key(|c| {
         (

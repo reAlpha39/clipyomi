@@ -42,9 +42,15 @@ alone sum to 608, before the small edits and the 280-line fixture). Stated
 plainly rather than repeated as the old estimate: the excess is the coverage
 test's walk and the three extra fixture rows the review added to pin dedup
 and step-order on chains other than ます+です, both of which earned their
-place rather than being scope creep. The whole phase, measured against its
-own plan's base commit (`3bded19`) rather than against any single task's
-diff, is **9 files changed, 956 insertions(+), 55 deletions(-)**.
+place rather than being scope creep. Measured against the plan's base commit
+(`3bded19`) through the commit that finished the code (`af0628f`) — the
+*code range*, not the whole phase — this is **9 files changed, 956
+insertions(+), 55 deletions(-)**. The whole phase, through this handoff's own
+closing commits, is larger: **13 files changed, 1,343 insertions(+), 66
+deletions(-)**. The 9-file code-range figure omits `lib.rs`'s doc-comment
+change, which is a source file, not only the two closing docs commits this
+handoff itself is part of — a handoff cannot count its own commit, which is
+why the two figures are reported separately rather than folded into one.
 
 Both feature states of the standing test suite pass at the counts every task
 in this phase reported and this handoff reconfirmed independently at
@@ -86,6 +92,7 @@ renders `…Negative Want-to` rather than `…Negative Past`, which is finding 5
 below (the た/たい collision), not a formatter defect. Both causes are
 outside this phase's files — the split is the DP's (`cost.rs`/`lattice.rs`,
 Phase 1a's metric-gated territory) and the Want-to mislabelling is
+`lex::dedup_shallowest`'s equal-depth tie (finding 5 below), not
 `assemble::order`'s ranking. `label::fmt` itself renders that exact chain
 correctly: the fixture carries the row for it (`書かせられた` at depth 3,
 `Causative Passive/Potential Past`, and `食べました` at depth 2, `Polite
@@ -137,17 +144,36 @@ that reasoning rather than standing in for it.
 
 ## 3. What the fixture decided that design §3 did not say in advance
 
-The strongest result of this phase is a negative one: nothing had to be
-added to `label.rs`'s three lookup tables. `AUX_WORD`, `FORM_WORD` and
-`OVERRIDE` were transcribed from the design exactly as design §3 wrote them,
-and all 221 fixture rows — including the three the review added afterward to
-pin dedup and step order on chains other than ます+です — passed against
-that transcription without a single table edit. The hand-written English
-column (written from the grid before `label.rs` existed) and the
-independently-specified formatter agreed on every row with no negotiation
-between them, which is the outcome design §4.1's whole authorship order was
-built to test for: it means design §3's rules were right in advance, not
-retrofitted to make the fixture pass after the fact.
+The fixture's English column is not evidence of an independent check on the
+formatter: `AUX_WORD`, `FORM_WORD`, `OVERRIDE` and the whole body of `fmt`
+are printed verbatim in the plan (`docs/superpowers/plans/
+2026-09-02-engine-v2-phase1b-i.md`), as is the entire fixture, and both were
+committed together in `3bded19` by one author, both derived from design §3.
+They share an ancestor, so their agreement cannot be evidence that the
+vocabulary or the rules are correct. What the phase actually earned is four
+narrower, verified claims:
+
+1. **No fixture row's `expected` value was ever edited toward observed
+   output.** The fixture is touched by exactly two commits, `3548d04` and
+   `81fd9a0`, both before the formatter commit `8e59b4b`; `81fd9a0` added
+   three rows and corrected comments only.
+2. **Design §3's rules were complete over the whole reachable input space.**
+   221 hand-applied rows and 21,760 walked chains produced **zero**
+   additions to the three lookup tables. A rule set retrofitted to a
+   fixture always grows; this one did not.
+3. **The transcription from design to code is faithful** — verified
+   byte-for-byte against the plan by review.
+4. **The gate could fail before it was trusted to pass**: 183 rows red
+   against the `None`-returning stub, exactly the fixture's non-`-` count.
+
+The honest caveat the fixture header already half-admits: for roughly thirty
+rows describing surfaces that are not natural Japanese — 読んな, 読んなれ,
+食べよよう, 食べるじゃ, and 食べた read as `たい:ガル接続` — the `expected`
+column is the rule's output by construction, so those rows verify
+*consistency*, not correctness. The gate's rule-grading power sits in the
+naturally-occurring surfaces (書いた, 食べさせられませんでした, 高く,
+食べなかった, ませんでした and the rest), and there the review checked the
+English on every row and found none wrong.
 
 Two corrections were nonetheless made *before* the formatter was written,
 found by enumerating the grid rather than by any fixture row failing:
@@ -191,14 +217,60 @@ are recorded below, with the surfaces that expose each.
    stem and its ガル接続 surface is *also* a bare `た`. Both are real
    Continuation hits at the same trie node, both accept a preceding 連用形,
    so **every polite past also carries a Want-to reading over the identical
-   span**. Which one the reader sees is decided by `assemble::order`'s
-   ranking, not by the formatter. Three instances appear in the regenerated
-   snapshot: 読みました and しました render `Polite Want-to` where `Polite
-   Past` is right, and 書かせられた renders `Causative Passive/Potential
-   Want-to` where the fixture's own row for that exact chain says `Causative
+   span**. Which one the reader sees is decided by `lex::dedup_shallowest`
+   (`engine/lex.rs:170`), not by `assemble::order` and not by the formatter.
+   For 読みました the two competing chains — `…ます:連用形 た:基本形` and
+   `…ます:連用形 たい:ガル接続` — have the same span, the same `entry_id`,
+   and the same `steps.len()` (3; 4 for 書かせられた), so
+   `dedup_shallowest`'s key `(cand.len, cand.entry_id)` ties and the existing
+   (first-generated) candidate is kept, deleting the other before
+   `assemble::order` is ever called. Every one of `order`'s own keys —
+   `(!exact, !COMMON, PRONOUNCE, steps.len(), entry_id)` — ties for these two
+   as well, so `order` neither can nor does make this choice. The real
+   decision is `Table::search`'s hit order at the shared `た` trie node,
+   which follows `ATTACHES_TO`'s row order: `("たい", …)` at `table.rs:268`
+   precedes the two `("た", …)` rows at `table.rs:269-270`, which is why
+   Want-to wins. Three instances appear in the regenerated snapshot: 読みました
+   and しました render `Polite Want-to` where `Polite Past` is right, and
+   書かせられた renders `Causative Passive/Potential Want-to` where the
+   fixture's own row for that exact chain says `Causative
    Passive/Potential Past`. The fixture deliberately pins **both** sides of
    this collision (as separate `chain` rows), so this is documented,
    understood behaviour rather than an unknown.
+
+   Two fixes exist, at different costs, and only one of them needs the metric
+   gate. The **cheap fix** — reordering `ATTACHES_TO` so the `たい` row
+   follows the two `た` rows — changes only which of two equal-depth chains
+   survives `dedup_shallowest`; the survivor keeps the same `len`, the same
+   `entry_id` and the same span, so `jparser-cli score`'s `accumulate`
+   (§8.4 above: it reads only `gold.spans` plus `segments[].start`/`.len`/
+   `.matched` and `entries.first().entry_id`) cannot observe the difference —
+   the same neutrality argument §8.4 already makes. That neutrality is
+   derived from the code here and should be confirmed by measurement the way
+   §8.4 was, not assumed; the cost is a one-row reorder plus a snapshot
+   regeneration, with the metric run as *confirmation* rather than as a
+   gate. The **principled fix** — making `たい:ガル接続` non-terminal, since
+   no `ATTACHES_TO` row actually requires that form — deletes a candidate
+   outright and can move the DP's span choice elsewhere, so it is the one
+   that is genuinely metric-gated, like the rest of this section.
+
+   The same equal-depth dedup tie decides more than this one label. Every
+   godan 仮定形/命令ｅ pair collides identically: 書け is both
+   `五段・カ行イ音便:仮定形` and `五段・カ行イ音便:命令ｅ` — same surface,
+   same entry, same `steps.len()` of 1 — so `Conditional` versus `Imperative`
+   is settled by row order too; 読め (五段・マ行) and 話せ (五段・サ行) are
+   the same shape. The fixture pins both readings as separate rows (書け at
+   both); the 30-sentence snapshot corpus happens not to exercise them.
+
+   This is deferrable only because v2 is not yet the default: `parse_v2` has
+   exactly two callers in the tree, `bin/jparser-cli/main.rs` and
+   `bin/jparser-cli/score.rs`; `src-tauri` never calls it and the frontend
+   never sees it, so no end user sees a wrong label today. Were v2 becoming
+   the default in this commit, "Polite Want-to" on ました — the most common
+   polite form in the language — would be a blocker, not a deferral. Phase
+   1b-ii owns the switchover and must settle this before flipping the
+   default.
+
 6. **A distinct, larger class: correct labels on implausible parses.** The
    formatter names whatever chain it is handed, so a label can be perfectly
    correct while describing a parse no reader would accept — this is a
@@ -242,7 +314,8 @@ are recorded below, with the surfaces that expose each.
    `…Polite Negative Want-to` via finding 5. Neither cause is the
    formatter's: the split is the DP's (`cost.rs`/`lattice.rs`, Phase 1a's
    metric-gated territory) and the Want-to mislabelling is finding 5's
-   ranking question. The formatter renders that exact chain correctly —
+   `lex::dedup_shallowest` equal-depth tie, not a ranking question. The
+   formatter renders that exact chain correctly —
    `conjugation_labels.txt` carries the row and it passes. Recorded here as a
    correction to the design, not as an open defect.
 9. **A documentation defect worth recording.** The plan asserted
@@ -311,3 +384,15 @@ behind that gap now have a named cause (§4's `ATTACHES_TO` and collision
 findings above); whoever plans 1b-ii should decide whether to take any of
 those fixes, measured against the Phase 0 metrics, before or alongside
 making v2 the default.
+
+One more item for whoever lands the switchover: `EngineChoice`'s doc comment
+in `crates/jparser/src/bin/jparser-cli/main.rs:55-57` reads *"v1 is the
+default for all of Phase 1a: the switchover is Phase 1b's, so no build ships
+with `conjugation: None`."* Its *reason*, not merely its phase number, is now
+obsolete — v2 no longer emits `None` for a conjugated entry, so that
+sentence's stated justification for keeping v1 the default no longer holds.
+The real reason v1 is still the default appears nowhere in the code: Phase
+1a's metric gate is open on four of the eight cells above. Phase 1b-ii
+touches this file to flip the default in any case, so it should correct both
+the phase number and the reason in the same edit. Recorded here, not fixed —
+this handoff's own scope is 1b-i, and `main.rs` is 1b-ii's file to change.

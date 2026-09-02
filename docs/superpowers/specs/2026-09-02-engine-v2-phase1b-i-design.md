@@ -104,8 +104,7 @@ match — never the other way round.
 ### 3.2 One word from the outermost step's form
 
 Applies to whichever step is last — the main word's own form when there is no
-auxiliary, the outermost auxiliary's form otherwise. "Adjective" means
-`Class::is_adjective` or an adjective-conjugating auxiliary (ない, たい).
+auxiliary, the outermost auxiliary's form otherwise.
 
 | form | word |
 | --- | --- |
@@ -132,7 +131,10 @@ auxiliary, the outermost auxiliary's form otherwise. "Adjective" means
    基本形) and through だ (特殊・ダ, 連用形); ませ through ます 未然形 and ます
    命令ｅ. The formatter labels each chain it is given. The fixture pins each
    chain separately (its `chain` column, §4.1); which one the user sees is
-   `assemble::order`'s decision and is unchanged by this phase.
+   `lex::dedup_shallowest`'s decision (an equal-depth tie on `(len,
+   entry_id)` and `steps.len()`, resolved by `ATTACHES_TO`'s row order, not
+   by `assemble::order`) and is unchanged by this phase — see the handoff's
+   §4 finding 5.
 
 ---
 
@@ -348,7 +350,12 @@ questions — Phase 1a's cost-model-gated territory, not this phase's:
    coverage test passes.
 2. `jparser-cli parse --engine v2` labels 食べさせられませんでした
    *"Causative Passive/Potential Polite Negative Past"*; the v2 snapshot is
-   regenerated and its diff reviewed.
+   regenerated and its diff reviewed. **Amended, phase 1b-i handoff:** this
+   does not hold — against the curated test dictionary the DP splits the
+   word into two spans, and the tail renders Want-to, not Past. See the
+   handoff's §4 finding 8 for what `parse --engine v2` actually emits;
+   `書いた → 書く (Past)` is the working demonstration that the label
+   reaches the CLI.
 3. The standing gates: `cargo test -p jparser` with and without
    `--features mecab`; `cargo clippy -p jparser --all-targets -- -D warnings`
    in both feature states; `cargo check -p jparser --no-default-features`.
