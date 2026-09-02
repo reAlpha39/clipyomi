@@ -31,16 +31,16 @@ start=0 len=1 本 matched reading=もと
 start=1 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=2 len=5 読みました matched reading=よみました
-    読む (-) [よみました] to read
+    読む (Polite Want-to) [よみました] to read
 start=7 len=1 。 unmatched
 
 === これは面白い映画だ。
 start=0 len=2 これ matched reading=-
     これ (-) [-] this
-    こる (-) [-] to become stiff (of muscles)
-    くる (-) [-] to come (spatially or temporally)
+    こる (Conditional) [-] to become stiff (of muscles)
+    くる (Passive/Potential) [-] to come (spatially or temporally)
     これ (-) [-] hey
-    こる (-) [-] to pack
+    こる (Conditional) [-] to pack
 start=2 len=1 は matched reading=-
     は (-) [-] indicates sentence topic
     は (-) [-] tooth
@@ -70,7 +70,7 @@ start=3 len=1 車 matched reading=くるま
 start=4 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=5 len=3 買った matched reading=かった
-    買う (-) [かった] to buy
+    買う (Past) [かった] to buy
 start=8 len=1 。 unmatched
 
 === 冷たい水を飲まない。
@@ -82,7 +82,7 @@ start=3 len=1 水 matched reading=みず
 start=4 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=5 len=4 飲まない matched reading=のまない
-    飲む (-) [のまない] to drink
+    飲む (Negative) [のまない] to drink
 start=9 len=1 。 unmatched
 
 === 彼は学校に来る。
@@ -203,7 +203,7 @@ start=3 len=2 宿題 matched reading=しゅくだい
 start=5 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=6 len=4 しました matched reading=-
-    する (-) [-] to do
+    する (Polite Want-to) [-] to do
 start=10 len=1 。 unmatched
 
 === 彼に何も言われなかった。
@@ -221,7 +221,7 @@ start=1 len=1 に matched reading=-
 start=2 len=2 何も matched reading=なにも
     何も (-) [なにも] (not) anything
 start=4 len=7 言われなかった matched reading=いわれなかった
-    言う (-) [いわれなかった] to say
+    言う (Passive/Potential Negative Past) [いわれなかった] to say
 start=11 len=1 。 unmatched
 
 === 手紙を書かせられた。
@@ -230,7 +230,7 @@ start=0 len=2 手紙 matched reading=てがみ
 start=2 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=3 len=6 書かせられた matched reading=かかせられた
-    書く (-) [かかせられた] to write
+    書く (Causative Passive/Potential Want-to) [かかせられた] to write
 start=9 len=1 。 unmatched
 
 === 日本語を話せますか。
@@ -256,9 +256,9 @@ start=9 len=1 。 unmatched
 === 早く帰りたかった。
 start=0 len=2 早く matched reading=はやく
     早く (-) [はやく] early
-    早い (-) [はやく] fast
+    早い (Adverbial) [はやく] fast
 start=2 len=6 帰りたかった matched reading=かえりたかった
-    帰る (-) [かえりたかった] to return
+    帰る (Want-to Past) [かえりたかった] to return
 start=8 len=1 。 unmatched
 
 === 雨が降りそうだ。
@@ -284,7 +284,7 @@ start=3 len=1 に matched reading=-
     にる (-) [-] to boil
     ... 6 more
 start=4 len=3 登った matched reading=のぼった
-    登る (-) [のぼった] to ascend
+    登る (Past) [のぼった] to ascend
 start=7 len=1 。 unmatched
 
 === 水が飲みたい。
@@ -299,14 +299,14 @@ start=1 len=1 が matched reading=-
     が (-) [-] picture
     ... 5 more
 start=2 len=4 飲みたい matched reading=のみたい
-    飲む (-) [のみたい] to drink
+    飲む (Want-to) [のみたい] to drink
 start=6 len=1 。 unmatched
 
 === 毎日走っている。
 start=0 len=2 毎日 matched reading=まいにち
     毎日 (-) [まいにち] every day
 start=2 len=3 走って matched reading=はしって
-    走る (-) [はしって] to run
+    走る (Te-form) [はしって] to run
 start=5 len=2 いる matched reading=-
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
@@ -327,13 +327,13 @@ start=2 len=1 が matched reading=-
     が (-) [-] picture
     ... 5 more
 start=3 len=3 遅れて matched reading=おくれて
-    遅れる (-) [おくれて] to be late
+    遅れる (Te-form) [おくれて] to be late
 start=6 len=3 います matched reading=-
-    いる (-) [-] to shoot (arrow, bolt, dart)
-    いる (-) [-] to be (of animate objects)
-    いる (-) [-] to cast
+    いる (Polite) [-] to shoot (arrow, bolt, dart)
+    いる (Polite) [-] to be (of animate objects)
+    いる (Polite) [-] to cast
     います (-) [-] to be
-    いる (-) [-] to calm down
+    いる (Polite) [-] to calm down
     ... 2 more
 start=9 len=1 。 unmatched
 
@@ -343,9 +343,9 @@ start=0 len=2 ドア matched reading=-
 start=2 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=3 len=3 開けて matched reading=あけて
-    開ける (-) [あけて] to open (a door, etc.)
-    開ける (-) [ひらけて] to open out (of a view, scenery, etc.)
-    開ける (-) [はだけて] to open (e.g. one's robe)
+    開ける (Te-form) [あけて] to open (a door, etc.)
+    開ける (Te-form) [ひらけて] to open out (of a view, scenery, etc.)
+    開ける (Te-form) [はだけて] to open (e.g. one's robe)
 start=6 len=4 ください matched reading=-
     ください (-) [-] please (give me)
 start=10 len=1 。 unmatched
@@ -370,9 +370,9 @@ start=5 len=1 で matched reading=-
     で (-) [-] without doing ...
     ... 3 more
 start=6 len=3 遊んで matched reading=あそんで
-    遊ぶ (-) [あそんで] to play (games, sports)
-    遊む (-) [すさんで] to grow wild
-    遊ぶ (-) [すさんで] to grow wild
+    遊ぶ (Te-form) [あそんで] to play (games, sports)
+    遊む (Te-form) [すさんで] to grow wild
+    遊ぶ (Te-form) [すさんで] to grow wild
 start=9 len=2 いる matched reading=-
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
@@ -389,7 +389,7 @@ start=4 len=2 説明 matched reading=せつめい
     説明 (-) [せつめい] explanation
 start=6 len=2 して matched reading=-
     して (-) [-] doer
-    する (-) [-] to do
+    する (Te-form) [-] to do
     して (-) [-] by (indicating means of action)
 start=8 len=4 ください matched reading=-
     ください (-) [-] please (give me)
@@ -416,7 +416,7 @@ start=5 len=1 が matched reading=-
     が (-) [-] picture
     ... 5 more
 start=6 len=3 待って matched reading=まって
-    待つ (-) [まって] to wait
+    待つ (Te-form) [まって] to wait
 start=9 len=2 いる matched reading=-
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
@@ -517,10 +517,10 @@ start=2 len=1 に matched reading=-
     にる (-) [-] to boil
     ... 6 more
 start=3 len=6 なりたいです matched reading=-
-    なる (-) [-] to become
-    なる (-) [-] to sound
-    なる (-) [-] to bear fruit
-    なり (-) [-] to be
+    なる (Want-to Polite) [-] to become
+    なる (Want-to Polite) [-] to sound
+    なる (Want-to Polite) [-] to bear fruit
+    なり (Want-to Polite) [-] to be
 start=9 len=1 。 unmatched
 
 === パソコンが壊れてしまった。
@@ -535,17 +535,17 @@ start=4 len=1 が matched reading=-
     が (-) [-] picture
     ... 5 more
 start=5 len=3 壊れて matched reading=こわれて
-    壊れる (-) [こわれて] to be broken
+    壊れる (Te-form) [こわれて] to be broken
 start=8 len=4 しまった matched reading=-
     しまった (-) [-] darn it!
-    しまう (-) [-] to finish
-    しまる (-) [-] to be shut
-    しまる (-) [-] to be strangled
+    しまう (Past) [-] to finish
+    しまる (Past) [-] to be shut
+    しまる (Past) [-] to be strangled
 start=12 len=1 。 unmatched
 
 === 出て来るのを待っていた。
 start=0 len=2 出て matched reading=でて
-    出る (-) [でて] to leave
+    出る (Te-form) [でて] to leave
 start=2 len=2 来る matched reading=くる
     来る (-) [くる] to come (spatially or temporally)
     来る (-) [きたる] next (e.g. "next April")
