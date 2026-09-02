@@ -80,7 +80,11 @@ fn chains_over(table: &Table, surface: &str) -> Vec<ChainHit> {
 #[test]
 fn the_fixture_parses_and_is_not_empty() {
     let rows = rows();
-    assert!(rows.len() > 200, "expected the full grid, got {} rows", rows.len());
+    assert!(
+        rows.len() >= 221,
+        "the grid lost rows: {} (the fixture is the phase's authority; rows may be added, never quietly dropped)",
+        rows.len()
+    );
     for r in &rows {
         assert!(r.chain.contains(':'), "line {}: chain has no class:form step", r.line_no);
     }

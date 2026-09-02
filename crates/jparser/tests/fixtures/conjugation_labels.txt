@@ -180,8 +180,9 @@
 書いた	五段・カ行イ音便:連用タ接続 た:基本形	Past
 書いたろ	五段・カ行イ音便:連用タ接続 た:未然形	Past
 # table finding: ATTACHES_TO points the voiced past だ at the copula class
-# 特殊・ダ, whose forms are なら/な/なれ/だろ/だっ/で, so 読んだら is unreachable
-# and the four rows below it are spurious. Labelled by rule regardless.
+# 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/だっ/で, so 読んだら is
+# unreachable. Of the rows below, 読んなら, 読んな, 読んなれ and 読んだっ are
+# spurious; 読んだ, 読んだろ and 読んで are real. All labelled by rule.
 読んなら	五段・マ行:連用タ接続 だ:仮定形	Conditional
 読んな	五段・マ行:連用タ接続 だ:体言接続	Past
 読んなれ	五段・マ行:連用タ接続 だ:命令ｅ	Past Imperative
@@ -191,6 +192,10 @@
 読んで	五段・マ行:連用タ接続 だ:連用形	Te-form
 書いて	五段・カ行イ音便:連用タ接続 て:基本形	Te-form
 読んで	五段・マ行:連用タ接続 で:基本形	Te-form
+# です/じゃ/や attach to 基本形, so their depth-1 surfaces read as nonstandard
+# Japanese (食べるです, 食べるじゃ). They are the chains the table generates for
+# these lemmas; table.rs's ATTACHES_TO doc records that the じゃ/や rows never
+# fire on real text at all.
 食べるです	一段:基本形 です:基本形	Polite
 食べるでしょ	一段:基本形 です:未然形	Polite
 食べるでし	一段:基本形 です:連用形	Polite
@@ -231,7 +236,7 @@
 食べたら	一段:連用形 た:仮定形	Conditional
 食べた	一段:連用形 た:基本形	Past
 食べて	一段:連用形 て:基本形	Te-form
-# nonstandard surface, but the chain です:基本形 -> た generates it
+# nonstandard surface, but the chain です:連用形 -> た generates it
 食べるでした	一段:基本形 です:連用形 た:基本形	Polite Past
 しよう	サ変・スル:未然ウ接続 う:基本形	Volitional
 こよう	カ変・クル:未然ウ接続 う:基本形	Volitional
@@ -264,3 +269,12 @@
 取られました	五段・ラ行:未然形 れる:連用形 ます:連用形 た:基本形	Passive/Potential Polite Past
 行った	五段・カ行促音便:連用タ接続 た:基本形	Past
 読みたかった	五段・マ行:連用形 たい:連用タ接続 た:基本形	Want-to Past
+# The dedup and step-order rules, pinned on chains that are not ます+です.
+# A formatter that special-cased "です after ます says Polite once" instead of
+# deduplicating generically would pass every row above and still double a word
+# on the two causative/passive stacks below. 食べたです is the only row where a
+# word-contributing auxiliary is followed by another, so it is what pins
+# "auxiliary words in step order" rather than "Past comes last".
+書かせさせる	五段・カ行イ音便:未然形 せる:未然形 させる:基本形	Causative
+書かれられる	五段・カ行イ音便:未然形 れる:未然形 られる:基本形	Passive/Potential
+食べたです	一段:連用形 た:基本形 です:基本形	Past Polite
