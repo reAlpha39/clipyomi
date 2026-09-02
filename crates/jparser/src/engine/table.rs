@@ -730,24 +730,48 @@ mod tests {
         // Phase 1b-i's formatter cannot tell せる from られる (both 一段) or
         // ん from て (both 不変化型) by class and form alone; the lemma has to
         // ride on the step. Master plan §7.3's chain, innermost first.
+        //
+        // Asserted as "one hit reaching 食べる carries this sequence" rather
+        // than "the first such hit does", because the tail character た is
+        // ambiguous. 特殊・タ removes nothing and its 基本形 suffix is empty,
+        // so its stem is た and its 基本形 surface is た; 特殊・タイ removes
+        // たい, leaving an empty stem, so its ガル接続 suffix た is also a
+        // bare た. Both are Continuation hits at the same node, both accept
+        // でし's 連用形, and which one `chains_ending_at` yields first is
+        // ATTACHES_TO's row order rather than anything this test should
+        // pin. The past-tense reading is the one that must exist.
         let c = chars("食べさせられませんでした");
         let hits = table().chains_ending_at(&c, c.len(), c.len());
-        let hit = hits
-            .iter()
-            .find(|h| key(&c, h) == "食べる")
-            .expect("the chain must reach 食べる");
-        let auxes: Vec<Option<&str>> = hit.steps.iter().map(|s| s.aux).collect();
-        assert_eq!(
-            auxes,
-            vec![
-                None,
-                Some("させる"),
-                Some("られる"),
-                Some("ます"),
-                Some("ん"),
-                Some("です"),
-                Some("たい"),
-            ]
+        let reaching: Vec<&ChainHit> = hits.iter().filter(|h| key(&c, h) == "食べる").collect();
+        assert!(!reaching.is_empty(), "the chain must reach 食べる");
+        for hit in &reaching {
+            assert_eq!(
+                hit.steps[0].aux, None,
+                "the innermost step is the word's own inflection, not an auxiliary"
+            );
+            assert!(
+                hit.steps[1..].iter().all(|s| s.aux.is_some()),
+                "every step after the first names an auxiliary"
+            );
+        }
+        let want = vec![
+            None,
+            Some("させる"),
+            Some("られる"),
+            Some("ます"),
+            Some("ん"),
+            Some("です"),
+            Some("た"),
+        ];
+        assert!(
+            reaching
+                .iter()
+                .any(|h| h.steps.iter().map(|s| s.aux).collect::<Vec<_>>() == want),
+            "no hit carried the past-tense reading's lemmas; got {:?}",
+            reaching
+                .iter()
+                .map(|h| h.steps.iter().map(|s| s.aux).collect::<Vec<_>>())
+                .collect::<Vec<_>>()
         );
     }
 
