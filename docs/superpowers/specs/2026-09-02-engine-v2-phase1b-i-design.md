@@ -111,9 +111,8 @@ auxiliary, the outermost auxiliary's form otherwise. "Adjective" means
 | --- | --- |
 | 仮定形, 仮定縮約１, 仮定縮約２ | Conditional |
 | 命令ｅ, 命令ｉ, 命令ｒｏ, 命令ｙｏ | Imperative |
-| 連用形 (adjective only), 連用テ接続 | Adverbial |
-| 連用デ接続 | Te-form (食べないで) |
-| 基本形, 未然形, 未然ウ接続, 未然レル接続, 未然ヌ接続, 未然特殊, 連用形 (verb), 連用タ接続, 連用ゴザイ接続, 連用ニ接続, 体言接続, 体言接続特殊, 体言接続特殊２, 文語基本形, 音便基本形, 現代基本形, 基本形-促音便, ガル接続 | *(none)* — a plain form, or a dangling attachment stem |
+| 連用テ接続 | Adverbial (高く, なく, たく — IPADIC has no 連用形 for adjectives; this is their く form) |
+| 基本形, 未然形, 未然ウ接続, 未然レル接続, 未然ヌ接続, 未然特殊, 連用形, 連用タ接続, 連用デ接続, 連用ゴザイ接続, 連用ニ接続, 体言接続, 体言接続特殊, 体言接続特殊２, 文語基本形, 音便基本形, 基本形-促音便, ガル接続 | *(none)* — a plain form, or a dangling attachment stem. 連用デ接続's surface is ない itself (the form で attaches to, without the で), so it adds nothing — an earlier draft of this table wrote "Te-form" here; the grid corrected it |
 
 ### 3.3 Rules
 
@@ -122,10 +121,10 @@ auxiliary, the outermost auxiliary's form otherwise. "Adjective" means
    食べませんでした is ます → Polite, ん → Negative, です → Polite (dropped),
    た → Past: *"Polite Negative Past"*.
 2. **Overrides.** A table keyed `(lemma, outermost form)` replaces the pair
-   of words rules 3.1 and 3.2 would emit. Two are known now: `(た, 仮定形)`
-   食べたら → *"Conditional"*, not "Past Conditional"; `(だ, 連用形)` 読んで
-   → *"Te-form"*, not "Past". The table grows only where a fixture row
-   demands it.
+   of words rules 3.1 and 3.2 would emit. Three are known now: `(た, 仮定形)`
+   食べたら → *"Conditional"*, not "Past Conditional"; `(だ, 仮定形)` the
+   same; `(だ, 連用形)` 読んで → *"Te-form"*, not "Past". The table grows
+   only where a fixture row demands it.
 3. **Empty is `None`.** Zero words → `None`, matching the v1 path's observable
    behaviour for an all-stem chain. So 書か, 書い, 食べ, 高かっ → `None`;
    食べませ → *"Polite"* — dangling, but a real candidate the DP can pick.
@@ -151,7 +150,7 @@ every form of that auxiliary — and counted:
 
 | auxiliaries deep | rows (all 20 classes) | distinct class-independent tuples |
 | --- | ---: | ---: |
-| 0 | 170 | 170 `(class, form)`; ~35 once collapsed to `(adjective?, form)` |
+| 0 | 170 | 170 `(class, form)`; 32 once collapsed to `(adjective?, form)` |
 | 1 | 1,860 | 101 `(aux lemma, aux form)` |
 | 2 | 19,730 | 1,028 |
 | 3 | 226,766 | 11,806 |
@@ -188,14 +187,14 @@ surface ⇥ chain ⇥ expected
 書か	五段・カ行イ音便:未然形	-
 ```
 
-Three parts, about 190 rows:
+Three parts, about 220 rows:
 
-- **Part A — depth 0.** One row per `(adjective?, form)` tuple, ~35, on
-  representative stems: 書く (五段), 行く (五段・カ行促音便ユク, the only
-  class with 基本形-促音便), 食べる (一段), する (サ変), 来る (カ変), あり
-  (ラ変, the only class with 現代基本形), 高い (形容詞・アウオ段), いい
-  (形容詞・イイ). More rows are welcome; these are the floor the coverage
-  test enforces.
+- **Part A — depth 0.** At least one row per `(adjective?, form)` tuple —
+  32 tuples, ~60 rows once the same form is shown on several classes — on
+  representative stems: 書く (五段), 食べる (一段), する (サ変), くる
+  (カ変), あり (ラ変), 高い (形容詞・アウオ段), いい (形容詞・イイ, the
+  class that owns 基本形-促音便). The 32 tuples are the floor the coverage
+  test enforces; more rows are welcome.
 - **Part B — depth 1.** One row per `(aux lemma, aux form)` tuple, 101, on
   whichever representative stem reaches that auxiliary's attachment form
   (食べ- for 未然形/連用形, 書い- for 連用タ接続, さ- for 未然レル接続, 書こ-
@@ -314,11 +313,26 @@ renders *"Polite"*, master plan §7.3's own word.
 The grid enumeration already shows table gaps that are **span-shape**
 questions — Phase 1a's cost-model-gated territory, not this phase's:
 
-- **`ATTACHES_TO` has no て row for 連用テ接続.** IPADIC's 連用テ接続 (高く,
-  なく, たく) is literally the form て attaches to, but the table's て rows
-  require 連用形 or 連用タ接続 only, so 高くて, 食べなくて, 行きたくて never
-  decompose. Adding the row changes candidate generation and therefore span
+- **`ATTACHES_TO` has no て or ない row for 連用テ接続.** IPADIC's
+  連用テ接続 (高く, なく, たく) is literally the form て attaches to, but the
+  table's て rows require 連用形 or 連用タ接続 only, and ない requires
+  未然形, so 高くて, 食べなくて, 高くない and 食べたくない never decompose
+  as one chain. Adding rows changes candidate generation and therefore span
   accuracy; it belongs to a 1a follow-up or 1b-ii, measured.
+- **う attaches only to 未然ウ接続.** た, だ and です carry their
+  presumptive stem as 未然形 (たろ, だろ, でしょ), so だろう, たろう and
+  でしょう never decompose; and よう, which also requires 未然ウ接続, only
+  ever produces the spurious 食べよよう / 書こよう — the natural 食べよう is
+  reached through う (食べよ+う).
+- **The voiced past だ row names the copula class.** `("だ", "特殊・ダ",
+  "連用タ接続")` gives だ the copula's forms (なら, な, なれ, だろ, だっ, で,
+  だ) rather than the 特殊・タ shape た has (たら, た, たろ). So 読んだら is
+  unreachable, and 読んな, 読んなら, 読んなれ, 読んだっ are generated. 読んで
+  still decomposes, through the で row and, coincidentally, through the
+  copula's 連用形.
+- **せる/させる and れる/られる are not restricted by the inner class.**
+  Every 未然形 accepts all four, so 食べせる and 書かられる are generated
+  beside the natural 食べさせる and 書かれる.
 - **Dangling attachment forms are live candidates** (食べませ, 書こ, 読んだっ).
   The formatter gives each a deterministic label or `None` (§3.3 rule 3);
   whether they should exist as candidates at all is `cost.rs`/`lex.rs`'s
