@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! The clipboard poll.
 //!
@@ -30,7 +25,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 /// to find out what that costs.
 pub const MAX_INPUT_CHARS: usize = 10_000;
 
-/// Kana or a CJK ideograph — ta-old's test for "is this worth parsing".
+/// Kana or a CJK ideograph: the test for "is this worth parsing".
 fn is_japanese(c: char) -> bool {
     matches!(c,
         '\u{3040}'..='\u{309F}'   // hiragana
@@ -205,8 +200,8 @@ mod tests {
         assert!(!should_parse("東京", Some("東京"), None));
     }
 
-    /// ta-old's rule. English, code, and URLs pass through the clipboard
-    /// constantly and none of them are worth a parse.
+    /// Only Japanese is worth parsing. English, code, and URLs pass through
+    /// the clipboard constantly and none of them are worth a parse.
     #[test]
     fn text_with_no_japanese_is_skipped() {
         assert!(!should_parse("hello world", None, None));

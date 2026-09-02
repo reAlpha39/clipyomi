@@ -9,13 +9,13 @@ export interface Run {
 
 /** Hiragana, katakana, and the prolonged sound mark. */
 const KANA = /[぀-ヿ]/;
-/** 【 and 】, which ta-old treats as Japanese and breaks before. */
+/** 【 and 】, which count as Japanese and start a new run. */
 const OPEN_LENTICULAR = '【';
 const BRACKET = /[【】]/;
 /**
  * CJK ideographs, including extension A and the compatibility block, plus
- * the kanji iteration mark 々 — ta-old special-cases it explicitly
- * (`StringUtil.cpp:531-535`) rather than including it in a range.
+ * the kanji iteration mark 々, which no Unicode range covers and which the
+ * original tooltip therefore special-cased too.
  */
 const CJK = /[㐀-䶿一-鿿豈-﫿々]/;
 
@@ -33,8 +33,8 @@ function closeParen(line: string, start: number): number {
       if (depth === 0) return i + 1;
     }
   }
-  // Unclosed: ta-old's FindCloseBrace returns null and the run simply extends.
-  // Truncating instead would drop the rest of a gloss over a typo in JMdict.
+  // Unclosed: the run simply extends to the end of the line. Truncating
+  // instead would drop the rest of a gloss over a typo in JMdict.
   return line.length;
 }
 

@@ -26,9 +26,10 @@ A curated subset of **JMdict**, containing only the entries the sentences in
 - **Notice:** This file contains material from JMdict, Copyright (C) EDRDG.
 
 This is third-party **data**, not source: it carries the EDRDG notice in its own
-XML header instead of the crate's GPL v2 header, and it is not relicensed. The
-crate is `GPL-2.0-only` and CC BY-SA 4.0 is one-way compatible with GPL v3, not
-v2; the subset is kept as a separately-licensed data asset for that reason.
+XML header instead of the crate's SPDX header, and it is not relicensed. The
+crate is `MIT OR Apache-2.0`, and CC BY-SA 4.0 is a share-alike licence that
+offers no option to take either of those; the subset is kept as a
+separately-licensed data asset for that reason.
 
 Regenerate with:
 

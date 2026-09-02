@@ -779,13 +779,12 @@ let keepPoll: number | undefined;
  *
  * Spec §3.3's first row is a conjunction — "cursor leaves the chip **and** the
  * keep rule fails" — so the keep rule must not judge anything while the cursor
- * is still on the word. ta-old holds the same shape: `KeepToolTip` is only a
- * flag, and the word window consumes it on mouse-leave
- * (`MyToolTip.cpp:333-360`), so its mouse hook never hides a tooltip whose word
- * is still under the cursor. Set by the chip's `mouseout`, which also means a
- * tooltip opened by FOCUS never arms the poll at all — there is no cursor
- * gesture to judge, and unrelated mouse movement elsewhere on screen must not
- * dismiss a tooltip the keyboard opened.
+ * is still on the word. The original tooltip held the same shape: its keep
+ * flag was consumed by the word window on mouse-leave, so its mouse hook never
+ * hid a tooltip whose word was still under the cursor. Set by the chip's
+ * `mouseout`, which also means a tooltip opened by FOCUS never arms the poll at
+ * all — there is no cursor gesture to judge, and unrelated mouse movement
+ * elsewhere on screen must not dismiss a tooltip the keyboard opened.
  */
 let keepArmed = false;
 /** The chip awaiting a measurement, so the reply knows what to anchor to. */
@@ -971,8 +970,8 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
     bottom: (monitor.workArea.position.y + monitor.workArea.size.height) / scale,
   };
 
-  // Never taller than the work area allows: past that it scrolls, as ta-old
-  // does, rather than being placed off-screen.
+  // Never taller than the work area allows: past that it scrolls, the way
+  // the original tooltip did, rather than being placed off-screen.
   const height = Math.min(size.height, work.bottom - work.top - 2 * MARGIN);
   const placed = placePopover(rect, { width: size.width, height }, work);
   // Physical px, matching `cursorPosition()` — see `tooltipRect`'s own

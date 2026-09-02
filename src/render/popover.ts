@@ -1,4 +1,4 @@
-/** Distance between the word and the tooltip, in px. ta-old's `rAvoid.top-2`. */
+/** Distance between the word and the tooltip, in px: the original tooltip kept two. */
 const GAP = 2;
 /** Closest the tooltip may sit to a work-area edge, in px. */
 export const MARGIN = 8;
@@ -79,8 +79,8 @@ function distance(a: Point, b: Point): number {
 /**
  * Whether a cursor that has left the word should keep the tooltip open.
  *
- * ta-old's rule (`MyToolTip.cpp:354`): compare the cursor's distance to the
- * tooltip's centre against its distance from the previous sample. Closer means
+ * The original tooltip's rule: compare the cursor's distance to the tooltip's
+ * centre against its distance from the previous sample. Closer means
  * the user is heading for the tooltip. Chosen over a grace period because it
  * holds no timer for every dismissal path to remember to clear, and because it
  * distinguishes moving *toward* the tooltip from merely moving slowly.

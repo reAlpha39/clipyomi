@@ -98,6 +98,6 @@ cargo test --workspace
 
 ## License & Acknowledgments
 
-- **ClipYomi** is distributed under the **GPL-2.0** license, following the original Translation Aggregator codebase license.
+- **ClipYomi** is dual-licensed under **MIT OR Apache-2.0** (`LICENSE-MIT`, `LICENSE-APACHE`). The parsing engine is a clean-room implementation; see `docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md` §3.5.
+- Dictionary data from the **EDRDG**'s JMdict is CC BY-SA 4.0 under its own notice (`crates/jparser/tests/fixtures/README.md`); the **IPADIC** conjugation data carries its notice in `crates/jparser/assets/IPADIC_NOTICE`.
 - Dedicated to the authors and contributors of **Translation Aggregator** (Hongfire / Sinflower / TA contributors) for the original JParser design.
-- Uses dictionary data from the **EDRDG** (Electronic Dictionary Research and Development Group) under the Creative Commons Attribution-ShareAlike Licence.

@@ -17,15 +17,15 @@ function entry(overrides: Partial<Entry> = {}): Entry {
 }
 
 describe('assembleTooltipText', () => {
-  // The headword line is ta-old's `headword【reading】` from
-  // DictionaryUtil.cpp:57-77; senses are `(pos) (N) gloss/gloss`.
+  // The headword line is `headword【reading】`; senses are
+  // `(pos) (N) gloss/gloss`.
   test('renders a headword line and a numbered sense line', () => {
     expect(assembleTooltipText([entry()])).toBe(
       '消える【きえる】\n(v1,vi) (1) to disappear/to vanish',
     );
   });
 
-  // Glosses join with "/" — ta-old's separator — not the pane's "; ".
+  // Glosses join with "/", the tooltip's separator, not the pane's "; ".
   test('joins glosses with a slash', () => {
     const e = entry({
       senses: [{ pos: ['n'], glosses: ['a', 'b', 'c'], xrefs: [], misc: [], info: [] }],
@@ -57,7 +57,7 @@ describe('assembleTooltipText', () => {
     expect(assembleTooltipText([entry({ headword: 'ある', reading: null })])).toContain('ある\n');
   });
 
-  // `(P)` is ta-old's common-word marker, appended to the last sense only.
+  // `(P)` is the common-word marker, appended to the last sense only.
   test('appends (P) for a common entry', () => {
     expect(assembleTooltipText([entry({ flags: ['primary', 'common'] })])).toMatch(/\/\(P\)$/);
   });
