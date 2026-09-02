@@ -1125,11 +1125,14 @@ licensing is still unresolved and this does not change that.
 3. **`jmdict.rs` and `index/*` disposition (§3.2 soft tier).** Rewriting is
    cleanly safe; scrubbing the citations is cheaper. This plan assumes
    scrubbing. If a reviewer disagrees, Phase 1 grows by ~1,300 lines.
-4. **Does k-best justify its UI?** Answered by Phase 2's gate, not in advance.
-5. **Which N-best route (§4.1)?** Fork Vibrato, write k-shortest-path, or move
-   to MeCab. Deferred to Phase 2 deliberately: Phase 1's measured cost model
-   should inform it. Current lean is the Vibrato fork — MIT, ~100 lines,
-   upstreamable, and it keeps the build pure Rust.
+4. ~~**Does k-best justify its UI?**~~ **ANSWERED — no; the gate was not met.**
+   oracle@3 tolerant span accuracy, hints on, reached 1,883 of 2,163, +40
+   spans over top-1's 1,843, against the 55 required. No interface was built
+   (§7 Phase 2; Phase 2 handoff).
+5. ~~**Which N-best route (§4.1)?**~~ **ANSWERED — own k-shortest-path over
+   the Phase 1 DP.** Not the Vibrato fork this item's original lean named:
+   Phase 1a's hints supply boundaries only, so there is no tokenizer lattice
+   in the engine to take an N-best from in the first place (§4.1).
 6. ~~**IPADIC or UniDic (§3.3)?**~~ **ANSWERED — stay on IPADIC.** Measured at
    the Phase 0/1 boundary against the 150-sentence gold corpus, unidic-mecab-2.1.2
    versus the pinned ipadic-mecab-2.7.0:

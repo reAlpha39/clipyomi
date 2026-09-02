@@ -85,7 +85,7 @@ measurement is what vindicates it, not what motivated it.
 
 Nothing. The wire field is empty and the menu is unchanged.
 
-## 5. Standing gates at the final commit
+## 5. Standing gates at the phase's final code commit
 
 Run at `428fac4`: `cargo test -p jparser` (283 passed), the same with
 `--features mecab` (309 passed, 1 ignored), both clippy invocations clean,
@@ -100,9 +100,10 @@ src-tauri/Cargo.toml` (149 passed). Eight cells byte-identical at
   filter; a top-1 with more than nine matched spans can push a genuine
   alternate priced above +29 out of the raw list. Upgrade path: dominance
   pruning inside the DP lists (design §3.2a).
-- `display` resets the sentence pane's scroll on a reading switch, as it
-  does on a furigana change. Harmless on short clipboard text; a long parse
-  loses its place.
+- Whoever builds the reading-cycling interface should decide what happens to
+  the sentence pane's scroll position. `display` resets it on every render,
+  which is why a furigana change already returns a long parse to the top
+  (`src/main.ts`); a reading switch would inherit that.
 - The 9 gold spans with no candidate at all (`嫌な`, `完成する`, `見ないで`
   and kin) and the 3 with the span but not the entry (`あり` wanting
   1296400) are lexicon or index findings for a later phase, not k-best ones.
