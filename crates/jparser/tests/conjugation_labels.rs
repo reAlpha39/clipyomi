@@ -112,7 +112,6 @@ fn every_fixture_chain_is_generated_exactly_once() {
     );
 }
 
-#[ignore = "Task 3 of the 1b-i plan writes label.rs against this fixture; un-ignore there"]
 #[test]
 fn every_fixture_row_labels_as_expected() {
     let table = Table::new();
