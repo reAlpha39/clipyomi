@@ -7,7 +7,9 @@ name: CI
 # layout `cargo fmt` would have destroyed, so formatting was done per-file with
 # `rustfmt --edition 2021 <file>` and a wholesale run counted as a defect. That
 # table and its module are deleted, and Phase 1b-ii ran `cargo fmt` once over
-# `jparser` and `clipyomi`: both crates are rustfmt-clean as of that commit.
+# `jparser` and `clipyomi`. The final fix wave additionally formatted
+# `vibrato-source`, whose drift predated this branch: a workspace-wide
+# `cargo fmt` check is clean as of that commit.
 # Adding a formatting job here is now a safe change rather than a forbidden
 # one — it just has not been made.
 
