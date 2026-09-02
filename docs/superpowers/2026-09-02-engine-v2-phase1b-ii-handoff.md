@@ -20,13 +20,11 @@ plan §3.2 names, and relicensed the tree from `GPL-2.0-only` to
 the phase surfaced and deliberately did not answer, because it belongs to the
 copyright holder.
 
-Nine comments in the frontend cite the upstream GPL-2 C++ by source file and
+Seven comments in the frontend cite the upstream GPL-2 C++ by source file and
 line range. They are, exactly as written:
 
 | Site | Citation |
 | --- | --- |
-| `src/render/tooltip-colour.ts:47` | `MyToolTip.cpp:216` |
-| `src/render/tooltip-colour.ts:58` | *"Ported from `MyDrawText` (`MyToolTip.cpp:125-268`)"* |
 | `src/render/tooltip-colour.test.ts:11` | `MyToolTip.cpp:154-160` |
 | `src/render/tooltip-colour.test.ts:41` | `MyToolTip.cpp:214-217` |
 | `src/render/tooltip-colour.test.ts:50` | `MyToolTip.cpp:224` |
@@ -36,7 +34,22 @@ line range. They are, exactly as written:
 | `src/styles/tooltip.css:50` | `MyDrawText`'s `xOffset = 10` |
 
 `README.md:5` names Translation Aggregator outright as the project's lineage —
-deliberate attribution, and the tenth site if one is counting them all.
+deliberate attribution, and the eighth site if one is counting them all.
+
+**One of these rows is gone since this table was first written.**
+`c827ef2` reimplemented `src/render/tooltip-colour.ts`'s `colourLine`
+clean-room: the implementer worked only from
+`src/render/tooltip-colour.test.ts` as the specification, was forbidden from
+reading the previous implementation or any upstream source, and confirmed
+that constraint was honoured. The result is structurally independent — 157
+lines against 97, six private helpers against three, iterating code points
+where the old version indexed the string by UTF-16 code unit — and carries no
+derivation claim at all. That is why the table above no longer has rows for
+the former `src/render/tooltip-colour.ts:47` and `:58`; the citation
+inventory dropped from nine sites to seven. The rewrite also fixed a latent
+bug the index-based version had: a supplementary-plane ideograph (a
+UTF-16 surrogate pair) would have been mishandled, and a new test now pins
+U+20000 through the code-point-iterating version.
 
 **Why these survived, and why that is not evidence they are fine.** They
 passed this phase's done-when greps **by construction, not by judgment**: the
@@ -53,16 +66,31 @@ declares the frontend `MIT OR Apache-2.0` is `package.json`'s `license` field
 together with `README.md` and the `LICENSE-MIT`/`LICENSE-APACHE` pair, not a
 per-file assertion.
 
-**What the citations actually record.** Most are *behavioural rules* — which
-characters colour how, a 2px gap, a right-first flip, `xOffset = 10` — and a
-rule of that kind is largely uncopyrightable as such. **Two go further, and
-they are this question's real content:**
+**What the citations actually record — and what changed.** This section
+originally singled out two citations as going beyond uncopyrightable
+behavioural rules: `src/render/tooltip-colour.ts:58`, whose author
+characterised the work as *"a port of the rule rather than of its output"*,
+and `src/render/tooltip-text.test.ts:66`, which quotes an upstream *source
+statement* rather than a line range. **The first of those two is now gone** —
+dissolved by the clean-room rewrite above, not merely reworded. Everything
+that remains is one of three kinds: a test comment, a CSS comment, or the one
+implementation comment left, `src/render/popover.ts:45`, which describes a
+window-placement rule (flip sideways, right first). Comments of that kind are
+recording *which rules were adopted* — which characters colour how, a 2px
+gap, a right-first flip, `xOffset = 10` — and a rule of that kind is largely
+uncopyrightable as such. That argument, which this section already made for
+most of the tree, now applies to everything left in it.
 
-- **`src/render/tooltip-colour.ts:58`**, whose author characterises the work
-  as *"a port of the rule rather than of its output"*. The phrasing shows the
-  author had already considered the distinction, and it may well be fine.
-- **`src/render/tooltip-text.test.ts:66`**, which quotes an upstream *source
-  statement* rather than a line range.
+The one exception worth naming on its own is **`src/render/tooltip-text.test.ts:66`**,
+the surviving strong case: it quotes an upstream *source statement*, not a
+behavioural rule, and it is a comment in a *test* file about a `\x01`
+sentinel value, not implementation code. That distinction may matter to the
+analysis, but it does not settle it — the citation still names a specific
+upstream line.
+
+**This narrows the open question; it does not close it.** The maintainer
+still owns the decision about the remaining citations and about
+`README.md:5`, and the merge-versus-release guidance below still stands.
 
 **The ruling this phase took: leave every one of them exactly as written.**
 The citations *are* the provenance evidence. Rewording them would strip the
@@ -89,18 +117,17 @@ wait on the maintainer's answer. This is guidance on where the risk actually
 sits, not legal advice — the maintainer should still get a real answer before
 that release ships.
 
-**A third option, beside yes and no.** The question above is framed as
-binary — is this code clean, or isn't it — but there is a cheap engineering
-answer available too. `src/render/tooltip-colour.ts` is 97 lines, and
-`colourLine`, the function carrying *"Ported from `MyDrawText`"*, the
-strongest of the ten citations, is a character-class colouring pass over one
-line of text. A clean-room reimplementation, written by someone who has not
-read the upstream source and working only from the existing behaviour —
-`src/render/tooltip-colour.test.ts` passes today and would serve as the
-specification — is roughly an afternoon's work. Doing that converts the
-highest-risk item in the tree from an open licence question into a closed
-engineering task: the same manoeuvre this phase just performed, at far
-larger scale, on the parsing engine itself.
+**A third option, beside yes and no — and this one has now been taken.** The
+question above was framed as binary — is this code clean, or isn't it — but
+there was a cheap engineering answer available too, and `c827ef2` took it.
+`colourLine`, the function that had carried *"Ported from `MyDrawText`"*, the
+strongest of the original nine citations, was reimplemented clean-room in
+that one commit, working only from `src/render/tooltip-colour.test.ts` as the
+specification. That converted the highest-risk item in the tree from an open
+licence question into a closed engineering task: the same manoeuvre this
+phase performed, at far larger scale, on the parsing engine itself. The same
+move remains available for any of the seven remaining citations the
+maintainer judges needs it.
 
 **One thing that is now available and was not before.** "The original
 tooltip" is the de-naming circumlocution in **ten** places
