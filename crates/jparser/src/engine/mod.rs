@@ -50,13 +50,19 @@ pub trait Boundaries {
 /// One step of a deinflection chain: which conjugation class was applied, in
 /// which form, over which characters of the span.
 ///
-/// Filled by Phase 1a (`chain.rs`); named in English by Phase 1b. Phase 1a
-/// leaves `Entry::conjugation` as `None`.
+/// Filled by Phase 1a (`chain.rs`); named in English by Phase 1b-i
+/// (`label.rs`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ConjStep {
     pub class: ClassId,
     pub form: FormId,
     pub range: std::ops::Range<usize>,
+    /// The auxiliary this step is, as `table.rs`'s `ATTACHES_TO` spells its
+    /// lemma — `Some("られる")`, `Some("ます")` — or `None` on the first step,
+    /// which is the main word's own inflection and belongs to no auxiliary.
+    /// Recorded here because the class alone cannot say: せる, させる, れる
+    /// and られる are all 一段, and ん, う, よう, て and で are all 不変化型.
+    pub aux: Option<&'static str>,
 }
 
 /// Parse `text` with the Engine v2 core.

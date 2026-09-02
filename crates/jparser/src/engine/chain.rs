@@ -51,6 +51,10 @@ use crate::engine::ConjStep;
 ///   headword looked up as-is) carries `stem_class: None` and never reaches
 ///   `Table::search`, so `cand.steps` -- and this function's return -- is
 ///   empty.
+/// - **`aux` names the auxiliary, and only the auxiliary.** `steps[0].aux`
+///   is `None` — it is the main word's own inflection. Every later step's
+///   `aux` is `Some(lemma)`, the `ATTACHES_TO` row that produced it,
+///   spelled exactly as that table spells it. `label.rs` keys on it.
 pub fn steps_for(cand: &Candidate) -> Vec<ConjStep> {
     cand.steps.clone()
 }
