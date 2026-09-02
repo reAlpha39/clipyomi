@@ -32,11 +32,11 @@
 # The third column is documentation, not a literal reconstruction of the
 # surface: it is not checked by the test, and for some rows (はこ, どうし,
 # ことし, いっしょ) it names wider sentence context or a lemma form that does
-# not fit the surface's own character count. See task-15-report.md's fix
-# addendum for why asserting it mechanically was judged not cheap enough to
-# do here.
+# not fit the surface's own character count. See the Phase 1a handoff
+# (`docs/superpowers/2026-09-01-engine-v2-phase1a-handoff.md`) §5 and §8 on
+# why the third column is documentation rather than an assertion.
 #
-# Nothing here is captured text or ta-old expression: these are ordinary
+# Nothing here is captured text or ported expression: these are ordinary
 # Japanese strings this project measured about its own engine.
 #
 # surface	ent_seq	what it actually is

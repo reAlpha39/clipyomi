@@ -1,9 +1,4 @@
-// ClipYomi — Engine v2, Phase 1a.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // Written for ClipYomi without reference to Translation Aggregator's JParser.
 

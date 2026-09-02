@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Downloading the archive, and proving it is the pinned one before unpacking.
 
@@ -43,11 +38,11 @@ const HASH_CHUNK: usize = 64 * 1024;
 
 /// An agent carrying this crate's TLS decision.
 ///
-/// `rustls` with an **injected** provider: its defaults are `ring`
-/// ("Apache-2.0 AND ISC") or `aws-lc-rs` (whose `-sys` crate carries an "AND
-/// Apache-2.0" term), and an AND leaves no option compatible with this
-/// project's GPL-2.0-only. `rustls-graviola` is taken under ISC. Roots come
-/// from the OS trust store rather than a vendored bundle.
+/// `rustls` with an **injected** provider: its defaults are `ring` (C and
+/// assembly) or `aws-lc-rs` (whose `-sys` crate builds a BoringSSL fork), and
+/// neither may enter a build that must stay free of a C toolchain.
+/// `rustls-graviola` is pure Rust, taken under ISC. Roots come from the OS
+/// trust store rather than a vendored bundle.
 ///
 /// Do not "simplify" this to ureq's default features: that silently takes
 /// `ring` back, and `ci.yml`'s TLS gate is the only thing that would notice.

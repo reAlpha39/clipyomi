@@ -31,9 +31,9 @@ describe('colourLine', () => {
     expect(kinds('旅だつ【たびだつ】')).toEqual(['kanji', 'kana']);
   });
 
-  // StringUtil.cpp:531-535 — the kanji iteration mark 々 is special-cased into
-  // ta-old's IsKanji, not covered by a Unicode range. Without it, 時々 splits
-  // into a kanji run and a stray text run instead of staying one kanji run.
+  // The kanji iteration mark 々 is special-cased into the kanji test, since no
+  // Unicode range covers it. Without it, 時々 splits into a kanji run and a
+  // stray text run instead of staying one kanji run.
   test('kanji iteration mark 々 stays in the kanji run', () => {
     expect(colourLine('時々')).toEqual([{ text: '時々', kind: 'kanji' }]);
   });

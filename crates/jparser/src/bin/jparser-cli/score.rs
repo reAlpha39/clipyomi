@@ -1,9 +1,4 @@
-// ClipYomi — Engine v2 Phase 0 measurement harness.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // Written independently for the Engine v2 measurement harness. Nothing here
 // derives from Translation Aggregator.

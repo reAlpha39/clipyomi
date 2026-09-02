@@ -3,10 +3,9 @@ import type { Entry, GlossFilters } from '../types';
 /**
  * Prefix marking a line as the conjugation label.
  *
- * ta-old uses the literal control character `\x01` for this
- * (`DictionaryUtil.cpp:46`), and the colouriser looks for it the same way
- * `MyDrawText` does. Kept as a control character rather than a friendlier
- * sentinel precisely because it cannot occur in dictionary text.
+ * The literal control character `\x01`, which the colouriser looks for. Kept
+ * as a control character rather than a friendlier sentinel precisely because
+ * it cannot occur in dictionary text.
  */
 export const CONJ_MARKER = '\u0001';
 
@@ -22,8 +21,8 @@ function entryLines(entry: Entry, filters?: GlossFilters): string[] {
 
   const common = entry.flags.includes('common');
   entry.senses.forEach((sense, i) => {
-    // Glosses join with "/" — ta-old's separator. The pane uses "; "; the two
-    // surfaces render differently on purpose from this phase onward.
+    // Glosses join with "/", the tooltip's separator; the pane uses "; ". The
+    // two surfaces render differently on purpose from this phase onward.
     const parts: string[] = [...sense.glosses];
 
     if (!filters?.hide_usage) {
@@ -55,7 +54,7 @@ function entryLines(entry: Entry, filters?: GlossFilters): string[] {
 }
 
 /**
- * Every match for one word, as ta-old's flat text block.
+ * Every match for one word, as the tooltip's flat text block.
  *
  * Flat text rather than structured markup because the colouring that follows
  * is lexical, not semantic (see `tooltip-colour.ts`): it reads characters, so

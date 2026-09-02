@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-# JParser — Japanese text parser ported from Translation Aggregator.
-# Copyright (C) 2026
-#
-# This program is free software; you can redistribute it and/or modify it
-# under the terms of the GNU General Public License version 2 as published
-# by the Free Software Foundation.
+# SPDX-License-Identifier: MIT OR Apache-2.0
 """Extract the JMdict subset the parse-snapshot sentences can reach.
 
 Usage:

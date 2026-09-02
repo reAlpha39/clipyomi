@@ -69,7 +69,7 @@ const STUB = `
   };
 `;
 
-test('renders every sense, coloured by ta-old rules', async ({ page }) => {
+test('renders every sense, coloured by the tooltip rules', async ({ page }) => {
   await page.addInitScript(STUB);
   await page.goto('/popover.html');
   await page.evaluate((entries) => window.__TA_EMIT__('popover-content', entries), ENTRIES);

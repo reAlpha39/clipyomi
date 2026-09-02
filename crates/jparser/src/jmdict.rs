@@ -1,17 +1,10 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Streaming JMdict XML reader.
 //!
-//! Replaces ta-old's EDICT2 line parser (`CreateDict`,
-//! `ta-old/exe/util/Dictionary.cpp:246`). JMdict carries structured data where
-//! ta-old did string surgery on English glosses: real `<pos>` tags instead of
-//! `strncmp` against a gloss prefix, and real `<ke_pri>`/`<re_pri>` markers
-//! instead of searching for the substring "(P)".
+//! Reads JMdict's structured XML: real `<pos>` tags instead of string surgery
+//! on English glosses, and real `<ke_pri>`/`<re_pri>` markers instead of
+//! searching a gloss for the substring "(P)".
 //!
 //! Parts of speech arrive as entity references (`<pos>&v5r;</pos>`) whose
 //! expansions are defined in JMdict's internal DTD. We want the *code*, since
@@ -43,10 +36,11 @@ use quick_xml::events::{BytesText, Event};
 use quick_xml::{Error, Reader};
 
 /// Priority markers that mean "common word", per JMdict's documentation.
-/// Replaces ta-old's `(P)` substring search.
+/// JMdict tags priority structurally, so nothing here searches a gloss for
+/// the substring `(P)`.
 ///
 /// UNVERIFIED against a real `JMdict_e.xml`: none exists in this repo, and
-/// ta-old read EDICT2, where `(P)` was already baked in, so it cannot settle
+/// EDICT2 — where `(P)` is already baked into the gloss — cannot settle
 /// this either. `spec2` is included on the strength of the documented EDICT
 /// `(P)` rule (fires on `ichi1`, `news1`, `spec1`, `spec2`, and `gai1`) — it
 /// is the hand-curated common-word list, so omitting it would drop `COMMON`

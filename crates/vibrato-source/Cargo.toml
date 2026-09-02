@@ -14,10 +14,10 @@ rust-version = "1.89"
 
 [dependencies]
 # GitHub serves no plain HTTP, so unlike `jmdict-source` this crate needs TLS.
-# `rustls` is MIT OR Apache-2.0 OR ISC, taken under MIT — but its default crypto
-# providers are NOT usable here: `ring` is "Apache-2.0 AND ISC" and `aws-lc-sys`
-# carries an "AND Apache-2.0" term, and an AND offers no compatible option under
-# this project's GPL-2.0-only. Hence `rustls-no-provider` plus the provider below.
+# `rustls` is MIT OR Apache-2.0 OR ISC — but its default crypto providers are
+# NOT usable here: `ring` builds C and assembly and `aws-lc-sys` builds a
+# BoringSSL fork, and no platform's build may need a C toolchain. Hence
+# `rustls-no-provider` plus the pure-Rust provider below.
 ureq = { version = "3", default-features = false, features = [
     "rustls-no-provider",
     "platform-verifier",

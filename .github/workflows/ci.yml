@@ -113,29 +113,29 @@ jobs:
             exit 1
           fi
 
-      # GPL v2: OpenSSL is Apache-2.0, which the FSF holds GPLv2-incompatible,
-      # so no dependency may link native-tls/OpenSSL — now or in any later phase.
+      # TLS stays pure Rust: OpenSSL links a system C library, so no dependency
+      # may pull in native-tls/OpenSSL — now or in any later phase. A C
+      # toolchain in the build is the cost, and every platform's release build
+      # would have to carry it.
       #
-      # `ring` ("Apache-2.0 AND ISC") and `aws-lc-sys` (which carries its own
-      # "AND Apache-2.0" term) are refused for the same reason: an AND offers no
-      # compatible option to take. Phase 5A's HTTPS therefore runs on `rustls`
-      # with `rustls-graviola` (ISC) injected as the provider — if a build
+      # `ring` (C and assembly) and `aws-lc-sys` (a BoringSSL fork) are refused
+      # for the same reason. Phase 5A's HTTPS therefore runs on `rustls` with
+      # `rustls-graviola` (pure Rust, ISC) injected as the provider — if a build
       # error here tempts you to enable ureq's default features, that silently
       # takes `ring` back, and this grep is the only thing that would notice.
       #
       # The pattern is anchored, and deliberately not `-i`: a bare `openssl`
       # also matches `openssl-probe`, which `rustls-native-certs` pulls in on
       # Linux via `rustls-platform-verifier`. That crate links nothing — it only
-      # locates the system trust store — and is MIT OR Apache-2.0, so it is
-      # compatible and not what this gate is for. Since this job only ever runs
-      # on ubuntu-latest, the unanchored pattern matched `openssl-probe v0.2.1`
-      # and failed the job on every run. Do not re-broaden it back to a bare
-      # `openssl`: a real OpenSSL link appears as `openssl v` or `openssl-sys`,
-      # and both are still caught.
-      - name: no GPL-incompatible TLS backend
+      # locates the system trust store — so it is not what this gate is for.
+      # Since this job only ever runs on ubuntu-latest, the unanchored pattern
+      # matched `openssl-probe v0.2.1` and failed the job on every run. Do not
+      # re-broaden it back to a bare `openssl`: a real OpenSSL link appears as
+      # `openssl v` or `openssl-sys`, and both are still caught.
+      - name: no native-code TLS backend
         run: |
           if cargo tree --workspace | grep -E "openssl v|openssl-sys|native-tls|\bring v|aws-lc"; then
-            echo "::error::a GPLv2-incompatible TLS dependency entered the tree"
+            echo "::error::a native-code TLS dependency entered the tree"
             exit 1
           fi
 

@@ -3,7 +3,7 @@ import { assembleTooltipText } from './tooltip-text';
 import { colourLine } from './tooltip-colour';
 
 /**
- * The tooltip's body: every match for one word, coloured ta-old's way.
+ * The tooltip's body: every match for one word, coloured by `colourLine`.
  *
  * Deliberately NOT `renderEntry`. 2G shared one renderer between the pane and
  * the popover so they could not drift; from this phase they are meant to

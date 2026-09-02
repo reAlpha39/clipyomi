@@ -13,7 +13,7 @@ const WORK: Rect = { left: 0, top: 0, right: 1000, bottom: 700 };
 describe('placePopover', () => {
   // Below is preferred, reversing 2G. That reasoning was about what the
   // popover covered inside the window; a tooltip that leaves the window
-  // mostly covers desktop, and below-first is ta-old's behaviour.
+  // mostly covers desktop, and below-first is the original tooltip's behaviour.
   test('sits below the chip when there is room, with the 2px gap', () => {
     expect(placePopover(chip(), SIZE, WORK)).toEqual({ left: 60, top: 130 });
   });
@@ -67,7 +67,7 @@ describe('placePopover', () => {
 describe('shouldKeep', () => {
   const centre = { x: 500, y: 500 };
 
-  // ta-old's rule (MyToolTip.cpp:354): moving toward the tooltip keeps it, so
+  // The original tooltip's rule: moving toward the tooltip keeps it, so
   // the cursor can cross the gap between the word and the tooltip to scroll it.
   test('keeps it when the cursor moves toward the tooltip', () => {
     expect(shouldKeep({ x: 0, y: 0 }, { x: 100, y: 100 }, centre)).toBe(true);

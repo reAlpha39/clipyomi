@@ -11,7 +11,7 @@ Written for [Engine v2 Phase 0](../../../../docs/superpowers/specs/2026-08-28-en
 | --- | --- | --- |
 | A | Aozora Bunko, 新字新仮名 editions only, max 8 sentences per work | Public domain |
 | B | ja.Wikinews / ja.Wikipedia | CC BY 2.5 / CC BY-SA 4.0 |
-| C1 | Hand-written pastiche | GPL-2.0-only, with the crate |
+| C1 | Hand-written pastiche | MIT OR Apache-2.0, with the crate |
 | D | Noise derived from A–C1 | Follows its source line |
 
 Tier C2 (real `vn_data` lines) is never committed and has no rows here.
