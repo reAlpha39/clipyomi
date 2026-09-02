@@ -98,9 +98,13 @@ pub struct Entry {
     /// stem with its verb type's remove-suffix restored for a stem match.
     pub headword: String,
     pub reading: Option<String>,
-    /// `render_conjugation_label` output, e.g. `"Negative Formal Past"`.
-    /// `None` for a non-verb match, and `None` when the label renders empty —
-    /// which `GetConjString` legitimately does for an all-Stem chain.
+    /// `render_conjugation_label`'s output on the v1 path (e.g.
+    /// `"Negative Formal Past"`), or `engine::label::fmt`'s on the v2 path
+    /// (Phase 1b-i) — the two disagree on `ます`/`です`'s word by design
+    /// (`"Formal"` vs `"Polite"`; see
+    /// docs/superpowers/specs/2026-09-02-engine-v2-phase1b-i-design.md §6).
+    /// `None` for a non-verb match, and `None` when the label renders empty,
+    /// which both renderers legitimately do for an all-Stem chain.
     pub conjugation: Option<String>,
     /// Union of every sense's `pos`, in first-seen order, deduplicated.
     pub pos: Vec<String>,
@@ -127,8 +131,9 @@ pub struct Entry {
     /// surface, innermost step first. Empty for an uninflected match and on
     /// the v1 path, which does not compute it.
     ///
-    /// Phase 1b's formatter turns this into `conjugation`'s English label; see
-    /// docs/superpowers/specs/2026-09-01-engine-v2-phase1a-design.md §8.
+    /// `engine::label::fmt` turns this into `conjugation`'s English label on
+    /// the v2 path (Phase 1b-i); see
+    /// docs/superpowers/specs/2026-09-02-engine-v2-phase1b-i-design.md §3.
     pub steps: Vec<crate::engine::ConjStep>,
 }
 
