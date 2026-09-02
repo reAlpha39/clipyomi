@@ -97,7 +97,11 @@ fn relax(best: &mut [Option<Node>], from: usize, to: usize, step_cost: i32, step
         Some(_) => false,
     };
     if better {
-        best[to] = Some(Node { cost: total, from, step });
+        best[to] = Some(Node {
+            cost: total,
+            from,
+            step,
+        });
     }
 }
 
@@ -149,7 +153,13 @@ pub fn best_path(
         for to in (from + 1)..=max_to {
             let len = to - from;
             let step_cost = unmatched_cost(chars, from, len);
-            relax(&mut best, from, to, step_cost, Step::Unmatched { start: from, len });
+            relax(
+                &mut best,
+                from,
+                to,
+                step_cost,
+                Step::Unmatched { start: from, len },
+            );
         }
     }
 
@@ -198,7 +208,11 @@ mod tests {
     #[test]
     fn the_path_covers_the_input_exactly_once() {
         let chars: Vec<char> = "あいうえお".chars().collect();
-        let path = best_path(&chars, &by_start(5, vec![c(0, 2, 1, WordFlags::PRIMARY)]), None);
+        let path = best_path(
+            &chars,
+            &by_start(5, vec![c(0, 2, 1, WordFlags::PRIMARY)]),
+            None,
+        );
         let mut at = 0;
         for step in &path {
             let (s, l) = match step {
@@ -233,7 +247,9 @@ mod tests {
             &by_start(3, vec![c(1, 2, 9, WordFlags::PRIMARY)]),
             Some(&At(&[0, 2, 3])),
         );
-        assert!(!path.iter().any(|s| matches!(s, Step::Matched(x) if x.entry_id == 9)));
+        assert!(!path
+            .iter()
+            .any(|s| matches!(s, Step::Matched(x) if x.entry_id == 9)));
     }
 
     // Master plan §4.3 requires a compound to be able to pay the crossing
@@ -287,7 +303,8 @@ mod tests {
             Some(&At(&[0, 2, 3])),
         );
         assert!(
-            path.iter().any(|s| matches!(s, Step::Matched(x) if x.entry_id == 1)),
+            path.iter()
+                .any(|s| matches!(s, Step::Matched(x) if x.entry_id == 1)),
             "東京都 must be able to pay the crossing price and win"
         );
     }

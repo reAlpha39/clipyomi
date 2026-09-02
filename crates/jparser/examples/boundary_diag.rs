@@ -17,6 +17,12 @@
 //!     "hints are advisory where they should be decisive", and it is
 //!     `segment.rs` plus the cost model.
 //!
+//! Those three module names are v1's, and v1 was deleted at Phase 1b-ii. The
+//! v2 modules that inherited the two jobs are `engine::lex` (candidate
+//! generation) and `engine::lattice` plus `engine::cost` (the DP). The names
+//! are left as written because this file records a Phase 0 measurement and
+//! the attribution it made at the time.
+//!
 //! This separates them. For every gold boundary that Vibrato has and jparser
 //! lacks, it finds the jparser segment that swallowed it and asks whether the
 //! two halves are themselves matchable units.
@@ -25,7 +31,8 @@
 //! into the matcher would mean making it public, and Phase 0 writes nothing
 //! under `src/`. Re-parsing `text[a..p]` on its own runs the real matcher,
 //! conjugation recursion included, so a deinflected span counts as findable
-//! the way `Index::prefixes_of` alone would not. It is still a reconstruction:
+//! the way `Index::prefixes_of_with` alone would not. It is still a
+//! reconstruction:
 //! a unit findable in isolation is not proof the lattice offered it in
 //! context. Read the cost-model bucket as an upper bound and the lexical-gap
 //! bucket as a lower one.
@@ -95,7 +102,7 @@ enum Bucket {
     /// preferred the longer one. §4.3.
     CostModel,
     /// At least one half is not a matchable unit, so the split was never on
-    /// offer. `matcher.rs` / `stem.rs`.
+    /// offer. `matcher.rs` / `stem.rs` under v1; `engine::lex` under v2.
     Lexical,
 }
 

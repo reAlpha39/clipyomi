@@ -38,12 +38,11 @@ fn fnv1a_feed(mut hash: u64, s: &str) -> u64 {
 /// FNV-1a fingerprint of [`CLASSES`]: every class's name and remove-suffix,
 /// then every one of its forms' name and suffix, in table order.
 ///
-/// The property this must have is the same one
-/// `conjugation::embedded_asset_fingerprint` gives the v1 asset: reordering,
-/// adding or removing a class or form changes every `verb_type`/class id
-/// downstream of the change, so it must also change this fingerprint, or an
-/// index built against a stale table would open cleanly and silently
-/// misresolve classes.
+/// The property this must have: reordering, adding or removing a class or
+/// form changes every [`crate::engine::ClassId`] downstream of the change, so
+/// it must also change this fingerprint, or an index built against a stale
+/// table would open cleanly and silently misresolve classes. The index header
+/// carries the value and `Index::open` refuses a mismatch.
 pub fn fingerprint() -> u64 {
     let mut hash = FNV_OFFSET_BASIS;
     for class in CLASSES {

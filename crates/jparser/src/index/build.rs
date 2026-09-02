@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Writes the on-disk index. The builder is [`crate::engine::build`]; this is
-//! the format's one writer, so the two cannot drift.
+//! Writes the on-disk index. Its only caller is [`crate::engine::build`], and
+//! this is the format's one writer, so there is exactly one place the on-disk
+//! layout is decided.
 
 use std::collections::BTreeMap;
 use std::fs::File;

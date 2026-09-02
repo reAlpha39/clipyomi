@@ -127,11 +127,12 @@ fn no_sampling_signal(vibrato_cuts: &[usize]) -> bool {
 /// Tokenize `text` and return its cut offsets plus the count of tokens whose
 /// IPADIC reading field is `*`, absent, or empty.
 ///
-/// Deliberately **not** `VibratoTokenizer::hints`. `BoundaryFlags` stores only
-/// interior-position booleans, so token boundaries are not recoverable from it,
-/// and `flags_from_worker` skips reading-less tokens — the right call for hints
-/// and the wrong one for sampling, because a sentence the tokenizer recognised
-/// nothing in is a sentence worth looking at.
+/// Deliberately **not** `VibratoTokenizer::boundaries`. That returns a
+/// `BoundarySet` and nothing else, so the reading-less token count is not
+/// recoverable from it — and that count is the whole point here, because a
+/// sentence the tokenizer recognised nothing in is a sentence worth looking
+/// at. Driving a worker directly is the only way to read both off one
+/// tokenization.
 fn tokenize(tokenizer: &vibrato::Tokenizer, text: &str) -> (Vec<usize>, usize) {
     let mut worker = tokenizer.new_worker();
     worker.reset_sentence(text);
@@ -220,9 +221,7 @@ pub fn run(
         });
     }
     if skipped_no_signal > 0 {
-        eprintln!(
-            "note: skipped {skipped_no_signal} sentence(s) where vibrato produced no tokens"
-        );
+        eprintln!("note: skipped {skipped_no_signal} sentence(s) where vibrato produced no tokens");
     }
 
     rank(&mut records, all);

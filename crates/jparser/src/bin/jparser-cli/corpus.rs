@@ -360,8 +360,11 @@ mod tests {
     fn a_malformed_line_names_its_line_number() {
         let dir = scratch("malformed");
         let path = dir.join("gold.jsonl");
-        std::fs::write(&path, "{\"text\":\"あ\",\"source\":\"t\",\"spans\":[]}\nnot json\n")
-            .expect("write");
+        std::fs::write(
+            &path,
+            "{\"text\":\"あ\",\"source\":\"t\",\"spans\":[]}\nnot json\n",
+        )
+        .expect("write");
 
         let err = read_gold(&path).err().expect("must fail");
         assert!(err.to_string().contains("line 2"), "got {err}");

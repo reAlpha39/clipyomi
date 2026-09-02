@@ -618,7 +618,10 @@ mod tests {
         );
         assert!(result.hints_warning.0.is_empty());
         assert!(result.hints.is_none());
-        assert!(!result.failure.0.is_empty(), "the hints error must be fatal");
+        assert!(
+            !result.failure.0.is_empty(),
+            "the hints error must be fatal"
+        );
         assert!(!result.needs_dictionary.0);
         assert!(result.index.is_none());
     }

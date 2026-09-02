@@ -128,13 +128,23 @@ impl Index {
         &self.header
     }
 
-    /// Every dictionary key that is a prefix of `text`, shortest first,
-    /// including the empty key when one is indexed, with the key
-    /// normalization supplied by the caller.
+    /// Every dictionary key that is a prefix of `text`, shortest first, with
+    /// the key normalization supplied by the caller.
     ///
     /// A single transducer walk, one character at a time: every node that is
     /// final marks a complete headword. `""` is a prefix of every string, so
     /// the root node's finality is checked before consuming any character.
+    ///
+    /// That root check is unreachable by construction with today's builder,
+    /// and is kept as a property of the walk rather than as a live guarantee:
+    /// [`crate::engine::build`] stores headwords only, and no JMdict entry has
+    /// an empty headword, so no index this crate can write has an empty key.
+    /// A `key_chars == 0` hit was reachable under the v1 builder, which also
+    /// indexed generated stems — one verb type stripped its whole surface and
+    /// so keyed the empty string. Phase 1b-ii deleted that builder along with
+    /// the branch's only test; the branch itself stays, because removing it
+    /// would change the behaviour of a surviving public API on an index some
+    /// later writer might legitimately produce.
     ///
     /// `fold` is a parameter rather than a constant because an index is built
     /// with the fold its builder used, and the walk has to agree with it.

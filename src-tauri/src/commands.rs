@@ -333,12 +333,7 @@ pub mod win32_frameless {
             uIdSubclass: usize,
             dwRefData: usize,
         ) -> i32;
-        fn DefSubclassProc(
-            hWnd: *mut c_void,
-            uMsg: u32,
-            wParam: usize,
-            lParam: isize,
-        ) -> isize;
+        fn DefSubclassProc(hWnd: *mut c_void, uMsg: u32, wParam: usize, lParam: isize) -> isize;
     }
 
     fn mul_div(n_number: i32, n_numerator: i32, n_denominator: i32) -> i32 {
@@ -376,9 +371,7 @@ pub mod win32_frameless {
     }
 
     fn get_system_metrics(index: i32, dpi: u32) -> i32 {
-        unsafe {
-            GetSystemMetricsForDpi(index, dpi)
-        }
+        unsafe { GetSystemMetricsForDpi(index, dpi) }
     }
 
     /// The pixels that survive a move-or-resize: what the old and the new
@@ -1182,15 +1175,16 @@ pub const SETTINGS_LABEL: &str = "settings";
 /// default white before the theme lands. Shown and hidden, never rebuilt,
 /// there is nothing left to load at reveal time.
 pub fn create_settings_window<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
-    let window = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
-        .title("ClipYomi Settings")
-        .inner_size(360.0, 480.0)
-        .min_inner_size(300.0, 400.0)
-        .resizable(false)
-        .decorations(true)
-        .always_on_top(true)
-        .visible(false)
-        .build()?;
+    let window =
+        WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
+            .title("ClipYomi Settings")
+            .inner_size(360.0, 480.0)
+            .min_inner_size(300.0, 400.0)
+            .resizable(false)
+            .decorations(true)
+            .always_on_top(true)
+            .visible(false)
+            .build()?;
 
     // Closing hides rather than destroys. A destroyed window would have to be
     // rebuilt on the next open, reintroducing exactly the load this eager
@@ -2008,10 +2002,8 @@ mod tests {
 
         resolve_chrome_mode(ChromeMode::Native, &state).unwrap();
 
-        let expected = crate::settings::supported(
-            ChromeMode::Native,
-            crate::settings::native_supported(),
-        );
+        let expected =
+            crate::settings::supported(ChromeMode::Native, crate::settings::native_supported());
         assert_eq!(state.snapshot().chrome_mode, Some(expected));
     }
 
@@ -2102,14 +2094,12 @@ mod tests {
 
             assert_eq!(second_saved.window_width, first_saved.window_width);
             assert_eq!(
-                second_saved.window_height,
-                first_saved.window_height,
+                second_saved.window_height, first_saved.window_height,
                 "height fixed point for case ({w},{h},{x},{y})"
             );
             assert_eq!(second_saved.window_x, first_saved.window_x);
             assert_eq!(
-                second_saved.window_y,
-                first_saved.window_y,
+                second_saved.window_y, first_saved.window_y,
                 "y fixed point for case ({w},{h},{x},{y})"
             );
         }
@@ -2160,7 +2150,11 @@ mod tests {
             },
         );
 
-        assert_eq!(current.layout_slots.len(), 1, "a settings save wiped a slot");
+        assert_eq!(
+            current.layout_slots.len(),
+            1,
+            "a settings save wiped a slot"
+        );
         assert_eq!(current.layout_slots["1"].surface_alpha, Some(35));
     }
 
@@ -2552,8 +2546,7 @@ mod tests {
         std::fs::create_dir_all(&current).expect("current dir");
         jparser::hints::write_test_dictionary(&current.join(vibrato_source::SYSTEM_DIC))
             .expect("fixture dictionary");
-        let before =
-            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read before");
+        let before = std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read before");
 
         // Precondition, not an assumption — see this test's own doc comment.
         assert!(

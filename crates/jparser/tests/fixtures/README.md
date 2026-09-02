@@ -3,19 +3,25 @@
 ## `jmdict_mini.xml`
 
 Hand-written, three entries, no external source. Used by
-`tests/index_roundtrip.rs`, `tests/cli_parse.rs`, and `record.rs`'s own tests.
+`tests/index_roundtrip.rs`, `tests/cli_parse.rs`, `tests/cli_label.rs`,
+`tests/cli_score.rs`, `tests/entry_id.rs`, and `src/jmdict.rs`'s own tests.
 
 ## `jmdict_matcher.xml`
 
-Hand-written, eight entries, no external source. Used by `src/matcher.rs`'s own
-test module. Covers a hiragana/katakana homophone pair, a particle, two
-homographs, a nested-prefix pair, a `v1` verb, and a `vs-i` verb whose stem is
-the empty string.
+Hand-written, eight entries, no external source. Covers a hiragana/katakana
+homophone pair, a particle, two homographs, a nested-prefix pair, a `v1` verb,
+and a `vs-i` verb whose stem is the empty string.
+
+**Currently unused.** Its only consumer was `src/matcher.rs`'s own test
+module, deleted with the v1 engine at Phase 1b-ii. It is kept rather than
+deleted because the eight shapes it covers are still the ones a lexical-lookup
+test wants and nothing else in the tree covers them together; whether to adopt
+it or drop it is a decision for whoever next touches the lookup layer.
 
 ## `jmdict_subset.xml`
 
 A curated subset of **JMdict**, containing only the entries the sentences in
-`parse_sentences.txt` can reach. Used by `tests/parse_snapshots.rs`.
+`parse_sentences.txt` can reach. Used by `tests/engine_v2.rs`.
 
 - **Source:** Electronic Dictionary Research and Development Group (EDRDG),
   <http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz>
@@ -37,9 +43,17 @@ Regenerate with:
 python3 tools/extract_jmdict_subset.py \
   /path/to/JMdict_e.xml \
   crates/jparser/tests/fixtures/parse_sentences.txt \
-  crates/jparser/assets/conjugations.json \
+  <conjugation source> \
   crates/jparser/tests/fixtures/jmdict_subset.xml
 ```
+
+**The extractor does not run as written today.** Its third argument was
+`crates/jparser/assets/conjugations.json`, deleted at Phase 1b-ii, and it
+needs a replacement built from `crates/jparser/src/engine/table.rs` — see the
+note in `tools/extract_jmdict_subset.py`'s docstring. Until that port lands,
+recover the old asset from git history if a regeneration is genuinely needed.
+The committed subsets are the reproducible artifacts, so no regeneration is
+pending.
 
 One entry is hand-added rather than extractor-derived: `食べる` (ent_seq
 1358280, `v1`, gloss "to eat"), appended just before `</JMdict>`. It backs

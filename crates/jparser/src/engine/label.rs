@@ -8,7 +8,9 @@
 // https://en.wikipedia.org/wiki/Japanese_verb_conjugation, read 2026-09;
 // terminology only. assets/conjugations.json, src/conjugation.rs and
 // src/matcher/ (matcher.rs and matcher/verb.rs) were not opened while this
-// file or tests/fixtures/conjugation_labels.txt was written.
+// file or tests/fixtures/conjugation_labels.txt was written. Those four paths
+// were deleted at Phase 1b-ii and are recoverable from git history; they are
+// named here because naming what was not read is the attestation.
 
 //! The English conjugation label -- Phase 1b-i's half of master plan §7.3's
 //! recombiner. Reads [`ConjStep`]s, writes `Entry::conjugation`.

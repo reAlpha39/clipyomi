@@ -11,7 +11,8 @@ default = ["cli"]
 # without it: `cargo check -p jparser --no-default-features` is the gate that
 # keeps an HTTP client and a decompressor out of the parser.
 cli = ["dep:jmdict-source"]
-# Vibrato-backed BoundaryHints. Off by default: the parser library must build
+# Vibrato-backed boundary hints (`hints::VibratoTokenizer`). Off by default:
+# the parser library must build
 # without a tokenizer, and `cargo check -p jparser --no-default-features` is the
 # gate that proves it.
 mecab = ["dep:vibrato"]

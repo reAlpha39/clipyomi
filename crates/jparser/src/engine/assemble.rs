@@ -419,7 +419,12 @@ mod tests {
     // a "trap" where a *lower*-priority signal (often `entry_id` itself)
     // favors the wrong candidate, so the test only passes if the clause
     // under test is actually what `order` is applying.
-    fn order_candidate(entry_id: u32, exact: bool, flags: WordFlags, step_count: usize) -> Candidate {
+    fn order_candidate(
+        entry_id: u32,
+        exact: bool,
+        flags: WordFlags,
+        step_count: usize,
+    ) -> Candidate {
         Candidate {
             start: 0,
             len: 1,
@@ -461,7 +466,7 @@ mod tests {
         common.insert(WordFlags::COMMON);
         let mut cands = vec![
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not COMMON, smaller id
-            order_candidate(2, true, common, 0),              // COMMON, larger id
+            order_candidate(2, true, common, 0),             // COMMON, larger id
         ];
         order(&mut cands);
         assert_eq!(

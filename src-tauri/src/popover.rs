@@ -38,7 +38,8 @@ pub fn create(app: &App) -> tauri::Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        if let (Some(main_win), Ok(popover_hwnd)) = (app.get_webview_window("main"), window.hwnd()) {
+        if let (Some(main_win), Ok(popover_hwnd)) = (app.get_webview_window("main"), window.hwnd())
+        {
             if let Ok(main_hwnd) = main_win.hwnd() {
                 unsafe {
                     set_window_owner(popover_hwnd.0, main_hwnd.0);

@@ -37,7 +37,11 @@ fn rows() -> Vec<Row> {
             let expected = cols
                 .next()
                 .unwrap_or_else(|| panic!("line {}: no expected column", i + 1));
-            assert!(cols.next().is_none(), "line {}: more than three columns", i + 1);
+            assert!(
+                cols.next().is_none(),
+                "line {}: more than three columns",
+                i + 1
+            );
             Row {
                 line_no: i + 1,
                 surface,
@@ -81,7 +85,11 @@ fn the_fixture_parses_and_is_not_empty() {
         rows.len()
     );
     for r in &rows {
-        assert!(r.chain.contains(':'), "line {}: chain has no class:form step", r.line_no);
+        assert!(
+            r.chain.contains(':'),
+            "line {}: chain has no class:form step",
+            r.line_no
+        );
     }
 }
 

@@ -91,7 +91,8 @@ fn main() {
                 }
                 #[cfg(target_os = "macos")]
                 if loaded.chrome_mode != Some(settings::ChromeMode::Native) {
-                    let _ = commands::apply_decorations_macos(&main_window.as_ref().window(), false);
+                    let _ =
+                        commands::apply_decorations_macos(&main_window.as_ref().window(), false);
                 }
                 #[cfg(target_os = "windows")]
                 {
@@ -103,7 +104,9 @@ fn main() {
                 // geometry restores verbatim and only a first launch has the
                 // band added to it — by `initial_height`, which answers for
                 // every platform and is still the only place a band appears.
-                let width = loaded.window_width.unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
+                let width = loaded
+                    .window_width
+                    .unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
                 let height = commands::initial_height(loaded.window_height);
                 // One path for both platforms now, because the clamp has to run
                 // wherever a stored box can name a monitor that is gone.
@@ -267,7 +270,6 @@ fn main() {
             popover::place_popover,
             popover::hide_popover
         ])
-
         // If the runtime cannot start, there is no window to report anything
         // in, so the alternative to this `expect` is a silent exit.
         .run(tauri::generate_context!())
