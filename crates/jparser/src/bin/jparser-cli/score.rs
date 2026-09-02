@@ -417,7 +417,10 @@ mod tests {
     }
 
     fn parsed(segments: Vec<Segment>) -> ParseResult {
-        ParseResult { segments }
+        ParseResult {
+            segments,
+            alternatives: Vec::new(),
+        }
     }
 
     #[test]

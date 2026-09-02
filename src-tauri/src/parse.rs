@@ -161,7 +161,13 @@ mod tests {
 
     #[test]
     fn catch_parse_returns_the_value_when_nothing_panics() {
-        let out = catch_parse(3, || Ok(ParseResult { segments: vec![] })).expect("ok");
+        let out = catch_parse(3, || {
+            Ok(ParseResult {
+                segments: vec![],
+                alternatives: vec![],
+            })
+        })
+        .expect("ok");
         assert!(out.segments.is_empty());
     }
 
