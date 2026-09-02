@@ -720,29 +720,19 @@ mod tests {
         CLASSES.iter().position(|c| c.name == name).expect("class") as ClassId
     }
 
-    /// The learner-standard register design §3 fixes (also documented atop
-    /// `conjugation_labels.txt`) -- every word `label::fmt` can currently
-    /// emit. Kept here only so `check_fmt` can assert the precondition its
-    /// `split(' ')` repeat-check relies on.
-    const KNOWN_LABEL_WORDS: &[&str] = &[
-        "Causative", "Passive/Potential", "Negative", "Volitional", "Polite", "Want-to", "Past",
-        "Te-form", "Copula", "Conditional", "Imperative", "Adverbial",
-    ];
-
     /// Asserts `fmt` is total on `steps`: returns `None` or a non-empty label
     /// with no repeated word. Asserts nothing about which words.
     fn check_fmt(steps: &[ConjStep]) {
         if let Some(label) = crate::engine::label::fmt(steps) {
             assert!(!label.is_empty(), "empty Some for {steps:?}");
-            // split(' ') below only detects a repeat correctly because every
-            // known label word is one space-free token -- a future
-            // multi-word addition (e.g. "Past Progressive") would silently
-            // break it, so assert the precondition explicitly.
-            assert!(
-                KNOWN_LABEL_WORDS.iter().all(|w| !w.contains(' ')),
-                "label vocabulary grew a multi-word entry; split(' ')-based repeat detection \
-                 needs revisiting"
-            );
+            // Splitting on ' ' is exact only while every label word is a single
+            // token, which `label.rs`'s three tables currently guarantee (the
+            // one word carrying punctuation, "Passive/Potential", uses a slash
+            // rather than a space). A multi-word label word would make this
+            // over-report rather than under-report -- it would see a repeat
+            // across two different words -- so the failure mode is a loud false
+            // positive here, not a missed defect. Whoever adds such a word
+            // should revisit this helper.
             let words: Vec<&str> = label.split(' ').collect();
             let unique: std::collections::BTreeSet<&str> = words.iter().copied().collect();
             assert_eq!(words.len(), unique.len(), "repeated word in {label:?} for {steps:?}");
