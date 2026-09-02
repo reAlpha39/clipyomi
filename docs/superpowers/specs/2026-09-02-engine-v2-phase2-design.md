@@ -23,7 +23,7 @@ instead of guessing on their behalf.
 
 - `lattice::k_best`, an exact k-best over the Phase 1 lattice, of which
   today's `best_path` becomes the k = 1 case (§3).
-- `ParseOptions::readings(k)`; `ParseResult.alternatives`, readings 2..k as
+- `ParseOptions::with_readings(k)`; `ParseResult.alternatives`, readings 2..k as
   full covers (§4).
 - `jparser-cli score --readings K`, adding oracle@K lines (§5).
 - The main window: `Reading n of k` radio rows in the existing right-click
@@ -196,6 +196,30 @@ Hash collisions merge two genuinely different readings into one. At tens of
 spans per sentence and a 64-bit mixer that is a non-event, and the failure
 is a missing alternate, never a wrong segment.
 
+### 3.2a Dominated readings
+
+The key leaves one class of near-optimal path standing: a reading that is
+top-1 with one matched word left unmatched. `UNMATCHED` is 30 per character
+against at most `COVER + INEXACT` = 9 for the costliest one-character match,
+so such a variant is always at least 21 dearer than the reading it degrades
+and never wins at k = 1 — but on a short or unambiguous sentence it is what
+fills readings 2 and 3, and "東京 with 都 unmatched" is not a second reading
+of 東京都, only a worse copy of the first.
+
+A reading is **dominated** when a cheaper reading matches every span it
+matches. `k_best` keeps `4k` raw readings per position, and after the
+backtrack returns the first k that no cheaper kept reading dominates. Rank 0
+is never dominated, so k = 1 is untouched. A reading that leaves a character
+unmatched because nothing matches it (東 in a dictionary that lacks it, read
+against 京都) has a span the cheaper readings do not, and survives.
+
+The factor is a `ponytail:` ceiling: a top-1 with more than `3k` matched
+spans has more one-word-unmatched variants than the raw list holds spare
+slots, and a genuine alternate priced above them (a PRONOUNCE crossing plus
+INEXACT, about +33) can fall off the end. The upgrade path is dominance
+pruning inside the DP lists, which is safe because domination at a position
+survives every extension.
+
 ### 3.3 Exactness, and why rank 0 is today's answer
 
 A reading in the top-k at `to` is a reading at some `from` plus one step. If
@@ -217,8 +241,8 @@ same loop with a three-element list.
 exactly this, gains its first field:
 
 ```rust
-pub struct ParseOptions { readings: usize }        // Default: 1
-impl ParseOptions { pub fn readings(k: usize) -> Self }
+pub struct ParseOptions { pub readings: usize }        // Default: 1
+impl ParseOptions { pub fn with_readings(k: usize) -> Self }  // k.max(1)
 ```
 
 `ParseResult` gains `alternatives: Vec<Vec<Segment>>`: readings 2..k in cost
@@ -233,7 +257,7 @@ across `engine_v2.rs`, `score.rs`, and `src-tauri/src/parse.rs`; each gains
 
 ## 5. Harness: oracle@K
 
-`score` gains `--readings K`, default 1, and passes `ParseOptions::readings(K)`
+`score` gains `--readings K`, default 1, and passes `ParseOptions::with_readings(K)`
 to `parse`. With K = 1 every output byte is unchanged, which is how §1's
 invariant is measured.
 
@@ -254,13 +278,13 @@ oracle@3 tolerant:  0.xxxx  (n / 2163)
 oracle@3 sentences: 0.xxxx  (n / 150)
 ```
 
-JSON gains `readings`, `oracle_span_hits`, `oracle_tolerant_hits`,
-`oracle_sentence_hits`, all `skip_serializing_if` K = 1, so the recorded
+JSON gains one block, `"oracle":{"readings":K,"span_hits":n,
+"tolerant_hits":n,"sentence_hits":n}`, absent at K = 1, so the recorded
 baselines stay byte-identical too.
 
 ## 6. Application and UI (commit 4 only)
 
-`src-tauri/src/parse.rs`'s worker passes `ParseOptions::readings(3)`.
+`src-tauri/src/parse.rs`'s worker passes `ParseOptions::with_readings(3)`.
 Nothing else in `src-tauri` changes: the `parse-result` event already
 carries the whole `ParseResult`, and `history` stores it, so alternates ride
 along into back and forward for free.
@@ -328,8 +352,10 @@ All measured hints on, gold corpus, K = 3, per §5's per-span union:
 - **`lattice`**: every existing `best_path` test passes through the wrapper
   unchanged; k = 3 returns readings distinct by span sequence; two entries at
   one span return one reading; an unmatched run yields no fragment variant;
-  a forbidden candidate appears in no reading; output is cost-ordered, at
-  most k long, and each path is a contiguous cover.
+  a reading that only un-matches a cheaper reading's word is dropped while
+  one that leaves an unmatchable character unmatched is kept; a forbidden
+  candidate appears in no reading; output is cost-ordered, at most k long,
+  and each path is a contiguous cover.
 - **`engine_v2`**: a sentence with a known second segmentation
   (`くるまではこう`, which `engine_v2.rs` already gates at k = 1) yields it as
   `alternatives[0]`; every alternate is a full cover; `ParseOptions::default()`
@@ -376,6 +402,7 @@ new dependency. `lattice.rs` stays under 450 lines.
 | Own k-best, not Vibrato N-best or MeCab | Hints supply boundaries only (Phase 1a §6.1), so there is no tokenizer lattice in the engine to enumerate; a tokenizer's N-best is morphemes over IPADIC, not JMdict segmentations (master plan §4.1, §2.3 here) |
 | Bounded list per position, not backward-Viterbi plus a priority queue | Both are exact and about the same size; the list is what `lattice.rs`'s module doc promised and changes one function's body plus the backtrack. Master plan §10 already rejected Eppstein (§3) |
 | Reading identity is the matched span sequence, hashed | Collapses same-span entry variants, which `to_segment` already gathers, and unmatched fragmentation, which the k = 1 tie-break already hides. Without it k = 3 returns one segmentation three times (§3.2) |
+| Drop dominated readings after the DP, over a 4k raw list | A reading that only leaves a cheaper reading's word unmatched is a worse copy, not an alternate, and on short sentences it is what fills readings 2 and 3. Filtering after the backtrack keeps the DP exact and rank 0 untouched; pruning inside the lists is the named upgrade if the fixed factor ever binds (§3.2a) |
 | `segments` stays top-1; alternates are an additive field | Every consumer and the wire-shape test keep their meaning; the frontend ignores an unknown field until commit 4 (§4) |
 | No scores on the wire | Order is the rank; the `i32` cost has no user meaning. Master plan §7 amended (§1, §11) |
 | oracle@k is a per-span union, with the sentence count beside it | The gate compares against top-1 span accuracy, a per-span metric, and a user cycles per word. The master plan's literal whole-parse definition is printed as context (§5) |
