@@ -25,9 +25,9 @@ const HALFWIDTH_TO_FULLWIDTH: [char; 58] = [
     'ハ', 'ヒ', 'フ', 'ヘ', 'ホ', // U+FF8A..=U+FF8E
     'マ', 'ミ', 'ム', 'メ', 'モ', // U+FF8F..=U+FF93
     'ヤ', 'ユ', 'ヨ', // U+FF94..=U+FF96
-    'ラ', 'リ', 'ル', 'レ', 'ロ', // U+FF97..=U+FF9B
-    'ワ', // U+FF9C
-    'ン', // U+FF9D
+    'ラ', 'リ', 'ル', 'レ', 'ロ',       // U+FF97..=U+FF9B
+    'ワ',       // U+FF9C
+    'ン',       // U+FF9D
     '\u{309B}', // U+FF9E halfwidth voiced sound mark -> fullwidth spacing form
     '\u{309C}', // U+FF9F halfwidth semi-voiced sound mark -> fullwidth spacing form
 ];

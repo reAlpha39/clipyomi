@@ -19,7 +19,9 @@
 # before crates/jparser/src/engine/label.rs existed, and is authoritative over
 # it. assets/conjugations.json, src/conjugation.rs and src/matcher/
 # (matcher.rs and matcher/verb.rs) were not opened while this file was
-# written.
+# written. Those four paths were deleted at Phase 1b-ii and are recoverable
+# from git history; they are named here because naming what was not read is
+# the attestation.
 #
 # Rows marked "table finding" are surfaces that are not natural Japanese but
 # are chains the table generates today. They are labelled by the same rules;

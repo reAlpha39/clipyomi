@@ -87,11 +87,16 @@ counts from `wc -l`.
 integration, but `flags_from_worker` is documented as a port of
 `Dictionary.cpp:1115-1126`. Phase 1 dissolves the question rather than arguing
 it: tokenizer output stops being an advisory "hint" and becomes a DP constraint
-(§4.3), so that function has no successor.
+(§4.3), so that function has no successor. **Dissolved at Phase 1b-ii: deleted
+with `BoundaryFlags`, no successor.**
 | **Clean** | `crates/jmdict-source`, `crates/vibrato-source` | — | Zero `ta-old` references, verified by grep — but that grep tested the wrong string; see the correction below |
 | **Clean** | `src/**.ts`, `src/**.css`, `src-tauri/src/**` | — | 25 references, all behavioural: *"ta-old's rule"*, *"the same shape"*. Describes conventions, not copied expression |
 
 The clean tiers are roughly half the repository and carry forward untouched.
+
+**Discharged at Phase 1b-ii.** The hard tier is deleted; the soft tier's
+citations are scrubbed (§9.3's assumption held); the clean tier's header
+strings are gone.
 
 **Correction, made at Phase 1a (design §11.1).** The grep behind the first
 "Clean" row above tested only `ta-old`. Ten files across `crates/jmdict-source`
@@ -288,6 +293,14 @@ touches `はこう`'s start (4) or end (6).
 This is the class of bug success criterion 3 names. The fix is a cost model in
 which tokenizer boundaries are evidence rather than a ±10 nudge — designed in
 Phase 1, tuned against Phase 0's corpus.
+
+**Delivered at Phase 1a, and the advisory mechanism is gone at 1b-ii.** Cost
+accrues per character and the tokenizer's cuts reach the DP as the
+`engine::Boundaries` trait — a question about where a token ends, not a
+per-position "do not split inside this" nudge. §3.2's `flags_from_worker`, the
+one borderline entry in the taint map, was deleted along with `BoundaryFlags`
+at Phase 1b-ii with no successor; `hints::VibratoTokenizer::boundaries` is
+what remains.
 
 #### Why two objectives, and what arbitrates between them
 
@@ -737,8 +750,15 @@ tree-wide with zero hits. Corrected counts of the header string alone, as of
 Phase 1a: 24 files under `crates/jparser/`, 1 under `xtask/`, 4 under
 `crates/jmdict-source`, 6 under `crates/vibrato-source`, 11 under
 `src-tauri/` (10 under `src/` plus `build.rs`), 1 under `tools/`
-(`extract_jmdict_subset.py`) — 47 files total. Both Phase 0 metrics are at
-or above baseline, in both hint states; `くるまではこう` parses as
+(`extract_jmdict_subset.py`) — 47 files total.
+
+**Relicence clause met** (Phase 1b-ii): both strings grep to zero tree-wide.
+**Metric clause superseded**, not met: the tolerant gap is the structural
+JMdict-priority ceiling §7 Phase 3 already assigns to the frequency layer, and
+no Phase 1 tool reaches it. In the shipped configuration (hints on) v2 is
++10.7 points strict, −1.6 tolerant, −0.9 entry top-1 against v1 — strict
+measures the particle-absorbing defect this project exists to fix; tolerant
+measures compound preservation, which Phase 3 owns. `くるまではこう` parses as
 `くる / まで / は / こう`.
 
 #### Phase 1a — Clean-room segmentation core
@@ -833,8 +853,8 @@ Done-when below carried verbatim. The split exists because Phase 1a's metric
 gate is open on four of eight cells and the switchover decision wants the
 formatter working and those numbers in hand, and because §7.3 names the
 formatter the highest-risk item — de-risked first, it leaves the switchover
-a smaller commit. Phase 1's own done-when is unchanged and lands at the end
-of 1b-ii.
+a smaller commit. Phase 1's own done-when lands at the end of 1b-ii — its
+relicence clause met, its metric clause superseded, as recorded above.
 
 **Phase 1b-i — complete (handoff
 [`../2026-09-02-engine-v2-phase1b-i-handoff.md`](../2026-09-02-engine-v2-phase1b-i-handoff.md)).**
@@ -871,9 +891,13 @@ headers of §9 open question 2 written on the replacement files.
 
 **Out:** k-best (Phase 2). Extra token layers (Phase 3). Any UI change.
 
-**Done when:** the class × chain gate passes, and the switchover lands in one
-commit with nothing shipped in between (design §4.1) — which is also when
-Phase 1's own done-when above is met.
+**Done when:** the class × chain gate passes, and the switchover lands with
+nothing shipped in between (design §4.1) — which is also when Phase 1's own
+done-when above is settled. The 1b-ii design §1 refined "one commit" into the
+four-stage sequence recorded below: the rewiring is one indivisible commit,
+but the deletion of the ported sources and the licence flip are deliberately
+separate from it, so that a commit exists in which every ported line is gone
+and the tree is still `GPL-2.0-only`.
 
 **Size, restated per module (design §9).**
 
@@ -887,13 +911,41 @@ Plus 1b's own expectation fixture. 1a's ~2,580 and 1b's ~480 total ~3,060, a
 little under the original ~3,300 estimate; the difference is rounding across
 rows, not a claim of a smaller phase.
 
-**Phase 1b-ii has not started.** Design §9's budget for the switchover
-stands. Whoever plans it should read Phase 1a's measured outcome above and
-the 1b-i handoff's §4 table findings before deciding whether v2 is ready to
-become the default — the metric gap that remains is concentrated and
-understood, and five of the still-shattered or mislabelled surfaces now
-have a named cause in the conjugation table — four in `ATTACHES_TO`, one in
-`CLASSES`.
+**Phase 1b-ii — complete (design
+[`2026-09-02-engine-v2-phase1b-ii-design.md`](2026-09-02-engine-v2-phase1b-ii-design.md),
+handoff
+[`../2026-09-02-engine-v2-phase1b-ii-handoff.md`](../2026-09-02-engine-v2-phase1b-ii-handoff.md)).**
+Landed in four stages, in the one order that builds: **prep** (the startup
+fix, the two table fixes measured one at a time, v2's fingerprint pinned,
+`parse_snapshots.rs` retired with one test ported forward), **switchover**
+(one indivisible commit of about forty files — the relocations, index format
+4, the engine-agnostic lifecycle, `parse` becoming v2, `src-tauri` and
+`jparser-cli` following, and the nine v1 files orphaned but untouched on
+disk), **delete** (`git rm` of those nine plus `matcher/verb.rs`,
+`assets/conjugations.json`, the `xtask` crate and `.gitignore`'s `ta-old/`
+line — 8,980 deletions against 8 insertions, and the tree still
+`GPL-2.0-only` at that commit, which is why the deletion is separate from the
+flip), and **relicense** (59 files re-headered, `LICENSE` swapped for
+`LICENSE-MIT` plus the canonical `LICENSE-APACHE`, both banned strings at
+zero, and `cargo fmt` run once). The hazard §3 found is the one the prep
+stage exists for: `state.rs::load_state` opens the newest generation with
+`Index::open`, which after the fingerprint bump returns
+`IndexError::ConjugationMismatch` for every user upgrading with a v1-built
+index — and `is_missing_dictionary` mapped `StartupError::Index(_)` to
+`false`, so the webview would have shown a fatal error screen for exactly the
+condition the download screen already repairs. One match arm routing
+`ConjugationMismatch` and `VersionMismatch` to `true` fixes it, and those are
+precisely the two errors `ensure_dictionary` already rebuilds on. The two
+bundled table fixes both landed measured and both proved metric-neutral: the
+`たい:連用形` `ATTACHES_TO` row moved below the two `た` rows, flipping three
+snapshot labels (読みました, しました, 書かせられた) from *Want-to* to *Past*;
+and `JMDICT_POS_CLASS` became a multimap so `vk` also maps `カ変・来ル`, which
+makes kanji-written 来る deinflect at last (来ます went from two junk spans to
+one `来る (Polite) [きます]`) under a table-derived reading rule that takes the
+stem reading from `カ変・クル`'s same-named form. The coverage walk re-pinned
+from 21,760 chains to 22,783, and all eight `score` cells reproduce Phase
+1b-i's exactly in both hint states: hints off 0.7272 strict / 0.7975 tolerant
+/ 0.9075 entry top-1 / 75 merges, hints on 0.8031 / 0.8521 / 0.9063 / 53.
 
 **§7.2 — Table size.** ta-old's table holds 32 types and 734 conjugations. The
 replacement need not match that count — it must cover what the corpus exercises
@@ -1021,6 +1073,15 @@ licensing is still unresolved and this does not change that.
    GPL-2.0-only until the nine hard-taint files of §3.2 are gone, which is
    Phase 1's output. Until then the header states the intended licence of the
    new file, and the repository's licence is unchanged.
+
+   **Written at Phase 1b-ii. The tree is `MIT OR Apache-2.0`.** 59 files
+   re-headered, `Cargo.toml` and `package.json` updated, `LICENSE` replaced by
+   `LICENSE-MIT` plus the canonical `LICENSE-APACHE`. One open item goes with
+   it, and it is the maintainer's to settle rather than a phase's: ten
+   line-range citations into the upstream GPL-2 C++ survive in
+   `src/render/*` and `src/styles/tooltip.css`, files this phase relabelled
+   without ever having fenced or reassessed them — the clean-room rebuild
+   covered the parsing engine only. See the 1b-ii handoff §1.
 3. **`jmdict.rs` and `index/*` disposition (§3.2 soft tier).** Rewriting is
    cleanly safe; scrubbing the citations is cheaper. This plan assumes
    scrubbing. If a reviewer disagrees, Phase 1 grows by ~1,300 lines.
@@ -1205,3 +1266,13 @@ licensing is still unresolved and this does not change that.
 | Label register is learner-standard; られる/れる is "Passive/Potential" | The product is a learner tool and §7.3's own example is in this register. Ichidan られる is ambiguous and the parser cannot resolve it, so the label says so (1b-i design §3) |
 | `ConjStep.aux` records the auxiliary lemma | 一段 is shared by せる/させる/れる/られる and 不変化型 by ん/う/よう/て/で; class and form cannot name the auxiliary (1b-i design §2) |
 | The label fixture is hand-written to depth 1 in full, curated deeper, with a mechanical completeness test that asserts no English | Depth 2 is 1,028 distinct tuples — past what a reviewer reads rather than skims; asserting compositional English at depth 2 would test the formatter against its own rule (1b-i design §4) |
+| **1b-ii lands in four stages — prep, switchover, delete, relicense — not one commit** | The rewiring is genuinely indivisible (dropping `verb_type` breaks v1's builder; v2's fingerprint fails every v1-built test index; a fresh `WordFlags` collides with `record.rs`'s on the shared `Entry.flags`), but the deletion and the licence flip are not. Separating them buys a commit in which every ported line is gone and the tree is still `GPL-2.0-only` — the licence invariant made observable rather than asserted (1b-ii design §1) |
+| Re-seat the prep/switchover seam at what v1 tolerates | An earlier draft put the relocations in the prep commit "with v1 still the default and still compiling", which cannot be built. The alternative was a throwaway `WordFlags` conversion layer with bit values reverse-engineered from v1 at run time, purely to keep a commit boundary — code the next commit would immediately remove, and reverse engineering the fence forbids (1b-ii design §1) |
+| Route a stale-index startup error to the download screen | After the fingerprint bump every user upgrading with a v1-built index gets `IndexError::ConjugationMismatch`, and `is_missing_dictionary` mapped `StartupError::Index(_)` to `false` — a fatal error screen for the one condition the download path already repairs. One match arm over `ConjugationMismatch \| VersionMismatch`, which are exactly the errors `ensure_dictionary` rebuilds on, so no new UI and no new command (1b-ii design §3) |
+| Index format 4: `StoredRecord` loses `verb_type` | v2 emits no generated stems, so the field was written `None` on every record. The header fingerprint already rejects a cross-read, so dropping it costs no new guard (1b-ii design §2) |
+| `flags_from_worker` dissolved rather than argued | §3.2's one borderline taint entry, documented as a port of `Dictionary.cpp:1115-1126`. Deleted with `BoundaryFlags` at 1b-ii; `Boundaries` asks where a token ends instead, so there is nothing left to relicense or defend (§3.2, §4.3, 1b-ii design §5) |
+| `vk` maps a second class, `カ変・来ル`, with a table-derived reading rule | Kanji-written 来る did not deinflect at all under v2 — `来た` came out as two unmatched spans — because `JMDICT_POS_CLASS` mapped `vk` only to `カ変・クル`, whose suffixes are the whole kana word. Shipping that as the default would regress one of the language's two irregular verbs. The stem reading comes from `カ変・クル`'s same-named form, whose suffix over an empty stem *is* that reading (連用形 き, 未然形 こ, 仮定形 くれ), written from the observable alternation rather than from v1's `kuruHack`. Metric-neutral on all eight cells (1b-ii design §9.1) |
+| The たい row reorder is the cheap fix, and the principled one is named not taken | 特殊・タ and 特殊・タイ both emit a bare `た`, the chains tie in `lex::dedup_shallowest`, and `ATTACHES_TO`'s row order decided that *Want-to* survived — so ました labelled "Polite Want-to", wrong on the most common polite form in the language. Moving one row changes which of two equal-depth chains survives dedup and nothing else. Making `たい:ガル接続` non-terminal would delete candidates and can move the DP, so it stays a measured Phase 1a follow-up, as does the godan 仮定形/命令ｅ tie (1b-ii design §9.2) |
+| `romaji --particle` removed with the switchover | The flag existed to expose v1's particle-aware romaji path. v2's `engine::romaji` has no such mode, so the flag could only have reported a value it no longer computes (1b-ii design §4) |
+| **Phase 1's metric clause is superseded, not met** | The tolerant gap is the structural JMdict-priority ceiling §7 Phase 3 already assigns to the frequency layer, so no tool inside Phase 1 can satisfy the clause as written; leaving it open indefinitely would be the same silent-degradation shape the phase split exists to avoid. The numbers stand beside the amendment: hints on, v2 is +10.7 points strict, −1.6 tolerant, −0.9 entry top-1 against v1. Strict measures the particle-absorbing defect class this project exists to fix (1b-ii design §10) |
+| `cargo fmt` runs once, in the last commit of the phase | The clean-room quarantine forbade it while the hand-laid conjugation table was still in the tree, and running it earlier would also have destroyed the evidence that it *had not* run — 12 of the drift sites that vanished at the switchover did so because their files became orphaned, which is a fact only a never-formatted tree can show. 49 sites across 15 files, absorbed in one mechanical commit (1b-ii design §1, §8) |

@@ -324,7 +324,10 @@ mod tests {
             is_allowed(&c, Some(&b)),
             "merging across a boundary is legal"
         );
-        assert!(cost(&c, Some(&b)) >= cost(&c, None), "never a discount for crossing");
+        assert!(
+            cost(&c, Some(&b)) >= cost(&c, None),
+            "never a discount for crossing"
+        );
     }
 
     #[test]

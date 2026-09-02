@@ -2,11 +2,14 @@ name: CI
 
 # The gates this repo relies on, all of which were previously run by hand.
 #
-# Deliberately NO `cargo fmt --check`. `crates/jparser/src/conjugation.rs` is
-# intentionally not rustfmt-clean, and reformatting it is a defect — the port
-# keeps its table layout readable against the C++ original. Formatting is done
-# per-file with `rustfmt --edition 2021 <file>`, never `cargo fmt`. Please do
-# not "helpfully" add a formatting job here.
+# No `cargo fmt --check` job yet, but the reason it was forbidden is gone.
+# Until Phase 1b-ii the workspace held a hand-laid conjugation table whose
+# layout `cargo fmt` would have destroyed, so formatting was done per-file with
+# `rustfmt --edition 2021 <file>` and a wholesale run counted as a defect. That
+# table and its module are deleted, and Phase 1b-ii ran `cargo fmt` once over
+# `jparser` and `clipyomi`: both crates are rustfmt-clean as of that commit.
+# Adding a formatting job here is now a safe change rather than a forbidden
+# one — it just has not been made.
 
 on:
   push:

@@ -72,8 +72,14 @@ fn a_conjugated_verb_is_found_with_its_chain() {
     let dir = scratch("lex-conj");
     build_v2(&dir);
     let c = cands(&dir, "書いた");
-    let hit = c[0].iter().find(|x| x.headword == "書く").expect("書いた -> 書く");
-    assert_eq!(hit.len, 3, "the candidate spans the whole conjugated surface");
+    let hit = c[0]
+        .iter()
+        .find(|x| x.headword == "書く")
+        .expect("書いた -> 書く");
+    assert_eq!(
+        hit.len, 3,
+        "the candidate spans the whole conjugated surface"
+    );
     assert!(!hit.steps.is_empty());
 }
 
@@ -91,7 +97,10 @@ fn a_kana_unified_match_is_marked_inexact() {
         .iter()
         .find(|x| x.headword == "はい")
         .expect("ハイ -> はい (杯/盃's reading) is the kana-unified match");
-    assert_eq!(hit.len, 2, "the match covers ハイ, not the whole katakana span");
+    assert_eq!(
+        hit.len, 2,
+        "the match covers ハイ, not the whole katakana span"
+    );
     assert!(!hit.exact, "はい (hiragana) != the raw katakana query ハイ");
 }
 
@@ -338,7 +347,10 @@ fn a_matched_segment_carries_its_entry_and_senses() {
     assert!(!seg.entries[0].senses.is_empty());
     assert!(!seg.entries[0].pos.is_empty());
     // ent_seq 1206730 in tests/fixtures/jmdict_subset.xml, <keb>学校</keb>.
-    assert_eq!(seg.entries[0].entry_id, 1206730, "the ent_seq entry top-1 is scored on");
+    assert_eq!(
+        seg.entries[0].entry_id, 1206730,
+        "the ent_seq entry top-1 is scored on"
+    );
 }
 
 // The general shape, not just this one word: with `COVER` priced per
@@ -374,8 +386,15 @@ fn the_v2_path_labels_a_conjugated_entry_from_its_steps() {
     let r = parse_v2_over(&dir, "書いた");
     let e = &r.segments[0].entries[0];
     assert_eq!(e.headword, "書く");
-    assert!(!e.steps.is_empty(), "Phase 1a hands the formatter the steps");
-    assert_eq!(e.conjugation.as_deref(), Some("Past"), "Phase 1b-i names them");
+    assert!(
+        !e.steps.is_empty(),
+        "Phase 1a hands the formatter the steps"
+    );
+    assert_eq!(
+        e.conjugation.as_deref(),
+        Some("Past"),
+        "Phase 1b-i names them"
+    );
 }
 
 #[test]
@@ -526,7 +545,9 @@ fn an_exact_match_outranks_an_inexact_one() {
         has_primary && has_pronounce,
         "fixture must offer both kinds or this test proves nothing"
     );
-    let first_inexact = e.iter().position(|x| x.flags.contains(WordFlags::PRONOUNCE));
+    let first_inexact = e
+        .iter()
+        .position(|x| x.flags.contains(WordFlags::PRONOUNCE));
     let last_exact = e.iter().rposition(|x| x.flags.contains(WordFlags::PRIMARY));
     assert!(
         last_exact.expect("checked above") < first_inexact.expect("checked above"),
@@ -632,14 +653,15 @@ fn the_same_headword_at_two_different_lengths_is_not_deduplicated_away() {
 // v2's own snapshot over the curated 30-sentence corpus, reviewed on its own
 // terms (master plan §5.1: v1 is a disagreement source, not an oracle, so
 // this is a fresh snapshot rather than a copy of
-// `parse_snapshots__sentences.snap`). The rendering below mirrors
-// `parse_snapshots.rs`'s `render` so a human can diff the two by eye; it is
-// a separate copy rather than a shared one because the two integration test
-// binaries cannot share non-`pub` code, and making this rendering `pub` in
-// the library for fifteen lines would leak a display concern into the API --
-// the same trade-off `parse_snapshots.rs` documents for its own copy.
+// `parse_snapshots__sentences.snap`). The rendering below was written to
+// mirror the now-deleted `parse_snapshots.rs`'s `render`, so that while both
+// existed a human could diff the two snapshots by eye. It stayed a separate
+// copy rather than a shared one because two integration test binaries cannot
+// share non-`pub` code, and making this rendering `pub` in the library for
+// fifteen lines would leak a display concern into the API. Phase 1b-ii
+// deleted the v1 snapshot test, so this is now the only copy.
 
-/// Alternatives printed per span. See `parse_snapshots.rs`'s identical constant.
+/// Alternatives printed per span.
 const MAX_ALTERNATIVES: usize = 5;
 
 /// Printed wherever a reading or conjugation is `None`.
@@ -767,7 +789,12 @@ fn kuru_in_kanji_deinflects_and_reads_through_the_kana_class() {
     // suffixes are whole kana words, so the kanji stem 来 matches nothing and
     // 来 + た are two unmatched spans.
     let r = parse_kuru("kuru-past", "来た");
-    assert_eq!(r.segments.len(), 1, "one span, not 来 + た: {:?}", r.segments);
+    assert_eq!(
+        r.segments.len(),
+        1,
+        "one span, not 来 + た: {:?}",
+        r.segments
+    );
     let s = &r.segments[0];
     assert!(s.matched);
     // Not くた: 来's reading in 連用形 is き, which カ変・クル's same-named

@@ -83,13 +83,13 @@ pub struct Entry {
     /// The match's flags, as carried by the dictionary record that won this
     /// span.
     ///
-    /// A set flag says the record carries it; it is not a per-engine
-    /// guarantee that a flag no longer applicable to this specific match
-    /// (e.g. `COUNTER` on a candidate not used as a counter here) has been
-    /// cleared before reaching this field. Whether and how each engine
-    /// reconciles a record's flags against the winning match is an engine
-    /// implementation detail — see the engine's own segmentation module for
-    /// what it does, if anything, before populating this field.
+    /// A set flag says the record carries it. It is not a guarantee that a
+    /// flag no longer applicable to this specific match (e.g. `COUNTER` on a
+    /// candidate not used as a counter here) has been cleared before reaching
+    /// this field. Whether and how the engine reconciles a record's flags
+    /// against the winning match is an implementation detail — see
+    /// [`crate::engine::assemble`] for what it does, if anything, before
+    /// populating this field.
     pub flags: WordFlags,
     /// The JMdict `ent_seq` this candidate came from.
     ///

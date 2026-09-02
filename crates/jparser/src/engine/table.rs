@@ -606,7 +606,10 @@ mod tests {
     #[test]
     fn every_jmdict_verb_pos_in_the_fixture_maps_to_a_real_class() {
         for pos in JMDICT_POS_CLASS.iter().map(|(p, _)| *p) {
-            assert!(classes_for_pos(pos).next().is_some(), "{pos} maps to nothing");
+            assert!(
+                classes_for_pos(pos).next().is_some(),
+                "{pos} maps to nothing"
+            );
         }
         for (pos, name) in JMDICT_POS_CLASS {
             assert!(
@@ -758,7 +761,11 @@ mod tests {
             // should revisit this helper.
             let words: Vec<&str> = label.split(' ').collect();
             let unique: std::collections::BTreeSet<&str> = words.iter().copied().collect();
-            assert_eq!(words.len(), unique.len(), "repeated word in {label:?} for {steps:?}");
+            assert_eq!(
+                words.len(),
+                unique.len(),
+                "repeated word in {label:?} for {steps:?}"
+            );
         }
     }
 
@@ -799,7 +806,8 @@ mod tests {
                 if !depth0.contains(&(c.is_adjective, form0.name.to_string())) {
                     missing.push(format!("depth 0: {class_name}:{}", form0.name));
                 }
-                for &(lemma1, ac1, _req1) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form0.name) {
+                for &(lemma1, ac1, _req1) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form0.name)
+                {
                     let c1 = class_id_of(ac1);
                     for (f1, _) in aux_forms(lemma1, ac1) {
                         let form1 = CLASSES[c1 as usize].forms[f1 as usize].name;
@@ -810,7 +818,8 @@ mod tests {
                         if !depth1.contains(&(lemma1.to_string(), form1.to_string())) {
                             missing.push(format!("depth 1: {lemma1}:{form1}"));
                         }
-                        for &(lemma2, ac2, _) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form1) {
+                        for &(lemma2, ac2, _) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form1)
+                        {
                             let c2 = class_id_of(ac2);
                             for (f2, _) in aux_forms(lemma2, ac2) {
                                 chains += 1;
@@ -960,8 +969,14 @@ mod tests {
     fn the_innermost_step_of_a_chain_carries_no_auxiliary() {
         let c = chars("書いた");
         let hits = table().chains_ending_at(&c, 3, 3);
-        let hit = hits.iter().find(|h| key(&c, h) == "書く").expect("書いた -> 書く");
-        assert_eq!(hit.steps[0].aux, None, "the main word's own inflection has no lemma");
+        let hit = hits
+            .iter()
+            .find(|h| key(&c, h) == "書く")
+            .expect("書いた -> 書く");
+        assert_eq!(
+            hit.steps[0].aux, None,
+            "the main word's own inflection has no lemma"
+        );
         assert_eq!(hit.steps[1].aux, Some("た"));
     }
 

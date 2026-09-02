@@ -105,7 +105,7 @@ fn a_rebuild_into_a_live_directory_can_serve_data_from_neither_build() {
         "a spliced index cannot coherently hold both dictionaries"
     );
 
-    // `prefixes_of` is the actually-spliced read path: it walks B's `keys.fst`,
+    // `prefixes_of_with` is the actually-spliced read path: it walks B's `keys.fst`,
     // decodes B's `records.bin`, then resolves the resulting `entry_id`
     // against A's `entries.idx`. The `entry()` checks above cannot see the
     // splice at all, because `entry()` reads only A's two payload files.

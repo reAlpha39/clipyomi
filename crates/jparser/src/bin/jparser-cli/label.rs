@@ -181,9 +181,7 @@ pub fn run(index_dir: &Path, diff_path: &Path, gold_path: &Path) -> Result<(), B
                 println!("    (no candidate on this span)");
             }
             let ent_seq = loop {
-                let Some(answer) =
-                    ask("  [1-N] pick  [n] no entry  [#<ent_seq>] by id > ")
-                else {
+                let Some(answer) = ask("  [1-N] pick  [n] no entry  [#<ent_seq>] by id > ") else {
                     return Ok(());
                 };
                 if answer == "n" {
@@ -327,7 +325,10 @@ mod tests {
     #[test]
     fn a_cut_outside_the_text_is_rejected() {
         assert!(parse_cuts("9", 7).is_err());
-        assert!(parse_cuts("0", 7).is_err(), "0 is implied, not an interior cut");
+        assert!(
+            parse_cuts("0", 7).is_err(),
+            "0 is implied, not an interior cut"
+        );
         assert!(parse_cuts("7", 7).is_err(), "the length is implied too");
     }
 
