@@ -670,14 +670,13 @@ mod tests {
         }
     }
 
+    type FixtureDepth0 = std::collections::BTreeSet<(bool, String)>;
+    type FixtureDepth1 = std::collections::BTreeSet<(String, String)>;
+
     /// The fixture's depth-0 and depth-1 tuples, parsed from its `chain`
     /// column: `(is_adjective, form)` for one-step rows, `(lemma, form)` for
     /// two-step rows. Deeper rows are curated and not enumerated here.
-    #[allow(clippy::type_complexity)]
-    fn fixture_tuples() -> (
-        std::collections::BTreeSet<(bool, String)>,
-        std::collections::BTreeSet<(String, String)>,
-    ) {
+    fn fixture_tuples() -> (FixtureDepth0, FixtureDepth1) {
         const FIXTURE: &str = include_str!("../../tests/fixtures/conjugation_labels.txt");
         let mut depth0 = std::collections::BTreeSet::new();
         let mut depth1 = std::collections::BTreeSet::new();
@@ -733,10 +732,6 @@ mod tests {
     }
 
     #[test]
-    // A single-clone `&[s0.clone()]` call below is intentional: it mirrors
-    // the two- and three-element `&[s0.clone(), s1.clone()]` calls beside it
-    // rather than special-casing the depth-0 walk onto `slice::from_ref`.
-    #[allow(clippy::cloned_ref_to_slice_refs)]
     fn the_label_fixture_covers_every_reachable_tuple_and_fmt_is_total() {
         // Design §4.3. Walk every chain a JMDICT_POS_CLASS-mapped class can
         // start, two auxiliaries deep: (class, form) --requires--> (aux,
@@ -762,7 +757,7 @@ mod tests {
             for (f0, form0) in c.forms.iter().enumerate() {
                 let s0 = step(c0, f0 as FormId, None);
                 chains += 1;
-                check_fmt(&[s0.clone()]);
+                check_fmt(std::slice::from_ref(&s0));
                 if !depth0.contains(&(c.is_adjective, form0.name.to_string())) {
                     missing.push(format!("depth 0: {class_name}:{}", form0.name));
                 }
@@ -794,9 +789,13 @@ mod tests {
             "reachable tuples with no fixture row:\n{}",
             missing.join("\n")
         );
-        assert!(
-            chains > 20_000,
-            "the walk reached only {chains} chains; the table's shape changed -- re-size the gate"
+        assert_eq!(
+            chains, 21_760,
+            "the walk reached {chains} chains, not 21,760 -- the conjugation table's \
+             shape changed. That is not automatically wrong, but it has to be \
+             deliberate: 21,760 is 170 depth-0 chains plus 1,860 depth-1 plus 19,730 \
+             depth-2, over the classes JMDICT_POS_CLASS maps. Re-derive it and update \
+             this constant, rather than loosening the assertion"
         );
     }
 
