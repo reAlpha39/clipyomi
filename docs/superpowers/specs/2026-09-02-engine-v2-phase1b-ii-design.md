@@ -17,11 +17,13 @@ the only engine, deletes the nine hard-taint files master plan §3.2 names,
 and relicenses the tree from `GPL-2.0-only` to `MIT OR Apache-2.0` — master
 plan §1's goal, discharged.
 
-**In.** Four commits, in this order and no other:
+**In.** Four stages, in this order and no other. Stages 2 and 3 are each a
+single commit by construction; stages 1 and 4 may be several small ones, since
+nothing in them threatens the invariant below:
 
 1. **Prep.** Everything that is safe while v1 is still the default: route the
-   stale-index startup error to the download screen (§3), land the one
-   metric-neutral table fix Phase 1b-i's handoff names and measure it (§9),
+   stale-index startup error to the download screen (§3), land the two
+   bundled table fixes and measure each (§9),
    pin v2's fingerprint as a stability test (§2), delete v1's redundant
    snapshot test, and port `parse_irregular.rs`'s observables into
    `engine_v2.rs` (§6).
@@ -323,7 +325,48 @@ drift.
 
 ---
 
-## 9. The one bundled table fix (commit 1)
+## 9. The two bundled table fixes (commit 1)
+
+Both are measured against the Phase 0 corpus, both hint states, before and
+after, and the numbers go in the handoff beside Phase 1b-i's. Each is a
+bounded change that can only add or re-rank candidates for surfaces that are
+wrong or unmatched today; a metric cell moving *down* is a finding, not a
+number to record.
+
+### 9.1 Kanji 来る deinflects
+
+Found while writing the plan, by running v2 on the fixture `parse_irregular.rs`
+uses: `parse --engine v2 来た` yields `来` and `た` both **unmatched**, and 来ない,
+来ます and every other kanji-written form fail the same way. `JMDICT_POS_CLASS`
+maps `vk` to one class, `カ変・クル` (remove `くる`), whose suffixes are the whole
+kana word (き, こ, くる); the kanji headword 来る needs `カ変・来ル` (remove `る`,
+suffixes over the kanji stem: empty for 未然形/連用形, る for 基本形), which the
+table carries but nothing maps to. v1 handled this; shipping v2 as the
+default without it regresses one of the language's two irregular verbs from
+parsed to unmatched. The 1b-i review's standard applies: deferrable behind a
+flag, a blocker at the switchover.
+
+**The fix.** `JMDICT_POS_CLASS` becomes a multimap — a second row
+`("vk", "カ変・来ル")` — and `class_for_pos(pos) -> Option<ClassId>` becomes
+`classes_for_pos(pos) -> impl Iterator<Item = ClassId>`. Its two production
+callers (`engine::flags::classes`, `engine::lex::entry_classes`) already
+collect into a deduplicated `Vec`, so they iterate instead of `if let`. The
+coverage walk's exact chain count moves (one more mapped class) and is
+re-derived deliberately, as its failure message instructs.
+
+**The reading rule it forces.** `assemble::reading_for`'s doc assumes 来る's
+strip *fails* — くる does not end in `カ変・クル`'s remove `くる` — and so returns
+`None` rather than a wrong reading. Under `カ変・来ル` the strip *succeeds*
+(くる ends in る) and would yield く + た = **くた**: wrong furigana, which that
+function's own contract forbids. So one rule is added, written from the
+observable alternation and not from v1's `kuruHack`: **a `カ変・来ル` match
+takes its stem reading from `カ変・クル`'s same-named form**, whose suffix over
+an empty stem *is* that reading — 連用形 き, 未然形 こ, 仮定形 くれ, 命令ｉ こい —
+followed by the surface after the step's own range. 来た → きた, 来ない → こない,
+来れ → くれ, 来い → こい. The two classes carry the same ten form names, which a
+test asserts so the lookup cannot silently miss.
+
+### 9.2 The たい row reorder
 
 Phase 1b-i's handoff §4 finding 5: 特殊・タ and 特殊・タイ both emit a bare `た`
 surface, the two chains tie in `lex::dedup_shallowest`, and `ATTACHES_TO`'s
@@ -366,7 +409,8 @@ which the row reorder does not touch.
    screen rather than a fatal error, rebuilds, and parses.
 5. `jparser-cli score`, both hint states, reproduces Phase 1b-i's eight cells
    exactly after §9's reorder.
-6. `jparser-cli parse 読みました` labels 読む `Polite Past`.
+6. `jparser-cli parse 読みました` labels 読む `Polite Past`, and `parse 来た`
+   yields one span, headword 来る, reading きた, label `Past`.
 
 **Phase 1's own done-when, amended.** Its relicence clause — zero hits of both
 strings tree-wide — is met by this phase. Its metric clause — both Phase 0
@@ -409,5 +453,6 @@ Phase 3 owns.
 | `parse_irregular.rs` ported by observable, not kept | The tests pin what a parse of した must produce, not how v1 produced it; v2 must satisfy the same or the gap is a finding (§6) |
 | `xtask` crate deleted whole | Its single job was the ta-old converter; an empty crate is worse than none (§7) |
 | Behavioural `ta-old` mentions reworded, not kept | The done-when counts the literal string; describing the behaviour without the name loses nothing (§8) |
-| The たい row reorder taken; the non-terminal fix named and left | The reorder is provably score-neutral and fixes the most visible wrong label; the principled fix moves the DP and belongs to a measured 1a follow-up (§9) |
+| The たい row reorder taken; the non-terminal fix named and left | The reorder is provably score-neutral and fixes the most visible wrong label; the principled fix moves the DP and belongs to a measured 1a follow-up (§9.2) |
+| `vk` maps to both カ変 classes, with a 来る reading rule | Running v2 on the irregular-verb fixture showed kanji 来る entirely unmatched — a hard failure v1 did not have, on one of two irregular verbs. The multimap only adds candidates for surfaces unmatched today; the reading rule is forced because `カ変・来ル`'s strip succeeds where the doc assumed it would fail. Written from the observable alternation, not v1's `kuruHack` (§9.1) |
 | Phase 1's metric clause recorded as superseded, not left open | The master plan itself assigns the remaining gap to Phase 3's frequency layer; a done-when no Phase 1 tool can satisfy should say so rather than stay silently open (§10) |
