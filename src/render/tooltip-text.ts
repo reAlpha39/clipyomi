@@ -3,9 +3,10 @@ import type { Entry, GlossFilters } from '../types';
 /**
  * Prefix marking a line as the conjugation label.
  *
- * The literal control character `\x01`, which the colouriser looks for. Kept
- * as a control character rather than a friendlier sentinel precisely because
- * it cannot occur in dictionary text.
+ * The original tooltip used the literal control character `\x01` for this, and
+ * the colouriser looks for it the same way. Kept as a control character rather
+ * than a friendlier sentinel precisely because it cannot occur in dictionary
+ * text.
  */
 export const CONJ_MARKER = '\u0001';
 
