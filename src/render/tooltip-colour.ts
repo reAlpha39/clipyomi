@@ -33,8 +33,9 @@ function closeParen(line: string, start: number): number {
       if (depth === 0) return i + 1;
     }
   }
-  // Unclosed: the run simply extends to the end of the line. Truncating
-  // instead would drop the rest of a gloss over a typo in JMdict.
+  // Unclosed: the run simply extends to the end of the line, as the original
+  // tooltip's brace scan did. Truncating instead would drop the rest of a
+  // gloss over a typo in JMdict.
   return line.length;
 }
 
