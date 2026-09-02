@@ -73,6 +73,35 @@ ask about is strictly better than the same derivation with its citations
 scrubbed. Task 8's stale-prose sweep was explicitly told to leave them alone,
 and did.
 
+**What this means for merging versus releasing.** This branch does not
+*create* the frontend's derivation. If `src/render/tooltip-colour.ts` is a
+derivative work of the upstream C++, it already was one before this phase,
+under `GPL-2.0-only`, where that derivation was compatible by construction —
+a GPL-2 work deriving from GPL-2 raises no licence question at all. What this
+branch changes is the licence the *same code* now ships under. Under
+`MIT OR Apache-2.0`, relicensing a derivative work is not unilaterally the
+maintainer's to make — but that consequence attaches at **distribution**, not
+at a merge into `main` in the maintainer's own repository. Nobody outside this
+repository receives anything different the moment this branch merges. So the
+recommendation is narrower than "resolve this before merging": merging is
+fine, and it is the **first release** cut under the new licence that should
+wait on the maintainer's answer. This is guidance on where the risk actually
+sits, not legal advice — the maintainer should still get a real answer before
+that release ships.
+
+**A third option, beside yes and no.** The question above is framed as
+binary — is this code clean, or isn't it — but there is a cheap engineering
+answer available too. `src/render/tooltip-colour.ts` is 97 lines, and
+`colourLine`, the function carrying *"Ported from `MyDrawText`"*, the
+strongest of the ten citations, is a character-class colouring pass over one
+line of text. A clean-room reimplementation, written by someone who has not
+read the upstream source and working only from the existing behaviour —
+`src/render/tooltip-colour.test.ts` passes today and would serve as the
+specification — is roughly an afternoon's work. Doing that converts the
+highest-risk item in the tree from an open licence question into a closed
+engineering task: the same manoeuvre this phase just performed, at far
+larger scale, on the parsing engine itself.
+
 **One thing that is now available and was not before.** "The original
 tooltip" is the de-naming circumlocution in **ten** places
 (`src-tauri/src/popover.rs:17`, `src/main.ts:782,974`,
@@ -179,7 +208,9 @@ is byte-identical and unweakened — only its GPL *rationale* was reworded. Four
 files carry no SPDX line because they never carried a GPL header
 (`crates/jparser/examples/boundary_diag.rs`, `src-tauri/src/mouse_tracker.rs`,
 `src-tauri/src/popover.rs`, `tools/gen_conjugation_table.py`); that is the
-only header inconsistency left, and this phase did not create it.
+only header inconsistency left **among files that carry an SPDX line at
+all** — §1 counts 42 files under `src/` that carry no licence header
+whatsoever, a separate and larger gap — and this phase did not create it.
 
 **3. The six gates green at every commit.** They were, and a seventh joined
 them — see §6 below.

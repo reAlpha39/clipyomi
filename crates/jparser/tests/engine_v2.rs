@@ -828,3 +828,71 @@ fn empty_text_parses_into_no_segments() {
     let r = parse_kuru("kuru-empty", "");
     assert!(r.segments.is_empty());
 }
+
+/// Pins the exact JSON the webview parses. Field names here are the
+/// TypeScript property names in `src/types.ts`; changing either side alone
+/// breaks rendering with no compiler error anywhere.
+#[test]
+fn parse_result_serializes_to_the_documented_wire_shape() {
+    let result = jparser::ParseResult {
+        segments: vec![jparser::Segment {
+            start: 0,
+            len: 2,
+            surface: "東京".to_string(),
+            reading: Some("とうきょう".to_string()),
+            matched: true,
+            entries: vec![jparser::Entry {
+                headword: "東京".to_string(),
+                reading: Some("とうきょう".to_string()),
+                conjugation: None,
+                pos: vec!["n".to_string()],
+                senses: vec![],
+                flags: WordFlags::PRIMARY,
+                entry_id: 1000010,
+                steps: Vec::new(),
+            }],
+        }],
+    };
+
+    let json = serde_json::to_value(&result).expect("serialize");
+    let seg = &json["segments"][0];
+    assert_eq!(seg["start"], 0);
+    assert_eq!(seg["len"], 2);
+    assert_eq!(seg["surface"], "東京");
+    assert_eq!(seg["reading"], "とうきょう");
+    assert_eq!(seg["matched"], true);
+
+    let entry = &seg["entries"][0];
+    assert_eq!(entry["headword"], "東京");
+    assert_eq!(entry["conjugation"], serde_json::Value::Null);
+    assert_eq!(entry["pos"][0], "n");
+    assert_eq!(entry["flags"][0], "primary");
+    // A nonzero id: `entry_id`'s type default is 0, so asserting against
+    // that value would pass even if the field silently stopped
+    // serializing and fell back to its default.
+    assert_eq!(entry["entry_id"], 1000010);
+}
+
+/// An unmatched run must still be a well-formed segment: the sentence pane
+/// renders these muted and unchipped, so it needs them present, not omitted.
+#[test]
+fn an_unmatched_segment_serializes_with_null_reading_and_no_entries() {
+    let result = jparser::ParseResult {
+        segments: vec![jparser::Segment {
+            start: 0,
+            len: 1,
+            surface: "〜".to_string(),
+            reading: None,
+            matched: false,
+            entries: vec![],
+        }],
+    };
+
+    let json = serde_json::to_value(&result).expect("serialize");
+    assert_eq!(json["segments"][0]["reading"], serde_json::Value::Null);
+    assert_eq!(json["segments"][0]["matched"], false);
+    assert!(json["segments"][0]["entries"]
+        .as_array()
+        .expect("array")
+        .is_empty());
+}
