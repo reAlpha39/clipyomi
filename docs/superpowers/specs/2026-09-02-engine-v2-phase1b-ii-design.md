@@ -19,25 +19,44 @@ plan §1's goal, discharged.
 
 **In.** Four commits, in this order and no other:
 
-1. **Relocate.** Move the types v2 shares with v1 out of the deletion set,
-   make the index layer engine-agnostic, and bump the index format. v1 is
-   still the default and still compiles.
-2. **Flip.** Make v2 the default everywhere — `src-tauri`, `jparser-cli`,
-   every test — route the stale-index startup error to the download screen,
-   and land the one metric-neutral table fix Phase 1b-i's handoff names.
-3. **Delete.** Remove the nine files, `matcher/verb.rs`,
-   `assets/conjugations.json`, the `xtask` crate, and the ported half of
-   `hints.rs`. The compiler proves nothing references them.
+1. **Prep.** Everything that is safe while v1 is still the default: route the
+   stale-index startup error to the download screen (§3), land the one
+   metric-neutral table fix Phase 1b-i's handoff names and measure it (§9),
+   pin v2's fingerprint as a stability test (§2), delete v1's redundant
+   snapshot test, and port `parse_irregular.rs`'s observables into
+   `engine_v2.rs` (§6).
+2. **Switchover.** One compile unit: the relocations and the format bump
+   (§2), the engine-agnostic index lifecycle (§3), `parse` becomes v2 and
+   `src-tauri`, `jparser-cli` and every remaining test follow (§4, §6), the
+   ported half of `hints.rs` goes (§5), and the nine files' `mod`
+   declarations leave `lib.rs`, so the v1 sources sit on disk uncompiled.
+3. **Delete.** `git rm` the nine orphaned files, `matcher/verb.rs`,
+   `assets/conjugations.json`, the `xtask` crate, and `.gitignore`'s
+   `ta-old/` line. Nothing references them, so the diff is deletions only.
 4. **Relicense.** Replace every GPL header with the SPDX header, remove every
    `ta-old` mention and every `ported from Translation Aggregator` string
    tree-wide, swap the licence files, and run `cargo fmt` once.
+
+**Why the seam between 1 and 2 sits where it does.** An earlier draft of this
+section put the relocations of §2 in commit 1, "with v1 still the default and
+still compiling". Writing the plan showed that cannot be built: dropping
+`verb_type` breaks v1's index builder, which writes it; pointing `Index::open`
+at v2's fingerprint makes every v1-built test index fail to open; and a fresh
+`WordFlags` collides with `record.rs`'s on the shared `Entry.flags` field,
+which both engines populate. Nor can `src-tauri` be split from the library
+change, since its build breaks the instant `parse`'s signature does. So
+everything that rewires the crate lands in one commit, and commit 1 holds
+only what v1 tolerates. Commit 2 is large (about forty files) but genuinely
+indivisible; the alternative — a throwaway `WordFlags` conversion layer with
+bit values reverse-engineered from v1 at run time, purely to keep a commit
+boundary — adds code commit 2 would immediately remove.
 
 **Out.** Any change to `cost.rs`, `lattice.rs`, `lex.rs`, `assemble::order`
 or `table_data.rs` beyond §9's one `ATTACHES_TO` row reorder. k-best (Phase
 2). Extra linguistic layers (Phase 3). Any UI change beyond what §3's startup
 fix requires. Closing Phase 1a's open metric cells — see §10.
 
-**Why four commits, when Phase 1a design §4.1 said one.** §4.1's reason for
+**Why four commits at all, when Phase 1a design §4.1 said one.** §4.1's reason for
 "one commit, nothing shipped in between" was to avoid a shipped window in
 which the engine emits `conjugation: None`. Phase 1b-i closed that window: v2
 now labels every conjugated entry. What §4.1 still protects is the invariant
@@ -50,7 +69,7 @@ reviewable pieces are strictly safer. Recorded in §11.
 
 ---
 
-## 2. Relocations and the index format (commit 1)
+## 2. Relocations and the index format (commit 2; the fingerprint test, commit 1)
 
 The dependency map taken before this design shows exactly four things the
 v2 engine or the shared index layer take from the nine files. Each gets one
@@ -101,7 +120,7 @@ Everything else the map found is v1-only and goes in commit 3.
 
 ---
 
-## 3. Index lifecycle and startup (commits 1–2)
+## 3. Index lifecycle and startup (the startup fix, commit 1; the lifecycle, commit 2)
 
 **`ensure_dictionary(root, keep, fetch)`.** The `table: &ConjugationTable` and
 `opts: &StemOptions` parameters go; `generations::build_new` calls
@@ -182,7 +201,7 @@ diagnostic that generated `spurious_merges.txt` and may be needed again.
 
 ---
 
-## 5. Hints (commits 2–3)
+## 5. Hints (commit 2)
 
 `hints.rs` is soft-tier (master plan §3.2) and is the only production
 implementor of `engine::Boundaries`. It stays. What goes with v1:
@@ -202,7 +221,7 @@ dissolution. `VibratoTokenizer::load`, `boundaries()`, `BoundarySet`,
 
 ---
 
-## 6. Test disposition (commit 2)
+## 6. Test disposition (the first two rows, commit 1; the rest, commit 2)
 
 Six test files, one example and two in-file test modules depend on v1. One
 decision each; the rule is that a test of engine-neutral behaviour is
@@ -304,7 +323,7 @@ drift.
 
 ---
 
-## 9. The one bundled table fix (commit 2)
+## 9. The one bundled table fix (commit 1)
 
 Phase 1b-i's handoff §4 finding 5: 特殊・タ and 特殊・タイ both emit a bare `た`
 surface, the two chains tie in `lex::dedup_shallowest`, and `ATTACHES_TO`'s
@@ -382,6 +401,7 @@ Phase 3 owns.
 | Decision | Rationale |
 | --- | --- |
 | Four commits, licence flipped last, instead of §4.1's one | §4.1's reason (a shipped `conjugation: None` window) was closed by 1b-i. The invariant that survives — never labelled MIT while ported code exists — holds when commit 4 follows commit 3. Ninety files in one diff bisect to nothing (§1) |
+| The seam between commits 1 and 2 is "what v1 tolerates", not "relocate first" | Found while writing the plan: every §2 relocation breaks v1 at the type level, and `src-tauri` cannot be split from the library change. Commit 2 is therefore one indivisible compile unit; commit 1 holds only the startup fix, the table reorder, a fingerprint test, and two test-file dispositions (§1) |
 | `WordFlags` redefined fresh in `engine/flags.rs`, bit values arbitrary | The eight wire names are the contract; every index is invalidated this phase anyway, so the bits are free. `record.rs` is not opened (§2) |
 | `verb_type` dropped, format 3 → 4 | v2 never writes it; the rebuild is happening regardless; a dead field is worse than a bump (§2) |
 | `is_missing_dictionary` routes `ConjugationMismatch`/`VersionMismatch` to the download screen | Those are the exact errors `ensure_dictionary` already repairs; without this every upgrading user sees a fatal error for a fixable condition (§3) |
