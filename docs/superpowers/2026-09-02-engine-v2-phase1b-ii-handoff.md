@@ -209,8 +209,8 @@ files carry no SPDX line because they never carried a GPL header
 (`crates/jparser/examples/boundary_diag.rs`, `src-tauri/src/mouse_tracker.rs`,
 `src-tauri/src/popover.rs`, `tools/gen_conjugation_table.py`); that is the
 only header inconsistency left **among files that carry an SPDX line at
-all** — §1 counts 42 files under `src/` that carry no licence header
-whatsoever, a separate and larger gap — and this phase did not create it.
+all** — §1 documents a separate and larger gap, where no file under `src/`
+carries a licence header at all — and this phase did not create it.
 
 **3. The six gates green at every commit.** They were, and a seventh joined
 them — see §6 below.
