@@ -25,6 +25,7 @@ pub mod chain;
 pub mod cost;
 pub mod flags;
 pub mod kana;
+pub mod label;
 pub mod lattice;
 pub mod lex;
 pub mod romaji;
