@@ -26,6 +26,16 @@
 //!   corpus_staging/gold_index crates/jparser/tests/fixtures/gold.jsonl \
 //!   "$APPDATA/dev.jparser.clipyomi/hints/current/system.dic"
 //! ```
+//!
+//! Kept on purpose, not forgotten: `docs/superpowers/specs/
+//! 2026-08-27-engine-v2-master-plan.md` §5.2 cites the oracle@∞ ceiling table
+//! this file, and only this file, reproduces. Delete it once §5.2 no longer
+//! cites those figures -- until then, whoever touches this file owns keeping
+//! it runnable, not deleting it. Unlike `score.rs`, this harness indexes
+//! candidates by gold span offset with no cover validation, so a malformed
+//! gold record panics here where the real harness would report an error;
+//! acceptable in a spike measured once against a fixed, already-validated
+//! gold file, not a reason to harden it.
 
 #[cfg(not(feature = "mecab"))]
 fn main() {

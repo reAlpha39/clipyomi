@@ -96,10 +96,33 @@ src-tauri/Cargo.toml` (149 passed). Eight cells byte-identical at
 
 ## 6. Open items
 
-- `RAW_FACTOR` in `lattice.rs` is a fixed over-provision for the dominance
-  filter; a top-1 with more than nine matched spans can push a genuine
-  alternate priced above +29 out of the raw list. Upgrade path: dominance
-  pruning inside the DP lists (design §3.2a).
+- `RAW_FACTOR`'s over-provision risk is retired on this corpus, not merely
+  bounded. The final Phase 2 review measured it directly: at k = 3, the
+  shipped cap of 12 raw readings per position returns byte-identical
+  top-three reading lists to a cap of 96 on all 150 gold-corpus sentences, in
+  both hint states, with no change to either oracle figure -- even though 70
+  of the 150 sentences have more than nine matched spans (the point past
+  which `RAW_FACTOR`'s doc comment warns a genuine alternate could fall off
+  the raw list) and 58 have more than eleven. The reason is structural, not
+  luck: with `CROSS = 0` the alternates that matter are exact-cost ties with
+  the reading they compete against, while the dominated one-word-unmatched
+  variants that would need to crowd them out cost roughly +30 more, so they
+  never do. Dominance pruning inside the DP lists (design §3.2a) is not a
+  live risk to close on this corpus; see below for where the real headroom
+  is instead.
+- The measurement above points at the actual lever for a future oracle@k
+  gain: reading identity, not list capacity. With `CROSS = 0` a real
+  compound ties its split alternative exactly, so ranks 1 and 2 of the
+  reading list are routinely spent on re-splits the tolerant metric forgives
+  by construction -- which is why strict oracle@3 gained +109 spans over
+  strict top-1 while tolerant gained only +40 (§3, "Strict versus
+  tolerant"). If `k_best`'s notion of "distinct" also collapsed readings
+  differing only by a tolerant-equivalent merge or split -- the same rule
+  `score.rs`'s `accumulate` already applies when scoring -- ranks 1 and 2
+  would be freed for readings that could actually move the metric. Named
+  next experiment for anyone revisiting Phase 2; not attempted here because
+  it changes what `k_best` returns, and the gate had already reached its
+  verdict.
 - Whoever builds the reading-cycling interface should decide what happens to
   the sentence pane's scroll position. `display` resets it on every render,
   which is why a furigana change already returns a long parse to the top
