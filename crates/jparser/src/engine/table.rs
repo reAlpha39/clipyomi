@@ -288,11 +288,13 @@ enum TrieHit {
     /// One specific auxiliary's own conjugated surface ends here (built
     /// from an `ATTACHES_TO` row, not from `CLASSES` directly). The chain
     /// can continue only if the text immediately before it ends in
-    /// `requires` — the 活用形 that auxiliary attaches to.
+    /// `requires` — the 活用形 that auxiliary attaches to. `lemma` is the
+    /// row's first column, carried onto the step so `label.rs` can name it.
     Continuation {
         class: ClassId,
         form: FormId,
         requires: &'static str,
+        lemma: &'static str,
     },
 }
 
@@ -409,6 +411,7 @@ impl Table {
                         class: class_id as ClassId,
                         form: form_id as FormId,
                         requires,
+                        lemma,
                     },
                 );
             }
@@ -468,6 +471,7 @@ impl Table {
                                     class,
                                     form,
                                     range: end - len..end,
+                                    aux: None,
                                 }],
                                 stem_class: Some(class),
                             });
@@ -477,6 +481,7 @@ impl Table {
                         class,
                         form,
                         requires,
+                        lemma,
                     } => {
                         // len == 0 is the loop-prevention guard: a
                         // zero-length auxiliary match would recurse at this
@@ -492,6 +497,7 @@ impl Table {
                                 class,
                                 form,
                                 range: end - len..end,
+                                aux: Some(lemma),
                             });
                             out.push(sub);
                         }
@@ -717,6 +723,41 @@ mod tests {
             hit.steps[0].range.start, 2,
             "the innermost step starts after 食べ"
         );
+    }
+
+    #[test]
+    fn every_step_after_the_first_names_its_auxiliary() {
+        // Phase 1b-i's formatter cannot tell せる from られる (both 一段) or
+        // ん from て (both 不変化型) by class and form alone; the lemma has to
+        // ride on the step. Master plan §7.3's chain, innermost first.
+        let c = chars("食べさせられませんでした");
+        let hits = table().chains_ending_at(&c, c.len(), c.len());
+        let hit = hits
+            .iter()
+            .find(|h| key(&c, h) == "食べる")
+            .expect("the chain must reach 食べる");
+        let auxes: Vec<Option<&str>> = hit.steps.iter().map(|s| s.aux).collect();
+        assert_eq!(
+            auxes,
+            vec![
+                None,
+                Some("させる"),
+                Some("られる"),
+                Some("ます"),
+                Some("ん"),
+                Some("です"),
+                Some("たい"),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_uninflected_or_single_step_chain_carries_no_auxiliary() {
+        let c = chars("書いた");
+        let hits = table().chains_ending_at(&c, 3, 3);
+        let hit = hits.iter().find(|h| key(&c, h) == "書く").expect("書いた -> 書く");
+        assert_eq!(hit.steps[0].aux, None, "the main word's own inflection has no lemma");
+        assert_eq!(hit.steps[1].aux, Some("た"));
     }
 
     #[test]

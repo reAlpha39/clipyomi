@@ -277,6 +277,7 @@ mod tests {
             class,
             form: 0,
             range: 1..3,
+            aux: None,
         }];
         let c = candidate(0, 3, WordFlags::PRIMARY, steps);
         assert_eq!(reading_for(&e, &c, &chars), Some("かいた".to_string()));
@@ -314,6 +315,7 @@ mod tests {
             class,
             form: 0,
             range: 0..2,
+            aux: None,
         }];
         let c = candidate(0, 2, WordFlags::PRIMARY, steps);
         assert_eq!(reading_for(&e, &c, &chars), None);
@@ -342,6 +344,7 @@ mod tests {
                     class: 0,
                     form: 0,
                     range: 0..0,
+                    aux: None,
                 };
                 step_count
             ],
