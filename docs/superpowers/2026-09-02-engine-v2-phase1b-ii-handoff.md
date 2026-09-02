@@ -46,10 +46,16 @@ lines against 97, six private helpers against three, iterating code points
 where the old version indexed the string by UTF-16 code unit — and carries no
 derivation claim at all. That is why the table above no longer has rows for
 the former `src/render/tooltip-colour.ts:47` and `:58`; the citation
-inventory dropped from nine sites to seven. The rewrite also fixed a latent
-bug the index-based version had: a supplementary-plane ideograph (a
-UTF-16 surrogate pair) would have been mishandled, and a new test now pins
-U+20000 through the code-point-iterating version.
+inventory dropped from nine sites to seven. **This section originally claimed
+the rewrite fixed a surrogate-pair bug; it did not.** On `\u{20000}` the old,
+index-based implementation and the new one produce identical, correct output,
+so the new test pins code-point iteration in the rewrite but proves nothing
+about a defect in the old code. The old code's real defect was a homoglyph:
+its CJK range opened at `豈`, U+8C48 (a CJK *Unified* Ideograph), where the
+comment plainly meant U+F900's CJK *Compatibility* Ideographs block —
+widening the effective range to U+8C48–U+FAFF, which fully encloses the
+UTF-16 surrogate block U+D800–U+DFFF and is why 😀 and 한 were misclassified
+as `kanji`.
 
 **Why these survived, and why that is not evidence they are fine.** They
 passed this phase's done-when greps **by construction, not by judgment**: the
