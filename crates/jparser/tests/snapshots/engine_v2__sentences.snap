@@ -31,7 +31,7 @@ start=0 len=1 本 matched reading=もと
 start=1 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=2 len=5 読みました matched reading=よみました
-    読む (Polite Want-to) [よみました] to read
+    読む (Polite Past) [よみました] to read
 start=7 len=1 。 unmatched
 
 === これは面白い映画だ。
@@ -203,7 +203,7 @@ start=3 len=2 宿題 matched reading=しゅくだい
 start=5 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=6 len=4 しました matched reading=-
-    する (Polite Want-to) [-] to do
+    する (Polite Past) [-] to do
 start=10 len=1 。 unmatched
 
 === 彼に何も言われなかった。
@@ -230,7 +230,7 @@ start=0 len=2 手紙 matched reading=てがみ
 start=2 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
 start=3 len=6 書かせられた matched reading=かかせられた
-    書く (Causative Passive/Potential Want-to) [かかせられた] to write
+    書く (Causative Passive/Potential Past) [かかせられた] to write
 start=9 len=1 。 unmatched
 
 === 日本語を話せますか。

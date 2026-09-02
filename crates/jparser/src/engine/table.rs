@@ -252,6 +252,9 @@ pub fn class_for_pos(pos: &str) -> Option<ClassId> {
 /// keeps the coverage test below honest about which class it is claiming
 /// for, without pretending either row will ever actually fire in the
 /// chain search.
+///
+/// Row order is load-bearing where two rows produce the same surface at
+/// the same node — see the たい row.
 const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("せる", "一段", "未然形"),
     ("せる", "一段", "未然レル接続"),
@@ -265,9 +268,20 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("う", "不変化型", "未然ウ接続"),
     ("よう", "不変化型", "未然ウ接続"),
     ("ます", "特殊・マス", "連用形"),
-    ("たい", "特殊・タイ", "連用形"),
     ("た", "特殊・タ", "連用タ接続"),
     ("た", "特殊・タ", "連用形"),
+    // Below both た rows on purpose. 特殊・タイ removes たい, so its ガル接続
+    // suffix た is a bare た over an empty stem -- the same surface as the
+    // past auxiliary. Both are real Continuation hits at the same trie node,
+    // both accept a preceding 連用形, and they tie on span, entry and depth,
+    // so `lex::dedup_shallowest` keeps whichever `Table::new` inserted first.
+    // Row order is that order. With たい first, every polite past (読みました)
+    // labelled Want-to; with た first, Past. This reorder changes which of two
+    // equal-depth chains survives and nothing else -- same span, same
+    // entry_id -- so it cannot move a score cell (Phase 1b-ii design §9.2).
+    // The principled fix, making ガル接続 non-terminal, deletes candidates and
+    // is a measured Phase 1a follow-up.
+    ("たい", "特殊・タイ", "連用形"),
     ("だ", "特殊・ダ", "連用タ接続"),
     ("て", "不変化型", "連用タ接続"),
     ("て", "不変化型", "連用形"),
