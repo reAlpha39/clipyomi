@@ -183,6 +183,29 @@ fn union_pos(senses: &[SenseData]) -> Vec<String> {
     pos
 }
 
+/// The kanji spelling of 来る. Its stem's reading alternates with the form
+/// (来た = きた, 来ない = こない, 来る = くる), so stripping the class's
+/// remove-suffix from the dictionary reading -- right for every other class
+/// -- would produce くた.
+const KURU_KANJI_CLASS: &str = "カ変・来ル";
+/// The kana spelling's class. It conjugates the same ten form names over an
+/// empty stem, so each form's suffix *is* the kanji stem's reading in that
+/// form.
+const KURU_KANA_CLASS: &str = "カ変・クル";
+
+/// `カ変・クル`'s suffix for the form named `form`: the reading of 来's stem
+/// in that form. `None` only if the two classes' form sets have drifted
+/// apart, which `kuru_classes_share_every_form_name` guards against.
+fn kuru_stem_reading(form: &str) -> Option<&'static str> {
+    CLASSES
+        .iter()
+        .find(|c| c.name == KURU_KANA_CLASS)?
+        .forms
+        .iter()
+        .find(|f| f.name == form)
+        .map(|f| f.suffix)
+}
+
 /// Reconstruct `cand`'s reading from `entry`'s stored data, or `None` when
 /// no reading can be attached without inventing one.
 ///
@@ -199,11 +222,12 @@ fn union_pos(senses: &[SenseData]) -> Vec<String> {
 ///   stem, and the matched surface's tail from that same point onward
 ///   (`chars[step.range.start..cand.start + cand.len]`) is already kana in
 ///   the ordinary case, so appending it verbatim reconstructs the
-///   conjugated reading (書いた -> stem "か" + tail "いた" -> かいた). When
-///   the dictionary reading does not end in that suffix at all -- an
-///   irregular verb whose kana stem does not track its kanji stem, such as
-///   来る's く/こ/き alternation -- the strip fails and this returns `None`
-///   rather than emit a reading built on a wrong assumption.
+///   conjugated reading (書いた -> stem "か" + tail "いた" -> かいた).
+///   Kanji 来る is the exception: under `カ変・来ル` the strip *succeeds* (くる
+///   ends in る) and would give くた, so that class takes its stem reading
+///   from `カ変・クル`'s same-named form instead -- 連用形 き, 未然形 こ,
+///   仮定形 くれ -- followed by the surface after the step's own range. Written
+///   from the observable alternation; nothing here derives from v1.
 fn reading_for(entry: &EntryData, cand: &Candidate, chars: &[char]) -> Option<String> {
     if cand.flags.contains(WordFlags::PRONOUNCE) {
         return None;
@@ -215,17 +239,25 @@ fn reading_for(entry: &EntryData, cand: &Candidate, chars: &[char]) -> Option<St
     };
 
     let class = &CLASSES[first_step.class as usize];
+    let end = cand.start + cand.len;
+    if class.name == KURU_KANJI_CLASS {
+        let form = class.forms[first_step.form as usize].name;
+        let stem = kuru_stem_reading(form)?;
+        // The step's own range is the kanji form's suffix (empty for 連用形,
+        // れ for 仮定形), already accounted for by the kana form's suffix; the
+        // auxiliaries after it are kana as written.
+        let tail: String = chars[first_step.range.end..end].iter().collect();
+        return Some(format!("{stem}{tail}"));
+    }
     let stem = dict_reading.strip_suffix(class.remove)?;
-    let tail: String = chars[first_step.range.start..cand.start + cand.len]
-        .iter()
-        .collect();
+    let tail: String = chars[first_step.range.start..end].iter().collect();
     Some(format!("{stem}{tail}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::table::class_for_pos;
+    use crate::engine::table::classes_for_pos;
     use crate::engine::ConjStep;
 
     fn entry(readings: &[&str]) -> EntryData {
@@ -278,7 +310,7 @@ mod tests {
         // strips to か, then いた (the matched surface's tail from the
         // stem's end onward) is appended: かいた.
         let e = entry(&["かく"]);
-        let class = class_for_pos("v5k").expect("v5k maps to a class");
+        let class = classes_for_pos("v5k").next().expect("v5k maps to a class");
         let chars: Vec<char> = "書いた".chars().collect();
         let steps = vec![ConjStep {
             class,
@@ -316,7 +348,7 @@ mod tests {
         // only correct answer -- a guess here would render as wrong
         // furigana with no visible sign it was fabricated.
         let e = entry(&["かく"]);
-        let class = class_for_pos("v1").expect("v1 maps to a class");
+        let class = classes_for_pos("v1").next().expect("v1 maps to a class");
         let chars: Vec<char> = "かく".chars().collect();
         let steps = vec![ConjStep {
             class,
@@ -326,6 +358,59 @@ mod tests {
         }];
         let c = candidate(0, 2, WordFlags::PRIMARY, steps);
         assert_eq!(reading_for(&e, &c, &chars), None);
+    }
+
+    fn kuru_step(form: &str, range: std::ops::Range<usize>) -> ConjStep {
+        let class = CLASSES
+            .iter()
+            .position(|c| c.name == KURU_KANJI_CLASS)
+            .expect("カ変・来ル") as u16;
+        let form = CLASSES[class as usize]
+            .forms
+            .iter()
+            .position(|f| f.name == form)
+            .expect("form") as u16;
+        ConjStep {
+            class,
+            form,
+            range,
+            aux: None,
+        }
+    }
+
+    #[test]
+    fn kuru_in_kanji_reads_its_stem_from_the_kana_class() {
+        let e = entry(&["くる"]);
+        // 来た: 来 is 連用形 (empty suffix, range 1..1); た follows.
+        let chars: Vec<char> = "来た".chars().collect();
+        let c = candidate(0, 2, WordFlags::PRIMARY, vec![kuru_step("連用形", 1..1)]);
+        assert_eq!(reading_for(&e, &c, &chars), Some("きた".to_string()));
+        // 来ない: 未然形, also empty.
+        let chars: Vec<char> = "来ない".chars().collect();
+        let c = candidate(0, 3, WordFlags::PRIMARY, vec![kuru_step("未然形", 1..1)]);
+        assert_eq!(reading_for(&e, &c, &chars), Some("こない".to_string()));
+        // 来れ: 仮定形's suffix れ is the step's own range, so nothing follows.
+        let chars: Vec<char> = "来れ".chars().collect();
+        let c = candidate(0, 2, WordFlags::PRIMARY, vec![kuru_step("仮定形", 1..2)]);
+        assert_eq!(reading_for(&e, &c, &chars), Some("くれ".to_string()));
+    }
+
+    #[test]
+    fn kuru_classes_share_every_form_name() {
+        // The reading rule looks each カ変・来ル form up by name in カ変・クル.
+        // A regeneration that renamed a form in one class only would make the
+        // lookup fail and the reading silently vanish; this catches it.
+        let kanji = CLASSES
+            .iter()
+            .find(|c| c.name == KURU_KANJI_CLASS)
+            .expect("kanji class");
+        for form in kanji.forms {
+            assert!(
+                kuru_stem_reading(form.name).is_some(),
+                "{} has no カ変・クル twin",
+                form.name
+            );
+        }
     }
 
     // `order`'s five clauses, isolated one at a time against hand-built

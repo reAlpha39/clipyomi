@@ -740,3 +740,82 @@ fn v2_snapshots_every_sentence() {
     }
     insta::assert_snapshot!("sentences", out);
 }
+
+// 来る in kanji: the one common verb whose kanji stem's reading changes with
+// the form (来た = きた, 来ない = こない, 来る = くる). These are the observables
+// `tests/parse_irregular.rs` pinned for v1, ported to v2. A private fixture,
+// because `jmdict_subset.xml` is extractor-generated and would drop a
+// hand-added entry on regeneration (`fixtures/README.md`).
+const KURU_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY vk "Kuru verb - special class">
+]>
+<JMdict>
+<entry>
+<ent_seq>1000040</ent_seq>
+<k_ele><keb>来る</keb></k_ele>
+<r_ele><reb>くる</reb></r_ele>
+<sense><pos>&vk;</pos><gloss>to come</gloss></sense>
+</entry>
+</JMdict>
+"#;
+
+fn parse_kuru(name: &str, text: &str) -> jparser::ParseResult {
+    let dir = scratch(name);
+    jparser::engine::build::build_from_reader(BufReader::new(KURU_FIXTURE.as_bytes()), &dir)
+        .expect("v2 build");
+    parse_v2_over(&dir, text)
+}
+
+#[test]
+fn kuru_in_kanji_uninflected_keeps_the_dictionary_reading() {
+    let r = parse_kuru("kuru-plain", "来る");
+    assert_eq!(r.segments.len(), 1);
+    let s = &r.segments[0];
+    assert_eq!((s.start, s.len, s.surface.as_str()), (0, 2, "来る"));
+    assert!(s.matched);
+    assert_eq!(s.reading.as_deref(), Some("くる"));
+    assert_eq!(s.entries[0].headword, "来る");
+    assert_eq!(s.entries[0].conjugation, None);
+}
+
+#[test]
+fn kuru_in_kanji_deinflects_and_reads_through_the_kana_class() {
+    // Fails today at the first assertion: `vk` maps only to カ変・クル, whose
+    // suffixes are whole kana words, so the kanji stem 来 matches nothing and
+    // 来 + た are two unmatched spans.
+    let r = parse_kuru("kuru-past", "来た");
+    assert_eq!(r.segments.len(), 1, "one span, not 来 + た: {:?}", r.segments);
+    let s = &r.segments[0];
+    assert!(s.matched);
+    // Not くた: 来's reading in 連用形 is き, which カ変・クル's same-named
+    // form supplies.
+    assert_eq!(s.reading.as_deref(), Some("きた"));
+    let e = &s.entries[0];
+    assert_eq!(e.headword, "来る");
+    assert_eq!(e.reading.as_deref(), Some("きた"));
+    assert_eq!(e.conjugation.as_deref(), Some("Past"));
+    assert_eq!(e.pos, vec!["vk"]);
+    assert_eq!(e.senses[0].glosses, vec!["to come"]);
+}
+
+#[test]
+fn kuru_in_kanji_leaves_an_unmatched_tail_alone() {
+    // 。 is in no dictionary here; an unmatched run has no reading and no
+    // entries, and the caller can rebuild the input verbatim from the spans.
+    let r = parse_kuru("kuru-unmatched", "来た。");
+    assert_eq!(r.segments.len(), 2);
+    assert!(r.segments[0].matched);
+    let tail = &r.segments[1];
+    // Char offset 2, not byte offset 6: 来た。 is 3 chars and 9 bytes.
+    assert_eq!((tail.start, tail.len, tail.surface.as_str()), (2, 1, "。"));
+    assert!(!tail.matched);
+    assert_eq!(tail.reading, None);
+    assert!(tail.entries.is_empty());
+}
+
+#[test]
+fn empty_text_parses_into_no_segments() {
+    let r = parse_kuru("kuru-empty", "");
+    assert!(r.segments.is_empty());
+}

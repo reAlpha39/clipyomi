@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 
 use crate::engine::kana;
-use crate::engine::table::{class_for_pos, ChainHit, Table, CLASSES};
+use crate::engine::table::{classes_for_pos, ChainHit, Table, CLASSES};
 use crate::engine::{ClassId, ConjStep};
 use crate::index::load::Index;
 use crate::index::{EntryData, IndexError, StoredRecord};
@@ -229,7 +229,7 @@ fn entry_classes(entry: &EntryData) -> Vec<ClassId> {
     let mut classes = Vec::new();
     for sense in &entry.senses {
         for pos in &sense.pos {
-            if let Some(class) = class_for_pos(pos) {
+            for class in classes_for_pos(pos) {
                 if !classes.contains(&class) {
                     classes.push(class);
                 }
