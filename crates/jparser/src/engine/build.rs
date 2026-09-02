@@ -165,6 +165,16 @@ mod tests {
         assert_eq!(fingerprint(), fingerprint());
     }
 
+    /// Pinned so a regeneration of `table_data.rs` is a visible, deliberate
+    /// change: every class and form id an index stores is relative to that
+    /// table, and `Index::open` refuses an index whose fingerprint differs.
+    /// After an intended regeneration, run this test, take the `left` value
+    /// from its failure, and replace the literal. Never loosen it.
+    #[test]
+    fn fingerprint_is_pinned() {
+        assert_eq!(fingerprint(), 0xfeae_49c6_63b9_fb24);
+    }
+
     #[test]
     fn fingerprint_differs_from_the_v1_conjugation_asset() {
         // If these ever collided, the fingerprint guard in `Index::open`
