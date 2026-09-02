@@ -1,5 +1,15 @@
 import { CONJ_MARKER } from './tooltip-text';
 
+/**
+ * Lexical colouring for one line of assembled tooltip text.
+ *
+ * `colourLine` walks a line and splits it into runs the renderer can paint
+ * differently: the conjugation label, parenthesised asides, Japanese text
+ * (kanji vs. kana), and everything else. It is lexical, not semantic — it
+ * never looks at where the text came from, only at the characters
+ * themselves, which is what lets `assembleTooltipText` stay a flat string.
+ */
+
 export type RunKind = 'conj' | 'paren' | 'kana' | 'kanji' | 'text';
 
 export interface Run {
@@ -7,91 +17,141 @@ export interface Run {
   kind: RunKind;
 }
 
-/** Hiragana, katakana, and the prolonged sound mark. */
-const KANA = /[぀-ヿ]/;
-/** 【 and 】, which count as Japanese and start a new run. */
-const OPEN_LENTICULAR = '【';
-const BRACKET = /[【】]/;
 /**
- * CJK ideographs, including extension A and the compatibility block, plus
- * the kanji iteration mark 々, which no Unicode range covers and which the
- * original tooltip therefore special-cased too.
+ * The kanji iteration (repetition) mark, e.g. the second character of 時々.
+ * It stands in for "repeat the previous character" rather than being an
+ * ideograph itself, so it falls outside every Unicode ideograph range and
+ * has to be special-cased into the kanji test below.
  */
-const CJK = /[㐀-䶿一-鿿豈-﫿々]/;
+const ITERATION_MARK = '々';
 
-function isJapanese(ch: string): boolean {
-  return KANA.test(ch) || BRACKET.test(ch) || CJK.test(ch);
+/** Lenticular brackets, used to wrap a reading after a headword: 【きえる】. */
+const LENTICULAR_OPEN = '【';
+const LENTICULAR_CLOSE = '】';
+
+/**
+ * A CJK ideograph ("kanji"), across the ranges Unicode actually assigns
+ * them in, plus the iteration mark (see above). Deliberately broader than
+ * the handful of ranges any single test happens to exercise.
+ */
+function isIdeograph(ch: string): boolean {
+  if (ch === ITERATION_MARK) return true;
+  const cp = ch.codePointAt(0);
+  if (cp === undefined) return false;
+  return (
+    (cp >= 0x4e00 && cp <= 0x9fff) || // CJK Unified Ideographs
+    (cp >= 0x3400 && cp <= 0x4dbf) || // CJK Unified Ideographs Extension A
+    (cp >= 0xf900 && cp <= 0xfaff) || // CJK Compatibility Ideographs
+    (cp >= 0x20000 && cp <= 0x2fa1f) // Supplementary Ideographic Plane (Ext. B and on)
+  );
 }
 
-/** Index just past the `)` matching the `(` at START, or the line's end. */
-function closeParen(line: string, start: number): number {
+/** Hiragana or katakana. */
+function isKana(ch: string): boolean {
+  const cp = ch.codePointAt(0);
+  if (cp === undefined) return false;
+  return (cp >= 0x3040 && cp <= 0x309f) || (cp >= 0x30a0 && cp <= 0x30ff);
+}
+
+/**
+ * Everything a "Japanese" run may be built from: kana, kanji, and the
+ * lenticular brackets that wrap a reading. The brackets carry no meaning of
+ * their own here — they just need to ride along with the kana run they
+ * bracket instead of falling out as stray `text`.
+ */
+function isJapaneseChar(ch: string): boolean {
+  return isKana(ch) || isIdeograph(ch) || ch === LENTICULAR_OPEN || ch === LENTICULAR_CLOSE;
+}
+
+/** Where a run of Japanese characters starting at `chars[start]` ends. */
+function japaneseRunEnd(chars: string[], start: number): number {
+  let end = start + 1;
+  while (end < chars.length) {
+    const ch = chars[end];
+    // Break *before* an opening bracket that isn't the run's first
+    // character: a headword immediately followed by its bracketed reading
+    // (消える【きえる】) is two runs, not one, so the reading can be coloured
+    // on its own kana/kanji merits instead of inheriting the headword's.
+    if (ch === LENTICULAR_OPEN) break;
+    if (!isJapaneseChar(ch)) break;
+    end++;
+  }
+  return end;
+}
+
+/** 'kanji' if any character in the run is an ideograph, else 'kana'. */
+function japaneseRunKind(chars: string[], start: number, end: number): RunKind {
+  for (let i = start; i < end; i++) {
+    if (isIdeograph(chars[i])) return 'kanji';
+  }
+  return 'kana';
+}
+
+/** Where the parenthesised span starting at `chars[start]` (a `(`) closes. */
+function parenRunEnd(chars: string[], start: number): number {
   let depth = 0;
-  for (let i = start; i < line.length; i += 1) {
-    if (line[i] === '(') depth += 1;
-    else if (line[i] === ')') {
-      depth -= 1;
+  for (let i = start; i < chars.length; i++) {
+    if (chars[i] === '(') depth++;
+    else if (chars[i] === ')') {
+      depth--;
       if (depth === 0) return i + 1;
     }
   }
-  // Unclosed: the run simply extends to the end of the line, as the original
-  // tooltip's brace scan did. Truncating instead would drop the rest of a
-  // gloss over a typo in JMdict.
-  return line.length;
-}
-
-/** Index just past a Japanese run starting at START. */
-function endOfJapanese(line: string, start: number): number {
-  let i = start;
-  while (i < line.length && isJapanese(line[i])) {
-    // Break BEFORE a 【 that is not the run's first character
-    // (MyToolTip.cpp:216). Without this, 消える【きえる】 is one run and the
-    // reading inherits the kanji colour instead of the kana one.
-    if (i > start && line[i] === OPEN_LENTICULAR) break;
-    i += 1;
-  }
-  return i;
+  // Unclosed: run to end of line rather than throwing or dropping the rest
+  // of the gloss over a stray '(' left by a typo in the source data.
+  return chars.length;
 }
 
 /**
- * One line of assembled tooltip text, split into coloured runs.
+ * Split one line of tooltip text into colour runs.
  *
- * Ported from `MyDrawText` (`MyToolTip.cpp:125-268`), which colours by what
- * characters *are* rather than by what they mean: it has no notion of a
- * headword or a part of speech. That is why `(v1,vi)`, `(1)` and `(P)` all
- * render alike — they are parentheses — and it is why this is a port of the
- * rule rather than of its output.
+ * A line flagged with the conjugation marker is entirely one `conj` run.
+ * Otherwise the line is scanned left to right; at each position a `(`
+ * starts a parenthesised run (checked first, so kanji inside parentheses
+ * stays `paren`), a Japanese character starts a kana/kanji run, and
+ * anything else accumulates into `text` until one of those takes over.
  */
 export function colourLine(line: string): Run[] {
   if (line.startsWith(CONJ_MARKER)) {
     const text = line.slice(CONJ_MARKER.length);
-    return text === '' ? [] : [{ text, kind: 'conj' }];
+    return text.length > 0 ? [{ text, kind: 'conj' }] : [];
   }
 
+  // Split into Unicode code points, not UTF-16 code units, so a
+  // supplementary-plane ideograph (a surrogate pair) is never sliced in half.
+  const chars = Array.from(line);
   const runs: Run[] = [];
+  let textStart = 0;
   let i = 0;
 
-  while (i < line.length) {
-    if (line[i] === '(') {
-      // Checked first, so kanji inside parentheses stays parenthesis-coloured.
-      const end = closeParen(line, i);
-      runs.push({ text: line.slice(i, end), kind: 'paren' });
+  const flushText = (end: number): void => {
+    if (end > textStart) runs.push({ text: chars.slice(textStart, end).join(''), kind: 'text' });
+  };
+
+  while (i < chars.length) {
+    const ch = chars[i];
+
+    if (ch === '(') {
+      flushText(i);
+      const end = parenRunEnd(chars, i);
+      runs.push({ text: chars.slice(i, end).join(''), kind: 'paren' });
       i = end;
+      textStart = end;
       continue;
     }
 
-    if (isJapanese(line[i])) {
-      const end = endOfJapanese(line, i);
-      const text = line.slice(i, end);
-      runs.push({ text, kind: CJK.test(text) ? 'kanji' : 'kana' });
+    if (isJapaneseChar(ch)) {
+      flushText(i);
+      const end = japaneseRunEnd(chars, i);
+      runs.push({ text: chars.slice(i, end).join(''), kind: japaneseRunKind(chars, i, end) });
       i = end;
+      textStart = end;
       continue;
     }
 
-    let end = i;
-    while (end < line.length && line[end] !== '(' && !isJapanese(line[end])) end += 1;
-    runs.push({ text: line.slice(i, end), kind: 'text' });
-    i = end;
+    i++;
   }
 
+  flushText(chars.length);
   return runs;
 }

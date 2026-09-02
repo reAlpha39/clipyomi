@@ -74,4 +74,35 @@ describe('colourLine', () => {
   test('an empty line produces no runs', () => {
     expect(colourLine('')).toEqual([]);
   });
+
+  // Assumption: katakana counts as kana just like hiragana does — the ten
+  // cases above only ever exercise hiragana for the non-kanji case.
+  test('an all-katakana run is kana, not text', () => {
+    expect(colourLine('ケーキ')).toEqual([{ text: 'ケーキ', kind: 'kana' }]);
+  });
+
+  // Assumption: the break before 【 is a property of the run boundary, not a
+  // side effect of one side being a kanji run — an all-kana headword still
+  // splits into two runs at its bracketed reading.
+  test('breaks before 【 even when neither side contains kanji', () => {
+    expect(colourLine('たつ【たつ】')).toEqual([
+      { text: 'たつ', kind: 'kana' },
+      { text: '【たつ】', kind: 'kana' },
+    ]);
+  });
+
+  // Assumption: the lenticular brackets are themselves part of a Japanese
+  // run (never `text`), including when the run opens with one rather than
+  // being reached mid-run after a headword.
+  test('a bracketed reading with no preceding headword is one kana run', () => {
+    expect(colourLine('【たとえば】')).toEqual([{ text: '【たとえば】', kind: 'kana' }]);
+  });
+
+  // Assumption: "the standard Unicode ideograph ranges" means more than the
+  // BMP block the other cases happen to use — a supplementary-plane
+  // ideograph (here U+20000, in CJK Unified Ideographs Extension B) must
+  // still count as kanji, and must survive being a UTF-16 surrogate pair.
+  test('a supplementary-plane ideograph counts as kanji', () => {
+    expect(colourLine('\u{20000}')).toEqual([{ text: '\u{20000}', kind: 'kanji' }]);
+  });
 });
