@@ -23,13 +23,16 @@ use std::error::Error;
 use std::path::Path;
 
 use jparser::index::load::Index;
-use jparser::{ParseOptions, ParseResult};
+use jparser::{ParseOptions, ParseResult, Segment};
 
-use crate::corpus::{read_gold, validate, GoldRecord};
+use crate::corpus::{read_gold, validate, GoldRecord, GoldSpan};
 
 /// Field width for the label column in [`render`]. `span accuracy:` is the
 /// longest label at 14 chars; 16 leaves two spaces after it.
 const LABEL_WIDTH: usize = 16;
+
+/// Field width for the oracle lines. `oracle@3 sentences:` is 19 chars.
+const ORACLE_LABEL_WIDTH: usize = 20;
 
 /// One decision's span-accuracy tally within [`Metrics::by_decision`].
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -37,6 +40,19 @@ pub struct DecisionBreakdown {
     pub decision: String,
     pub hits: usize,
     pub total: usize,
+}
+
+/// oracle@K (master plan §5.2; Phase 2 design §5). Per gold span, a hit if
+/// *any* of the K readings reproduces it -- a user cycles per word, and the
+/// gate compares against top-1 span accuracy, a per-span metric.
+/// `sentence_hits` is the master plan's literal form, the whole gold cover
+/// present as one reading, printed as context.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Oracle {
+    pub readings: usize,
+    pub span_hits: usize,
+    pub tolerant_hits: usize,
+    pub sentence_hits: usize,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize)]
@@ -94,6 +110,11 @@ pub struct Metrics {
     /// (e.g. `gen-3`), or `None` if the path has none. Recorded beside the
     /// numbers for the same reason as `hints`.
     pub index_generation: Option<String>,
+    /// Present only when `--readings` asked for more than one: how often the
+    /// gold is reachable anywhere in the reading list, not just at the top.
+    /// Absent at the default so the recorded baselines serialize unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oracle: Option<Oracle>,
 }
 
 /// `skip_serializing_if` for the coarsening counters, so a corpus the parse
@@ -136,6 +157,55 @@ fn decision_rank(decision: &str) -> (u8, &str) {
     }
 }
 
+/// How one reading (a segment list) relates to one gold span.
+struct Fit {
+    /// A segment sits exactly on the span.
+    strict: bool,
+    /// Set only when not `strict`: the matched segment that swallowed the
+    /// span whole, starting and ending on gold boundaries -- a merge of whole
+    /// gold spans rather than a cut through one.
+    merge: Option<(usize, usize)>,
+    /// The exactly-placed segment's first entry, if it has one.
+    first_entry: Option<u32>,
+}
+
+fn fit(segments: &[Segment], span: &GoldSpan, bounds: &BTreeSet<usize>) -> Fit {
+    let seg = segments
+        .iter()
+        .find(|s| s.start == span.start && s.len == span.len);
+    // Benign coarsening: a matched segment that contains this gold span and
+    // whose own endpoints are gold boundaries merged whole gold spans rather
+    // than cutting one. A linear scan over a sentence's segments; corpora
+    // are hundreds of sentences, so an index is not worth its bookkeeping.
+    let merge = match seg {
+        Some(_) => None,
+        None => segments
+            .iter()
+            .find(|j| {
+                j.matched
+                    && j.start <= span.start
+                    && span.start + span.len <= j.start + j.len
+                    && bounds.contains(&j.start)
+                    && bounds.contains(&(j.start + j.len))
+            })
+            .map(|j| (j.start, j.len)),
+    };
+    Fit {
+        strict: seg.is_some(),
+        merge,
+        first_entry: seg.and_then(|s| s.entries.first().map(|e| e.entry_id)),
+    }
+}
+
+/// Whether `segments` is the gold cover itself, span for span.
+fn covers_exactly(segments: &[Segment], gold: &GoldRecord) -> bool {
+    segments.len() == gold.spans.len()
+        && segments
+            .iter()
+            .zip(&gold.spans)
+            .all(|(s, g)| s.start == g.start && s.len == g.len)
+}
+
 /// Fold one sentence's gold and parse into `m`.
 pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
     m.sentences += 1;
@@ -151,31 +221,28 @@ pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
 
     for span in &gold.spans {
         m.gold_spans += 1;
-        let seg = parsed
-            .segments
-            .iter()
-            .find(|s| s.start == span.start && s.len == span.len);
+        let top = fit(&parsed.segments, span, &bounds);
         if let Some(decision) = gold.decision.as_deref() {
-            bump_decision(&mut m.by_decision, decision, seg.is_some());
+            bump_decision(&mut m.by_decision, decision, top.strict);
         }
-        if seg.is_none() {
-            // Benign coarsening: a matched segment that contains this gold
-            // span and whose own endpoints are gold boundaries merged whole
-            // gold spans rather than cutting one. A linear scan over a
-            // sentence's segments; corpora are hundreds of sentences, so the
-            // index this would otherwise want is not worth its bookkeeping.
-            if let Some(j) = parsed.segments.iter().find(|j| {
-                j.matched
-                    && j.start <= span.start
-                    && span.start + span.len <= j.start + j.len
-                    && bounds.contains(&j.start)
-                    && bounds.contains(&(j.start + j.len))
-            }) {
-                m.coarse_forgiven += 1;
-                merges.insert((j.start, j.len));
+        if let Some(merge) = top.merge {
+            m.coarse_forgiven += 1;
+            merges.insert(merge);
+        }
+        if let Some(o) = &mut m.oracle {
+            let mut strict = top.strict;
+            let mut tolerant = top.strict || top.merge.is_some();
+            for alt in &parsed.alternatives {
+                let f = fit(alt, span, &bounds);
+                strict |= f.strict;
+                tolerant |= f.strict || f.merge.is_some();
             }
+            o.span_hits += strict as usize;
+            o.tolerant_hits += tolerant as usize;
         }
-        let Some(seg) = seg else { continue };
+        if !top.strict {
+            continue;
+        }
         m.span_hits += 1;
         // A null gold span asserts nothing about ranking, so it leaves both
         // halves of entry top-1 untouched.
@@ -183,11 +250,18 @@ pub fn accumulate(gold: &GoldRecord, parsed: &ParseResult, m: &mut Metrics) {
         m.top1_total += 1;
         // `entries.first()` is None for an unmatched span, which is a miss
         // rather than an exclusion — design §5.2.
-        if seg.entries.first().map(|e| e.entry_id) == Some(want) {
+        if top.first_entry == Some(want) {
             m.top1_hits += 1;
         }
     }
     m.coarse_merges += merges.len();
+
+    if let Some(o) = &mut m.oracle {
+        let whole = std::iter::once(parsed.segments.as_slice())
+            .chain(parsed.alternatives.iter().map(Vec::as_slice))
+            .any(|segments| covers_exactly(segments, gold));
+        o.sentence_hits += whole as usize;
+    }
 }
 
 /// Confirm every `ent_seq` a gold record names actually resolves in `index`.
@@ -289,6 +363,26 @@ pub fn render(m: &Metrics) -> String {
             s(m.coarse_merges)
         ));
     }
+    // Additive like the two blocks above, and absent at one reading.
+    if let Some(o) = &m.oracle {
+        let w = ORACLE_LABEL_WIDTH;
+        let k = o.readings;
+        out.push_str(&format!(
+            "{:<w$}{}\n",
+            format!("oracle@{k} strict:"),
+            ratio(o.span_hits, m.gold_spans)
+        ));
+        out.push_str(&format!(
+            "{:<w$}{}\n",
+            format!("oracle@{k} tolerant:"),
+            ratio(o.tolerant_hits, m.gold_spans)
+        ));
+        out.push_str(&format!(
+            "{:<w$}{}\n",
+            format!("oracle@{k} sentences:"),
+            ratio(o.sentence_hits, m.sentences)
+        ));
+    }
     out
 }
 
@@ -298,10 +392,15 @@ pub fn render(m: &Metrics) -> String {
 /// produced (master plan §5.4). Nothing here touches the network, and with
 /// `hints` absent nothing loads a tokenizer — which is what keeps the offline
 /// gate free of the 46 MB dictionary.
+///
+/// `readings` above 1 asks the engine for that many readings per sentence and
+/// adds the oracle@K lines (Phase 2 design §5); at 1 every byte of output is
+/// what it was before Phase 2.
 pub fn run(
     index_dir: &Path,
     gold_path: &Path,
     #[cfg(feature = "mecab")] hints: Option<&Path>,
+    readings: usize,
     json: bool,
 ) -> Result<(), Box<dyn Error>> {
     let table = jparser::engine::table::Table::new();
@@ -325,10 +424,14 @@ pub fn run(
         superseded,
         hints: hints_used,
         index_generation,
+        oracle: (readings > 1).then(|| Oracle {
+            readings,
+            ..Oracle::default()
+        }),
         ..Metrics::default()
     };
     let mut ent_seq_cache: HashMap<u32, bool> = HashMap::new();
-    let opts = ParseOptions::default();
+    let opts = ParseOptions::with_readings(readings);
     for record in &records {
         validate(record)?;
         ensure_ent_seqs_exist(&index, &mut ent_seq_cache, record)?;
@@ -417,9 +520,23 @@ mod tests {
     }
 
     fn parsed(segments: Vec<Segment>) -> ParseResult {
+        parsed_with(segments, Vec::new())
+    }
+
+    fn parsed_with(segments: Vec<Segment>, alternatives: Vec<Vec<Segment>>) -> ParseResult {
         ParseResult {
             segments,
-            alternatives: Vec::new(),
+            alternatives,
+        }
+    }
+
+    fn with_oracle(readings: usize) -> Metrics {
+        Metrics {
+            oracle: Some(Oracle {
+                readings,
+                ..Oracle::default()
+            }),
+            ..Metrics::default()
         }
     }
 
@@ -671,6 +788,96 @@ mod tests {
                 },
             ],
             "the undecided record contributes to neither bucket"
+        );
+    }
+
+    /// Phase 2 design §5: per gold span, any reading counts. Top-1 merged
+    /// both gold spans into one segment on gold boundaries, so span accuracy
+    /// is 0/2 and both are forgiven; reading 2 gets both exactly, so oracle
+    /// strict is 2/2 and the whole gold cover is present as one reading.
+    #[test]
+    fn oracle_credits_a_span_only_a_later_reading_gets_right() {
+        let mut m = with_oracle(2);
+        accumulate(
+            &gold("あいう", &[(0, 1, Some(10)), (1, 2, Some(20))]),
+            &parsed_with(
+                vec![seg(0, 3, &[30])],
+                vec![vec![seg(0, 1, &[10]), seg(1, 2, &[20])]],
+            ),
+            &mut m,
+        );
+
+        assert_eq!(m.span_hits, 0, "top-1 still scores as before");
+        assert_eq!(m.coarse_forgiven, 2, "and its merge is still forgiven");
+        let o = m.oracle.expect("oracle on");
+        assert_eq!((o.span_hits, o.tolerant_hits, o.sentence_hits), (2, 2, 1));
+    }
+
+    /// Top-1 cuts inside a gold span (あい|う against gold あ|いう), so
+    /// nothing is forgiven; reading 2 merges the whole sentence on gold
+    /// boundaries, which tolerant forgives and strict does not.
+    #[test]
+    fn oracle_tolerant_credits_a_benign_merge_in_an_alternate() {
+        let mut m = with_oracle(2);
+        accumulate(
+            &gold("あいう", &[(0, 1, Some(10)), (1, 2, Some(20))]),
+            &parsed_with(
+                vec![seg(0, 2, &[40]), seg(2, 1, &[50])],
+                vec![vec![seg(0, 3, &[60])]],
+            ),
+            &mut m,
+        );
+
+        assert_eq!((m.span_hits, m.coarse_forgiven), (0, 0));
+        let o = m.oracle.expect("oracle on");
+        assert_eq!((o.span_hits, o.tolerant_hits, o.sentence_hits), (0, 2, 0));
+    }
+
+    /// With `--readings 1` there is no oracle, and alternates -- which the
+    /// engine does not even produce then -- would change nothing if present.
+    #[test]
+    fn without_oracle_alternates_change_nothing() {
+        let mut m = Metrics::default();
+        accumulate(
+            &gold("あ", &[(0, 1, Some(10))]),
+            &parsed_with(vec![seg(0, 1, &[99])], vec![vec![seg(0, 1, &[10])]]),
+            &mut m,
+        );
+
+        assert_eq!((m.span_hits, m.top1_hits), (1, 0));
+        assert!(m.oracle.is_none());
+    }
+
+    #[test]
+    fn render_adds_the_oracle_lines_only_when_present() {
+        let mut m = Metrics {
+            sentences: 2,
+            gold_spans: 4,
+            superseded: 0,
+            span_hits: 3,
+            top1_hits: 1,
+            top1_total: 2,
+            ..Metrics::default()
+        };
+        assert!(
+            !render(&m).contains("oracle@"),
+            "nothing to show at one reading"
+        );
+
+        m.oracle = Some(Oracle {
+            readings: 3,
+            span_hits: 4,
+            tolerant_hits: 4,
+            sentence_hits: 1,
+        });
+        assert!(
+            render(&m).ends_with(
+                "oracle@3 strict:    1.0000  (4 / 4)\n\
+                 oracle@3 tolerant:  1.0000  (4 / 4)\n\
+                 oracle@3 sentences: 0.5000  (1 / 2)\n"
+            ),
+            "got {}",
+            render(&m)
         );
     }
 
