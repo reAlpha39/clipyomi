@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/jparser", "crates/jmdict-source", "crates/vibrato-source", "xtask", "src-tauri"]
+members = ["crates/jparser", "crates/jmdict-source", "crates/vibrato-source", "src-tauri"]
 resolver = "2"
 
 [workspace.package]

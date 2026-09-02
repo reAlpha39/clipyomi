@@ -23,6 +23,11 @@ Usage:
 Entries are copied verbatim by text slicing, never re-serialized: JMdict's
 parts of speech are entity references and a DTD-aware parser would expand
 them into prose, which is precisely the data jparser reads as POS codes.
+
+The conjugation-source argument above pointed at the now-deleted
+crates/jparser/assets/conjugations.json; it needs a replacement built from
+crates/jparser/src/engine/table.rs. Until that port lands, recover the old
+asset from git history if a regeneration is needed.
 """
 
 import json

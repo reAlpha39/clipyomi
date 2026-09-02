@@ -71,7 +71,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       # Package-scoped, not `--workspace`: the 1.85 floor is a promise about
-      # the library crates (`jparser`, `jmdict-source`, `xtask`), not about
+      # the library crates (`jparser`, `jmdict-source`), not about
       # `src-tauri`. Tauri's own transitive dependency tree (`darling`,
       # `icu_*`, `plist`, `serde_with`, `time`, ...) needs rustc 1.86-1.88,
       # newer than this floor — that's the GUI shell's toolchain to track
@@ -82,7 +82,7 @@ jobs:
       # Library and binary targets only — deliberately not `--all-targets`.
       # MSRV is a promise to whoever compiles this workspace's crates, and
       # dev-dependencies never reach them.
-      - run: cargo check -p jparser -p jmdict-source -p xtask
+      - run: cargo check -p jparser -p jmdict-source
 
       # `mecab` is off by default, so the check above never compiles `vibrato`
       # or its transitive `bincode 2.0.1` — the entire reason the floor moved
