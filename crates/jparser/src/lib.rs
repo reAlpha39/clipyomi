@@ -24,6 +24,11 @@ pub use crate::engine::Boundaries;
 /// the same five fields.
 pub use crate::index::SenseData as Sense;
 
+/// Upper bound on [`ParseOptions::readings`]. The DP keeps a per-position
+/// list proportional to `readings` (`engine::lattice::RAW_FACTOR`), and
+/// nothing has a use for a reading list longer than this.
+pub const MAX_READINGS: usize = 64;
+
 /// Parse-time options.
 ///
 /// `readings` is how many distinct segmentations `parse` returns: the best
@@ -36,7 +41,7 @@ pub use crate::index::SenseData as Sense;
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct ParseOptions {
-    /// Distinct readings to return, at least 1.
+    /// Distinct readings to return, at least 1 and at most [`MAX_READINGS`].
     pub readings: usize,
 }
 
@@ -47,11 +52,12 @@ impl Default for ParseOptions {
 }
 
 impl ParseOptions {
-    /// `readings` distinct segmentations, cheapest first; anything below 1
-    /// reads as 1.
+    /// `readings` distinct segmentations, cheapest first; clamped to
+    /// `1..=MAX_READINGS` -- anything below 1 reads as 1, anything above
+    /// `MAX_READINGS` reads as `MAX_READINGS`.
     pub fn with_readings(readings: usize) -> Self {
         Self {
-            readings: readings.max(1),
+            readings: readings.clamp(1, MAX_READINGS),
         }
     }
 }
