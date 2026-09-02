@@ -123,16 +123,8 @@ start=4 len=1 が matched reading=-
     が (-) [-] moth
     が (-) [-] picture
     ... 5 more
-start=5 len=1 来 matched reading=らい
-    来 (-) [らい] next (year, spring, etc.)
-    来る (-) [きた] next (e.g. "next April")
-start=6 len=2 ます matched reading=-
-    ます (-) [-] measuring container
-    ます (-) [-] to increase
-    ます (-) [-] trout
-    ます (-) [-] expresses politeness towards the listener (or reader)
-    ます (-) [-] to be
-    ... 3 more
+start=5 len=3 来ます matched reading=きます
+    来る (Polite) [きます] to come (spatially or temporally)
 start=8 len=1 。 unmatched
 
 === 彼はまだ来ていない。
@@ -152,6 +144,7 @@ start=2 len=2 まだ matched reading=-
     マダ (-) [-] Japanese linden (Tilia japonica)
 start=4 len=1 来 matched reading=らい
     来 (-) [らい] next (year, spring, etc.)
+    来る (-) [く] to come (spatially or temporally)
     来る (-) [きた] next (e.g. "next April")
 start=5 len=4 ていない matched reading=-
     ていない (-) [-] grounds

@@ -18,7 +18,7 @@
 //! ordinary particles like は and こう out of the cost term that prices a
 //! `PRONOUNCE`-only match crossing a tokenizer boundary.
 
-use super::table::class_for_pos;
+use super::table::classes_for_pos;
 use super::ClassId;
 use crate::jmdict::RawEntry;
 use crate::record::WordFlags;
@@ -55,13 +55,14 @@ fn all_misc(raw: &RawEntry) -> impl Iterator<Item = &str> {
         .flat_map(|s| s.misc.iter().map(String::as_str))
 }
 
-/// `class_for_pos` over every sense's POS codes, deduplicated. An entry
+/// `classes_for_pos` over every sense's POS codes, deduplicated. An entry
 /// tagged `v5r` in one sense and `v1` in another legitimately yields two
-/// classes, which is why this is a `Vec` and not an `Option`.
+/// classes, and `vk` alone yields two, which is why this is a `Vec` and not
+/// an `Option`.
 fn classes(raw: &RawEntry) -> Vec<ClassId> {
     let mut out = Vec::new();
     for pos in all_pos(raw) {
-        if let Some(class) = class_for_pos(pos) {
+        for class in classes_for_pos(pos) {
             if !out.contains(&class) {
                 out.push(class);
             }

@@ -44,7 +44,8 @@ pub struct Form {
 /// Hand-written: JMdict's POS vocabulary and IPADIC's 活用型 vocabulary have
 /// no defined relationship (master plan §4.3), so this is the mapping that
 /// connects them. Every row is checked by the tests below — the code must
-/// map to a class the generated table actually carries.
+/// map to a class the generated table actually carries. A code may appear
+/// in more than one row.
 ///
 /// This list is not exhaustive by design. A JMdict verb/adjective POS code
 /// is only given a row here when a class in `CLASSES` can be justified for
@@ -64,6 +65,14 @@ pub const JMDICT_POS_CLASS: &[(&str, &str)] = &[
     ("v5r", "五段・ラ行"),
     ("v5u", "五段・ワ行促音便"),
     ("vk", "カ変・クル"),
+    // 来る written with its kanji. The stem is 来 and this class's suffixes are
+    // what follows it (empty for 未然形 and 連用形, る for 基本形), where
+    // カ変・クル's suffixes are the whole kana word over an empty stem. A
+    // headword can only match through the class whose remove-suffix it ends
+    // in, so both rows are needed and the headword decides; `classes_for_pos`
+    // returns every row for a code. Without this row every kanji form -- 来た,
+    // 来ない, 来ます -- is unmatched (Phase 1b-ii design §9.1).
+    ("vk", "カ変・来ル"),
     ("vs-i", "サ変・スル"),
     ("adj-i", "形容詞・アウオ段"),
     // Below: completed from the generator's printed class list against the
@@ -203,11 +212,17 @@ pub const POS_WITHOUT_A_CLASS: &[&str] = &[
     "adj-shiku",
 ];
 
-pub fn class_for_pos(pos: &str) -> Option<ClassId> {
-    let name = JMDICT_POS_CLASS.iter().find(|(p, _)| *p == pos)?.1;
-    CLASSES
+/// Every IPADIC conjugation class a JMdict POS code maps to, in table order.
+///
+/// Usually zero or one. `vk` is the one code with two, because 来る's kanji
+/// and kana spellings conjugate over different stems (`カ変・来ル`, `カ変・クル`)
+/// and a headword can only match through the class whose remove-suffix it
+/// ends in — so the entry's own headword picks between them at match time.
+pub fn classes_for_pos(pos: &str) -> impl Iterator<Item = ClassId> + '_ {
+    JMDICT_POS_CLASS
         .iter()
-        .position(|c| c.name == name)
+        .filter(move |(p, _)| *p == pos)
+        .filter_map(|(_, name)| CLASSES.iter().position(|c| c.name == *name))
         .map(|i| i as ClassId)
 }
 
@@ -597,7 +612,7 @@ mod tests {
     #[test]
     fn every_jmdict_verb_pos_in_the_fixture_maps_to_a_real_class() {
         for pos in JMDICT_POS_CLASS.iter().map(|(p, _)| *p) {
-            assert!(class_for_pos(pos).is_some(), "{pos} maps to nothing");
+            assert!(classes_for_pos(pos).next().is_some(), "{pos} maps to nothing");
         }
         for (pos, name) in JMDICT_POS_CLASS {
             assert!(
@@ -773,12 +788,19 @@ mod tests {
 
         let mut missing = Vec::new();
         let mut chains = 0usize;
+        // Broken out only to re-derive the three-term sum the failure message
+        // quotes below; `chains` alone (the sum of all three) is still the
+        // one value the assertion checks.
+        let mut depth0_chains = 0usize;
+        let mut depth1_chains = 0usize;
+        let mut depth2_chains = 0usize;
         for class_name in mapped {
             let c0 = class_id_of(class_name);
             let c = class(class_name);
             for (f0, form0) in c.forms.iter().enumerate() {
                 let s0 = step(c0, f0 as FormId, None);
                 chains += 1;
+                depth0_chains += 1;
                 check_fmt(std::slice::from_ref(&s0));
                 if !depth0.contains(&(c.is_adjective, form0.name.to_string())) {
                     missing.push(format!("depth 0: {class_name}:{}", form0.name));
@@ -789,6 +811,7 @@ mod tests {
                         let form1 = CLASSES[c1 as usize].forms[f1 as usize].name;
                         let s1 = step(c1, f1, Some(lemma1));
                         chains += 1;
+                        depth1_chains += 1;
                         check_fmt(&[s0.clone(), s1.clone()]);
                         if !depth1.contains(&(lemma1.to_string(), form1.to_string())) {
                             missing.push(format!("depth 1: {lemma1}:{form1}"));
@@ -797,6 +820,7 @@ mod tests {
                             let c2 = class_id_of(ac2);
                             for (f2, _) in aux_forms(lemma2, ac2) {
                                 chains += 1;
+                                depth2_chains += 1;
                                 check_fmt(&[s0.clone(), s1.clone(), step(c2, f2, Some(lemma2))]);
                             }
                         }
@@ -812,12 +836,13 @@ mod tests {
             missing.join("\n")
         );
         assert_eq!(
-            chains, 21_760,
-            "the walk reached {chains} chains, not 21,760 -- the conjugation table's \
+            chains, 22_783,
+            "the walk reached {chains} chains, not 22,783 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 21,760 is 170 depth-0 chains plus 1,860 depth-1 plus 19,730 \
-             depth-2, over the classes JMDICT_POS_CLASS maps. Re-derive it and update \
-             this constant, rather than loosening the assertion"
+             deliberate: 22,783 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
+             maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
+             constant, rather than loosening the assertion"
         );
     }
 
