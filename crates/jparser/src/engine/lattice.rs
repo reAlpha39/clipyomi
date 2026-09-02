@@ -208,8 +208,10 @@ fn matched_spans(path: &[Step]) -> Vec<(usize, usize)> {
 /// enough, because every dominator of a dropped reading is cheaper than it
 /// and so was either kept or dominated in turn by something kept.
 fn undominated(readings: Vec<Vec<Step>>, k: usize) -> Vec<Vec<Step>> {
-    let mut kept: Vec<Vec<Step>> = Vec::with_capacity(k);
-    let mut kept_spans: Vec<Vec<(usize, usize)>> = Vec::with_capacity(k);
+    // No `Vec::with_capacity(k)`: `k` is caller-controlled (see `k_best`) and
+    // must not let a huge request pre-allocate an absurd amount up front.
+    let mut kept: Vec<Vec<Step>> = Vec::new();
+    let mut kept_spans: Vec<Vec<(usize, usize)>> = Vec::new();
     for reading in readings {
         if kept.len() == k {
             break;
@@ -246,18 +248,39 @@ fn undominated(readings: Vec<Vec<Step>>, k: usize) -> Vec<Vec<Step>> {
 /// (`beats`), extensions of a position's rank-0 reading inserted before its
 /// lower ranks', and every lower-ranked extension at least as dear as the
 /// rank-0 extension with the same step.
+///
+/// The result is exact top-k over undominated readings whenever fewer than
+/// `3 * k` of the `4 * k` cheapest raw readings are dominated; above that a
+/// genuine alternate can fall off the raw list (see [`RAW_FACTOR`]). Fewer
+/// than `k` readings come back when the lattice holds fewer distinct
+/// undominated covers -- 35 of the 150 gold-corpus sentences do, measured at
+/// a cap eight times the shipped one.
+///
+/// That ceiling is measured, not merely bounded: at k = 3 the shipped cap of
+/// 12 returns byte-identical reading lists to a cap of 96 on all 150
+/// gold-corpus sentences in both hint states, because with `CROSS = 0` the
+/// interesting alternates are exact-cost ties while the one-word-unmatched
+/// variants they compete with cost about +30.
 pub fn k_best(
     chars: &[char],
     by_start: &[Vec<Candidate>],
     bounds: Option<&dyn Boundaries>,
     k: usize,
 ) -> Vec<Vec<Step>> {
-    let k = k.max(1);
+    // Clamped rather than trusted to the caller: `ParseOptions::with_readings`
+    // clamps too, but this function is also reachable directly, and a `k`
+    // near `usize::MAX` would overflow `k * RAW_FACTOR` below.
+    let k = k.clamp(1, crate::MAX_READINGS);
     let n = chars.len();
     if n == 0 {
         return vec![Vec::new()];
     }
-    let cap = k * RAW_FACTOR;
+    // Rank 0 is never dominated (see `undominated`), so at k = 1 a single
+    // slot is exactly the pre-Phase-2 single-winner DP -- with `cap == 1`,
+    // `accepts` reduces to the old `better` match arms. The `RAW_FACTOR`
+    // over-provision only earns its keep once there is more than one rank to
+    // protect from domination.
+    let cap = if k == 1 { 1 } else { k * RAW_FACTOR };
     let mut best: Vec<Vec<Node>> = (0..=n).map(|_| Vec::new()).collect();
 
     for from in 0..n {
@@ -446,17 +469,6 @@ mod tests {
         assert!(best_path(&[], &[], None).is_empty());
     }
 
-    /// The spans each reading matches, in order -- what distinguishes one
-    /// reading from another.
-    fn spans_of(path: &[Step]) -> Vec<(usize, usize)> {
-        path.iter()
-            .filter_map(|s| match s {
-                Step::Matched(c) => Some((c.start, c.len)),
-                Step::Unmatched { .. } => None,
-            })
-            .collect()
-    }
-
     #[test]
     fn k_best_with_k_one_is_best_path() {
         let chars: Vec<char> = "あいうえお".chars().collect();
@@ -487,7 +499,7 @@ mod tests {
             ],
         );
         let readings = k_best(&chars, &cands, None, 3);
-        let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| spans_of(p)).collect();
+        let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| matched_spans(p)).collect();
         // Equal cost (3 each); the longer last step wins the tie, as at k = 1.
         assert_eq!(spans, vec![vec![(0, 3)], vec![(0, 2), (2, 1)]]);
     }
@@ -508,7 +520,7 @@ mod tests {
             1,
             "the second entry is a sibling, not a reading"
         );
-        assert_eq!(spans_of(&readings[0]), vec![(0, 1)]);
+        assert_eq!(matched_spans(&readings[0]), vec![(0, 1)]);
     }
 
     #[test]
@@ -554,7 +566,7 @@ mod tests {
             ],
         );
         let readings = k_best(&chars, &cands, None, 3);
-        let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| spans_of(p)).collect();
+        let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| matched_spans(p)).collect();
         // Both cost 32; いう closes the sentence with a longer step than う.
         assert_eq!(spans, vec![vec![(1, 2)], vec![(0, 2)]]);
     }
@@ -615,5 +627,23 @@ mod tests {
     #[test]
     fn the_empty_input_yields_one_empty_reading() {
         assert_eq!(k_best(&[], &[], None, 3), vec![Vec::<Step>::new()]);
+    }
+
+    #[test]
+    fn a_huge_k_neither_panics_nor_overflows() {
+        // `k * RAW_FACTOR` would overflow `usize` before the clamp; the
+        // caller-facing route (`jparser-cli score --readings`) has no upper
+        // bound of its own, so this function must hold the line alone.
+        let chars: Vec<char> = "あい".chars().collect();
+        let cands = by_start(
+            2,
+            vec![
+                c(0, 1, 1, WordFlags::PRIMARY),
+                c(1, 1, 2, WordFlags::PRIMARY),
+            ],
+        );
+        let readings = k_best(&chars, &cands, None, usize::MAX / 2 + 1);
+        assert!(!readings.is_empty());
+        assert!(readings.len() <= crate::MAX_READINGS);
     }
 }

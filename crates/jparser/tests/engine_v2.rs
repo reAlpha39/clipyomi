@@ -872,7 +872,10 @@ fn parse_result_serializes_to_the_documented_wire_shape() {
     // that value would pass even if the field silently stopped
     // serializing and fell back to its default.
     assert_eq!(entry["entry_id"], 1000010);
-    // Present and empty at the default: the webview reads it unconditionally.
+    // Present and empty at the default. No frontend consumer exists: the
+    // Phase 2 gate that would have justified a reading-cycling UI was not
+    // met, so nothing reads this field yet (docs/superpowers/
+    // 2026-09-02-engine-v2-phase2-handoff.md §3-4).
     assert_eq!(json["alternatives"].as_array().map(Vec::len), Some(0));
 }
 
