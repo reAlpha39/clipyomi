@@ -54,3 +54,25 @@ The snapshot corpus. Adding a sentence requires re-running the extractor against
 a real `JMdict_e.xml` — the committed subset will not contain the new
 vocabulary, and the snapshot will show unmatched spans instead of failing
 loudly.
+
+## `conjugation_labels.txt`
+
+Hand-written, no external data source. Phase 1b-i's class × chain gate:
+one row per deinflection chain the v2 table generates, with the English
+label `engine/label.rs` must produce for it. Used by
+`tests/conjugation_labels.rs` (every row through the real trie, exactly one
+matching chain, label equal) and by `engine/table.rs`'s coverage test (every
+depth-0 and depth-1 tuple reachable from a `JMDICT_POS_CLASS`-mapped class
+has a row).
+
+The English column was written from *Japanese verb conjugation*, English
+Wikipedia, terminology only, **before** `label.rs` existed, and is
+authoritative over it: a row the formatter cannot pass is a finding about
+the formatter or the design, never a row to edit toward the code. Rows
+marked `table finding` are surfaces the table generates that are not
+natural Japanese; their cause is an `ATTACHES_TO` row and is recorded in
+`docs/superpowers/2026-09-02-engine-v2-phase1b-i-handoff.md` §4.
+
+Class and form names are `engine/table_data.rs`'s IPADIC names; regenerating
+that table can rename or add forms, and the coverage test will then name
+every tuple that lost its row.

@@ -825,6 +825,34 @@ full-index/subset-index equivalence check both pass.
 
 #### Phase 1b — Formatter, class × chain gate, and the switchover
 
+**Split into Phase 1b-i and Phase 1b-ii (design
+[`2026-09-02-engine-v2-phase1b-i-design.md`](2026-09-02-engine-v2-phase1b-i-design.md)
+§1, added 2026-09-02).** 1b-i is the formatter and its gate, landed behind
+the existing `--engine v2` flag; 1b-ii is the switchover, with the In/Out/
+Done-when below carried verbatim. The split exists because Phase 1a's metric
+gate is open on four of eight cells and the switchover decision wants the
+formatter working and those numbers in hand, and because §7.3 names the
+formatter the highest-risk item — de-risked first, it leaves the switchover
+a smaller commit. Phase 1's own done-when is unchanged and lands at the end
+of 1b-ii.
+
+**Phase 1b-i — complete (handoff
+[`../2026-09-02-engine-v2-phase1b-i-handoff.md`](../2026-09-02-engine-v2-phase1b-i-handoff.md)).**
+`Entry::conjugation` is filled on the v2 path by `engine/label.rs` from
+`Entry::steps`, in the learner-standard register (Causative,
+Passive/Potential, Negative, Volitional, Polite, Want-to, Past, Te-form,
+Conditional, Imperative, Adverbial), with the English Wikipedia article
+*Japanese verb conjugation* as the named reference. The gate is
+`tests/fixtures/conjugation_labels.txt` — 221 hand-written rows (59 at depth
+0, 101 at depth 1, 61 curated deeper): every `(adjective?, form)` at depth 0,
+every `(auxiliary, form)` at depth 1, a curated set to depth 6 — written
+before the formatter and run through the real trie, plus a mechanical
+coverage walk to depth 2 that asserts the fixture omits nothing and asserts
+no English. Both Phase 0 metrics are byte-identical to Phase 1a's, as they
+must be. The grid exposed five `ATTACHES_TO` findings (design §7, handoff
+§4) that are span-shape questions and are left for a measured 1a follow-up
+or 1b-ii.
+
 **In:** the auxiliary-chain formatter — `fmt(&[ConjStep]) -> Option<String>`,
 filling `Entry::conjugation`, which 1a leaves `None`; its own gate, a class ×
 chain grid generated mechanically for coverage with the expected English
@@ -856,12 +884,12 @@ Plus 1b's own expectation fixture. 1a's ~2,580 and 1b's ~480 total ~3,060, a
 little under the original ~3,300 estimate; the difference is rounding across
 rows, not a claim of a smaller phase.
 
-**Phase 1b has not started.** Design §9's own budget and gate (class × chain
-grid, expectation fixture) stand as planned; nothing in this file changes
-them. Whoever plans Phase 1b should read Phase 1a's measured outcome above
-before deciding whether v2 is ready to become the default — the gate it
-inherits (Phase 1's own done-when) is open on the metric half, not the
-relicence half.
+**Phase 1b-ii has not started.** Design §9's budget for the switchover
+stands. Whoever plans it should read Phase 1a's measured outcome above and
+the 1b-i handoff's §4 table findings before deciding whether v2 is ready to
+become the default — the metric gap that remains is concentrated and
+understood, and five of the still-shattered or mislabelled surfaces now
+have a named `ATTACHES_TO` cause.
 
 **§7.2 — Table size.** ta-old's table holds 32 types and 734 conjugations. The
 replacement need not match that count — it must cover what the corpus exercises
@@ -1169,3 +1197,7 @@ licensing is still unresolved and this does not change that.
 | v1's snapshot is not promoted into v2's gate | It pins the port's behaviour, bugs included, as a specification. §5.1 makes v1 a disagreement source, not an oracle (design §10.4) |
 | The IPADIC CSVs are fetched out of tree; the generated table is committed | The shipped Vibrato asset is a compiled dictionary and yields no lexicon. IPADIC's licence permits reproduction with notice retention, and committing generator plus output keeps the table regenerable rather than hand-edited (design §6.2) |
 | **Compound-tolerant span accuracy is vindicated by Phase 1a's own numbers** | Before tuning, v2 hints-on scored 0.7947 strict against baseline's 0.6963 — a 9.8-point apparent improvement — while tolerant *fell* (0.8678→0.8003) and the merge count collapsed from 173 to 6. Without the second metric and the merge-count guard, that would have read as a large win while compound preservation had been destroyed — exactly the trap the row above ("Answered: add compound-tolerant span accuracy") exists to catch, now observed in a real phase rather than merely anticipated (Phase 1a handoff, 2026-09-01, §2) |
+| Phase 1b split into 1b-i (formatter + gate) and 1b-ii (switchover) | 1a's metric gate is open on four cells; the switchover decision wants the formatter working and the numbers in hand, not 480 ungated lines in the relicence commit (1b-i design §1) |
+| Label register is learner-standard; られる/れる is "Passive/Potential" | The product is a learner tool and §7.3's own example is in this register. Ichidan られる is ambiguous and the parser cannot resolve it, so the label says so (1b-i design §3) |
+| `ConjStep.aux` records the auxiliary lemma | 一段 is shared by せる/させる/れる/られる and 不変化型 by ん/う/よう/て/で; class and form cannot name the auxiliary (1b-i design §2) |
+| The label fixture is hand-written to depth 1 in full, curated deeper, with a mechanical completeness test that asserts no English | Depth 2 is 1,028 distinct tuples — past what a reviewer reads rather than skims; asserting compositional English at depth 2 would test the formatter against its own rule (1b-i design §4) |
