@@ -230,6 +230,28 @@ mod tests {
     }
 
     #[test]
+    fn only_the_outermost_steps_form_contributes_a_word() {
+        // No chain the table can generate today distinguishes this from
+        // "any step's form": every 活用形 an auxiliary attaches to
+        // contributes no word, so a form word can only ever land on the
+        // last step. That equivalence is accidental, and it ends the moment
+        // an ATTACHES_TO row requiring 連用テ接続 is added -- design §7's
+        // first table finding contemplates exactly that. Built by hand
+        // rather than through the trie, so the distinction is pinned before
+        // it becomes reachable.
+        let steps = [
+            step("一段", "連用形", None),
+            step("特殊・タ", "仮定形", Some("た")),
+            step("特殊・マス", "基本形", Some("ます")),
+        ];
+        // た:仮定形 is both a FORM_WORD form and an OVERRIDE pair, but it
+        // sits on an inner step here, so only た's own word survives: an
+        // inner form word would give "Past Conditional Polite", and an
+        // inner override would give "Conditional Polite".
+        assert_eq!(fmt(&steps).as_deref(), Some("Past Polite"));
+    }
+
+    #[test]
     fn an_unknown_lemma_contributes_nothing_rather_than_panicking() {
         let steps = [
             step("一段", "連用形", None),

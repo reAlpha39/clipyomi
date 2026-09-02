@@ -659,6 +659,147 @@ mod tests {
         }
     }
 
+    #[test]
+    fn every_attaches_to_lemma_has_a_label_word() {
+        // A lemma label.rs does not know would silently contribute no word.
+        for (lemma, _, _) in ATTACHES_TO {
+            assert!(
+                crate::engine::label::aux_word(lemma).is_some(),
+                "ATTACHES_TO lemma {lemma} has no AUX_WORD row in label.rs"
+            );
+        }
+    }
+
+    /// The fixture's depth-0 and depth-1 tuples, parsed from its `chain`
+    /// column: `(is_adjective, form)` for one-step rows, `(lemma, form)` for
+    /// two-step rows. Deeper rows are curated and not enumerated here.
+    #[allow(clippy::type_complexity)]
+    fn fixture_tuples() -> (
+        std::collections::BTreeSet<(bool, String)>,
+        std::collections::BTreeSet<(String, String)>,
+    ) {
+        const FIXTURE: &str = include_str!("../../tests/fixtures/conjugation_labels.txt");
+        let mut depth0 = std::collections::BTreeSet::new();
+        let mut depth1 = std::collections::BTreeSet::new();
+        for line in FIXTURE
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        {
+            let chain = line.split('\t').nth(1).expect("chain column");
+            let steps: Vec<&str> = chain.split(' ').collect();
+            let (class_name, form0) = steps[0].split_once(':').expect("class:form");
+            let is_adjective = class(class_name).is_adjective;
+            match steps.len() {
+                1 => {
+                    depth0.insert((is_adjective, form0.to_string()));
+                }
+                2 => {
+                    let (lemma, form1) = steps[1].split_once(':').expect("lemma:form");
+                    depth1.insert((lemma.to_string(), form1.to_string()));
+                }
+                _ => {}
+            }
+        }
+        (depth0, depth1)
+    }
+
+    /// The auxiliary's conjugated surfaces, the way `Table::new` builds them:
+    /// its lemma minus its class's `remove`, plus each form's suffix, empty
+    /// surfaces skipped.
+    fn aux_forms(lemma: &str, class_name: &str) -> Vec<(FormId, String)> {
+        let c = class(class_name);
+        let stem = lemma.strip_suffix(c.remove).unwrap_or(lemma);
+        c.forms
+            .iter()
+            .enumerate()
+            .map(|(id, f)| (id as FormId, format!("{stem}{}", f.suffix)))
+            .filter(|(_, surface)| !surface.is_empty())
+            .collect()
+    }
+
+    fn class_id_of(name: &str) -> ClassId {
+        CLASSES.iter().position(|c| c.name == name).expect("class") as ClassId
+    }
+
+    /// Asserts `fmt` is total on `steps`: returns `None` or a non-empty label
+    /// with no repeated word. Asserts nothing about which words.
+    fn check_fmt(steps: &[ConjStep]) {
+        if let Some(label) = crate::engine::label::fmt(steps) {
+            assert!(!label.is_empty(), "empty Some for {steps:?}");
+            let words: Vec<&str> = label.split(' ').collect();
+            let unique: std::collections::BTreeSet<&str> = words.iter().copied().collect();
+            assert_eq!(words.len(), unique.len(), "repeated word in {label:?} for {steps:?}");
+        }
+    }
+
+    #[test]
+    // A single-clone `&[s0.clone()]` call below is intentional: it mirrors
+    // the two- and three-element `&[s0.clone(), s1.clone()]` calls beside it
+    // rather than special-casing the depth-0 walk onto `slice::from_ref`.
+    #[allow(clippy::cloned_ref_to_slice_refs)]
+    fn the_label_fixture_covers_every_reachable_tuple_and_fmt_is_total() {
+        // Design §4.3. Walk every chain a JMDICT_POS_CLASS-mapped class can
+        // start, two auxiliaries deep: (class, form) --requires--> (aux,
+        // form) --requires--> (aux, form). Depth 0 and 1 must each have a
+        // fixture row; every chain to depth 2 must not break fmt. No English
+        // is asserted here -- doing so compositionally would test the
+        // formatter against its own rule (Phase 1a design §2.2's tautology).
+        let (depth0, depth1) = fixture_tuples();
+        let mapped: std::collections::BTreeSet<&str> =
+            JMDICT_POS_CLASS.iter().map(|(_, c)| *c).collect();
+        let step = |class: ClassId, form: FormId, aux: Option<&'static str>| ConjStep {
+            class,
+            form,
+            range: 0..0,
+            aux,
+        };
+
+        let mut missing = Vec::new();
+        let mut chains = 0usize;
+        for class_name in mapped {
+            let c0 = class_id_of(class_name);
+            let c = class(class_name);
+            for (f0, form0) in c.forms.iter().enumerate() {
+                let s0 = step(c0, f0 as FormId, None);
+                chains += 1;
+                check_fmt(&[s0.clone()]);
+                if !depth0.contains(&(c.is_adjective, form0.name.to_string())) {
+                    missing.push(format!("depth 0: {class_name}:{}", form0.name));
+                }
+                for &(lemma1, ac1, _req1) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form0.name) {
+                    let c1 = class_id_of(ac1);
+                    for (f1, _) in aux_forms(lemma1, ac1) {
+                        let form1 = CLASSES[c1 as usize].forms[f1 as usize].name;
+                        let s1 = step(c1, f1, Some(lemma1));
+                        chains += 1;
+                        check_fmt(&[s0.clone(), s1.clone()]);
+                        if !depth1.contains(&(lemma1.to_string(), form1.to_string())) {
+                            missing.push(format!("depth 1: {lemma1}:{form1}"));
+                        }
+                        for &(lemma2, ac2, _) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form1) {
+                            let c2 = class_id_of(ac2);
+                            for (f2, _) in aux_forms(lemma2, ac2) {
+                                chains += 1;
+                                check_fmt(&[s0.clone(), s1.clone(), step(c2, f2, Some(lemma2))]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        missing.sort();
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "reachable tuples with no fixture row:\n{}",
+            missing.join("\n")
+        );
+        assert!(
+            chains > 20_000,
+            "the walk reached only {chains} chains; the table's shape changed -- re-size the gate"
+        );
+    }
+
     fn table() -> Table {
         Table::new()
     }
