@@ -741,6 +741,21 @@ fn v2_snapshots_every_sentence() {
     insta::assert_snapshot!("sentences", out);
 }
 
+// Ported from the now-deleted parse_snapshots.rs: its subject is the fixture
+// corpus itself, not either engine, so it moves rather than dies with that
+// file. Guards the corpus itself: addendum §6 requires ~30 sentences and at
+// least one する or 来る. Deleting a sentence to make a snapshot green should
+// fail here first -- and with parse_snapshots.rs's own する-specific test
+// gone too (it tested v1's generated-stem mechanism, which v2 does not have),
+// this is now the only test in the crate that exercises する at all.
+#[test]
+fn corpus_has_thirty_sentences_covering_both_irregulars() {
+    let all: Vec<&str> = sentences().collect();
+    assert_eq!(all.len(), 30, "got {} sentences", all.len());
+    assert!(all.iter().any(|s| s.contains("する")));
+    assert!(all.iter().any(|s| s.contains("来る")));
+}
+
 // 来る in kanji: the one common verb whose kanji stem's reading changes with
 // the form (来た = きた, 来ない = こない, 来る = くる). These are the observables
 // `tests/parse_irregular.rs` pinned for v1, ported to v2. A private fixture,
