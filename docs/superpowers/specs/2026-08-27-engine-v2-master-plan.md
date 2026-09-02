@@ -849,9 +849,12 @@ every `(auxiliary, form)` at depth 1, a curated set to depth 6 — written
 before the formatter and run through the real trie, plus a mechanical
 coverage walk to depth 2 that asserts the fixture omits nothing and asserts
 no English. Both Phase 0 metrics are byte-identical to Phase 1a's, as they
-must be. The grid exposed five `ATTACHES_TO` findings (design §7, handoff
-§4) that are span-shape questions and are left for a measured 1a follow-up
-or 1b-ii.
+must be. The grid exposed five table findings (design §7, handoff §4) that
+are span-shape questions and are left for a measured 1a follow-up or
+1b-ii — four are `ATTACHES_TO` rows (a missing row, rows pointing at the
+wrong class, a missing restriction); the fifth is a collision between two
+`CLASSES` shapes (特殊・タ and 特殊・タイ both emit a bare `た` surface), not
+an `ATTACHES_TO` problem.
 
 **In:** the auxiliary-chain formatter — `fmt(&[ConjStep]) -> Option<String>`,
 filling `Entry::conjugation`, which 1a leaves `None`; its own gate, a class ×
@@ -889,7 +892,8 @@ stands. Whoever plans it should read Phase 1a's measured outcome above and
 the 1b-i handoff's §4 table findings before deciding whether v2 is ready to
 become the default — the metric gap that remains is concentrated and
 understood, and five of the still-shattered or mislabelled surfaces now
-have a named `ATTACHES_TO` cause.
+have a named cause in the conjugation table — four in `ATTACHES_TO`, one in
+`CLASSES`.
 
 **§7.2 — Table size.** ta-old's table holds 32 types and 734 conjugations. The
 replacement need not match that count — it must cover what the corpus exercises

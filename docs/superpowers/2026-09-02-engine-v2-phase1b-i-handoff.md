@@ -203,7 +203,7 @@ are recorded below, with the surfaces that expose each.
    formatter names whatever chain it is handed, so a label can be perfectly
    correct while describing a parse no reader would accept — this is a
    segmentation/candidate-ranking question, not a formatter question. The
-   snapshot has roughly thirteen instances; among them: これ in
+   snapshot has at least twelve instances, itemised below: これ in
    これは面白い映画だ carries three low-ranked sibling candidates that parse
    it as a conjugated verb stem (こる twice as `Conditional`, くる once as
    `Passive/Potential`); `いる (Polite)` appears glossed "to shoot", "to
