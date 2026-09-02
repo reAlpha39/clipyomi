@@ -151,6 +151,14 @@ enum Command {
         #[cfg(feature = "mecab")]
         #[arg(long)]
         hints: Option<PathBuf>,
+        /// Readings per sentence to score. Above 1, the engine returns that
+        /// many and the oracle@K lines are added (Phase 2 design §5).
+        #[arg(
+            long,
+            default_value_t = 1,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        readings: usize,
         /// Emit the metrics as one JSON object instead of the human form.
         #[arg(long)]
         json: bool,
@@ -367,12 +375,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             gold,
             #[cfg(feature = "mecab")]
             hints,
+            readings,
             json,
         } => score::run(
             &index,
             &gold,
             #[cfg(feature = "mecab")]
             hints.as_deref(),
+            readings,
             json,
         )?,
         #[cfg(feature = "mecab")]

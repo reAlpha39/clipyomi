@@ -272,3 +272,77 @@ fn the_json_form_carries_the_decision_breakdown() {
         "got {stdout}"
     );
 }
+
+/// Phase 2 design §5: `--readings 3` adds the oracle@3 lines after
+/// everything the default prints. 言った is one gold span top-1 already gets,
+/// so every oracle ratio is 1.0 by construction -- this pins the format and
+/// the plumbing, not the engine.
+#[test]
+fn readings_above_one_add_the_oracle_lines() {
+    let dir = scratch("cli-score-readings");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--readings")
+        .arg("3")
+        .output()
+        .expect("runnable");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap(),
+        "sentences:      1\n\
+         gold spans:     1\n\
+         superseded:     0\n\
+         span accuracy:  1.0000  (1 / 1)\n\
+         entry top-1:    1.0000  (1 / 1)\n\
+         oracle@3 strict:    1.0000  (1 / 1)\n\
+         oracle@3 tolerant:  1.0000  (1 / 1)\n\
+         oracle@3 sentences: 1.0000  (1 / 1)\n"
+    );
+}
+
+/// The JSON form nests the oracle numbers under one key, present only when
+/// asked -- `the_json_form_carries_the_same_numbers` above pins that the
+/// default output has no such key.
+#[test]
+fn the_json_form_nests_the_oracle_block_only_when_asked() {
+    let dir = scratch("cli-score-readings-json");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--readings")
+        .arg("3")
+        .arg("--json")
+        .output()
+        .expect("runnable");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        stdout.contains(
+            r#""oracle":{"readings":3,"span_hits":1,"tolerant_hits":1,"sentence_hits":1}"#
+        ),
+        "got {stdout}"
+    );
+}
