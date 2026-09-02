@@ -99,8 +99,14 @@ pub enum StartupError {
     Hints(#[from] HintsError),
 }
 
-/// Whether this startup error is the first-run condition the download screen
-/// can fix, rather than a genuine failure.
+/// Whether this startup error is one the download screen can fix: no index at
+/// all, or an index a previous engine or on-disk format built.
+///
+/// The second case is deliberate. `ensure_dictionary` rebuilds on exactly
+/// `ConjugationMismatch` and `VersionMismatch` — both expected after an
+/// application upgrade — so routing them to the download screen repairs a
+/// stale index through the path that already exists, with no new UI. Every
+/// other `IndexError` is a real failure a download cannot fix.
 ///
 /// Matched exhaustively rather than with a wildcard: a future `StartupError`
 /// variant must force a decision here. Offering a download for an error a
@@ -108,6 +114,9 @@ pub enum StartupError {
 pub fn is_missing_dictionary(error: &StartupError) -> bool {
     match error {
         StartupError::NoIndex { .. } => true,
+        StartupError::Index(
+            IndexError::ConjugationMismatch { .. } | IndexError::VersionMismatch { .. },
+        ) => true,
         StartupError::Index(_) | StartupError::Conjugation(_) | StartupError::Hints(_) => false,
     }
 }
@@ -376,6 +385,34 @@ mod tests {
 
         let err = load_state(&root).err().expect("must fail");
         assert!(matches!(err, StartupError::Index(_)), "got {err:?}");
+    }
+
+    /// After an engine upgrade the newest generation carries the previous
+    /// engine's fingerprint, or an older on-disk format. `ensure_dictionary`
+    /// already rebuilds on exactly these two errors, so the download screen
+    /// can repair them; treating them as fatal would strand every upgrading
+    /// user on an error a click can fix.
+    #[test]
+    fn a_stale_index_is_the_download_screens_to_fix() {
+        let stale_fingerprint = StartupError::Index(IndexError::ConjugationMismatch {
+            found: 1,
+            expected: 2,
+        });
+        let stale_format = StartupError::Index(IndexError::VersionMismatch {
+            found: 3,
+            expected: 4,
+        });
+        assert!(is_missing_dictionary(&stale_fingerprint));
+        assert!(is_missing_dictionary(&stale_format));
+    }
+
+    /// Every other index failure stays fatal: a download cannot fix a failing
+    /// disk or a corrupt payload, and offering one would loop the user through
+    /// a wait that changes nothing.
+    #[test]
+    fn a_corrupt_or_unreadable_index_is_still_fatal() {
+        let io = StartupError::Index(IndexError::Io(std::io::Error::other("boom")));
+        assert!(!is_missing_dictionary(&io));
     }
 
     /// Guards the sentinel `main.rs` relies on: an empty `StartupFailure`
