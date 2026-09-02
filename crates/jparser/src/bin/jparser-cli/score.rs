@@ -828,9 +828,36 @@ mod tests {
             &mut m,
         );
 
-        assert_eq!((m.span_hits, m.coarse_forgiven), (0, 0));
+        assert_eq!(
+            (m.span_hits, m.coarse_forgiven, m.coarse_merges),
+            (0, 0, 0),
+            "an alternate's mergeable segment must not enter top-1's merge counters"
+        );
         let o = m.oracle.expect("oracle on");
         assert_eq!((o.span_hits, o.tolerant_hits, o.sentence_hits), (0, 2, 0));
+    }
+
+    /// The union must never lose a hit. Top-1 spans both gold spans exactly;
+    /// the alternate merges them into one segment and reproduces neither. A
+    /// fold written `strict = f.strict` rather than `strict |= f.strict`
+    /// would let this alternate clobber top-1's two hits and silently
+    /// under-credit oracle@K.
+    #[test]
+    fn a_worse_alternate_never_clobbers_a_top_1_oracle_hit() {
+        let mut m = with_oracle(2);
+        accumulate(
+            &gold("あい", &[(0, 1, Some(10)), (1, 1, Some(20))]),
+            &parsed_with(
+                vec![seg(0, 1, &[10]), seg(1, 1, &[20])],
+                vec![vec![seg(0, 2, &[30])]],
+            ),
+            &mut m,
+        );
+
+        assert_eq!((m.span_hits, m.top1_hits), (2, 2), "top-1 is unaffected");
+        let o = m.oracle.expect("oracle on");
+        assert_eq!((o.span_hits, o.tolerant_hits), (2, 2));
+        assert_eq!(o.sentence_hits, 1, "top-1 is itself the gold cover");
     }
 
     /// With `--readings 1` there is no oracle, and alternates -- which the
