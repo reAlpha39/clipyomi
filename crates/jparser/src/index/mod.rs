@@ -7,12 +7,11 @@
 
 //! Memory-mapped dictionary index.
 //!
-//! Replaces ta-old's hand-rolled sorted-array-plus-binary-search index
-//! (`LoadDict`/`FindMatches`, `ta-old/exe/util/Dictionary.cpp`). Keys are
-//! surfaces normalized with `kana::unify`, so the kana-insensitive comparator
-//! ta-old threaded through three separate binary searches does not exist here.
-//! The original surface is kept in the payload so inexact hiragana/katakana
-//! matches can still be detected and penalized in Phase 1B.
+//! An FST from folded keys to record offsets, plus length-prefixed bincode
+//! blobs for records and entries. Keys are surfaces folded with
+//! `engine::kana::fold`, so a kana-insensitive comparator is not needed at
+//! lookup time. The original surface is kept in the payload so inexact
+//! hiragana/katakana matches can still be detected and penalized.
 
 pub mod build;
 pub mod generations;
@@ -22,15 +21,13 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::conjugation::ConjugationTable;
-use crate::conjugation::VerbTypeId;
 use crate::index::load::Index;
-use crate::stem::StemOptions;
-use crate::stem::StemStats;
 
 /// Bumped whenever the on-disk layout changes. A mismatch forces a rebuild; the
 /// loader must never try to read an index it does not recognize.
-pub const INDEX_FORMAT_VERSION: u32 = 3;
+///
+/// 4 (Phase 1b-ii): `StoredRecord` lost `verb_type`.
+pub const INDEX_FORMAT_VERSION: u32 = 4;
 
 pub const HEADER_FILE: &str = "header.bin";
 pub const FST_FILE: &str = "keys.fst";
@@ -49,29 +46,23 @@ pub struct IndexHeader {
     pub keys: u32,
     pub records: u32,
     pub entries: u32,
-    /// FNV-1a fingerprint of the conjugation asset this index's `verb_type`
-    /// ids were assigned from (`conjugation::embedded_asset_fingerprint`).
-    /// `Index::open` rejects a mismatch: reordering or adding a type in the
-    /// asset changes every id downstream of the change, so an index built
-    /// against a different asset would otherwise silently resolve
-    /// `verb_type` to the wrong verb.
+    /// FNV-1a fingerprint of the conjugation table this index's class ids
+    /// were assigned from (`engine::build::fingerprint`). `Index::open`
+    /// rejects a mismatch: reordering or adding a class in the table changes
+    /// every id downstream of the change, so an index built against a
+    /// different table would otherwise silently resolve a class to the wrong
+    /// conjugation.
     pub conjugation_fingerprint: u64,
 }
 
-/// One headword or stem as stored in the payload.
+/// One headword as stored in the payload.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StoredRecord {
     /// Original, unnormalized surface. Compared against the source text to set
-    /// the inexact-match flag in Phase 1B.
+    /// the inexact-match flag.
     pub surface: String,
+    /// The raw bits of an `engine::flags::WordFlags`.
     pub flags: u16,
-    /// `Some` for generated verb stems, `None` for plain headwords. ta-old
-    /// stored `verbType` as `vt + 1`, with `0` meaning "not a verb"
-    /// (`ConjInfo::verbType`, `Dictionary.h`); this port uses a 0-based id
-    /// inside an `Option` instead, so the Phase 1B differential run must
-    /// account for that offset (add 1, map `None` to `0`) when comparing
-    /// against the old encoding.
-    pub verb_type: Option<VerbTypeId>,
     pub entry_id: u32,
 }
 
@@ -88,9 +79,9 @@ pub struct SenseData {
 pub struct EntryData {
     pub id: u32,
     /// The entry's `<reb>` forms in document order, stored **only when the
-    /// entry also has kanji forms** — exactly the set ta-old flags
-    /// `JAP_WORD_PRONOUNCE`. Empty for kana-only entries, where the surface
-    /// already is the reading and ta-old renders no furigana.
+    /// entry also has kanji forms** — exactly the readings a kanji entry
+    /// needs furigana for. Empty for kana-only entries, where the surface
+    /// already is the reading.
     pub readings: Vec<String>,
     pub senses: Vec<SenseData>,
 }
@@ -102,7 +93,6 @@ pub struct BuildReport {
     pub entries: usize,
     /// Malformed JMdict entries skipped. Surfaced, never silently dropped.
     pub skipped_entries: usize,
-    pub stems: StemStats,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -139,17 +129,11 @@ pub enum IndexError {
 /// and the steady-state path must not pay for it.
 ///
 /// A version or conjugation-fingerprint mismatch triggers a rebuild — both are
-/// expected after an application upgrade or a changed `conjugations.json`. Any
-/// **other** open failure is returned rather than rebuilt: a generation that
-/// was published as complete but does not read back is a bug or a failing
+/// expected after an application upgrade or a regenerated conjugation table.
+/// Any **other** open failure is returned rather than rebuilt: a generation
+/// that was published as complete but does not read back is a bug or a failing
 /// disk, and silently rebuilding would hide it.
-pub fn ensure_dictionary<R, F>(
-    root: &Path,
-    table: &ConjugationTable,
-    opts: &StemOptions,
-    keep: usize,
-    source: F,
-) -> Result<Index, IndexError>
+pub fn ensure_dictionary<R, F>(root: &Path, keep: usize, source: F) -> Result<Index, IndexError>
 where
     F: FnOnce() -> std::io::Result<R>,
     R: std::io::BufRead,
@@ -181,7 +165,7 @@ where
     }
 
     let xml = source()?;
-    let (published, _report) = generations::build_new(root, xml, table, opts)?;
+    let (published, _report) = generations::build_new(root, xml)?;
     // Sweep after the publish, never before: sweeping first could delete the
     // generation the caller would have fallen back to had the build failed.
     //
@@ -236,8 +220,6 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::conjugation::ConjugationTable;
-    use crate::stem::StemOptions;
 
     const XML: &str = concat!(
         r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -255,13 +237,6 @@ mod tests {
         dir
     }
 
-    fn table_and_opts() -> (ConjugationTable, StemOptions) {
-        (
-            ConjugationTable::load_embedded().expect("table"),
-            StemOptions::default(),
-        )
-    }
-
     /// Rewrite `gen-N`'s header so the next open rejects it.
     fn corrupt_header(dir: &std::path::Path, f: impl FnOnce(&mut IndexHeader)) {
         let path = dir.join(HEADER_FILE);
@@ -274,10 +249,9 @@ mod tests {
     #[test]
     fn an_empty_root_builds_the_first_generation() {
         let root = scratch("ensure-first");
-        let (table, opts) = table_and_opts();
         let calls = Cell::new(0usize);
 
-        let index = ensure_dictionary(&root, &table, &opts, 2, || {
+        let index = ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
             Ok(XML.as_bytes())
         })
@@ -296,10 +270,9 @@ mod tests {
     #[test]
     fn a_valid_generation_is_reused_without_consulting_the_source() {
         let root = scratch("ensure-reuse");
-        let (table, opts) = table_and_opts();
 
         let first = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             first.set(first.get() + 1);
             Ok(XML.as_bytes())
         })
@@ -307,7 +280,7 @@ mod tests {
         assert_eq!(first.get(), 1);
 
         let second = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             second.set(second.get() + 1);
             Ok(XML.as_bytes())
         })
@@ -322,15 +295,14 @@ mod tests {
     #[test]
     fn a_version_mismatch_rebuilds() {
         let root = scratch("ensure-version");
-        let (table, opts) = table_and_opts();
-        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("first");
 
         corrupt_header(&root.join("gen-1"), |h| {
             h.version = INDEX_FORMAT_VERSION - 1;
         });
 
         let calls = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
             Ok(XML.as_bytes())
         })
@@ -342,15 +314,14 @@ mod tests {
     #[test]
     fn a_fingerprint_mismatch_rebuilds() {
         let root = scratch("ensure-fingerprint");
-        let (table, opts) = table_and_opts();
-        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("first");
 
         corrupt_header(&root.join("gen-1"), |h| {
             h.conjugation_fingerprint ^= 1;
         });
 
         let calls = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
             Ok(XML.as_bytes())
         })
@@ -364,15 +335,14 @@ mod tests {
     #[test]
     fn a_corrupt_generation_errors_rather_than_rebuilding() {
         let root = scratch("ensure-corrupt");
-        let (table, opts) = table_and_opts();
-        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("first");
 
         // Truncate a file `open` reads eagerly, leaving the header intact so
         // version and fingerprint both still validate.
         std::fs::write(root.join("gen-1").join(ENTRIES_INDEX_FILE), b"\x00\x00").expect("truncate");
 
         let calls = Cell::new(0usize);
-        let err = ensure_dictionary(&root, &table, &opts, 2, || {
+        let err = ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
             Ok(XML.as_bytes())
         })
@@ -389,11 +359,10 @@ mod tests {
     #[test]
     fn a_rebuild_sweeps_to_the_retention_limit() {
         let root = scratch("ensure-sweep");
-        let (table, opts) = table_and_opts();
 
         // Four rounds, invalidating the head each time so every round rebuilds.
         for _ in 0..4 {
-            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
@@ -421,18 +390,16 @@ mod tests {
     #[test]
     fn ensure_dictionary_honors_a_keep_of_one() {
         let root = scratch("ensure-keep-one");
-        let (table, opts) = table_and_opts();
 
         // Three rounds at keep=2, so all three generations would survive
         // under the default — the point below is the fourth round's keep=1.
         for _ in 0..3 {
-            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
 
-        let index = ensure_dictionary(&root, &table, &opts, 1, || Ok(XML.as_bytes()))
-            .expect("ensure with keep=1");
+        let index = ensure_dictionary(&root, 1, || Ok(XML.as_bytes())).expect("ensure with keep=1");
 
         let remaining = std::fs::read_dir(&root)
             .expect("read_dir")
@@ -458,9 +425,8 @@ mod tests {
     #[test]
     fn a_zero_keep_is_clamped_rather_than_self_destructive() {
         let root = scratch("ensure-keep-zero");
-        let (table, opts) = table_and_opts();
 
-        let index = ensure_dictionary(&root, &table, &opts, 0, || Ok(XML.as_bytes()))
+        let index = ensure_dictionary(&root, 0, || Ok(XML.as_bytes()))
             .expect("ensure_dictionary must not self-destruct on keep=0");
 
         assert!(
@@ -489,12 +455,9 @@ mod tests {
     #[test]
     fn open_published_or_newest_falls_back_when_its_own_generation_is_swept() {
         let root = scratch("ensure-superseded");
-        let (table, opts) = table_and_opts();
 
-        let (gen1, _) =
-            generations::build_new(&root, XML.as_bytes(), &table, &opts).expect("gen-1");
-        let (gen2, _) =
-            generations::build_new(&root, XML.as_bytes(), &table, &opts).expect("gen-2");
+        let (gen1, _) = generations::build_new(&root, XML.as_bytes()).expect("gen-1");
+        let (gen2, _) = generations::build_new(&root, XML.as_bytes()).expect("gen-2");
 
         // Simulate a different call's sweep removing gen1 — the generation
         // this call "published" — before this call's own open ran.
@@ -558,13 +521,12 @@ mod tests {
         }
 
         let root = scratch("ensure-sweep-fails");
-        let (table, opts) = table_and_opts();
 
         // Three rounds, invalidating the head each time. keep=2's normal
         // operation already sweeps gen-1 away during this loop, leaving
         // gen-2 and gen-3 (corrupt) once it finishes.
         for _ in 0..3 {
-            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
@@ -592,7 +554,7 @@ mod tests {
             return;
         }
 
-        let index = ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes()))
+        let index = ensure_dictionary(&root, 2, || Ok(XML.as_bytes()))
             .expect("a failed sweep must not fail ensure_dictionary");
 
         assert_eq!(

@@ -11,7 +11,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use jparser::hints::VibratoTokenizer;
-use jparser::{BoundaryHints, ParseOptions, ParseResult};
+use jparser::{Boundaries, ParseOptions, ParseResult};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::watch;
 
@@ -108,13 +108,13 @@ pub async fn run_worker(
 
         let outcome = tauri::async_runtime::spawn_blocking(move || {
             catch_parse(len, || {
-                let flags = tokenizer.as_ref().map(|t| t.hints(&text));
+                let bounds = tokenizer.as_ref().map(|t| t.boundaries(&text));
                 jparser::parse(
                     &state.index,
                     &state.table,
                     &text,
                     &ParseOptions::default(),
-                    flags.as_ref().map(|f| f as &dyn BoundaryHints),
+                    bounds.as_ref().map(|b| b as &dyn Boundaries),
                 )
                 .map_err(|e| e.to_string())
             })
@@ -192,14 +192,13 @@ mod tests {
     /// a restart. This is the mechanism 2F's "no restart" promise rests on.
     #[test]
     fn a_published_index_becomes_visible_without_a_restart() {
-        use jparser::conjugation::ConjugationTable;
         use jparser::index::load::Index;
 
         let root = crate::test_support::scratch("worker-late-index");
         let generation = crate::test_support::build_index_generation(&root);
         let state = AppState {
             index: Index::open(&generation).expect("open"),
-            table: ConjugationTable::load_embedded().expect("table"),
+            table: jparser::engine::table::Table::new(),
         };
 
         let (tx, rx) = watch::channel(None);
@@ -260,7 +259,7 @@ mod tests {
             .expect("corrupt the records file");
 
         let index = Index::open(&generation).expect("header.bin and entries.idx are untouched");
-        let table = jparser::conjugation::ConjugationTable::load_embedded().expect("table");
+        let table = jparser::engine::table::Table::new();
 
         // "本" is the fixture's own headword (see `test_support`), so this is
         // a real FST hit that then fails reading its record payload back —

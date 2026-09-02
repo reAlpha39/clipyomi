@@ -179,7 +179,7 @@ pub fn best_path(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::record::WordFlags;
+    use crate::engine::flags::WordFlags;
 
     fn c(start: usize, len: usize, id: u32, flags: WordFlags) -> Candidate {
         Candidate {

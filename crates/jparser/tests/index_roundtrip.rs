@@ -7,12 +7,11 @@
 
 use std::path::{Path, PathBuf};
 
-use jparser::conjugation::ConjugationTable;
-use jparser::index::build::build_from_reader;
+use jparser::engine::build::build_from_reader;
+use jparser::engine::kana::fold;
 use jparser::index::load::Index;
 use jparser::index::{BuildReport, INDEX_FORMAT_VERSION};
-use jparser::record::WordFlags;
-use jparser::stem::StemOptions;
+use jparser::WordFlags;
 
 const FIXTURE: &str = include_str!("fixtures/jmdict_mini.xml");
 
@@ -24,14 +23,7 @@ fn tmpdir(name: &str) -> PathBuf {
 }
 
 fn build(dir: &Path) -> BuildReport {
-    let table = ConjugationTable::load_embedded().unwrap();
-    build_from_reader(
-        std::io::Cursor::new(FIXTURE),
-        &table,
-        &StemOptions::default(),
-        dir,
-    )
-    .expect("build must succeed")
+    build_from_reader(std::io::Cursor::new(FIXTURE), dir).expect("build must succeed")
 }
 
 #[test]
@@ -41,7 +33,6 @@ fn builds_and_reports_counts() {
     assert_eq!(report.skipped_entries, 0);
     assert!(report.keys > 0);
     assert!(report.records >= report.keys);
-    assert!(report.stems.exact_stems > 0);
 }
 
 #[test]
@@ -65,7 +56,7 @@ fn round_trips_an_exact_headword() {
     build(&dir);
     let index = Index::open(&dir).unwrap();
     let found = index
-        .prefixes_of("言う")
+        .prefixes_of_with("言う", fold)
         .unwrap()
         .iter()
         .flat_map(|h| &h.records)
@@ -75,15 +66,34 @@ fn round_trips_an_exact_headword() {
 
 #[test]
 fn prefix_walk_returns_distinct_ascending_lengths() {
+    // Two headwords, one a prefix of the other, so walking "言葉狩り" must
+    // surface hits at more than one length. `jmdict_mini.xml` cannot serve
+    // this on its own: no key in it is a prefix of another, because the
+    // builder stores headwords and nothing else.
     let dir = tmpdir("prefixes");
-    build(&dir);
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+]>
+<JMdict>
+<entry>
+<ent_seq>2000010</ent_seq>
+<k_ele><keb>言</keb></k_ele>
+<r_ele><reb>げん</reb></r_ele>
+<sense><pos>&n;</pos><gloss>word</gloss></sense>
+</entry>
+<entry>
+<ent_seq>2000020</ent_seq>
+<k_ele><keb>言葉</keb></k_ele>
+<r_ele><reb>ことば</reb></r_ele>
+<sense><pos>&n;</pos><gloss>language</gloss></sense>
+</entry>
+</JMdict>"#;
+    build_from_reader(std::io::Cursor::new(xml), &dir).expect("build must succeed");
     let index = Index::open(&dir).unwrap();
-    // 言う is a headword and 言 is its generated stem, so walking "言うから"
-    // must surface hits at more than one length.
-    let hits = index.prefixes_of("言うから").unwrap();
+    let hits = index.prefixes_of_with("言葉狩り", fold).unwrap();
     let lengths: Vec<usize> = hits.iter().map(|h| h.key_chars).collect();
-    assert!(lengths.len() >= 2, "got lengths {lengths:?}");
-    assert!(lengths.windows(2).all(|w| w[0] < w[1]), "got {lengths:?}");
+    assert_eq!(lengths, vec![1, 2], "got lengths {lengths:?}");
 }
 
 #[test]
@@ -94,7 +104,7 @@ fn matches_katakana_text_against_a_hiragana_headword() {
     // The key is normalized, so katakana input finds the hiragana headword,
     // while the stored surface stays hiragana so inexactness stays detectable.
     let surfaces: Vec<String> = index
-        .prefixes_of("イウ")
+        .prefixes_of_with("イウ", fold)
         .unwrap()
         .iter()
         .flat_map(|h| &h.records)
@@ -105,72 +115,14 @@ fn matches_katakana_text_against_a_hiragana_headword() {
 
 #[test]
 fn returns_no_hits_for_text_with_no_dictionary_prefix() {
-    // This holds only because jmdict_mini.xml's build has empty_stems: 0 (no
-    // irregular verb like する/vs-i or 来る/vk in the fixture). "" is a
-    // prefix of every string, so an index that DID contain an empty-key
-    // record would report a key_chars: 0 hit here too, for "zzz" same as
-    // anything else. Do not change jmdict_mini.xml on the strength of this
-    // test alone: see prefix_walk_returns_the_empty_stem_hit_for_an_irregular_verb
-    // below for that case, exercised against its own dedicated fixture.
+    // The builder stores headwords only, and no JMdict entry has an empty
+    // one, so no index it writes carries the empty key. "" is a prefix of
+    // every string, so an index that DID carry it would report a
+    // key_chars: 0 hit here too, for "zzz" same as anything else.
     let dir = tmpdir("miss");
     build(&dir);
     let index = Index::open(&dir).unwrap();
-    assert!(index.prefixes_of("zzz").unwrap().is_empty());
-}
-
-#[test]
-fn prefix_walk_returns_the_empty_stem_hit_for_an_irregular_verb() {
-    // する is tagged vs-i, one of ta-old's irregular verbs: vs-i's
-    // remove-tense/form-0 conjugation strips suffix "する" from surface
-    // "する" itself, leaving the empty stem. "" is a prefix of every
-    // string, so prefixes_of must surface it as a key_chars: 0 hit — this
-    // is exactly the failure mode from the bug report, where looking up
-    // "します" found nothing because the empty key was unreachable.
-    let dir = tmpdir("empty-stem");
-    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE JMdict [
-<!ENTITY vs-i "noun or participle which takes the aux. verb suru">
-]>
-<JMdict>
-<entry>
-<ent_seq>3000001</ent_seq>
-<r_ele><reb>する</reb></r_ele>
-<sense><pos>&vs-i;</pos><gloss>to do</gloss></sense>
-</entry>
-</JMdict>"#;
-    let table = ConjugationTable::load_embedded().unwrap();
-    let report = build_from_reader(
-        std::io::Cursor::new(xml),
-        &table,
-        &StemOptions::default(),
-        &dir,
-    )
-    .expect("build must succeed");
-    assert!(
-        report.stems.empty_stems > 0,
-        "fixture must produce an empty stem, got {:?}",
-        report.stems
-    );
-
-    let index = Index::open(&dir).unwrap();
-    let hits = index.prefixes_of("します").unwrap();
-    let lengths: Vec<usize> = hits.iter().map(|h| h.key_chars).collect();
-    assert!(
-        lengths.windows(2).all(|w| w[0] < w[1]),
-        "ascending order must hold even with a 0-length hit first: got {lengths:?}"
-    );
-    let empty_hit = hits
-        .iter()
-        .find(|h| h.key_chars == 0)
-        .expect("the empty stem must be reachable through prefixes_of");
-    assert!(
-        empty_hit
-            .records
-            .iter()
-            .any(|r| r.surface.is_empty() && r.entry_id == 3_000_001),
-        "got {:?}",
-        empty_hit.records
-    );
+    assert!(index.prefixes_of_with("zzz", fold).unwrap().is_empty());
 }
 
 #[test]
@@ -178,7 +130,7 @@ fn preserves_flags_through_the_round_trip() {
     let dir = tmpdir("flags");
     build(&dir);
     let index = Index::open(&dir).unwrap();
-    let hits = index.prefixes_of("は").unwrap();
+    let hits = index.prefixes_of_with("は", fold).unwrap();
     let particle = hits
         .iter()
         .flat_map(|h| &h.records)
@@ -194,7 +146,7 @@ fn retrieves_entry_data_by_id() {
     let index = Index::open(&dir).unwrap();
     let entry = index.entry(1000010).unwrap().expect("entry must exist");
     assert_eq!(entry.senses[0].glosses, vec!["to say", "to utter"]);
-    assert_eq!(entry.senses[0].pos, vec!["v5r"]);
+    assert_eq!(entry.senses[0].pos, vec!["v5u"]);
 }
 
 #[test]
@@ -235,7 +187,7 @@ fn rejects_a_header_with_the_wrong_conjugation_fingerprint() {
     // conjugation_fingerprint is the header's last field (u32, u32, u32, u32,
     // then u64), so flipping the encoded blob's last byte corrupts only it
     // and leaves version and the counts intact. Load must refuse rather than
-    // silently resolve verb_type ids against a different conjugation asset.
+    // silently resolve class ids against a different conjugation table.
     let path = dir.join("header.bin");
     let mut bytes = std::fs::read(&path).unwrap();
     let last = bytes.len() - 1;
@@ -246,47 +198,12 @@ fn rejects_a_header_with_the_wrong_conjugation_fingerprint() {
 }
 
 #[test]
-fn stems_carry_the_producing_verb_type_and_headwords_carry_none() {
-    let dir = tmpdir("verb-type");
-    build(&dir);
-    let index = Index::open(&dir).unwrap();
-    let table = ConjugationTable::load_embedded().unwrap();
-    // v5u is not one of the four duplicate-named types, so it has exactly
-    // one id in the table.
-    let v5u_id = table.types_named("v5u")[0];
-
-    let records: Vec<_> = index
-        .prefixes_of("言う")
-        .unwrap()
-        .iter()
-        .flat_map(|h| h.records.clone())
-        .collect();
-
-    // 言 is the v5-fallback stem generated from 言う via sibling type v5u
-    // (see the module docs on the mis-annotation fallback), so its stored
-    // verb_type must survive the build -> mmap -> bincode round trip.
-    let stem = records
-        .iter()
-        .find(|r| r.surface == "言")
-        .expect("言 stem must be indexed");
-    assert_eq!(stem.verb_type, Some(v5u_id));
-
-    // The plain headword carries no verb type of its own; Task 9 uses this
-    // distinction to tell a stem from a headword.
-    let headword = records
-        .iter()
-        .find(|r| r.surface == "言う")
-        .expect("言う headword must be indexed");
-    assert_eq!(headword.verb_type, None);
-}
-
-#[test]
 fn a_shared_normalized_key_collects_records_from_distinct_entries() {
     let dir = tmpdir("multi-record");
-    // とる (hiragana) and トル (katakana) normalize to the same FST key via
-    // kana::unify_str, so these two otherwise-unrelated entries must land in
-    // the same bucket. tests/fixtures/jmdict_mini.xml is untouched; every
-    // fixture key maps to exactly one record and can't exercise this.
+    // とる (hiragana) and トル (katakana) fold to the same FST key via
+    // engine::kana::fold_str, so these two otherwise-unrelated entries must
+    // land in the same bucket. tests/fixtures/jmdict_mini.xml is untouched;
+    // every fixture key maps to exactly one record and can't exercise this.
     let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE JMdict [
 <!ENTITY n "noun (common) (futsuumeishi)">
@@ -303,18 +220,11 @@ fn a_shared_normalized_key_collects_records_from_distinct_entries() {
 <sense><pos>&n;</pos><gloss>a different noun</gloss></sense>
 </entry>
 </JMdict>"#;
-    let table = ConjugationTable::load_embedded().unwrap();
-    build_from_reader(
-        std::io::Cursor::new(xml),
-        &table,
-        &StemOptions::default(),
-        &dir,
-    )
-    .expect("build must succeed");
+    build_from_reader(std::io::Cursor::new(xml), &dir).expect("build must succeed");
     let index = Index::open(&dir).unwrap();
 
     let records: Vec<_> = index
-        .prefixes_of("とる")
+        .prefixes_of_with("とる", fold)
         .unwrap()
         .iter()
         .flat_map(|h| h.records.clone())

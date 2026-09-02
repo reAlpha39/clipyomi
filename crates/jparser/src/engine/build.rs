@@ -10,16 +10,11 @@
 // clean-room discipline this file was written under. The SPDX header of §9.2
 // is written in Phase 1b, when the crate stops being GPL-2.0-only.
 
-//! Builds a v2 index from JMdict XML.
-//!
-//! Shares `index::build::write_index` with the v1 builder: the on-disk format
-//! does not change between engines, only what fills it. v2 emits one
-//! `StoredRecord` per [`crate::engine::flags::Headword`] and none of v1's
-//! generated stems, because deinflection happens at parse time via
-//! [`crate::engine::table::Table`] instead of at build time — so
-//! `StoredRecord::verb_type` is always `None` here, and [`fingerprint`] rather
-//! than `conjugation::embedded_asset_fingerprint` stamps the header, so
-//! `Index::open_with` rejects an index built by the other engine.
+//! Builds the index from JMdict XML: one `StoredRecord` per
+//! [`crate::engine::flags::Headword`], keyed by the folded surface, and no
+//! generated stems — deinflection is a parse-time walk of
+//! [`crate::engine::table::Table`]. [`fingerprint`] stamps the header so
+//! `Index::open` refuses an index built against a different table.
 
 use std::collections::BTreeMap;
 use std::io::BufRead;
@@ -31,7 +26,6 @@ use crate::engine::table::CLASSES;
 use crate::index::build::write_index;
 use crate::index::{BuildReport, EntryData, IndexError, SenseData, StoredRecord};
 use crate::jmdict::parse_entries;
-use crate::stem::StemStats;
 
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -69,11 +63,7 @@ pub fn fingerprint() -> u64 {
     hash
 }
 
-/// Builds a v2 index from `xml` into `out_dir`.
-///
-/// Signature-compatible with [`crate::index::build::build_from_reader`] apart
-/// from the missing `table`/`opts` parameters, which v1 needs to generate
-/// stems and v2 does not.
+/// Builds an index from `xml` into `out_dir`.
 pub fn build_from_reader<R: BufRead>(xml: R, out_dir: &Path) -> Result<BuildReport, IndexError> {
     std::fs::create_dir_all(out_dir)?;
 
@@ -117,7 +107,6 @@ pub fn build_from_reader<R: BufRead>(xml: R, out_dir: &Path) -> Result<BuildRepo
                 StoredRecord {
                     surface: head.surface.clone(),
                     flags: head.flags.0,
-                    verb_type: None,
                     entry_id: head.entry_id,
                 },
             ) {
@@ -136,8 +125,6 @@ pub fn build_from_reader<R: BufRead>(xml: R, out_dir: &Path) -> Result<BuildRepo
         records: record_count,
         entries: entry_count,
         skipped_entries,
-        // v2 generates no stems: deinflection happens at parse time instead.
-        stems: StemStats::default(),
     })
 }
 
@@ -173,15 +160,5 @@ mod tests {
     #[test]
     fn fingerprint_is_pinned() {
         assert_eq!(fingerprint(), 0xfeae_49c6_63b9_fb24);
-    }
-
-    #[test]
-    fn fingerprint_differs_from_the_v1_conjugation_asset() {
-        // If these ever collided, the fingerprint guard in `Index::open`
-        // could not tell the two engines' indexes apart.
-        assert_ne!(
-            fingerprint(),
-            crate::conjugation::embedded_asset_fingerprint()
-        );
     }
 }

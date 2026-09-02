@@ -15,10 +15,8 @@
 
 use std::path::PathBuf;
 
-use jparser::conjugation::ConjugationTable;
-use jparser::index::build::build_from_reader;
+use jparser::engine::build::build_from_reader;
 use jparser::index::load::Index;
-use jparser::stem::StemOptions;
 use jparser::ParseOptions;
 
 const FIXTURE: &str = include_str!("fixtures/jmdict_mini.xml");
@@ -27,24 +25,17 @@ fn index_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let table = ConjugationTable::load_embedded().unwrap();
-    build_from_reader(
-        std::io::Cursor::new(FIXTURE),
-        &table,
-        &StemOptions::default(),
-        &dir,
-    )
-    .expect("the mini fixture must build");
+    build_from_reader(std::io::Cursor::new(FIXTURE), &dir).expect("the mini fixture must build");
     dir
 }
 
 /// 言う is `<ent_seq>1000010</ent_seq>` in the fixture, and 言った matches it
-/// through the v5u mis-annotation fallback — the same case `cli_parse.rs`
-/// pins the rendered output of.
+/// because the fixture tags it `v5u` and 言っ is that class's 連用タ接続 — the
+/// same case `cli_parse.rs` pins the rendered output of.
 #[test]
 fn the_top_entry_carries_the_ent_seq_the_fixture_declares() {
     let dir = index_dir("entry-id-verb");
-    let table = ConjugationTable::load_embedded().unwrap();
+    let table = jparser::engine::table::Table::new();
     let index = Index::open(&dir).unwrap();
 
     let result = jparser::parse(&index, &table, "言った", &ParseOptions::default(), None)
@@ -57,12 +48,12 @@ fn the_top_entry_carries_the_ent_seq_the_fixture_declares() {
 }
 
 /// A particle, so the id survives a non-verb path too: は is
-/// `<ent_seq>1000020</ent_seq>` and reaches `assemble_entry` with an empty
-/// conjugation chain.
+/// `<ent_seq>1000020</ent_seq>` and reaches `engine::assemble` with an empty
+/// deinflection chain.
 #[test]
 fn a_non_verb_entry_carries_its_ent_seq_too() {
     let dir = index_dir("entry-id-particle");
-    let table = ConjugationTable::load_embedded().unwrap();
+    let table = jparser::engine::table::Table::new();
     let index = Index::open(&dir).unwrap();
 
     let result = jparser::parse(&index, &table, "は", &ParseOptions::default(), None)

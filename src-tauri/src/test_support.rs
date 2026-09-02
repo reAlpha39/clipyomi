@@ -8,16 +8,14 @@
 //! Test-only fixtures shared by `commands`' and `state`'s test modules.
 //!
 //! Building a real index — rather than relying only on the `index: None`
-//! shortcut — turns out to be cheap: `jparser::index::ensure_dictionary` and
-//! `jparser::stem::StemOptions` are both public, so a one-entry fixture is
-//! exactly as easy to build here as it is inside `jparser`'s own tests.
+//! shortcut — turns out to be cheap: `jparser::index::ensure_dictionary` is
+//! public, so a one-entry fixture is exactly as easy to build here as it is
+//! inside `jparser`'s own tests.
 //! Only compiled for `cargo test`; nothing here is reachable from `main`.
 
 use std::path::{Path, PathBuf};
 
-use jparser::conjugation::ConjugationTable;
 use jparser::index::{ensure_dictionary, generations};
-use jparser::stem::StemOptions;
 
 /// A single-entry JMdict fixture — the smallest input `ensure_dictionary`
 /// accepts, mirroring `crates/jparser/src/index/mod.rs`'s own test fixture.
@@ -41,11 +39,8 @@ pub(crate) fn scratch(name: &str) -> PathBuf {
 /// Build a real one-entry index generation under `root` and return the
 /// generation's own directory (`root/gen-1`).
 pub(crate) fn build_index_generation(root: &Path) -> PathBuf {
-    let table = ConjugationTable::load_embedded().expect("embedded conjugation table");
-    let opts = StemOptions::default();
     drop(
-        ensure_dictionary(root, &table, &opts, 1, || Ok(FIXTURE_XML.as_bytes()))
-            .expect("build the fixture index"),
+        ensure_dictionary(root, 1, || Ok(FIXTURE_XML.as_bytes())).expect("build the fixture index"),
     );
     generations::latest(root)
         .expect("read back the generation just built")

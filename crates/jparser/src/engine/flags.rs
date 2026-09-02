@@ -21,7 +21,6 @@
 use super::table::classes_for_pos;
 use super::ClassId;
 use crate::jmdict::RawEntry;
-use crate::record::WordFlags;
 
 /// POS codes that make a word a particle for scoring purposes.
 const PARTICLE_POS: &[&str] = &["prt", "conj"];
@@ -29,6 +28,65 @@ const PARTICLE_POS: &[&str] = &["prt", "conj"];
 const COUNTER_POS: &[&str] = &["ctr", "suf"];
 /// Misc code that disqualifies a counter.
 const ARCHAIC_MISC: &str = "arch";
+
+/// Per-record flags the cost model and the webview read.
+///
+/// A `u16` newtype with eight named bits. The eight **names** are the
+/// contract: they are the strings `Entry::flags` serialises and
+/// `src/types.ts`'s `FlagName` declares, and the webview picks a chip's
+/// content class by them. The bit **values** are arbitrary — an index stores
+/// the raw `u16` (`StoredRecord::flags`), and Phase 1b-ii bumped the index
+/// format at the same time it assigned these, so nothing built before them
+/// can be read regardless. See `headwords` below for when each is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WordFlags(pub u16);
+
+impl WordFlags {
+    pub const PRIMARY: WordFlags = WordFlags(1 << 0);
+    pub const PRONOUNCE: WordFlags = WordFlags(1 << 1);
+    pub const COMMON_LINE: WordFlags = WordFlags(1 << 2);
+    pub const COMMON: WordFlags = WordFlags(1 << 3);
+    pub const PARTICLE: WordFlags = WordFlags(1 << 4);
+    pub const COUNTER: WordFlags = WordFlags(1 << 5);
+    /// Reserved; set by nothing (Phase 1a design §8).
+    pub const TOP: WordFlags = WordFlags(1 << 6);
+    /// Reserved for JMnedict; set by nothing (Phase 1a design §8).
+    pub const IS_NAME: WordFlags = WordFlags(1 << 7);
+
+    /// Every flag with its wire name, in bit order.
+    const NAMES: [(WordFlags, &'static str); 8] = [
+        (Self::PRIMARY, "primary"),
+        (Self::PRONOUNCE, "pronounce"),
+        (Self::COMMON_LINE, "common_line"),
+        (Self::COMMON, "common"),
+        (Self::PARTICLE, "particle"),
+        (Self::COUNTER, "counter"),
+        (Self::TOP, "top"),
+        (Self::IS_NAME, "is_name"),
+    ];
+
+    pub fn contains(self, other: WordFlags) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub fn insert(&mut self, other: WordFlags) {
+        self.0 |= other.0;
+    }
+
+    /// The wire names of every set flag, in bit order.
+    pub fn names(self) -> impl Iterator<Item = &'static str> {
+        Self::NAMES
+            .iter()
+            .filter(move |(flag, _)| self.contains(*flag))
+            .map(|(_, name)| *name)
+    }
+}
+
+impl serde::Serialize for WordFlags {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.names())
+    }
+}
 
 /// One headword — a single kanji or reading form of a `RawEntry`, flagged
 /// for the cost model and tagged with the conjugation classes its senses map
@@ -236,6 +294,47 @@ mod tests {
             &[],
         ));
         assert!(!find(&hs, "食べる").classes.is_empty());
+    }
+
+    #[test]
+    fn flags_serialise_as_their_wire_names_in_bit_order() {
+        let mut f = WordFlags::default();
+        f.insert(WordFlags::COMMON);
+        f.insert(WordFlags::PRIMARY);
+        assert_eq!(
+            serde_json::to_string(&f).unwrap(),
+            r#"["primary","common"]"#,
+            "the eight names are what src/types.ts's FlagName declares"
+        );
+        assert_eq!(serde_json::to_string(&WordFlags::default()).unwrap(), "[]");
+    }
+
+    #[test]
+    fn contains_and_insert_are_bitwise() {
+        let mut f = WordFlags::PRIMARY;
+        assert!(f.contains(WordFlags::PRIMARY));
+        assert!(!f.contains(WordFlags::COMMON));
+        f.insert(WordFlags::COMMON);
+        assert!(f.contains(WordFlags::COMMON));
+        assert!(f.contains(WordFlags::PRIMARY));
+    }
+
+    #[test]
+    fn the_eight_wire_names_are_exactly_types_ts_flagname() {
+        let names: Vec<&str> = WordFlags(u16::MAX).names().collect();
+        assert_eq!(
+            names,
+            [
+                "primary",
+                "pronounce",
+                "common_line",
+                "common",
+                "particle",
+                "counter",
+                "top",
+                "is_name"
+            ]
+        );
     }
 
     #[test]

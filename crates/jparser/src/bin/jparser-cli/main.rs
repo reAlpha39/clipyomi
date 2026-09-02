@@ -16,19 +16,15 @@ mod score;
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use clap::error::ErrorKind;
-use clap::{ArgGroup, CommandFactory, Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 use jmdict_source::SOURCE_DIR;
-use jparser::conjugation::ConjugationTable;
-use jparser::index::build::build_from_reader;
 use jparser::index::ensure_dictionary;
 use jparser::index::generations::{
     generation_number, latest, sweep, DEFAULT_KEEP_GENERATIONS, GENERATION_PREFIX,
 };
 use jparser::index::load::Index;
-use jparser::record::WordFlags;
-use jparser::stem::StemOptions;
 use jparser::ParseOptions;
+use jparser::WordFlags;
 
 /// Flags rendered by `lookup`, paired with their display labels.
 const FLAG_LABELS: &[(WordFlags, &str)] = &[
@@ -52,16 +48,6 @@ struct Cli {
     command: Command,
 }
 
-/// Which segmentation engine a subcommand runs.
-///
-/// v1 is the default for all of Phase 1a: the switchover is Phase 1b's, so no
-/// build ships with `conjugation: None`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-enum EngineChoice {
-    V1,
-    V2,
-}
-
 #[derive(Subcommand)]
 enum Command {
     /// Build an index from a JMdict XML file.
@@ -70,14 +56,6 @@ enum Command {
         xml: PathBuf,
         /// Directory to write the index into.
         out: PathBuf,
-        /// Disable the v5 mis-annotation fallback, to measure its effect.
-        /// Meaningless with `--engine v2`, which generates no stems at all.
-        #[arg(long)]
-        no_v5_fallback: bool,
-        /// Segmentation engine the index is built for. `v2` emits headwords
-        /// only: no generated stems, so `verb_type` is always absent.
-        #[arg(long, value_enum, default_value_t = EngineChoice::V1)]
-        engine: EngineChoice,
     },
     /// Open the newest usable index in ROOT, building from a source if needed.
     #[command(group(
@@ -165,9 +143,6 @@ enum Command {
         #[cfg(feature = "mecab")]
         #[arg(long)]
         hints: Option<PathBuf>,
-        /// Segmentation engine. `v2` is the Phase 1a clean-room core.
-        #[arg(long, value_enum, default_value_t = EngineChoice::V1)]
-        engine: EngineChoice,
     },
     /// Score a gold corpus against the current engine: span accuracy and
     /// entry top-1, reported separately.
@@ -184,9 +159,6 @@ enum Command {
         /// Emit the metrics as one JSON object instead of the human form.
         #[arg(long)]
         json: bool,
-        /// Segmentation engine. `v2` is the Phase 1a clean-room core.
-        #[arg(long, value_enum, default_value_t = EngineChoice::V1)]
-        engine: EngineChoice,
     },
     /// Emit the pool sentences where jparser has a segmentation cut Vibrato
     /// does not — the gold corpus's sampling signal.
@@ -226,69 +198,18 @@ enum Command {
         gold: PathBuf,
     },
     /// Convert kana to romaji.
-    Romaji {
-        text: String,
-        /// Apply the particle-only corrections (は to wa, へ to e).
-        #[arg(long)]
-        particle: bool,
-    },
-}
-
-/// Opens the index built for `engine`, and no other.
-///
-/// The two engines assign conjugation ids from different tables and stamp
-/// different fingerprints (`Index::open_with`'s doc comment), so opening a
-/// v2 index through the v1-fingerprint `Index::open` — or vice versa —
-/// either fails loudly on a fingerprint mismatch or, worse, succeeds against
-/// the wrong contract. `main.rs`'s `Parse` command and `score.rs`'s `run`
-/// both go through this single function so the guard `the_two_engines_
-/// cannot_read_each_others_indexes` asserts cannot silently drift out of
-/// sync between the two call sites again (whole-branch review finding 3).
-fn open_for(
-    engine: EngineChoice,
-    dir: &std::path::Path,
-) -> Result<Index, jparser::index::IndexError> {
-    match engine {
-        EngineChoice::V1 => Index::open(dir),
-        EngineChoice::V2 => Index::open_with(dir, jparser::engine::build::fingerprint()),
-    }
+    Romaji { text: String },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().command {
-        Command::BuildIndex {
-            xml,
-            out,
-            no_v5_fallback,
-            engine,
-        } => {
-            if engine == EngineChoice::V2 && no_v5_fallback {
-                Cli::command()
-                    .error(
-                        ErrorKind::ArgumentConflict,
-                        "--no-v5-fallback is meaningless with --engine v2: v2 generates no \
-                         stems at all",
-                    )
-                    .exit();
-            }
+        Command::BuildIndex { xml, out } => {
             let file = BufReader::new(std::fs::File::open(&xml)?);
-            let report = match engine {
-                EngineChoice::V1 => {
-                    let table = ConjugationTable::load_embedded()?;
-                    let opts = StemOptions {
-                        v5_misannotation_fallback: !no_v5_fallback,
-                    };
-                    build_from_reader(file, &table, &opts, &out)?
-                }
-                EngineChoice::V2 => jparser::engine::build::build_from_reader(file, &out)?,
-            };
+            let report = jparser::engine::build::build_from_reader(file, &out)?;
             println!("entries:             {}", report.entries);
             println!("skipped entries:     {}", report.skipped_entries);
             println!("keys:                {}", report.keys);
             println!("records:             {}", report.records);
-            println!("stems (exact):       {}", report.stems.exact_stems);
-            println!("stems (v5 fallback): {}", report.stems.v5_fallback_stems);
-            println!("stems (empty):       {}", report.stems.empty_stems);
             if report.skipped_entries > 0 {
                 eprintln!(
                     "warning: {} malformed entries were skipped",
@@ -302,16 +223,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             source_dir,
             keep,
         } => {
-            let table = ConjugationTable::load_embedded()?;
-            let opts = StemOptions::default();
             // The ArgGroup guarantees exactly one is set, so both real branches
             // are reachable and the third exists only to satisfy the compiler.
             let index = match (&xml, &source_dir) {
-                (Some(xml), _) => ensure_dictionary(&root, &table, &opts, keep, || {
-                    std::fs::File::open(xml).map(BufReader::new)
-                })?,
+                (Some(xml), _) => {
+                    ensure_dictionary(&root, keep, || std::fs::File::open(xml).map(BufReader::new))?
+                }
                 (None, Some(dir)) => {
-                    ensure_dictionary(&root, &table, &opts, keep, || jmdict_source::resolve(dir))?
+                    ensure_dictionary(&root, keep, || jmdict_source::resolve(dir))?
                 }
                 (None, None) => return Err("no source given".into()),
             };
@@ -374,16 +293,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Command::Lookup { index, text } => {
-            let table = ConjugationTable::load_embedded()?;
             let index = Index::open(&index)?;
-            for hit in index.prefixes_of(&text)? {
+            for hit in index.prefixes_of_with(&text, jparser::engine::kana::fold)? {
                 let matched: String = text.chars().take(hit.key_chars).collect();
                 println!("[{matched}] ({} chars)", hit.key_chars);
                 for r in &hit.records {
-                    let verb = match r.verb_type {
-                        Some(vt) => table.types()[vt].name.as_str(),
-                        None => "-",
-                    };
                     let flags = WordFlags(r.flags);
                     let labels: Vec<&str> = FLAG_LABELS
                         .iter()
@@ -394,11 +308,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .entry(r.entry_id)?
                         .and_then(|e| e.senses.first().map(|s| s.glosses.join("; ")))
                         .unwrap_or_default();
-                    println!(
-                        "    {:8} type={verb:8} [{}] {glosses}",
-                        r.surface,
-                        labels.join(",")
-                    );
+                    println!("    {:8} [{}] {glosses}", r.surface, labels.join(","));
                 }
             }
         }
@@ -407,10 +317,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             text,
             #[cfg(feature = "mecab")]
             hints,
-            engine,
         } => {
-            let table = ConjugationTable::load_embedded()?;
-            let index = open_for(engine, &index)?;
+            let index = Index::open(&index)?;
 
             #[cfg(feature = "mecab")]
             let tokenizer = match &hints {
@@ -418,32 +326,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => None,
             };
             #[cfg(feature = "mecab")]
-            let flags = tokenizer.as_ref().map(|t| t.hints(&text));
-            #[cfg(feature = "mecab")]
-            let hints: Option<&dyn jparser::BoundaryHints> =
-                flags.as_ref().map(|f| f as &dyn jparser::BoundaryHints);
-            #[cfg(not(feature = "mecab"))]
-            let hints: Option<&dyn jparser::BoundaryHints> = None;
-
-            // v2's own boundary source, from the same tokenizer -- mirrors
-            // `score.rs`'s Task 16a wiring so `--engine v2 --hints` behaves
-            // the same way here as it does under `score` (finding 3).
-            #[cfg(feature = "mecab")]
             let bound_set = tokenizer.as_ref().map(|t| t.boundaries(&text));
             #[cfg(feature = "mecab")]
-            let bounds: Option<&dyn jparser::engine::Boundaries> =
-                bound_set.as_ref().map(|b| b as &dyn jparser::engine::Boundaries);
+            let bounds: Option<&dyn jparser::engine::Boundaries> = bound_set
+                .as_ref()
+                .map(|b| b as &dyn jparser::engine::Boundaries);
             #[cfg(not(feature = "mecab"))]
             let bounds: Option<&dyn jparser::engine::Boundaries> = None;
 
             let opts = ParseOptions::default();
-            let result = match engine {
-                EngineChoice::V1 => jparser::parse(&index, &table, &text, &opts, hints)?,
-                EngineChoice::V2 => {
-                    let v2_table = jparser::engine::table::Table::new();
-                    jparser::engine::parse_v2(&index, &v2_table, &text, &opts, bounds)?
-                }
-            };
+            let table = jparser::engine::table::Table::new();
+            let result = jparser::parse(&index, &table, &text, &opts, bounds)?;
             for seg in &result.segments {
                 if !seg.matched {
                     println!(
@@ -480,14 +373,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(feature = "mecab")]
             hints,
             json,
-            engine,
         } => score::run(
             &index,
             &gold,
             #[cfg(feature = "mecab")]
             hints.as_deref(),
             json,
-            engine,
         )?,
         #[cfg(feature = "mecab")]
         Command::Diff {
@@ -502,14 +393,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             disagreements,
             gold,
         } => label::run(&index, &disagreements, &gold)?,
-        Command::Romaji { text, particle } => {
-            let out = jparser::romaji::to_romaji(&text);
-            let out = if particle {
-                jparser::romaji::apply_particle_fixup(&out)
-            } else {
-                out
-            };
-            println!("{out}");
+        Command::Romaji { text } => {
+            println!("{}", jparser::engine::romaji::to_romaji(&text));
         }
     }
     Ok(())

@@ -21,12 +21,12 @@
 
 use std::collections::HashMap;
 
+use crate::engine::flags::WordFlags;
 use crate::engine::kana;
 use crate::engine::table::{classes_for_pos, ChainHit, Table, CLASSES};
 use crate::engine::{ClassId, ConjStep};
 use crate::index::load::Index;
 use crate::index::{EntryData, IndexError, StoredRecord};
-use crate::record::WordFlags;
 
 /// Longest deinflection chain `chains_ending_at` is asked to search, in
 /// characters consumed from a span's tail. Set from the corpus's deepest

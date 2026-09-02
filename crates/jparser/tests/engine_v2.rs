@@ -12,11 +12,10 @@
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-use jparser::record::WordFlags;
+use jparser::WordFlags;
 
 fn open_v2(dir: &Path) -> jparser::index::load::Index {
-    jparser::index::load::Index::open_with(dir, jparser::engine::build::fingerprint())
-        .expect("open v2 index")
+    jparser::index::load::Index::open(dir).expect("open v2 index")
 }
 
 const FIXTURE: &str = include_str!("fixtures/jmdict_subset.xml");
@@ -35,62 +34,29 @@ fn build_v2(dir: &Path) {
 }
 
 #[test]
-fn a_v2_index_opens_and_carries_no_stem_records() {
+fn a_v2_index_opens_under_the_engines_fingerprint() {
     let dir = scratch("build");
     build_v2(&dir);
-    let index = jparser::index::load::Index::open_with(&dir, jparser::engine::build::fingerprint())
-        .expect("open v2 index");
-    assert!(index.entry_count() > 0);
-    for hit in index.prefixes_of("東京都").expect("walk") {
-        for r in &hit.records {
-            assert!(r.verb_type.is_none(), "v2 emits no generated stems");
-        }
-    }
+    assert!(open_v2(&dir).entry_count() > 0);
 }
 
 #[test]
-fn the_two_engines_cannot_read_each_others_indexes() {
-    // The fingerprint guard, doing exactly what it exists for.
-    let v2_dir = scratch("v2-for-v1");
-    build_v2(&v2_dir);
-
-    let table = jparser::conjugation::ConjugationTable::load_embedded().expect("v1 table");
-    let v1_dir = scratch("v1-for-v2");
-    jparser::index::build::build_from_reader(
-        BufReader::new(FIXTURE.as_bytes()),
-        &table,
-        &jparser::stem::StemOptions::default(),
-        &v1_dir,
-    )
-    .expect("v1 build");
-
-    assert_ne!(
-        jparser::engine::build::fingerprint(),
-        jparser::conjugation::embedded_asset_fingerprint(),
-        "the two tables must not collide, or the guard is vacuous"
-    );
-
-    let err = jparser::index::load::Index::open(&v2_dir)
-        .expect_err("v1's fingerprint must not open a v2-built index");
+fn an_index_built_under_another_fingerprint_is_rejected() {
+    // The fingerprint guard, doing exactly what it exists for: a table
+    // regeneration changes every class id an index stores, and `Index::open`
+    // must refuse the stale index rather than misresolve classes silently.
+    let dir = scratch("wrong-fingerprint");
+    build_v2(&dir);
+    let wrong = jparser::engine::build::fingerprint() ^ 1;
+    let err = jparser::index::load::Index::open_with(&dir, wrong)
+        .expect_err("a different fingerprint must not open this index");
     assert!(
         matches!(err, jparser::index::IndexError::ConjugationMismatch { .. }),
         "expected a fingerprint mismatch, got {err:?}"
     );
-
-    let err =
-        jparser::index::load::Index::open_with(&v1_dir, jparser::engine::build::fingerprint())
-            .expect_err("v2's fingerprint must not open a v1-built index");
-    assert!(
-        matches!(err, jparser::index::IndexError::ConjugationMismatch { .. }),
-        "expected a fingerprint mismatch, got {err:?}"
-    );
+    open_v2(&dir);
 }
 
-// `cands` opens with `open_v2` (`Index::open_with` plus the v2 fingerprint)
-// rather than the bare `Index::open` the task-8 brief's snippet shows:
-// `Index::open` checks the index against v1's conjugation fingerprint, and a
-// v2-built index fails that guard by design (see the test above) -- v1's
-// open can never read a v2 index.
 fn cands(dir: &Path, text: &str) -> Vec<Vec<jparser::engine::lex::Candidate>> {
     let index = open_v2(dir);
     let table = jparser::engine::table::Table::new();
@@ -134,7 +100,7 @@ fn a_kana_unified_match_is_marked_inexact() {
     assert!(!hit.exact, "はい (hiragana) != the raw katakana query ハイ");
 }
 
-/// Opens a fresh v2 index, builds a fresh `Table`, and runs `parse_v2` with
+/// Opens a fresh index, builds a fresh `Table`, and runs `parse` with
 /// whatever boundary source `bounds` names.
 fn parse_v2_with_bounds(
     dir: &Path,
@@ -143,8 +109,14 @@ fn parse_v2_with_bounds(
 ) -> jparser::ParseResult {
     let index = open_v2(dir);
     let table = jparser::engine::table::Table::new();
-    jparser::engine::parse_v2(&index, &table, text, &jparser::ParseOptions::default(), bounds)
-        .expect("parse_v2")
+    jparser::parse(
+        &index,
+        &table,
+        text,
+        &jparser::ParseOptions::default(),
+        bounds,
+    )
+    .expect("parse")
 }
 
 /// `parse_v2_with_bounds` with no boundary source -- the shape every assemble

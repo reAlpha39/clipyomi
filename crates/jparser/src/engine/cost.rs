@@ -26,10 +26,10 @@
 //! surrounding context prices no differently than any other match. Not
 //! implemented, not forgotten.
 
+use crate::engine::flags::WordFlags;
 use crate::engine::kana;
 use crate::engine::lex::Candidate;
 use crate::engine::Boundaries;
-use crate::record::WordFlags;
 
 /// Cost of one covered character in a matched span.
 ///

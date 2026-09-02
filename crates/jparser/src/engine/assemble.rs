@@ -23,13 +23,13 @@
 //! furigana the reader has no reason to doubt.
 
 use crate::engine::chain;
+use crate::engine::flags::WordFlags;
 use crate::engine::label;
 use crate::engine::lattice::Step;
 use crate::engine::lex::Candidate;
 use crate::engine::table::CLASSES;
 use crate::index::load::Index;
 use crate::index::{EntryData, IndexError, SenseData};
-use crate::record::WordFlags;
 use crate::{Entry, Segment};
 
 /// Turn one step of the winning path into the [`Segment`] the application

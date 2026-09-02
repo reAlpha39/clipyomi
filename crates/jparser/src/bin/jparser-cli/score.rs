@@ -27,8 +27,6 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::path::Path;
 
-use crate::EngineChoice;
-use jparser::conjugation::ConjugationTable;
 use jparser::index::load::Index;
 use jparser::{ParseOptions, ParseResult};
 
@@ -310,14 +308,9 @@ pub fn run(
     gold_path: &Path,
     #[cfg(feature = "mecab")] hints: Option<&Path>,
     json: bool,
-    engine: EngineChoice,
 ) -> Result<(), Box<dyn Error>> {
-    let table = ConjugationTable::load_embedded()?;
-    let v2_table = jparser::engine::table::Table::new();
-    // Shared with `main.rs`'s `Parse` command (finding 3) so the v1/v2
-    // fingerprint guard can't drift out of sync between the two call sites
-    // again -- see `crate::open_for`'s doc comment.
-    let index = crate::open_for(engine, index_dir)?;
+    let table = jparser::engine::table::Table::new();
+    let index = Index::open(index_dir)?;
     let (records, superseded) = read_gold(gold_path)?;
 
     #[cfg(feature = "mecab")]
@@ -344,32 +337,18 @@ pub fn run(
     for record in &records {
         validate(record)?;
         ensure_ent_seqs_exist(&index, &mut ent_seq_cache, record)?;
-        let parsed = match engine {
-            EngineChoice::V1 => {
-                #[cfg(feature = "mecab")]
-                let flags = tokenizer.as_ref().map(|t| t.hints(&record.text));
-                #[cfg(feature = "mecab")]
-                let hints: Option<&dyn jparser::BoundaryHints> =
-                    flags.as_ref().map(|f| f as &dyn jparser::BoundaryHints);
-                #[cfg(not(feature = "mecab"))]
-                let hints: Option<&dyn jparser::BoundaryHints> = None;
-                jparser::parse(&index, &table, &record.text, &opts, hints)?
-            }
-            EngineChoice::V2 => {
-                // The hints-off / hints-on pair for v2 (Task 16a): with
-                // `--hints`, `bounds` is the tokenizer's real boundary set;
-                // without it, `None`, so every DP constraint lifts (`cost.rs`
-                // `is_allowed`).
-                #[cfg(feature = "mecab")]
-                let bound_set = tokenizer.as_ref().map(|t| t.boundaries(&record.text));
-                #[cfg(feature = "mecab")]
-                let bounds: Option<&dyn jparser::engine::Boundaries> =
-                    bound_set.as_ref().map(|b| b as &dyn jparser::engine::Boundaries);
-                #[cfg(not(feature = "mecab"))]
-                let bounds: Option<&dyn jparser::engine::Boundaries> = None;
-                jparser::engine::parse_v2(&index, &v2_table, &record.text, &opts, bounds)?
-            }
-        };
+        // The hints-off / hints-on pair (Task 16a): with `--hints`, `bounds`
+        // is the tokenizer's real boundary set; without it, `None`, so every
+        // DP constraint lifts (`cost.rs`'s `is_allowed`).
+        #[cfg(feature = "mecab")]
+        let bound_set = tokenizer.as_ref().map(|t| t.boundaries(&record.text));
+        #[cfg(feature = "mecab")]
+        let bounds: Option<&dyn jparser::engine::Boundaries> = bound_set
+            .as_ref()
+            .map(|b| b as &dyn jparser::engine::Boundaries);
+        #[cfg(not(feature = "mecab"))]
+        let bounds: Option<&dyn jparser::engine::Boundaries> = None;
+        let parsed = jparser::parse(&index, &table, &record.text, &opts, bounds)?;
         accumulate(record, &parsed, &mut m);
     }
     m.by_decision
@@ -387,7 +366,7 @@ pub fn run(
 mod tests {
     use super::*;
     use crate::corpus::{GoldRecord, GoldSpan};
-    use jparser::record::WordFlags;
+    use jparser::WordFlags;
     use jparser::{Entry, ParseResult, Segment};
 
     fn gold(text: &str, spans: &[(usize, usize, Option<u32>)]) -> GoldRecord {
@@ -740,14 +719,8 @@ mod tests {
             "<sense><pos>&n;</pos><gloss>ah</gloss></sense></entry>",
             "</JMdict>",
         );
-        let table = ConjugationTable::load_embedded().expect("embedded table");
-        jparser::index::build::build_from_reader(
-            XML.as_bytes(),
-            &table,
-            &jparser::stem::StemOptions::default(),
-            dir,
-        )
-        .expect("the fixture must build");
+        jparser::engine::build::build_from_reader(XML.as_bytes(), dir)
+            .expect("the fixture must build");
         Index::open(dir).expect("open the built index")
     }
 

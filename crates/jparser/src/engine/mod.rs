@@ -10,11 +10,10 @@
 // clean-room discipline this file was written under. The SPDX header of §9.2
 // is written in Phase 1b, when the crate stops being GPL-2.0-only.
 
-//! The Engine v2 segmentation core.
+//! The segmentation engine. `crate::parse` is this module's `parse`.
 //!
-//! Reachable only through `parse_v2` and `jparser-cli --engine v2` for the
-//! whole of Phase 1a; `parse` remains the default path. The switchover is
-//! Phase 1b's, so that no build ships without a conjugation label.
+//! Written clean-room for ClipYomi (master plan §3.5); the Phase 1a design
+//! records its cost model and the Phase 1b-i design its label formatter.
 
 use crate::index::load::Index;
 use crate::{ParseError, ParseOptions, ParseResult};
@@ -66,10 +65,11 @@ pub struct ConjStep {
     pub aux: Option<&'static str>,
 }
 
-/// Parse `text` with the Engine v2 core.
+/// Parse `text` against an already-open index — the crate's public entry
+/// point, re-exported as `jparser::parse`.
 ///
-/// Signature-compatible with [`crate::parse`] apart from the boundary
-/// parameter, which is a constraint source rather than an advisory hint.
+/// `bounds` is a tokenizer's boundary set, applied as a hard constraint:
+/// no span may end strictly inside a token. `None` lifts every constraint.
 ///
 /// Three stages, each already a separate module: [`lex::candidates`] finds
 /// every dictionary match at every span, [`lattice::best_path`] chooses the
@@ -78,7 +78,7 @@ pub struct ConjStep {
 ///
 /// [`Segment`]: crate::Segment
 /// [`Entry`]: crate::Entry
-pub fn parse_v2(
+pub fn parse(
     index: &Index,
     table: &table::Table,
     text: &str,

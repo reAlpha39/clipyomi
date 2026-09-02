@@ -24,7 +24,6 @@
 use std::error::Error;
 use std::path::Path;
 
-use jparser::conjugation::ConjugationTable;
 use jparser::index::load::Index;
 use jparser::{ParseOptions, Segment};
 
@@ -189,7 +188,7 @@ pub fn run(
     all: bool,
     limit: Option<usize>,
 ) -> Result<(), Box<dyn Error>> {
-    let table = ConjugationTable::load_embedded()?;
+    let table = jparser::engine::table::Table::new();
     let index = Index::open(index_dir)?;
     let file = std::fs::File::open(hints)
         .map_err(|e| format!("opening the vibrato dictionary at {}: {e}", hints.display()))?;

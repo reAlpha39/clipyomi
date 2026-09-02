@@ -17,9 +17,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use jparser::conjugation::ConjugationTable;
-use jparser::index::build::build_from_reader;
-use jparser::stem::StemOptions;
+use jparser::engine::build::build_from_reader;
 
 const BIN: &str = env!("CARGO_BIN_EXE_jparser-cli");
 const FIXTURE: &str = include_str!("fixtures/jmdict_mini.xml");
@@ -34,14 +32,7 @@ fn scratch(name: &str) -> PathBuf {
 fn index_dir(dir: &Path) -> PathBuf {
     let index = dir.join("index");
     std::fs::create_dir_all(&index).unwrap();
-    let table = ConjugationTable::load_embedded().unwrap();
-    build_from_reader(
-        std::io::Cursor::new(FIXTURE),
-        &table,
-        &StemOptions::default(),
-        &index,
-    )
-    .expect("the mini fixture must build");
+    build_from_reader(std::io::Cursor::new(FIXTURE), &index).expect("the mini fixture must build");
     index
 }
 

@@ -15,9 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use jparser::conjugation::ConjugationTable;
-use jparser::index::build::build_from_reader;
-use jparser::stem::StemOptions;
+use jparser::engine::build::build_from_reader;
 
 /// Cargo sets this for integration tests of a package that declares the bin.
 const BIN: &str = env!("CARGO_BIN_EXE_jparser-cli");
@@ -30,14 +28,7 @@ fn index_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let table = ConjugationTable::load_embedded().unwrap();
-    build_from_reader(
-        std::io::Cursor::new(FIXTURE),
-        &table,
-        &StemOptions::default(),
-        &dir,
-    )
-    .expect("the mini fixture must build");
+    build_from_reader(std::io::Cursor::new(FIXTURE), &dir).expect("the mini fixture must build");
     dir
 }
 
@@ -62,15 +53,9 @@ fn parse(dir: &Path, text: &str) -> String {
 
 #[test]
 fn prints_a_conjugated_verb_with_its_reconstructed_reading() {
-    // 言う is tagged v5r in the fixture but ends in う, so its only stem comes
-    // from the v5 mis-annotation fallback under v5u: surface "言". Matching
-    // "言った" is then v5u Stem "った" -> v-ta-stem Past "" (empty suffix), a
-    // two-link chain whose label renders as "Past" (the Stem link is skipped
-    // at every depth, GetConjString / contract §6.2).
-    //
-    // headword  = "言" + v5u's remove-suffix "う"          = 言う
-    // reading   = strip("いう", "う") + text[1..3]         = い + った = いった
-    // glosses   = first sense of entry 1000010
+    // 言う is `v5u`; 言っ is 五段・ワ行促音便's 連用タ接続 and た its past
+    // auxiliary, so the label renders as "Past". The reading strips う from
+    // いう and appends った; the glosses are the first sense of entry 1000010.
     let dir = index_dir("cli-parse-verb");
     assert_eq!(
         parse(&dir, "言った"),
@@ -81,42 +66,14 @@ fn prints_a_conjugated_verb_with_its_reconstructed_reading() {
 
 #[test]
 fn prints_an_unconjugated_particle_and_coalesces_the_skipped_tail() {
-    // は is a kana-only entry, so `EntryData::readings` is empty (contract §2)
-    // and `reconstruct_reading` returns None at STEP 2 — not step 1: a
-    // kana-only entry's record gets PRIMARY, never PRONOUNCE
-    // (record.rs:140-148). So reading is "-", not "は". "zz" is two skipped
-    // chars, which the backtrack coalesces into one unmatched span (§6.3).
+    // は is kana-only, so `EntryData::readings` is empty and the reading is
+    // "-", not "は". "zz" is two unmatched characters, coalesced into one
+    // span.
     let dir = index_dir("cli-parse-particle");
     assert_eq!(
         parse(&dir, "はzz"),
         "start=0 len=1 は matched reading=-\n\
          \x20   は (-) [-] topic marker\n\
          start=1 len=2 zz unmatched\n"
-    );
-}
-
-/// Whole-branch review finding 3: `--engine v2` against a v1-built index
-/// used to call `Index::open` (the v1 fingerprint) unconditionally and hand
-/// the result to `parse_v2` -- silently wrong output, not a rejection. Both
-/// commands now route through `open_for`, so this must fail loudly instead.
-#[test]
-fn parse_engine_v2_rejects_a_v1_built_index() {
-    let dir = index_dir("cli-parse-v2-against-v1-index");
-    let out = Command::new(BIN)
-        .arg("parse")
-        .arg(&dir)
-        .arg("あ")
-        .arg("--engine")
-        .arg("v2")
-        .output()
-        .expect("jparser-cli must be runnable");
-    assert!(
-        !out.status.success(),
-        "a v1 index must not open under --engine v2"
-    );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("ConjugationMismatch"),
-        "expected a fingerprint mismatch, got: {stderr}"
     );
 }

@@ -27,7 +27,6 @@ use std::error::Error;
 use std::io::{BufRead, Write};
 use std::path::Path;
 
-use jparser::conjugation::ConjugationTable;
 use jparser::index::load::Index;
 use jparser::{ParseOptions, ParseResult};
 
@@ -76,7 +75,7 @@ pub fn parse_cuts(line: &str, chars: usize) -> Result<Vec<usize>, String> {
 /// covers that case.
 pub fn candidates(
     index: &Index,
-    table: &ConjugationTable,
+    table: &jparser::engine::table::Table,
     text: &str,
     start: usize,
     len: usize,
@@ -129,7 +128,7 @@ fn ask(prompt: &str) -> Option<String> {
 
 /// Adjudicate `diff_path` into `gold_path`, appending as it goes.
 pub fn run(index_dir: &Path, diff_path: &Path, gold_path: &Path) -> Result<(), Box<dyn Error>> {
-    let table = ConjugationTable::load_embedded()?;
+    let table = jparser::engine::table::Table::new();
     let index = Index::open(index_dir)?;
     let records = read_diffs(diff_path)?;
     let total = records.len();
@@ -250,15 +249,15 @@ mod tests {
     /// Pins the tautology guard directly: two candidates on one span, built
     /// so jparser's own ranked order and ent_seq-ascending order disagree.
     ///
-    /// A plain tie is not discriminating here — `rank.rs`'s `sort_matches`
-    /// groups by `entry_id` first (Pass A), so two candidates with identical
+    /// A plain tie is not discriminating here — `engine::assemble::order`
+    /// breaks its last tie on `entry_id`, so two candidates with identical
     /// flags already come back ent_seq-ascending with no help from
     /// `candidates`'s own sort. `re_pri` on the *higher* ent_seq breaks that:
-    /// it marks that entry `COMMON`, which `RANK_FLAG_MASK` ranks ahead of an
-    /// unmarked entry, so jparser's ranked order becomes `[2000002, 2000001]`
-    /// while ent_seq order is `[2000001, 2000002]`. Only `candidates`'s
+    /// it marks that entry `COMMON`, which `order` ranks ahead of an unmarked
+    /// entry, so jparser's ranked order becomes `[2000002, 2000001]` while
+    /// ent_seq order is `[2000001, 2000002]`. Only `candidates`'s
     /// `out.sort_by_key(|(id, _)| *id)` produces the latter; delete that line
-    /// and this test fails (verified by hand — see the Task 7 report).
+    /// and this test fails.
     #[test]
     fn candidates_are_sorted_by_ent_seq_not_by_jparsers_rank() {
         const XML: &str = concat!(
@@ -273,16 +272,10 @@ mod tests {
             "</JMdict>",
         );
 
-        let table =
-            ConjugationTable::load_embedded().expect("the embedded conjugation table must load");
+        let table = jparser::engine::table::Table::new();
         let dir = scratch("ent-seq-not-rank");
-        let report = jparser::index::build::build_from_reader(
-            XML.as_bytes(),
-            &table,
-            &jparser::stem::StemOptions::default(),
-            &dir,
-        )
-        .expect("the fixture must build");
+        let report = jparser::engine::build::build_from_reader(XML.as_bytes(), &dir)
+            .expect("the fixture must build");
         assert_eq!(
             report.skipped_entries, 0,
             "the fixture must not be malformed"

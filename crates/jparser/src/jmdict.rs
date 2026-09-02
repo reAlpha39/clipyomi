@@ -366,9 +366,9 @@ mod tests {
 
     #[test]
     fn resolves_pos_entities_to_codes_not_descriptions() {
-        // The whole point: we need "v5r", not "Godan verb with `ru' ending",
-        // because the code is what matches conjugation type names.
-        assert_eq!(entries()[0].senses[0].pos, vec!["v5r"]);
+        // The whole point: we need "v5u", not "Godan verb with `u' ending",
+        // because the code is what matches conjugation class names.
+        assert_eq!(entries()[0].senses[0].pos, vec!["v5u"]);
         assert_eq!(entries()[1].senses[0].pos, vec!["prt"]);
         assert_eq!(entries()[2].senses[0].pos, vec!["adj-i"]);
     }
