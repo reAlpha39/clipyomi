@@ -10,6 +10,7 @@
 //! records its cost model and the Phase 1b-i design its label formatter.
 
 use crate::index::load::Index;
+use crate::index::IndexError;
 use crate::{ParseError, ParseOptions, ParseResult};
 
 pub mod assemble;
@@ -63,12 +64,15 @@ pub struct ConjStep {
 /// point, re-exported as `jparser::parse`.
 ///
 /// `bounds` is a tokenizer's boundary set, applied as a hard constraint:
-/// no span may end strictly inside a token. `None` lifts every constraint.
+/// no span may start or end strictly inside a token. `None` lifts every
+/// constraint.
 ///
 /// Three stages, each already a separate module: [`lex::candidates`] finds
-/// every dictionary match at every span, [`lattice::best_path`] chooses the
-/// min-cost cover among them, and [`assemble::to_segment`] resolves each
-/// step of that cover into the public [`Segment`]/[`Entry`] shape.
+/// every dictionary match at every span, [`lattice::k_best`] chooses the
+/// `opts.readings` cheapest distinct covers among them, and
+/// [`assemble::to_segment`] resolves each step of each cover into the
+/// public [`Segment`]/[`Entry`] shape. The cheapest cover is
+/// `ParseResult::segments`; the rest are `alternatives`.
 ///
 /// [`Segment`]: crate::Segment
 /// [`Entry`]: crate::Entry
@@ -79,15 +83,25 @@ pub fn parse(
     opts: &ParseOptions,
     bounds: Option<&dyn Boundaries>,
 ) -> Result<ParseResult, ParseError> {
-    let _ = opts;
     let chars: Vec<char> = text.chars().collect();
     let by_start = lex::candidates(index, table, &chars)?;
-    let path = lattice::best_path(&chars, &by_start, bounds);
-    let mut segments = Vec::with_capacity(path.len());
-    for step in &path {
-        segments.push(assemble::to_segment(index, &chars, step, &by_start)?);
+    let mut paths = lattice::k_best(&chars, &by_start, bounds, opts.readings);
+    let assemble = |path: &[lattice::Step]| -> Result<Vec<crate::Segment>, IndexError> {
+        path.iter()
+            .map(|step| assemble::to_segment(index, &chars, step, &by_start))
+            .collect()
+    };
+    // `k_best` always returns at least one path, an empty one for empty
+    // input. `remove`, not `swap_remove`: the rest must stay in cost order.
+    let segments = assemble(&paths.remove(0))?;
+    let mut alternatives = Vec::with_capacity(paths.len());
+    for path in &paths {
+        alternatives.push(assemble(path)?);
     }
-    Ok(ParseResult { segments })
+    Ok(ParseResult {
+        segments,
+        alternatives,
+    })
 }
 
 #[cfg(test)]

@@ -26,13 +26,35 @@ pub use crate::index::SenseData as Sense;
 
 /// Parse-time options.
 ///
-/// Deliberately empty: tokenizer boundaries arrive through `parse`'s `bounds`
-/// parameter, and gloss filters and furigana modes are Phase 3 display
-/// concerns above this crate. `#[non_exhaustive]` so adding a field later
-/// is not a breaking change; construct with `ParseOptions::default()`.
-#[derive(Debug, Clone, Default)]
+/// `readings` is how many distinct segmentations `parse` returns: the best
+/// as `ParseResult::segments`, the rest as `ParseResult::alternatives`. The
+/// default is one, so a caller that never asks sees exactly what it always
+/// did. Gloss filters and furigana modes are Phase 3 display concerns above
+/// this crate. `#[non_exhaustive]` so adding a field later is not a breaking
+/// change; construct with `ParseOptions::default()` or
+/// [`ParseOptions::with_readings`].
+#[derive(Debug, Clone)]
 #[non_exhaustive]
-pub struct ParseOptions {}
+pub struct ParseOptions {
+    /// Distinct readings to return, at least 1.
+    pub readings: usize,
+}
+
+impl Default for ParseOptions {
+    fn default() -> Self {
+        Self { readings: 1 }
+    }
+}
+
+impl ParseOptions {
+    /// `readings` distinct segmentations, cheapest first; anything below 1
+    /// reads as 1.
+    pub fn with_readings(readings: usize) -> Self {
+        Self {
+            readings: readings.max(1),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ParseResult {
@@ -40,6 +62,11 @@ pub struct ParseResult {
     /// character belongs to exactly one segment, matched or not. Empty iff
     /// the input is empty.
     pub segments: Vec<Segment>,
+    /// Readings 2..k in cost order, each a contiguous cover like `segments`
+    /// and distinct from it and from each other by the spans they match
+    /// (Phase 2 design §3, §4). Empty unless the caller asked for more than
+    /// one reading through [`ParseOptions::with_readings`].
+    pub alternatives: Vec<Vec<Segment>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]

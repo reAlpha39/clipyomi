@@ -852,6 +852,7 @@ fn parse_result_serializes_to_the_documented_wire_shape() {
                 steps: Vec::new(),
             }],
         }],
+        alternatives: Vec::new(),
     };
 
     let json = serde_json::to_value(&result).expect("serialize");
@@ -871,6 +872,8 @@ fn parse_result_serializes_to_the_documented_wire_shape() {
     // that value would pass even if the field silently stopped
     // serializing and fell back to its default.
     assert_eq!(entry["entry_id"], 1000010);
+    // Present and empty at the default: the webview reads it unconditionally.
+    assert_eq!(json["alternatives"].as_array().map(Vec::len), Some(0));
 }
 
 /// An unmatched run must still be a well-formed segment: the sentence pane
@@ -886,6 +889,7 @@ fn an_unmatched_segment_serializes_with_null_reading_and_no_entries() {
             matched: false,
             entries: vec![],
         }],
+        alternatives: Vec::new(),
     };
 
     let json = serde_json::to_value(&result).expect("serialize");
@@ -895,4 +899,131 @@ fn an_unmatched_segment_serializes_with_null_reading_and_no_entries() {
         .as_array()
         .expect("array")
         .is_empty());
+}
+
+// Phase 2: a private four-entry fixture on which 東京都 has exactly three
+// readings, so `k_best`'s order and its dominance filter are both visible
+// through `parse`. Private for the reason `KURU_FIXTURE` is.
+const TOKYO_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+]>
+<JMdict>
+<entry><ent_seq>1000100</ent_seq><k_ele><keb>東京都</keb></k_ele><r_ele><reb>とうきょうと</reb></r_ele><sense><pos>&n;</pos><gloss>Tokyo Metropolis</gloss></sense></entry>
+<entry><ent_seq>1000110</ent_seq><k_ele><keb>東京</keb></k_ele><r_ele><reb>とうきょう</reb></r_ele><sense><pos>&n;</pos><gloss>Tokyo</gloss></sense></entry>
+<entry><ent_seq>1000120</ent_seq><k_ele><keb>京都</keb></k_ele><r_ele><reb>きょうと</reb></r_ele><sense><pos>&n;</pos><gloss>Kyoto</gloss></sense></entry>
+<entry><ent_seq>1000130</ent_seq><k_ele><keb>都</keb></k_ele><r_ele><reb>みやこ</reb></r_ele><sense><pos>&n;</pos><gloss>capital</gloss></sense></entry>
+</JMdict>
+"#;
+
+fn parse_tokyo(name: &str, readings: usize) -> jparser::ParseResult {
+    let dir = scratch(name);
+    jparser::engine::build::build_from_reader(BufReader::new(TOKYO_FIXTURE.as_bytes()), &dir)
+        .expect("v2 build");
+    let index = open_v2(&dir);
+    let table = jparser::engine::table::Table::new();
+    jparser::parse(
+        &index,
+        &table,
+        "東京都",
+        &jparser::ParseOptions::with_readings(readings),
+        None,
+    )
+    .expect("parse")
+}
+
+fn surfaces(segments: &[jparser::Segment]) -> Vec<(&str, bool)> {
+    segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect()
+}
+
+#[test]
+fn three_readings_come_out_in_cost_order_with_dominated_ones_dropped() {
+    let r = parse_tokyo("tokyo-three", 3);
+    assert_eq!(surfaces(&r.segments), [("東京都", true)]);
+    assert_eq!(r.alternatives.len(), 2);
+    assert_eq!(surfaces(&r.alternatives[0]), [("東京", true), ("都", true)]);
+    // 東 has no entry here, so leaving it unmatched is the only way to read
+    // 京都. 東京 + unmatched 都 is absent: 東京 + 都 is cheaper and matches
+    // everything it does.
+    assert_eq!(
+        surfaces(&r.alternatives[1]),
+        [("東", false), ("京都", true)]
+    );
+}
+
+#[test]
+fn the_default_options_return_no_alternatives_and_the_same_top_reading() {
+    let one = parse_tokyo("tokyo-one", 1);
+    let three = parse_tokyo("tokyo-three-again", 3);
+    assert!(one.alternatives.is_empty());
+    assert_eq!(one.segments, three.segments);
+}
+
+#[test]
+fn every_alternative_is_a_contiguous_cover() {
+    let r = parse_tokyo("tokyo-cover", 3);
+    assert!(!r.alternatives.is_empty());
+    for alt in &r.alternatives {
+        let mut at = 0;
+        for s in alt {
+            assert_eq!(s.start, at);
+            at += s.len;
+        }
+        assert_eq!(at, 3);
+    }
+}
+
+/// Global constraint: asking for more readings never moves the first one.
+/// The eight cells prove it on the gold corpus; this proves it on every
+/// sentence the crate's own corpus holds, without a release build.
+#[test]
+fn asking_for_readings_never_moves_the_top_reading_on_the_corpus() {
+    let dir = scratch("readings-invariant");
+    build_v2(&dir);
+    let index = open_v2(&dir);
+    let table = jparser::engine::table::Table::new();
+    for text in sentences() {
+        let one = jparser::parse(
+            &index,
+            &table,
+            text,
+            &jparser::ParseOptions::default(),
+            None,
+        )
+        .expect("parse");
+        let three = jparser::parse(
+            &index,
+            &table,
+            text,
+            &jparser::ParseOptions::with_readings(3),
+            None,
+        )
+        .expect("parse");
+        assert_eq!(one.segments, three.segments, "{text}");
+    }
+}
+
+/// The wire shape of `alternatives`: an array of segment arrays, the same
+/// segment shape `segments` uses, so `src/types.ts` needs one line.
+#[test]
+fn alternatives_serialize_as_an_array_of_segment_arrays() {
+    let seg = |start: usize, len: usize, surface: &str| jparser::Segment {
+        start,
+        len,
+        surface: surface.to_string(),
+        reading: None,
+        matched: true,
+        entries: vec![],
+    };
+    let result = jparser::ParseResult {
+        segments: vec![seg(0, 3, "東京都")],
+        alternatives: vec![vec![seg(0, 2, "東京"), seg(2, 1, "都")]],
+    };
+    let json = serde_json::to_value(&result).expect("serialize");
+    assert_eq!(json["alternatives"].as_array().map(Vec::len), Some(1));
+    assert_eq!(json["alternatives"][0][1]["surface"], "都");
+    assert_eq!(json["alternatives"][0][1]["start"], 2);
 }
