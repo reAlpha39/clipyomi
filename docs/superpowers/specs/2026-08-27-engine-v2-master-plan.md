@@ -261,6 +261,13 @@ against JMdict. Whichever route is taken, tokenizer N-best is a **candidate
 generator** feeding this project's ranking, not the answer itself. That is why
 §7 keeps a DP under all three.
 
+**Route taken at Phase 2: own k-shortest-path over the Phase 1 DP.** The
+other two routes enumerate tokenizer morphemes over IPADIC, and since Phase
+1a's design §6.1 hints supply boundaries only, there is no tokenizer lattice
+in the engine to take an N-best from. The lattice module doc had promised the
+shape — swap the single winner for a bounded list — and that is what landed
+(Phase 2 design §2.3, §3).
+
 ### 4.2 The DP is already most of a k-best solver
 
 `segment.rs` is a min-cost path over a `best[]` array. K-shortest-path is a
@@ -332,6 +339,12 @@ So the engine keeps two objectives. The arbitration rule between them:
   mode Phase 0 must measure rather than assume: the corpus sampler (§5.1) exists
   to find these cases, and Phase 2's k-best is the escape hatch that surfaces the
   suppressed reading to the user instead of guessing on their behalf.
+
+  The escape hatch has a measured limit: hints on, 63 gold spans in the Phase
+  0 corpus are suppressed by `is_allowed` itself — they exist as candidates
+  and no path may use them — and k-best over the constrained lattice reaches
+  none of them. Phase 2 kept alternates on the constrained lattice and
+  recorded the 63 as the constraint's price (Phase 2 design §2.3).
 
 If Phase 0 shows tokenizer-wrong cases are common enough to hurt span accuracy,
 the constraint softens to a large-but-finite penalty and the tuning happens
@@ -557,9 +570,23 @@ this leaves is scoped, not total: `東京都` is tagged `&n;`, not `&exp;`, so
 this signal was never going to reach it — the noun-compound subclass needs a
 genuinely different signal.
 
-**Oracle@k** joins in Phase 2 — is the gold parse present anywhere in the top-k
-whole-sentence readings? It measures whether k-best earns its complexity, and it
-is meaningless before k-best exists.
+**Oracle@k** joined in Phase 2. Per gold span, a hit if *any* of the top-k
+readings reproduces it — strict, or tolerant with the same benign-merge rule
+— because the gate compares against span accuracy and a user cycles per
+word; the whole-gold-cover-in-top-k count is printed beside it as context
+(Phase 2 design §5). Before the DP existed, Phase 2 measured the bound that
+needs none, **oracle@∞**: does the lattice hold a candidate at the gold span
+at all? Fallback held at top-1, tolerant adding candidates that could
+forgive the span:
+
+| | strict top-1 | strict ceiling | tolerant top-1 | tolerant ceiling | exact-entry ceiling |
+| --- | --- | --- | --- | --- | --- |
+| hints off | 0.7272 (1573) | 0.8807 (1905) | 0.7975 (1725) | 0.8858 (1916) | 0.9923 (1542 / 1554) |
+| hints on | 0.8031 (1737) | 0.8937 (1933) | 0.8521 (1843) | 0.9020 (1951) | 0.9517 (1479 / 1554) |
+
+The lexicon is not the bottleneck — 99% of gold entries are in the lattice
+hints off — and the whole strict gap is the DP's choice plus the hard
+constraint (Phase 2 design §2.2).
 
 ### 5.3 Gold corpus
 
@@ -967,14 +994,27 @@ plan and the one most likely to need its own spec — which is why, per Phase
 ### Phase 2 — k-best readings
 
 **In:** the §4.1 route decision, taken with Phase 1's measured cost model in
-hand; k-best paths over the Phase 1 DP; a whole-sentence reading list with
-scores; UI to cycle readings; oracle@k added to `score`.
+hand; k-best paths over the Phase 1 DP; a whole-sentence reading list in
+cost order (no scores on the wire — the order is the rank, and the `i32`
+cost has no user meaning; Phase 2 design §1); UI to cycle readings; oracle@k
+added to `score`.
 
 **Out:** automatic disambiguation beyond ranking. The user picks.
 
-**Done when:** oracle@k=3 exceeds top-1 span accuracy by a margin that justifies
-the UI, measured on the Phase 0 corpus. **If it does not, Phase 2 ships
-nothing** — that outcome is a valid result, not a failure to be worked around.
+**Done when:** oracle@3 *tolerant* span accuracy, hints on, exceeds top-1
+tolerant by at least 55 spans of 2,163 (2.5 points rounded up: at least
+1,898 against 1,843), measured on the Phase 0 corpus. Tolerant rather than
+strict because strict would credit re-splitting the compounds the tolerant
+metric exists to forgive; half the measured ceiling headroom because below
+that a k = 1 cost-model pass plausibly recovers as much without a UI (Phase
+2 design §2.3, §8). **If it does not, Phase 2 ships nothing** — the k-best
+lattice and the `score --readings` instrument stay, the wire field stays
+empty, no UI lands. That outcome is a valid result, not a failure to be
+worked around.
+
+**Measured 2026-09-02 and not met:** oracle@3 tolerant hints on reached
+1,883 of 2,163, 40 spans over top-1, against the 55 required. Phase 2 shipped the
+measurement only; see the Phase 2 handoff §3.
 
 ### Phase 3 — Extra linguistic layers
 
@@ -1276,3 +1316,8 @@ licensing is still unresolved and this does not change that.
 | `romaji --particle` removed with the switchover | The flag existed to expose v1's particle-aware romaji path. v2's `engine::romaji` has no such mode, so the flag could only have reported a value it no longer computes (1b-ii design §4) |
 | **Phase 1's metric clause is superseded, not met** | The tolerant gap is the structural JMdict-priority ceiling §7 Phase 3 already assigns to the frequency layer, so no tool inside Phase 1 can satisfy the clause as written; leaving it open indefinitely would be the same silent-degradation shape the phase split exists to avoid. The numbers stand beside the amendment: hints on, v2 is +10.7 points strict, −1.6 tolerant, −0.9 entry top-1 against v1. Strict measures the particle-absorbing defect class this project exists to fix (1b-ii design §10) |
 | `cargo fmt` runs once, in the last commit of the phase | The clean-room quarantine forbade it while the hand-laid conjugation table was still in the tree, and running it earlier would also have destroyed the evidence that it *had not* run — 12 of the drift sites that vanished at the switchover did so because their files became orphaned, which is a fact only a never-formatted tree can show. 49 sites across 15 files, absorbed in one mechanical commit (1b-ii design §1, §8) |
+| Measure the oracle@∞ ceiling before building the k-best DP | oracle@k needs the DP; the ceiling needs none and bounds it for every k. Had it been small, Phase 2 would have shipped nothing without a line of engine code (Phase 2 design §2) |
+| Phase 2 alternates come from the constrained lattice only | One DP, one oracle number, k = 1 provably unchanged; the 63 `is_allowed`-suppressed spans are the constraint's price, the judgment Phase 1a §7.5 already made (Phase 2 design §2.3) |
+| Phase 2's gate is tolerant, +55 spans, hints on | 92 of the 196 reachable strict spans are compounds the corpus splits; strict would reward re-splitting them. Half the tolerant headroom is the line below which a cost-model pass plausibly does as well without a UI (Phase 2 design §8) |
+| Reading identity is the matched span set; dominated readings are dropped | Same-span entries and unmatched splits collapse into one reading; a reading that only un-matches a cheaper reading's word is a worse copy, not an alternate (Phase 2 design §3.2, §3.2a) |
+| **Phase 2's tolerant gate is vindicated by its own measurement** | Strict oracle@3 hints on gained +109 spans over strict top-1 (1737→1846); tolerant gained only +40 (1843→1883). The strict number alone would have cleared the same 55-span bar, but the gain is dominated by re-splitting the JMdict compounds the corpus adjudicates at short-unit granularity and the engine correctly keeps merged — exactly what the tolerant choice was made to avoid crediting, decided before either number existed (Phase 2 design §8; handoff §3) |

@@ -69,3 +69,40 @@ Context beside the gate, none of it thresholded: strict oracle@3 hints on,
 the hints-off pair, and the sentence-level count are in the outputs above.
 The oracle@∞ ceiling the design was built on (design §2.2) was 1,951
 tolerant hints on, so oracle@3 reached (1,883 − 1,843 =) 40 of the 108 reachable spans.
+
+### Strict versus tolerant
+
+Strict oracle@3 hints on gained +109 spans over strict top-1 (1737 → 1846);
+tolerant gained only +40 (1843 → 1883). Had the gate been written on the
+strict number, +109 would have cleared the same 55-span bar comfortably —
+and the gain would have been dominated by re-splitting the JMdict compounds
+the corpus splits at short-unit granularity and the engine correctly keeps
+merged. That is precisely what design §8 chose the tolerant metric to avoid
+crediting, and the choice was made before any of these numbers existed. This
+measurement is what vindicates it, not what motivated it.
+
+## 4. What landed after the gate
+
+Nothing. The wire field is empty and the menu is unchanged.
+
+## 5. Standing gates at the final commit
+
+Run at `428fac4`: `cargo test -p jparser` (283 passed), the same with
+`--features mecab` (309 passed, 1 ignored), both clippy invocations clean,
+`cargo check -p jparser --no-default-features` clean, `cargo fmt -p jparser
+-- --check` clean, `npm test` (269 passed), `cargo test --manifest-path
+src-tauri/Cargo.toml` (149 passed). Eight cells byte-identical at
+`--readings 1`.
+
+## 6. Open items
+
+- `RAW_FACTOR` in `lattice.rs` is a fixed over-provision for the dominance
+  filter; a top-1 with more than nine matched spans can push a genuine
+  alternate priced above +29 out of the raw list. Upgrade path: dominance
+  pruning inside the DP lists (design §3.2a).
+- `display` resets the sentence pane's scroll on a reading switch, as it
+  does on a furigana change. Harmless on short clipboard text; a long parse
+  loses its place.
+- The 9 gold spans with no candidate at all (`嫌な`, `完成する`, `見ないで`
+  and kin) and the 3 with the span but not the entry (`あり` wanting
+  1296400) are lexicon or index findings for a later phase, not k-best ones.
