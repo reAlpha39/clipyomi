@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { initSettingsApp } from './settings';
 import type { Settings } from './types';

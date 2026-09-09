@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { ALPHA_LIMITS, clampAlpha, surfaceAlphaVar } from './surface-alpha';
 

@@ -227,3 +227,37 @@ purpose of Engine v2 (master plan §1); shipping a `MIT OR Apache-2.0`
 artifact whose frontend has no per-file licence assertion and seven
 unexplained GPL-2.0 citations gives away, at the last step, the thing four
 phases were built to secure.
+
+## 8. Status — option 1, partially applied 2026-09-09
+
+Twenty-nine files now carry `SPDX-License-Identifier: MIT OR Apache-2.0`:
+every file under `src/` except the seven below, plus the three stragglers §4
+named (`src-tauri/src/mouse_tracker.rs`, `src-tauri/src/popover.rs`,
+`crates/jparser/examples/boundary_diag.rs`). `npx tsc --noEmit` clean,
+`npm test` 279 passed, `cargo test --manifest-path src-tauri/Cargo.toml` 149
+passed, clippy and `cargo fmt` clean.
+
+**Seven files were deliberately left unstamped**, and this is a departure
+from §6 option 1 as written. Option 1 proposed stamping all 33 `src/` files
+on the reasoning that the header assumes nothing about §5(a). That is wrong
+for these seven: stamping a file `MIT OR Apache-2.0` *is* an assertion about
+its licence, which is precisely the question §5(a) leaves open. So they wait
+for the answer rather than pre-empting it.
+
+| File | Why held |
+| --- | --- |
+| `src/render/tooltip-colour.test.ts` | carries §2.1, §2.2, §2.3 |
+| `src/render/tooltip-colour.ts` | the implementation those citations specify; rewritten clean-room at `c827ef2` *from* that test file — the chain §3 describes |
+| `src/render/tooltip-text.test.ts` | carries §2.6 |
+| `src/render/tooltip-text.ts` | writes the `\u0001` marker §2.6 cites |
+| `src/render/popover.ts` | carries §2.4 — production code |
+| `src/render/popover.test.ts` | carries §2.5 |
+| `src/styles/tooltip.css` | carries §2.7 |
+
+`src/render/tooltip.ts` was stamped: it imports both modules but composes
+them, and its own content is this project's.
+
+So the frontend's licence is now a per-file assertion everywhere its
+provenance is not in question, and the seven files where it *is* in question
+are the only ones still resting on `package.json` alone — which is a more
+honest position than either stamping them or leaving all 33 unmarked.

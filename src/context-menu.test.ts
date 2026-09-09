@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { MENU_MARGIN, clampMenu, closeContextMenu, openContextMenu, type MenuEntry } from './context-menu';
 

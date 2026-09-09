@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { renderSentence } from './sentence';
 import fixture from '../fixtures/tokyo.json';

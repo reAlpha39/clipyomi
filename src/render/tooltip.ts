@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import type { Entry, GlossFilters } from '../types';
 import { assembleTooltipText } from './tooltip-text';
 import { colourLine } from './tooltip-colour';

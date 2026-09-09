@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import type { FuriganaMode, Segment } from '../types';
 
 const HIRAGANA_START = 0x3041;

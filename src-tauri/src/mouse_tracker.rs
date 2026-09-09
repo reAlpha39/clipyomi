@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Background mouse tracking for macOS and Windows.
 //!
 //! WebKit does not dispatch DOM mousemove/mouseover events when an application
