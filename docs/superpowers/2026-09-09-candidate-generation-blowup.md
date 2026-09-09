@@ -3,7 +3,9 @@
 **Date:** 2026-09-09
 **Found:** while measuring the app-level latency the Phase 2b design left
 unmeasured (its handoff §6, and the final review's pre-merge note)
-**Status:** diagnosed and reproduced, fix shape proven, not fixed
+**Status:** fixed in Phase 2c — see its handoff. The restructure there
+supersedes §4's experimental bound and §5's four ways of sourcing a
+constant; neither was needed.
 **Severity:** the app's own input ceiling is unusable. A 10,000-character
 clipboard paste — the maximum `src-tauri` accepts — does not return.
 
