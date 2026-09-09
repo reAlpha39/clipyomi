@@ -220,6 +220,7 @@ impl Index {
 /// which walks from the root every time and discards every prefix it passes
 /// but one; that made candidate generation superlinear in input length
 /// (Phase 2c design §2).
+#[derive(Clone, Copy)]
 pub struct Walk<'a> {
     index: &'a Index,
     node: fst::raw::Node<'a>,
@@ -277,14 +278,9 @@ impl<'a> Walk<'a> {
         suffix: &str,
         fold: fn(char) -> char,
     ) -> Result<Option<Vec<StoredRecord>>, IndexError> {
-        // `fst::raw::Node` is `Copy`, so this is a cheap independent
+        // `Walk` is `Copy` (every field is), so this is a cheap independent
         // position rather than a second traversal from the root.
-        let mut probe = Walk {
-            index: self.index,
-            node: self.node,
-            output: self.output,
-            alive: self.alive,
-        };
+        let mut probe = *self;
         for ch in suffix.chars() {
             if !probe.push(ch, fold) {
                 return Ok(None);

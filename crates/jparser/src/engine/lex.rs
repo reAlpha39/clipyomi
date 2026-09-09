@@ -107,6 +107,9 @@ pub fn candidates(
     for (i, bucket) in chains_by_end.iter().enumerate() {
         let end = i + 1;
         for (chain_index, hit) in bucket.iter().enumerate() {
+            // `hit.consumed` can never exceed `end`: `Table::search`
+            // walks leftward from `end` and stops before running past
+            // its start, so this subtraction never wraps.
             chains_by_stem_end[end - hit.consumed].push((end, chain_index, hit));
         }
     }

@@ -1044,7 +1044,10 @@ see the Phase 2b handoff §3 and §4. Whole-sentence cover in the top three is
 ### Phase 2c — Candidate generation walks the index once per position — **COMPLETE**
 
 Not a quality change: the candidate set is byte-identical, and so are the
-eight cells and Phase 2b's oracle@3 figures. `lex::candidates` enumerated
+eight cells and Phase 2b's oracle@3 figures — measured and confirmed in both
+hint states (Phase 2c handoff §2), including the hints-off `--readings 3`
+triple, which the handoff had not run when this entry was first written.
+`lex::candidates` enumerated
 every `(start, end)` span pair and built a key per pair, making generation
 superlinear in input length — a 10,000-character paste, the app's own
 clipboard ceiling, did not finish in ten minutes. It now walks the key FST
