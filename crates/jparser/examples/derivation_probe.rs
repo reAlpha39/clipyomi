@@ -67,6 +67,61 @@ const DERIVATIONS: &[Derivation] = &[
     },
 ];
 
+/// Derivations that also constrain the partition's *last* part.
+///
+/// §13.5's finding was that a discount reaching `副大統領` also reaches
+/// `これは`, and nothing separated them. But those two differ in one visible
+/// way: `これは` ends in a `PARTICLE` and `副大統領` does not. `音がする`
+/// contains one in the middle and still ends in a verb, so the constraint has
+/// to be on the last part rather than on every part.
+const TAIL_DERIVATIONS: &[Derivation] = &[
+    Derivation {
+        name: "all parts COMMON, last part not PARTICLE",
+        holds: |c| c.flags.contains(WordFlags::COMMON),
+    },
+];
+
+/// Whether `chars` admits a full cover by candidates that all satisfy `holds`
+/// **and** whose final part is not a `PARTICLE`.
+///
+/// Reachability first, then one question about the last step: for some `k`,
+/// is `width - k` reachable by qualifying parts and is there a qualifying,
+/// non-`PARTICLE` candidate of length `k` there?
+fn splits_into_open_tail(
+    chars: &[char],
+    by_start: &[Vec<Candidate>],
+    holds: fn(&Candidate) -> bool,
+) -> bool {
+    let len = chars.len();
+    if len < 2 {
+        return false;
+    }
+    let mut reachable = vec![false; len + 1];
+    reachable[0] = true;
+    for p in 0..len {
+        if !reachable[p] {
+            continue;
+        }
+        for cand in &by_start[p] {
+            if cand.len >= len || p + cand.len > len {
+                continue;
+            }
+            if holds(cand) {
+                reachable[p + cand.len] = true;
+            }
+        }
+    }
+    (0..len).any(|p| {
+        reachable[p]
+            && by_start[p].iter().any(|c| {
+                c.len < len
+                    && p + c.len == len
+                    && holds(c)
+                    && !c.flags.contains(WordFlags::PARTICLE)
+            })
+    })
+}
+
 /// Whether `chars` admits a full cover by candidates that all satisfy `holds`.
 ///
 /// Reachability over start positions rather than an enumeration of
@@ -126,7 +181,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    for derivation in DERIVATIONS {
+    for (derivation, tail) in DERIVATIONS
+        .iter()
+        .map(|d| (d, false))
+        .chain(TAIL_DERIVATIONS.iter().map(|d| (d, true)))
+    {
         // Types the property holds for, by class, with their window counts.
         let mut hit: BTreeMap<&str, (usize, usize, Vec<String>)> = BTreeMap::new();
         let mut total: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
@@ -137,7 +196,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let t = total.entry(class.as_str()).or_insert((0, 0));
             t.0 += 1;
             t.1 += w;
-            if splits_into(&chars, &by_start, derivation.holds) {
+            let qualifies = if tail {
+                splits_into_open_tail(&chars, &by_start, derivation.holds)
+            } else {
+                splits_into(&chars, &by_start, derivation.holds)
+            };
+            if qualifies {
                 let e = hit.entry(class.as_str()).or_insert((0, 0, Vec::new()));
                 e.0 += 1;
                 e.1 += w;
