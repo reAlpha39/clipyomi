@@ -28,9 +28,18 @@ use crate::engine::Boundaries;
 /// input). A run longer than this bound is still fully coverable — just as
 /// consecutive shorter runs chained end to end, not as one step — so
 /// correctness never depends on this value, only how many hops a pathological
-/// gap takes. 64 is comfortably above any single unmatched stretch the corpus
-/// is expected to show, but that expectation is unmeasured against the gold
-/// corpus -- see handoff §8's "three size/shape assumptions" bullet.
+/// gap takes. Both halves of that are **measured, 2026-09-09**. On real text
+/// the bound is nowhere near binding: sweeping it down over 2,000 characters
+/// against the full index, every value from 4 to 64 gives byte-identical
+/// output and 2 is the first that diverges, so the longest run the text needs
+/// is 3 characters and 64 is twenty-one times that. On a deliberately
+/// pathological input -- a 200-character single-script run of `x` between two
+/// real Japanese fragments -- every value changes the output instead, which
+/// is this comment's own claim seen directly: an all-one-script gap costs
+/// `UNMATCHED` per character however it is split, so the hop count, and with
+/// it the number of unmatched segments the caller sees, is exactly what this
+/// constant decides. Coverage is invariant; the segmentation of a
+/// pathological gap is not, and never was.
 const MAX_UNMATCHED_RUN: usize = 64;
 
 /// Raw readings the DP keeps per position for every reading `k_best` is

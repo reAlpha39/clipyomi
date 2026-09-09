@@ -168,6 +168,19 @@ Run at `9fcab9b`: `cargo test -p jparser` (296 passed), the same with
   gone; the constant factor is whatever it is. Nothing here measured where
   the remaining time goes — entry assembly and JSON formatting both grow
   with the result, and neither was profiled.
-- **`MAX_CHAIN`'s and `MAX_UNMATCHED_RUN`'s adequacy is still unmeasured**
+- ~~**`MAX_CHAIN`'s and `MAX_UNMATCHED_RUN`'s adequacy is still unmeasured**
   against the full corpus, as the Phase 2 handoff's "three size/shape
-  assumptions" bullet recorded. This phase did not touch either.
+  assumptions" bullet recorded. This phase did not touch either.~~
+  **Closed 2026-09-09, after this phase, by sweeping each constant down until
+  the output moved.** `MAX_CHAIN`: the corpus needs 4, every value from 4 to
+  24 is byte-identical across all four `score` runs, 3 diverges — and the same
+  sweep against the full 218,449-entry index over 2,000 characters of real
+  text agrees, so the margin is not an artefact of the gold subset's smaller
+  lexicon. `MAX_UNMATCHED_RUN`: real text needs 3, every value from 4 to 64 is
+  byte-identical and 2 diverges; on a deliberately pathological 200-character
+  single-script run every value changes the output instead, which is the
+  constant's own doc comment seen directly — an all-one-script gap costs the
+  same however it is split, so the hop count is exactly what the bound
+  decides. Coverage is invariant, the segmentation of a pathological gap is
+  not, and the comment already said so. Both figures now live in the
+  constants' doc comments rather than in a handoff.
