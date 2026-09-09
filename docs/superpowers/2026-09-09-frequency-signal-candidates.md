@@ -1,12 +1,23 @@
-# Phase 3's frequency layer — the cheapest candidate, measured and ruled out
+# Phase 3's frequency layer — every candidate measured, and the layer itself ruled out
 
 **Date:** 2026-09-09
-**Question:** master plan §7's Phase 3 note says a frequency-rank layer
-"stopped being a nice-to-have at Phase 1a" and that its licensing is
+**Question as it started:** master plan §7's Phase 3 note says a frequency-rank
+layer "stopped being a nice-to-have at Phase 1a" and that its licensing is
 unresolved. Is the signal already on disk under a licence the plan accepts?
-**Answer:** the licence question for IPADIC is settled and favourable, and the
-data still does not do the job. Ruled out with evidence rather than left open.
-**Probe:** [`crates/jparser/examples/ipadic_cost_probe.rs`](../../crates/jparser/examples/ipadic_cost_probe.rs)
+**Question as it ended:** §8 narrowed the search to three corpora and §11 built
+the instrument that could judge one. Does a table built from either buildable
+corpus rank the compounds the engine should merge above the ones it should
+split?
+**Answer:** no, and not for want of corpus or register — §12. Every
+count-derived ranking scores at or below chance on a held-out register, two
+signals needing no corpus at all beat all of them, and the discriminator the
+metric asks for is wordhood rather than frequency. The layer as the master plan
+specifies it is ruled out on measurement, so the licence question §9 left open
+never has to be answered — including the one about the capture pool that only
+the copyright holder could have settled.
+**Probes:** [`freq_counts.rs`](../../crates/jparser/examples/freq_counts.rs) (§12),
+[`common_inversion_probe.rs`](../../crates/jparser/examples/common_inversion_probe.rs) (§10),
+[`ipadic_cost_probe.rs`](../../crates/jparser/examples/ipadic_cost_probe.rs) (§1-§6)
 
 ## 1. Why this was worth checking first
 
@@ -416,3 +427,187 @@ today with tooling already in `corpus_staging` and its weakness remains
 register; the capture pool remains the only candidate turning on a judgment
 about distributing counts over copyrighted text. The instrument decides which
 is worth having, not whether it may be shipped.
+
+## 12. The separation test: both buildable corpora built, counted and read
+
+§11.4 said the corpus choice of §8 "can now be made on evidence". This is that
+evidence, and it cost less than pricing a table into `cost.rs` would have.
+**Probe:**
+[`crates/jparser/examples/freq_counts.rs`](../../crates/jparser/examples/freq_counts.rs);
+scratch tooling in `corpus_staging/fetch_freq_corpora.py` and
+`corpus_staging/separation.py`, gitignored like the fetchers beside them.
+
+### 12.1 The question a table can be asked before any engine change
+
+§11.3 priced the ceiling: a blanket COMMON discount takes `lexical` from 41 to
+88 of 112 (+47) and pays `transparent` 30 → 10 and `false-match` 30 → 28
+(−22), net +25. So a frequency table is only worth having if it earns the +47
+without the −22 — and the adjudicated fixture is a lookup table of 139 distinct
+`(surface, headword)` types with a class on each. Whether a candidate corpus
+can do that is therefore a *ranking* question over those 139 types: does the
+table put the `lexical` types above the `transparent` and `false-match` ones?
+No cost model, no `cost.rs` edit, and no licence settled to ask it.
+
+**Held-out register, because each candidate is compromised on its own tier.**
+Aozora carries no news register at all, so it predictably has nothing to say
+about `副大統領`, `大統領選挙` or `日本郵政公社`; and a Wikinews table would score
+on those same windows partly because a third of the gold corpus *is* Wikinews,
+which is circular. Both tables were therefore built and each scored only on the
+types none of whose windows come from its own tier. Tier D is derived noise and
+its source string carries its parent tier (`d:a:…`), so it resolves to that.
+Tier C1 is hand-written pastiche and is held out from neither.
+
+| table | corpus | chars counted | tokens | distinct tokens | held-out types |
+| --- | --- | --- | --- | --- | --- |
+| Aozora | 400 works, catalogue-picked one per author, 新字新仮名 public domain | 12,119,277 | 7,899,934 | 91,958 | 76 (tier B + C1) |
+| Wikinews | the whole `jawikinews` dump, ns0, 4,118 articles | 2,720,659 | 1,546,666 | 42,934 | 84 (tier A + C1) |
+
+The counter uses the engine's own tokenizer — the shipped `system.dic` that
+`hints::VibratoTokenizer` loads — so "as a word" here means what the shipped
+boundary hints already mean and no second segmenter's opinion enters. It emits
+every count a ranking could plausibly key on from one corpus pass: the surface
+as a substring (`raw`), the surface where both its endpoints are token
+boundaries (`aligned`), the surface as exactly one token (`tok_exact`), tokens
+whose IPADIC base form is the surface or the headword, and the parts the
+surface tokenizes into with each part's own count.
+
+### 12.2 Both traps are real, and are the same number twice
+
+Zero-count share of the 87 `lexical` types, by the tier their windows come
+from:
+
+| table | tier A types | tier B types | tier C1 types |
+| --- | --- | --- | --- |
+| Aozora | **0 / 36** zero | **26 / 39** zero | 0 / 13 zero |
+| Wikinews | 17 / 36 zero | **0 / 39** zero | 8 / 13 zero |
+
+Aozora cannot see two-thirds of the news-sourced compounds, exactly as
+predicted. And Wikinews sees **every one** of the 39 news-sourced compound
+types — 0 zeroes out of 39, against 17 of 36 on Aozora's tier. That is the
+circularity, measured: a Wikinews table's apparent strength on those windows is
+the gold corpus's own sampling showing through. Held-out scoring is not a
+refinement here; without it the two tables would have swapped ranks for a
+reason that has nothing to do with either being better.
+
+### 12.3 What the separation test decides: no
+
+Positives `lexical`, negatives `transparent` + `false-match`, `ambiguous`
+excluded as always. AUC is Mann-Whitney with ties at half. "Best threshold" is
+the cut maximising should-merge minus should-split above it, reported in
+§11.3's own currency. The last row is the reference every scalar has to beat:
+a blanket discount with no signal at all, which merges everything on the same
+held-out subset.
+
+| scalar | Aozora AUC | net windows | Wikinews AUC | net windows |
+| --- | --- | --- | --- | --- |
+| `raw` | 0.173 | +43 | 0.297 | +14 |
+| `aligned` | 0.221 | +43 | 0.319 | +14 |
+| `tok_exact` | 0.457 | +43 | 0.510 | +14 |
+| `lemma_surface` | 0.432 | +43 | 0.510 | +14 |
+| `lemma_headword` | 0.433 | +43 | 0.468 | +14 |
+| PMI against the parts, on `aligned` | 0.449 | +43 | 0.458 | +16 |
+| PMI against the parts, on `tok_exact` | 0.456 | +43 | 0.510 | +14 |
+| compound against its rarest part | 0.288 | +43 | 0.369 | +14 |
+| `aligned / raw` | 0.429 | +43 | 0.353 | +14 |
+| *control:* number of IPADIC parts | 0.658 | +44 | 0.709 | +21 |
+| *control:* surface length in characters | **0.779** | **+45** | **0.733** | **+29** |
+| **blanket, no signal** | — | **+43** | — | **+14** |
+
+Every count-derived scalar lands at or below 0.51, and on the Aozora table
+every one of them has its best threshold at "merge everything" — the +43 is
+the blanket's own number, meaning no cut through those counts is worth making.
+On Wikinews one scalar clears the blanket by two windows, and does it by
+merging 24 of 56 `lexical` windows instead of 56, which is not the +47 §11.3
+asked for under any reading.
+
+**The volume scalars do not merely fail to separate; they separate backwards.**
+`raw` at 0.173 and `aligned` at 0.221 on Aozora mean the should-*split* types
+rank above the should-merge ones far more often than not. `には` occurs 2,585
+times on token boundaries in the news corpus, which puts it between `である`
+(2,569) and `として` (4,852) — two `lexical` types. A threshold cannot be placed
+between them because there is nothing between them.
+
+**Two controls that need no corpus at all beat every corpus scalar on both
+tables.** Surface length reaches 0.779 / 0.733 and net +45 / +29; the number of
+IPADIC parts reaches 0.658 / 0.709. This is a floor, not a proposal — both are
+build-time derivations of exactly the kind §10.4 rules out, and length
+separating this fixture is partly the adjudication's own shape (`transparent`
+is two-character particle stacking by definition). The point is that a
+candidate signal which cannot clear a free one has not earned a licence
+question, a shipped table, or a `cost.rs` term.
+
+An earlier version of the PMI scalar smoothed unseen surfaces with add-one and
+scored AUC 0.883, which looked like the answer. It was the arity control in
+disguise: `二重三重`, with **zero** occurrences and four parts, ranked first of
+139. The controls are in the table above so that mistake cannot be made twice.
+
+### 12.4 Why it fails, and what that settles about candidate 3
+
+The two corpora are 4.7× apart in size and as far apart in register as the
+three candidates go, and they return the same verdict by the same mechanism.
+The mechanism is neither coverage nor register:
+
+**What the metric asks for is wordhood, and frequency does not measure
+wordhood.** `には` and `副大統領` are both sequences whose endpoints fall on token
+boundaries; counted as sequences, `には` wins by three orders of magnitude, so
+volume ranks them backwards. Counted as words under the shipped short-unit
+tokenizer, *neither* is a token, so token and lemma counts are zero for both
+and rank nothing at all: **of the 87 `lexical` types, 5 exist as a single
+IPADIC token** in 2.9 M characters of news — `として`, `による`, `タイムリーヒット`,
+`となり`, `五日`. A word-frequency list, keyed the way every real frequency list
+is keyed, can price 5 of 87 targets.
+
+That settles §8's candidate 3 without needing the judgment it turns on. The
+`vn_data` capture pool is the best register available and the only candidate
+requiring a decision about distributing counts over copyrighted text — and it
+would fail this test for a reason that has nothing to do with register.
+**Nobody has to make that call.** Two corpora that cost nothing but a fetch
+retired the question, which is the same shape of result as §2 and §7: the
+cheapest measurement closed the expensive one.
+
+### 12.5 The one route this leaves, and it is not a corpus
+
+The counts do say what *would* separate the two groups: a frequency table over
+a **long-unit** token inventory — one in which `副大統領` is a token and `には` is
+not. Then `tok_exact` is positive for the compounds and zero for the particle
+stacks, which is the separation the metric wants, and it is the same table
+these two corpora could not provide only because the inventory that segmented
+them is short-unit.
+
+So §8's reframing holds one level up. It said a tokenizer dictionary is the
+wrong artifact to look for *frequency* in; what this adds is that the corpus
+was never the missing piece either. The missing piece is the **unit**, and a
+unit is a property of a segmenter's inventory, not of text. That is a different
+question from Phase 3's as written — it would mean adopting a second segmenter
+whose long-unit inventory is itself the signal, with its own size and licence
+gates — and it is **untested here**. It is recorded as the only route the
+measurements leave open, not as a recommendation, and not as licence to resume
+the dictionary hunt §8 closed.
+
+### 12.6 The `transparent` ruling, settled
+
+§11.1 flagged the `transparent` class (`には`, `にも`, `での`, `との`, `のか`,
+`彼の`) as the adjudication most open to dispute, worth 12 of the metric's
+misses. **It stands as should-split**, and the separation test is what decides
+it rather than taste. Rerun with the class moved to the positives, the best
+threshold for every scalar tested — corpus-derived and control alike — becomes
+"merge everything": blanket +52 held-out windows, and nothing beats it. So
+reversing the class does not make a frequency layer easier to justify, it
+removes the justification, because §11.3's argument was precisely that a rank
+could take the +47 while declining the −22. A ruling that deletes the −22
+decides Phase 3 by adjudication instead of by measurement, which is the one
+thing the third metric was built to avoid.
+
+The consequence is carried rather than hidden: the engine merges `には` and
+`にも` today, so those 12 windows are a real Phase 3 gap and the by-class line
+(`transparent 30 / 42`) is where it shows. The headline stays 0.5430 and is
+still never to be quoted without the class line beside it.
+
+### 12.7 Baseline
+
+Unchanged and reproduced before reporting — all eight cells byte-identical
+(hints on 0.8031 / 0.8521 / 0.9063, 53 merges, compounds 0.5430 with `lexical`
+41 / 112, `false-match` 30 / 32, `transparent` 30 / 42; hints off 0.7272 /
+0.7975 / 0.9075, 75 merges, 0.5161). The probe reads the index and the
+tokenizer and touches no engine code. Gates: jparser 333 with `mecab`, 1
+ignored; `clippy --all-targets --features mecab` and `fmt` clean.
