@@ -302,6 +302,17 @@ describe('the event-driven render path', () => {
     emit('settings-changed', { furigana_mode: 'hiragana' });
     expect(panes().scrollTop).toBe(120);
   });
+
+  test('cycling readings from the keyboard closes an open context menu', () => {
+    // `openContextMenu` moves focus into the menu, and a bracket keypress
+    // there bubbles to `document` — without a close, the menu would keep
+    // checking the reading the step just left behind.
+    emit('parse-result', tokyo());
+    menuLabels();
+    expect(document.querySelector('.context-menu')).not.toBeNull();
+    press(']');
+    expect(document.querySelector('.context-menu')).toBeNull();
+  });
 });
 
 // Residual 2 (re-review, final wave): the original fix wrapped the whole

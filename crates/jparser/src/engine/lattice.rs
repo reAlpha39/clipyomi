@@ -4,10 +4,11 @@
 // JParser. See docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md
 // §3.5 for the clean-room discipline this file was written under.
 
-//! The k cheapest paths over the candidate lattice: given every candidate
-//! span [`lex::candidates`](crate::engine::lex::candidates) produced and the
+//! The k best paths over the candidate lattice, in the rank order [`k_best`]
+//! defines: given every candidate span
+//! [`lex::candidates`](crate::engine::lex::candidates) produced and the
 //! price [`cost`](crate::engine::cost) puts on each, choose the contiguous
-//! covers of the sentence that pay the least.
+//! covers of the sentence that rank best.
 //!
 //! A forward DP over end positions `0..=chars.len()`, relaxed in the single
 //! place [`relax`], holding a bounded list of distinct readings per position
@@ -311,12 +312,16 @@ fn demote(pool: Vec<Vec<Step>>, k: usize) -> Vec<Vec<Step>> {
 /// lower ranks', and every lower-ranked extension at least as dear as the
 /// rank-0 extension with the same step.
 ///
-/// The result is exact top-k over undominated readings whenever fewer than
-/// `3 * k` of the `4 * k` cheapest raw readings are dominated; above that a
-/// genuine alternate can fall off the raw list (see [`RAW_FACTOR`]). Fewer
-/// than `k` readings come back when the lattice holds fewer distinct
-/// undominated covers -- 35 of the 150 gold-corpus sentences do, measured at
-/// a cap eight times the shipped one.
+/// The `3 * k`-of-`4 * k` guarantee is on the raw pool, not the returned
+/// order: whenever fewer than `3 * k` of the `4 * k` cheapest raw readings
+/// are dominated, no genuine alternate falls off the raw list before
+/// `undominated` and `demote` ever see it; above that threshold one can (see
+/// [`RAW_FACTOR`]). What comes back is `demote`'s rank order over the
+/// undominated pool, truncated to `k` -- the `k` best readings in that order,
+/// not the `k` cheapest undominated ones. Rank 0 is still exactly the
+/// cheapest. Fewer than `k` readings come back when the lattice holds fewer
+/// distinct undominated covers -- 35 of the 150 gold-corpus sentences do,
+/// measured at a cap eight times the shipped one.
 ///
 /// That ceiling was measured before `demote`, not merely bounded: at k = 3
 /// the shipped cap of 12 returned byte-identical top-three lists to a cap of
@@ -567,6 +572,10 @@ mod tests {
         );
         let readings = k_best(&chars, &cands, None, 3);
         let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| matched_spans(p)).collect();
+        // Phase 2b's demotion leaves this order alone, and not by luck: あい+う
+        // cuts at {0,2,3}, a superset of あいう's {0,3}, so it is a split of
+        // the top reading and sinks -- and being the only sunk reading here,
+        // its position among the two survivors is unchanged.
         // Equal cost (3 each); the longer last step wins the tie, as at k = 1.
         assert_eq!(spans, vec![vec![(0, 3)], vec![(0, 2), (2, 1)]]);
     }

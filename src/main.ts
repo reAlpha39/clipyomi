@@ -18,7 +18,7 @@ import {
 import { clampFont, fontVars } from './font-sizes';
 import { clampAlpha, surfaceAlphaVar } from './surface-alpha';
 import { createHistory } from './history';
-import { openContextMenu, type MenuEntry } from './context-menu';
+import { closeContextMenu, openContextMenu, type MenuEntry } from './context-menu';
 import type { ChromeMode, FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
 import './styles/global.css';
 
@@ -681,7 +681,7 @@ void listen<Partial<Settings>>('settings-changed', (e) => {
     // `display` is the single writer of `lastResult` (§6.2) and already does
     // exactly what this used to duplicate by hand: `closePopover()`, then
     // `renderSentence` into `#output`. Routing through it here means this
-    // path gets every future change to `display` — the scroll reset above
+    // path gets every future change to `display` — the scroll guard above
     // included — for free, instead of silently missing it. `display(null)`
     // is already a no-op, so no `lastResult !== null` guard is needed here.
     display(lastResult);
@@ -1110,8 +1110,19 @@ document.addEventListener('keydown', (e) => {
   // (`history-step`, Rust-side) and the webview sees that keydown too, so a
   // modifier means this is not a reading step.
   if (e.altKey || e.ctrlKey || e.metaKey) return;
-  if (e.key === ']') showReading(readingIndex + 1);
-  if (e.key === '[') showReading(readingIndex - 1);
+  // `openContextMenu` moves focus into the menu, so a bracket keypress made
+  // there bubbles up to this same listener: close it here (not inside
+  // `showReading`, which a menu row's own click also calls) so the sentence
+  // never changes under a menu still checking the reading it left behind.
+  // `closeContextMenu` is a no-op when nothing is open.
+  if (e.key === ']') {
+    showReading(readingIndex + 1);
+    closeContextMenu();
+  }
+  if (e.key === '[') {
+    showReading(readingIndex - 1);
+    closeContextMenu();
+  }
 });
 
 let lastUnfocusedChip: HTMLElement | null = null;
