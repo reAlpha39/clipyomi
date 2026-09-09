@@ -164,6 +164,19 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
 }
 
 #[cfg(target_os = "windows")]
+// `RECT`, `STYLESTRUCT`, `WINDOWPOS` and `SUBCLASSPROC` are Win32's own names
+// and are kept spelled the way MSDN spells them: every field layout and every
+// `extern "system"` signature in here is read against that documentation, and
+// a renamed type makes the comparison one step harder for no gain. Scoped to
+// this module so the lint still applies everywhere else.
+//
+// It is an `allow` rather than a rename because of an asymmetry that would
+// otherwise go unnoticed: this module is `cfg(target_os = "windows")`, so
+// `.github/workflows/ci.yml`'s `clippy --workspace --all-targets -- -D
+// warnings` never compiles it on `ubuntu-latest` and never reports these —
+// while the same command on the machine this is developed on fails with four
+// errors. The declared standard has to be runnable where the code is written.
+#[allow(clippy::upper_case_acronyms)]
 pub mod win32_frameless {
     use tauri::Window;
 

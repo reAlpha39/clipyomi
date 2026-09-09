@@ -2,16 +2,13 @@ name: CI
 
 # The gates this repo relies on, all of which were previously run by hand.
 #
-# No `cargo fmt --check` job yet, but the reason it was forbidden is gone.
-# Until Phase 1b-ii the workspace held a hand-laid conjugation table whose
-# layout `cargo fmt` would have destroyed, so formatting was done per-file with
-# `rustfmt --edition 2021 <file>` and a wholesale run counted as a defect. That
-# table and its module are deleted, and Phase 1b-ii ran `cargo fmt` once over
-# `jparser` and `clipyomi`. The final fix wave additionally formatted
-# `vibrato-source`, whose drift predated this branch: a workspace-wide
-# `cargo fmt` check is clean as of that commit.
-# Adding a formatting job here is now a safe change rather than a forbidden
-# one — it just has not been made.
+# The `fmt` job below was forbidden until Phase 1b-ii: the workspace held a
+# hand-laid conjugation table whose layout `cargo fmt` would have destroyed, so
+# formatting was done per-file with `rustfmt --edition 2021 <file>` and a
+# wholesale run counted as a defect. That table and its module are deleted,
+# Phase 1b-ii ran `cargo fmt` once over `jparser` and `clipyomi`, and the final
+# fix wave formatted `vibrato-source` too. Added 2026-09-09, once a
+# workspace-wide check had been clean by hand through several phases.
 
 on:
   push:
@@ -50,9 +47,52 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
 
+      # Two tests pin master plan success criterion 3 against genuine IPADIC
+      # tokenization rather than a stand-in dictionary —
+      # `kurumadehakou_parses_as_four_words` and
+      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
+      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
+      # There is no APPDATA on this runner, so without these two steps both
+      # tests panic before asserting anything and this job fails on a missing
+      # environment variable rather than on the engine.
+      #
+      # Measured locally rather than assumed, since this file has never run
+      # (the repository has no remote): with APPDATA unset, 2 of the 39
+      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
+      # output and APPDATA still unset, 39 of 39 pass.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
+
       - run: cargo test --workspace
 
       - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      # No cache and no system dependencies: rustfmt parses, it does not build,
+      # so this job needs neither webkit2gtk nor a warm target directory and
+      # finishes in seconds.
+      - run: cargo fmt --all --check
 
   msrv:
     name: MSRV ${{ matrix.rust }}
@@ -162,6 +202,35 @@ jobs:
       # `clippy -p jparser --features mecab --all-targets` isolates
       # mecab-specific lints to a scope a workspace-wide clippy run does not
       # guarantee.
+      # Two tests pin master plan success criterion 3 against genuine IPADIC
+      # tokenization rather than a stand-in dictionary —
+      # `kurumadehakou_parses_as_four_words` and
+      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
+      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
+      # There is no APPDATA on this runner, so without these two steps both
+      # tests panic before asserting anything and this job fails on a missing
+      # environment variable rather than on the engine.
+      #
+      # Measured locally rather than assumed, since this file has never run
+      # (the repository has no remote): with APPDATA unset, 2 of the 39
+      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
+      # output and APPDATA still unset, 39 of 39 pass.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
+
       - run: cargo test -p jparser --features mecab
       - run: cargo clippy -p jparser --features mecab --all-targets -- -D warnings
 
@@ -181,6 +250,35 @@ jobs:
       # "hints-source")]`) is type-checked anywhere in CI. Design spec §9.5
       # lists this gate; it did not reach this file until the Phase 5A fix wave.
       # Mirrors the `mecab` job above deliberately.
+      # Two tests pin master plan success criterion 3 against genuine IPADIC
+      # tokenization rather than a stand-in dictionary —
+      # `kurumadehakou_parses_as_four_words` and
+      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
+      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
+      # There is no APPDATA on this runner, so without these two steps both
+      # tests panic before asserting anything and this job fails on a missing
+      # environment variable rather than on the engine.
+      #
+      # Measured locally rather than assumed, since this file has never run
+      # (the repository has no remote): with APPDATA unset, 2 of the 39
+      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
+      # output and APPDATA still unset, 39 of 39 pass.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
+
       - run: cargo test -p jparser --features hints-source
       - run: cargo clippy -p jparser --features hints-source --all-targets -- -D warnings
 
@@ -194,6 +292,35 @@ jobs:
           components: llvm-tools-preview
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
+
+      # Two tests pin master plan success criterion 3 against genuine IPADIC
+      # tokenization rather than a stand-in dictionary —
+      # `kurumadehakou_parses_as_four_words` and
+      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
+      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
+      # There is no APPDATA on this runner, so without these two steps both
+      # tests panic before asserting anything and this job fails on a missing
+      # environment variable rather than on the engine.
+      #
+      # Measured locally rather than assumed, since this file has never run
+      # (the repository has no remote): with APPDATA unset, 2 of the 39
+      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
+      # output and APPDATA still unset, 39 of 39 pass.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
 
       - run: cargo llvm-cov -p jmdict-source --summary-only --fail-under-lines 80
       - run: cargo llvm-cov -p jparser --features mecab --summary-only --fail-under-lines 80
