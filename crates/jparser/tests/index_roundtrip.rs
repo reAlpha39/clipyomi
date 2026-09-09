@@ -238,3 +238,76 @@ fn a_shared_normalized_key_collects_records_from_distinct_entries() {
         "got {records:?}"
     );
 }
+
+/// Phase 2c: `Walk` is the walk `prefixes_of_with` performs, exposed so one
+/// start position can be walked once instead of re-walked per span end.
+#[test]
+fn a_walk_finds_the_key_that_ends_where_it_stands() {
+    let dir = tmpdir("walk-exact");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+
+    let mut walk = index.walk();
+    assert!(
+        walk.records().expect("records").is_none(),
+        "no key ends at the root"
+    );
+    for ch in "言う".chars() {
+        assert!(walk.push(ch, fold), "言う is in the fixture");
+    }
+    let records = walk.records().expect("records").expect("言う ends here");
+    assert!(records.iter().any(|r| r.surface == "言う"));
+}
+
+#[test]
+fn a_walk_that_leaves_the_index_is_spent() {
+    let dir = tmpdir("walk-dead");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+
+    let mut walk = index.walk();
+    assert!(!walk.push('z', fold), "no fixture key starts with z");
+    // Spent, and it stays spent: a caller enumerating spans from one start
+    // stops here rather than testing longer ones, which is the whole point.
+    assert!(!walk.push('言', fold));
+    assert!(walk.records().expect("records").is_none());
+}
+
+#[test]
+fn records_after_reaches_a_key_the_walk_itself_has_not() {
+    let dir = tmpdir("walk-after");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+
+    let mut walk = index.walk();
+    assert!(walk.push('言', fold));
+    // 言 alone is not the key; 言う is. `records_after` asks about the
+    // extension without committing the walk to it -- which is how a
+    // deinflected key (stem plus the class's remove-suffix) is tested.
+    let records = walk
+        .records_after("う", fold)
+        .expect("records_after")
+        .expect("言 + う is a key");
+    assert!(records.iter().any(|r| r.surface == "言う"));
+    assert!(
+        walk.records_after("zz", fold)
+            .expect("records_after")
+            .is_none(),
+        "an extension that leaves the index yields nothing"
+    );
+}
+
+#[test]
+fn records_after_does_not_move_the_walk_it_was_called_on() {
+    let dir = tmpdir("walk-immutable");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+
+    let mut walk = index.walk();
+    assert!(walk.push('言', fold));
+    let _ = walk.records_after("う", fold).expect("records_after");
+    // Still at 言, so pushing う still arrives at 言う.
+    assert!(walk.push('う', fold));
+    let records = walk.records().expect("records").expect("言う ends here");
+    assert!(records.iter().any(|r| r.surface == "言う"));
+}

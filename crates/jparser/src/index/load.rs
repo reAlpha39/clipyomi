@@ -128,62 +128,48 @@ impl Index {
         &self.header
     }
 
-    /// Every dictionary key that is a prefix of `text`, shortest first, with
-    /// the key normalization supplied by the caller.
+    /// Every dictionary key that is a prefix of `text`, folded by `fold`,
+    /// each tagged with its length in characters of `text`.
     ///
-    /// A single transducer walk, one character at a time: every node that is
-    /// final marks a complete headword. `""` is a prefix of every string, so
-    /// the root node's finality is checked before consuming any character.
-    ///
-    /// That root check is unreachable by construction with today's builder,
-    /// and is kept as a property of the walk rather than as a live guarantee:
-    /// [`crate::engine::build`] stores headwords only, and no JMdict entry has
-    /// an empty headword, so no index this crate can write has an empty key.
-    /// A `key_chars == 0` hit was reachable under the v1 builder, which also
-    /// indexed generated stems — one verb type stripped its whole surface and
-    /// so keyed the empty string. Phase 1b-ii deleted that builder along with
-    /// the branch's only test; the branch itself stays, because removing it
-    /// would change the behaviour of a surviving public API on an index some
-    /// later writer might legitimately produce.
-    ///
-    /// `fold` is a parameter rather than a constant because an index is built
-    /// with the fold its builder used, and the walk has to agree with it.
+    /// One forward walk, stopping where the index has no transition: a
+    /// caller that wants the walk itself, to test several keys sharing a
+    /// prefix without repeating it, wants [`Index::walk`] instead. This is
+    /// that walk with every key it passes collected.
     pub fn prefixes_of_with(
         &self,
         text: &str,
         fold: fn(char) -> char,
     ) -> Result<Vec<PrefixHit>, IndexError> {
-        let mut node = self.fst.root();
-        let mut output = 0u64;
+        let mut walk = self.walk();
         let mut hits = Vec::new();
-
-        if node.is_final() {
-            let offset = output + node.final_output().value();
+        if let Some(records) = walk.records()? {
             hits.push(PrefixHit {
                 key_chars: 0,
-                records: self.records_at(offset)?,
+                records,
             });
         }
-
         for (consumed, ch) in text.chars().enumerate() {
-            let mut buf = [0u8; 4];
-            for &byte in fold(ch).encode_utf8(&mut buf).as_bytes() {
-                let Some(i) = node.find_input(byte) else {
-                    return Ok(hits);
-                };
-                let transition = node.transition(i);
-                output += transition.out.value();
-                node = self.fst.node(transition.addr);
+            if !walk.push(ch, fold) {
+                return Ok(hits);
             }
-            if node.is_final() {
-                let offset = output + node.final_output().value();
+            if let Some(records) = walk.records()? {
                 hits.push(PrefixHit {
                     key_chars: consumed + 1,
-                    records: self.records_at(offset)?,
+                    records,
                 });
             }
         }
         Ok(hits)
+    }
+
+    /// A walk at the FST root, before any character.
+    pub fn walk(&self) -> Walk<'_> {
+        Walk {
+            index: self,
+            node: self.fst.root(),
+            output: 0,
+            alive: true,
+        }
     }
 
     fn records_at(&self, offset: u64) -> Result<Vec<StoredRecord>, IndexError> {
@@ -205,6 +191,84 @@ impl Index {
     /// resident after `open`, so this touches no mmap page.
     pub fn entry_count(&self) -> usize {
         self.entry_offsets.len()
+    }
+}
+
+/// A position in the key FST: the node some folded prefix of the input
+/// reached, and the transducer output accumulated on the way to it.
+///
+/// Exists so one input position can be walked once rather than re-walked
+/// for every span that starts there. `lex::candidates` used to build a key
+/// per `(start, end)` pair and hand each to [`Index::prefixes_of_with`],
+/// which walks from the root every time and discards every prefix it passes
+/// but one; that made candidate generation superlinear in input length
+/// (Phase 2c design §2).
+pub struct Walk<'a> {
+    index: &'a Index,
+    node: fst::raw::Node<'a>,
+    output: u64,
+    /// False once a `push` found no transition. A spent walk stays spent:
+    /// no key has the prefix it stands on, so no longer prefix has it
+    /// either, and a caller enumerating spans from one start stops.
+    alive: bool,
+}
+
+impl<'a> Walk<'a> {
+    /// Advance over `ch`, folded by `fold`. `false` when the index has no
+    /// such transition, after which this walk is spent.
+    pub fn push(&mut self, ch: char, fold: fn(char) -> char) -> bool {
+        if !self.alive {
+            return false;
+        }
+        let mut buf = [0u8; 4];
+        for &byte in fold(ch).encode_utf8(&mut buf).as_bytes() {
+            let Some(i) = self.node.find_input(byte) else {
+                self.alive = false;
+                return false;
+            };
+            let transition = self.node.transition(i);
+            self.output += transition.out.value();
+            self.node = self.index.fst.node(transition.addr);
+        }
+        true
+    }
+
+    /// The records of the key ending exactly where this walk stands, or
+    /// `None` when no key ends here.
+    pub fn records(&self) -> Result<Option<Vec<StoredRecord>>, IndexError> {
+        if !self.alive || !self.node.is_final() {
+            return Ok(None);
+        }
+        let offset = self.output + self.node.final_output().value();
+        Ok(Some(self.index.records_at(offset)?))
+    }
+
+    /// The records of the key that ends `suffix` past where this walk
+    /// stands, leaving this walk where it is. `None` when the extension
+    /// leaves the index, or when no key ends there.
+    ///
+    /// This is what lets a deinflected key be tested without repeating the
+    /// stem: the walk holds the stem, and `suffix` is the conjugation
+    /// class's remove-suffix.
+    pub fn records_after(
+        &self,
+        suffix: &str,
+        fold: fn(char) -> char,
+    ) -> Result<Option<Vec<StoredRecord>>, IndexError> {
+        // `fst::raw::Node` is `Copy`, so this is a cheap independent
+        // position rather than a second traversal from the root.
+        let mut probe = Walk {
+            index: self.index,
+            node: self.node,
+            output: self.output,
+            alive: self.alive,
+        };
+        for ch in suffix.chars() {
+            if !probe.push(ch, fold) {
+                return Ok(None);
+            }
+        }
+        probe.records()
     }
 }
 
