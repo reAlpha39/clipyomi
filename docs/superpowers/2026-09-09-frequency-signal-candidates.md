@@ -223,3 +223,79 @@ behalf. The first is buildable today with tooling already in the repo, and its
 weakness is measurable rather than legal — which means it could be built, its
 rank compared against the corpus's own compound decisions, and kept or
 discarded on evidence, exactly as the two candidates above it were.
+
+## 10. Before choosing a corpus: the inversion sized on the gold corpus itself
+
+§9 ended at a choice between three corpora. Before paying for any of them
+the premise was sized: master plan §5.2 and §7 justify the layer by the
+claim that JMdict's priority marker is inverted on the compounds the engine
+exists to preserve. How much of the corpus's compound behaviour is actually
+that? **Probe:**
+[`crates/jparser/examples/common_inversion_probe.rs`](../../crates/jparser/examples/common_inversion_probe.rs),
+hints on, gold index rebuilt from `gold_jmdict_subset.xml`. The eight-cell
+baseline was reproduced before and after (0.8031 / 0.8521 / 0.9063, 53
+merges forgiving 106 spans) and the probe touches no engine code.
+
+### 10.1 The coarsening count cannot answer it
+
+The natural place to look is `score`'s own line -- "coarsening: 106 gold
+spans inside 53 dictionary merges" -- since those 53 are the compounds the
+engine preserved. Of them, **0 are inverted** (compound without COMMON while
+a part carries it). That is structural rather than empirical. With
+`CROSS = 0`, a compound and its exact split tie on `COVER`, and `relax`'s
+tie-break gives an equal-cost tie to the longer step; a compound therefore
+wins only when it is evidenced at least as well as its parts. 48 of the 53
+are COMMON-against-COMMON ties, 3 are numeral+counter headwords (18日, 2月)
+whose numeral part has no COMMON, and 2 (タイムリーヒット, ノーベル化学賞) beat
+parts that had no candidate at all. A compound that lacks a discount its
+parts carry is priced out before it can become a merge, so the coarsening
+count says nothing about the inversion in either direction and should not be
+quoted as evidence about it.
+
+### 10.2 The population that can: compounds available but declined
+
+Every window between two gold boundaries, two or more gold spans wide, at
+which an allowed candidate exists and the parse placed no segment. There are
+**141**, and **104 are inverted** (88 with every part COMMON). The other 37
+carry COMMON on both sides and lost to `PRONOUNCE_CROSS` -- the はく-shaped
+reading-only merges the cost model keeps out on purpose -- not to the marker.
+Every master-plan example present in the corpus is in the inverted set and is
+split today for exactly that reason: 音がする (five sentences), 首を振る,
+ことになっている, 音を立てる, 風を切る. 東京都 itself does not occur in the
+corpus. So the claim holds: the inversion is real, and it is the mechanism.
+
+What the parse did instead across the 141: the gold split in 105, a smaller
+merge in 6, a real miss in 30.
+
+### 10.3 What fixing it would score, and why that is the finding
+
+For each declined window the probe asks what a COMMON-sized discount on the
+compound would have done -- any signal that gives the compound parity with
+its parts, a frequency rank included, behaves the same way at the DP. Of 99
+tiled inverted windows, **76 flip**. 69 of those replace a *gold split* --
+spans that are strict hits today -- so they would become tolerant-only: 150
+distinct strict spans at risk, about -6.9 points strict with tolerant flat.
+7 replace real misses: 18 distinct spans could be newly forgiven, about +0.8
+points tolerant at the very most.
+
+The gold corpus is adjudicated at short-unit granularity (§5.2 of the master
+plan already records this), so preserving 音がする as one segment can never
+register as a gain on it; it shows only as strict loss. **No frequency
+source, whatever its licence, can be gated by the current metrics for the
+problem that motivates the layer.** The blocker in front of Phase 3 is
+therefore not which corpus to choose but that the gate has no instrument
+that can reward a compound. The 76 flip windows are printed by the probe and
+are one sitting's worth of hand adjudication -- merge or split, per window --
+which would be that instrument, and needs no licence.
+
+### 10.4 Why a build-time COMMON derivation is not the free fix
+
+The cheapest response to an inverted marker is to derive COMMON at build time
+for any headword whose parts all carry it. The flip set shows what that ships:
+alongside the wanted 副大統領, 月平均, 名誉教授, 発売所, 大統領選挙 and
+音がする it flips 名の into 名のる, 煙が into 煙がる, and それは, 彼の, のか,
+かよ -- particle absorption and false verb matches, the §5.2 spurious-match
+class. A frequency rank is exactly what separates those two groups; a
+derivation cannot, and the current harness scores both groups identically.
+That is the argument for frequency over derivation, and it is also why
+neither can be adopted until 10.3's instrument exists.
