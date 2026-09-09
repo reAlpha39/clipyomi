@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 /** Distance between the word and the tooltip, in px: the original tooltip kept two. */
 const GAP = 2;
+/** Closest the tooltip may sit to a work-area edge, in px. */
 export const MARGIN = 8;
 
 /** A rectangle in screen coordinates. */

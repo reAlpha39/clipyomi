@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT OR Apache-2.0 */
+
 @import './tokens.css';
 @import './typography.css';
 
@@ -47,8 +49,8 @@ body {
 }
 
 .tt-line {
-  /* Wrapped continuations hang by 10px, matching MyDrawText's `xOffset = 10`,
-     so a long sense reads as a column rather than as a paragraph. */
+  /* Wrapped continuations hang by 10px, so a long sense reads as a column
+     rather than as a paragraph. */
   padding-left: 10px;
   text-indent: -10px;
   white-space: pre-wrap;

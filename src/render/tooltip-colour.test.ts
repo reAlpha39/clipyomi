@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { CONJ_MARKER } from './tooltip-text';
 import { colourLine } from './tooltip-colour';
@@ -8,8 +10,9 @@ function kinds(line: string): string[] {
 }
 
 describe('colourLine', () => {
-  // MyToolTip.cpp:154-160 — a line flagged with \x01 is drawn entirely in the
-  // conjugation colour, marker stripped.
+  // The contract between the two modules: tooltip-text.ts writes CONJ_MARKER
+  // at the head of a conjugation line, and this reads it back — the whole
+  // line becomes one conjugation run with the marker stripped.
   test('a marked line is one conjugation run with the marker removed', () => {
     expect(colourLine(`${CONJ_MARKER}Negative Formal Past`)).toEqual([
       { text: 'Negative Formal Past', kind: 'conj' },
@@ -38,7 +41,8 @@ describe('colourLine', () => {
     expect(colourLine('時々')).toEqual([{ text: '時々', kind: 'kanji' }]);
   });
 
-  // MyToolTip.cpp:214-217 — everything from ( to its match is one paren run.
+  // Everything from ( to its match is one paren run, matching the original
+  // tooltip's rendered output.
   test('a parenthesised span is one run', () => {
     expect(colourLine('(v1,vi) x')).toEqual([
       { text: '(v1,vi)', kind: 'paren' },
@@ -46,8 +50,7 @@ describe('colourLine', () => {
     ]);
   });
 
-  // Parenthesis colouring is tested BEFORE the Japanese check
-  // (MyToolTip.cpp:224), so kanji inside parentheses does not win.
+  // Kanji inside parentheses takes the paren colour, not the kanji colour.
   test('parenthesis beats kanji', () => {
     expect(colourLine('(e.g. 寿司)')).toEqual([{ text: '(e.g. 寿司)', kind: 'paren' }]);
   });
