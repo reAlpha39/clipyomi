@@ -112,3 +112,88 @@ Do not start Phase 3's implementation on IPADIC costs. They would improve
 nothing the layer exists for, and a display-facing "common word" marker built
 on them would be wrong in a way users would notice — 邂逅 marked commoner
 than 人.
+
+## 7. UniDic, checked the same day — ruled out on three grounds
+
+§5 named UniDic as the next candidate. It does not survive either.
+
+**Licence: the BSD leg is real, but not established where the gate requires.**
+The `unidic-py` distribution states UniDic 3.1.0 is "available under the GPL,
+LGPL, or BSD license" and redistributes it "under the BSD License", which
+matches what §3.3 recorded. But NINJAL's own pages are the authority and they
+did not yield it: `clrd.ninjal.ac.jp/unidic/en/about_unidic_en.html` states no
+licence at all, and `unidic.ninjal.ac.jp` did not resolve. Master plan §7
+requires a layer's licence "established in writing first", and a third-party
+wrapper's README is not the copyright holder's terms. Anyone returning to
+UniDic owes NINJAL's own licence text, not this.
+
+**Size: 770 MB installed**, against the roughly 47 MB compiled `system.dic`
+the app ships today. That is not a shippable increment for a desktop reading
+aid, and it would be paid on every user's first run.
+
+**And it carries no frequency data anyway.** UniDic's `lex.csv` columns are
+`pos1`–`pos4`, `cType`, `cForm`, `lForm`, `lemma`, `orth`, `pron`,
+`orthBase`, `pronBase`, `goshu`, `iType`, `iForm`, `fType`, `fForm`, with
+`lemma_id` last. Every one is morphological, orthographic or phonological.
+The only numeric weight is MeCab's `cost` field — the same trained
+segmentation weight §3 measured and rejected, one dictionary over.
+
+## 8. The reframing this forces
+
+Two candidates in, the pattern is not about which dictionary to pick. **A
+tokenizer dictionary is the wrong kind of artifact to look for frequency in.**
+The MeCab family carries trained segmentation costs because that is what a
+segmenter needs; corpus counts live in *frequency lists*, which are separate
+publications. Searching dictionaries for a frequency column was the wrong
+search, and two measurements were the cheapest way to find that out.
+
+For Japanese the authoritative frequency lists are BCCWJ-derived NINJAL
+products — the 短単位語彙表 family — which are their own publications with
+their own terms, and those terms are the thing the gate would have to
+establish. That is a materially different licensing question from the
+dictionaries, and it is the one Phase 3 actually faces.
+
+Three candidates remain, and they differ in what they cost rather than in
+whether they are available:
+
+1. **Derived from public-domain text.** Aozora Bunko, 新字新仮名 only, is
+   already tier A of the gold corpus and `corpus_staging/fetch_aozora.py`
+   already fetches it. Counts derived from public-domain text carry no
+   encumbrance at all, so the licence gate is satisfied by construction — the
+   cheapest gate of the three. The cost is register: the master plan already
+   records that Aozora is literary prose from roughly 1900–1955 and "carries
+   no news register at all", and it carries no contemporary or colloquial
+   register either. A frequency rank built on it would be a frequency rank
+   for a language nobody now writes.
+2. **Derived from CC BY-SA text.** ja.Wikinews is already tier B and
+   `fetch_wikinews.py` already fetches it. A derived table inherits
+   share-alike, which is an obligation to accept knowingly rather than a
+   blocker — the project already ships CC BY-SA data, since JMdict is CC BY-SA
+   4.0 and §3.3 records that as constraining the index and not the code. News
+   register, which is a real improvement on Aozora and still not the app's
+   input distribution.
+3. **Derived from the project's own capture pool.** The 66,114 cleaned
+   visual-novel lines under `vn_data` are the true input distribution — §9.1
+   says so in those words — and they are deliberately never committed because
+   the transcribed lines are copyrighted. A frequency table over them is
+   counts, not text, and §9.1's own reasoning is that "register and style are
+   not copyrightable; transcribed lines are." That is the most on-target
+   register available and the only candidate that matches what users actually
+   paste. It is also the one that turns on a judgment about whether a
+   statistical summary of copyrighted text may be distributed — which is the
+   copyright holder's call, not a measurement, and is where this document
+   stops.
+
+## 9. What the next step is, and what it is not
+
+It is not code, and it is no longer a dictionary hunt. It is a decision
+between the three above, and each carries a different question: for Aozora,
+whether a pre-war literary frequency rank is worth having at all; for
+Wikinews, whether share-alike on a shipped table is acceptable; for the
+capture pool, whether counts over copyrighted text may be shipped.
+
+Only the third needs a judgment nobody can make on the copyright holder's
+behalf. The first is buildable today with tooling already in the repo, and its
+weakness is measurable rather than legal — which means it could be built, its
+rank compared against the corpus's own compound decisions, and kept or
+discarded on evidence, exactly as the two candidates above it were.
