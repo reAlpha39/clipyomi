@@ -15,7 +15,15 @@ metric asks for is wordhood rather than frequency. The layer as the master plan
 specifies it is ruled out on measurement, so the licence question §9 left open
 never has to be answered — including the one about the capture pool that only
 the copyright holder could have settled.
-**Probes:** [`freq_counts.rs`](../../crates/jparser/examples/freq_counts.rs) (§12),
+**And the sequel, §13:** with frequency gone, §10.4's claim that "a derivation
+cannot" tell the two groups apart had nothing behind it — and it had tested
+exactly one derivation. A second one does separate them, shipped as
+`cost.rs`'s `FUNCTION_STACK`: `transparent` 30 → 42 of 42, strict +31 spans,
+tolerant +1, compounds +13 windows, no class regressed. Ungated it also
+shatters `なりたいです` while improving every one of those numbers, which is
+the more useful finding of the two.
+**Probes:** [`derivation_probe.rs`](../../crates/jparser/examples/derivation_probe.rs) (§13),
+[`freq_counts.rs`](../../crates/jparser/examples/freq_counts.rs) (§12),
 [`common_inversion_probe.rs`](../../crates/jparser/examples/common_inversion_probe.rs) (§10),
 [`ipadic_cost_probe.rs`](../../crates/jparser/examples/ipadic_cost_probe.rs) (§1-§6)
 
@@ -611,3 +619,118 @@ Unchanged and reproduced before reporting — all eight cells byte-identical
 0.7975 / 0.9075, 75 merges, 0.5161). The probe reads the index and the
 tokenizer and touches no engine code. Gates: jparser 333 with `mecab`, 1
 ignored; `clippy --all-targets --features mecab` and `fmt` clean.
+
+## 13. A derivation that does separate the classes — and the damage it does ungated
+
+§12 ruled out frequency on both buildable corpora. That left §10.4's claim
+standing on its own: "A frequency rank is exactly what separates those two
+groups; a derivation cannot." With frequency gone, that sentence had nothing
+behind it — and §10.4 had tested exactly **one** derivation, COMMON-if-all-
+parts-COMMON. So the question was reopened for the rest of them. **Probe:**
+[`crates/jparser/examples/derivation_probe.rs`](../../crates/jparser/examples/derivation_probe.rs).
+
+### 13.1 The question, and the bound before any code
+
+The probe asks, per adjudicated type, whether the surface admits a partition
+into two or more index entries all sharing some property. A property is only
+interesting if it holds for `transparent` and `false-match` and *not* for
+`lexical`. Over the 139 types:
+
+| property | `lexical` | `transparent` | `false-match` |
+| --- | --- | --- | --- |
+| every part `PARTICLE` | 9 / 87 | 12 / 22 | 10 / 23 |
+| every part `COMMON` (§10.4's own) | **72 / 87** | 21 / 22 | 21 / 23 |
+| every part exact | 75 / 87 | 22 / 22 | 21 / 23 |
+| every part `PARTICLE` **and** `COMMON` | **2 / 87** | 7 / 22 | 3 / 23 |
+
+The middle two rows are §10.4's finding restated: they hold for nearly
+everything, which is exactly why a derivation "cannot tell `副大統領` from
+`名の`". The last row is not like them. **2 of 87 `lexical` types against 10
+of 45 should-split ones** is a separation, and §10.4 never tested it.
+
+Cross-referenced against what the engine actually does today — most of those
+windows are already split, so the property holding changes nothing there — the
+achievable move was **+12 windows** (`には` in 8 sentences, `にも` in 4: every
+one of the `transparent` class's 12 misses) against **−3** (`として` in 2,
+`となり` in 1, all three currently kept whole).
+
+And then the finding that made it worth building: **the short-unit gold corpus
+splits all four surfaces.** So the merges this would block are currently
+destroying 30 gold spans (16 + 8 + 4 + 2) that strict accuracy scores as
+misses. Every earlier Phase 3 candidate traded strict spans for compound
+windows — §10.3 priced frequency at about −6.9 points strict. This one is the
+first where the compound adjudication and the short-unit gold **agree**.
+
+### 13.2 What it measures on-engine
+
+`FUNCTION_STACK` in `cost.rs`, a flat penalty on a match whose span also
+partitions into two or more entries each carrying `COMMON` and `PARTICLE`.
+The property is a fact about a span against the rest of the lattice rather
+than about an entry, so it cannot be a build-time `WordFlags` bit: it is
+computed by a second pass in `lex::candidates` and carried on `Candidate`.
+
+| | strict | tolerant | entry top-1 | compounds | lexical | false-match | transparent |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| hints on, before | 1737 | 1843 | 0.9063 | 101 | 41 | 30 | 30 |
+| hints on, after | **1768** | **1844** | **0.9092** | **114** | **42** | 30 | **42 / 42** |
+| hints off, before | 1573 | 1725 | 0.9075 | 96 | 45 | 24 | 27 |
+| hints off, after | **1588** | 1714 | **0.9093** | **109** | **46** | 24 | **39** |
+
+Hints on, all four metrics move up and **no class regresses** — the
+`transparent` class goes to 42 of 42. Hints off, the tolerant metric loses 11
+spans against a merge count falling 75 → 62, so what it lost is coarsening it
+was crediting; §5.2 records that metric as over-forgiving by about 1.3 points
+for exactly this reason. That reading is an interpretation of the coarsening
+line, not a separately proven claim, and it is the one cell in the table
+pointing the wrong way.
+
+Magnitude is **flat from 1 to 50 in both hint states**, identical cells
+throughout, so only the sign matters — as with `PRONOUNCE_CROSS`. 4 is the
+small end of that range, chosen because this term suppresses a *shape* that
+overlaps a legitimate class, so there is no argument for the extra margin
+`PRONOUNCE_CROSS`'s own comment makes.
+
+Latency unmoved: `bench`'s scaling cell reads 1.10x hints on against 1.12x
+before, and the second pass in `lex::candidates` is bounded by the span width
+the FST walk already bounds rather than by a whole-text table — which is the
+shape Phase 2c removed from that function.
+
+### 13.3 The gate, which is the real finding
+
+Ungated, this term is a defect. It shattered `なりたいです` (one segment,
+`なる` Want-to Polite) into `なり` + `たいです`, and `して` into `し` + `て`,
+because `なり` and `し` are themselves COMMON particle entries — so a
+conjugated form looks like stacked function words. That is master plan §4.3's
+shattering class, the thing this whole rewrite exists to remove, and it is a
+worse defect than the merge the term cures.
+
+**The gold corpus's own metrics improved straight through that damage.** With
+the ungated term, strict rose 30 spans and compounds rose 11 windows while
+`なりたいです` was being destroyed, because those sentences are in
+`parse_sentences.txt` and not in the 150-sentence gold corpus. What caught it
+was the curated snapshot — 30 hand-written sentences with documented coverage
+intent, whose whole purpose is to be read rather than scored.
+
+Gating the term on `steps.is_empty()` — a conjugated match is not function-word
+stacking — leaves the snapshot **byte-identical** and keeps every gain in
+§13.2.
+
+Two things to carry from that. A metric that improves is not evidence a change
+is correct; it is evidence about the sentences the metric contains. And the
+`parse_sentences.txt` snapshot earned its place here: it is the only gate in
+the harness that would have failed.
+
+### 13.4 What this does and does not settle
+
+It closes the `transparent` class, which §11.1 flagged as the metric's most
+disputable call and §12.6 confirmed as a real Phase 3 gap: 42 of 42, and the
+12 `には`/`にも` merges are gone. It does **not** touch the compound
+preservation gap that motivated Phase 3 — `lexical` moves 41 → 42 of 112, so
+the engine still declines 70 of the compounds the corpus says it should keep,
+and `副大統領` is still split for the inverted-priority reason §10.2 measured.
+
+So §10.4's sentence needs its correction stated plainly: a build-time
+derivation **can** separate function-word stacking from lexical compounds, and
+the conjunction that does it was simply not among the ones tested. What no
+derivation and no frequency table has done is the other half — telling
+`副大統領` from its parts — and that half is still open with no candidate.

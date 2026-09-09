@@ -56,6 +56,14 @@ pub struct Candidate {
     /// before folding -- the FST matched only because kana was unified, not
     /// because the two strings actually agree.
     pub exact: bool,
+    /// Whether this span also partitions into two or more candidates that
+    /// each carry both `COMMON` and `PARTICLE` -- `には` as `に` + `は`.
+    ///
+    /// A property of the span against the rest of the lattice, not of the
+    /// entry, so it cannot be a `WordFlags` bit set at build time: the same
+    /// headword is a function stack at one position and not at another. Set
+    /// by a second pass in [`candidates`], read by `cost::cost`.
+    pub function_stack: bool,
     pub headword: String,
 }
 
@@ -175,6 +183,10 @@ pub fn candidates(
                             flags: WordFlags(record.flags),
                             steps: hit.steps.clone(),
                             exact: record.surface == key,
+                            // The second pass below fills this in: it needs
+                            // every position's candidates, which do not
+                            // exist yet.
+                            function_stack: false,
                             headword: record.surface.clone(),
                         },
                     ));
@@ -198,7 +210,62 @@ pub fn candidates(
         out[start] = dedup_shallowest(found.into_iter().map(|(_, _, c)| c).collect());
     }
 
+    // Second pass for `function_stack`, which asks about a span against the
+    // candidates *inside* it and so cannot be answered until every position
+    // has been walked. Computed into a side vector first because the answer
+    // for one candidate reads the same structure another candidate is stored
+    // in.
+    let stacks: Vec<Vec<bool>> = (0..len)
+        .map(|start| {
+            out[start]
+                .iter()
+                .map(|cand| is_function_stack(&out, start, start + cand.len))
+                .collect()
+        })
+        .collect();
+    for (start, flags) in stacks.into_iter().enumerate() {
+        for (cand, stack) in out[start].iter_mut().zip(flags) {
+            cand.function_stack = stack;
+        }
+    }
+
     Ok(out)
+}
+
+/// Whether `[start, end)` partitions into two or more candidates that each
+/// carry both `COMMON` and `PARTICLE`.
+///
+/// A part spanning the whole width is skipped: the question is whether the
+/// merge decomposes, and a span is not a decomposition of itself. Two or
+/// more parts therefore falls out of plain reachability rather than needing
+/// a step count.
+///
+/// Scoped to the span's own positions on purpose. A reachability table over
+/// the whole text would be O(n^2) in a function whose superlinearity at
+/// clipboard length was the entire subject of Phase 2c; this is bounded by
+/// the span width, which the FST walk's own dead end already bounds.
+/// `jparser-cli bench`'s scaling cell is the check.
+fn is_function_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> bool {
+    let width = end - start;
+    if width < 2 {
+        return false;
+    }
+    let mut reachable = vec![false; width + 1];
+    reachable[0] = true;
+    for p in 0..width {
+        if !reachable[p] {
+            continue;
+        }
+        for cand in &by_start[start + p] {
+            if cand.len >= width || p + cand.len > width {
+                continue;
+            }
+            if cand.flags.contains(WordFlags::COMMON) && cand.flags.contains(WordFlags::PARTICLE) {
+                reachable[p + cand.len] = true;
+            }
+        }
+    }
+    reachable[width]
 }
 
 /// Collapse `bucket` (one `start`'s worth of candidates) so no two entries

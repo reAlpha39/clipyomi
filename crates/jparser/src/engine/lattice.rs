@@ -429,6 +429,7 @@ mod tests {
             flags,
             steps: Vec::new(),
             exact: true,
+            function_stack: false,
             headword: String::new(),
         }
     }
