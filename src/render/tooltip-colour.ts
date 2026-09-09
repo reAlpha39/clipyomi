@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { CONJ_MARKER } from './tooltip-text';
 
 /**

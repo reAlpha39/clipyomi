@@ -261,3 +261,43 @@ So the frontend's licence is now a per-file assertion everywhere its
 provenance is not in question, and the seven files where it *is* in question
 are the only ones still resting on `package.json` alone — which is a more
 honest position than either stamping them or leaving all 33 unmarked.
+
+## 9. Status — resolved 2026-09-09
+
+§5(a) has been decided. The copyright holder reviewed §2 — all seven sites,
+categorised — and determined that none of them is protected expression:
+what the citations record is observable rendered behaviour, one internal
+protocol of this codebase's own, and two arbitrary constants, as §3
+concludes. This is a judgment call by the person entitled to make it, not a
+result §3's categories forced by measurement; the categories are the factual
+input the decision rests on, not the decision itself.
+
+That determination resolved the fork §6 described. §2.4/§2.5
+(`placePopover`'s neither-side-fits fallback), the one production-code site,
+had already been handled ahead of and independent of this decision: it was
+reauthored clean-room from a behavioural specification at `b8035a3`, and its
+citation is gone. The remaining six — all in tests and one stylesheet —
+followed option 2: each is restated as behaviour, crediting "the original
+tooltip" generically where credit was worth keeping, with the file-and-line
+pointer removed.
+
+| Site | Before | After |
+| --- | --- | --- |
+| §2.1 `tooltip-colour.test.ts:11` | `MyToolTip.cpp:154-160 — a line flagged with \x01 is drawn entirely in the conjugation colour, marker stripped.` | States the contract between `tooltip-text.ts` (writes `CONJ_MARKER`) and `tooltip-colour.ts` (reads it) — no external credit, since both ends are this codebase's own. |
+| §2.2 `tooltip-colour.test.ts:41` | `MyToolTip.cpp:214-217 — everything from ( to its match is one paren run.` | States the same outcome, credited to "the original tooltip's rendered output" generically. |
+| §2.3 `tooltip-colour.test.ts:50` | `Parenthesis colouring is tested BEFORE the Japanese check (MyToolTip.cpp:224), so kanji inside parentheses does not win.` | States only the outcome — kanji inside parentheses takes the paren colour — and drops the claim about evaluation order in another program, which observation never supported. |
+| §2.5 `popover.test.ts:28` | `This is MyToolTip.cpp:518-523, the case 2G had no answer for.` | States the fallback behaviour, keeps the internal "case 2G" reference, credits "the original tooltip's fallback" generically. |
+| §2.6 `tooltip-text.test.ts:66` | `DictionaryUtil.cpp:46 sets \`temp[0] = 1\` for exactly this purpose.` | Points at `CONJ_MARKER`'s own doc comment, which already justifies byte 1 on this codebase's own terms, instead of at upstream. |
+| §2.7 `tooltip.css:50` | `matching MyDrawText's \`xOffset = 10\`` | States the visual intent — a long sense reads as a column rather than a paragraph — with no upstream pointer. |
+
+This is attribution, not laundering: the categories in §2 do not change
+because the wording does, and the substance decision in §5(a) was made
+before the wording changed, on the citations as they stood. Rewording without
+that decision first would have been laundering; rewording after it, on the
+same facts the decision was made from, is carrying out the decision.
+
+All seven files named in §8's table are now stamped
+`SPDX-License-Identifier: MIT OR Apache-2.0`, closing the gap §8 recorded.
+`grep -rn "MyToolTip\|DictionaryUtil\|MyDrawText" src/` returns nothing. The
+frontend's licence is now a per-file assertion on every file under `src/`,
+with no open citation anywhere in the tree.

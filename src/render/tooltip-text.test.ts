@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import type { Entry } from '../types';
 import { assembleTooltipText, CONJ_MARKER } from './tooltip-text';
@@ -62,8 +64,8 @@ describe('assembleTooltipText', () => {
     expect(assembleTooltipText([entry({ flags: ['primary', 'common'] })])).toMatch(/\/\(P\)$/);
   });
 
-  // The conjugation gets its own line, marked so the colouriser can find it —
-  // DictionaryUtil.cpp:46 sets `temp[0] = 1` for exactly this purpose.
+  // The conjugation gets its own line, marked so the colouriser can find it.
+  // See CONJ_MARKER for why byte 1 is the marker.
   test('puts a conjugation on its own marked line', () => {
     const text = assembleTooltipText([entry({ conjugation: 'Negative Formal Past' })]);
     expect(text.split('\n')[0]).toBe(`${CONJ_MARKER}Negative Formal Past`);

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { placePopover, shouldKeep, type Rect } from './popover';
 
@@ -24,8 +26,8 @@ describe('placePopover', () => {
     expect(placePopover(chip({ top: 650, bottom: 678 }), SIZE, WORK).top).toBe(650 - 60 - 2);
   });
 
-  // Neither side fits: pin to the work-area bottom and go right of the word.
-  // This is MyToolTip.cpp:518-523, the case 2G had no answer for.
+  // Neither side fits: pin to the work-area bottom and go right of the word —
+  // the case 2G had no answer for, and the original tooltip's fallback.
   test('pins to the bottom and moves right when neither side fits', () => {
     const tall = { width: 200, height: 690 };
     expect(placePopover(chip({ top: 300, bottom: 328 }), tall, WORK)).toEqual({
