@@ -604,6 +604,17 @@ trial log in doc §13, including the `steps.is_empty()` gate without which the
 same term shatters `なりたいです` while *improving* every number in this
 table.
 
+**One further candidate was re-priced the same day and reverted (doc §13.5).**
+With `transparent` at 42 of 42, §10.4's blanket COMMON derivation looked as
+though its −22 wrong merges were already prevented. Measured, it takes
+`lexical` from 42 to **82 of 112** and compounds to 0.7688 — the largest move
+on that metric anything has produced — for **−104 strict spans**, and it fails
+`the_particle_absorbing_merges_are_gone`, merging `これは` as one segment. The
+−22 turned out not to be one class: `FUNCTION_STACK` blocks *particle*
+stacking, while that discount creates *noun*-plus-particle absorption, and
+raising `FUNCTION_STACK` to 12 changed nothing. Compound preservation stays
+the open half of Phase 3, with three ruled-out candidates instead of two.
+
 **Compound-tolerant span accuracy.** A gold span strict accuracy scored as a
 miss counts as a hit when a single *matched* segment swallows it whole and that
 segment's own endpoints are both gold boundaries — so it merged whole gold
