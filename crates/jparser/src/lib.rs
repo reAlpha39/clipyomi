@@ -68,10 +68,15 @@ pub struct ParseResult {
     /// character belongs to exactly one segment, matched or not. Empty iff
     /// the input is empty.
     pub segments: Vec<Segment>,
-    /// Readings 2..k in cost order, each a contiguous cover like `segments`
-    /// and distinct from it and from each other by the spans they match
-    /// (Phase 2 design §3, §4). Empty unless the caller asked for more than
-    /// one reading through [`ParseOptions::with_readings`].
+    /// Readings 2..k, each a contiguous cover like `segments` and distinct
+    /// from it and from each other by the spans they match (Phase 2 design
+    /// §3, §4). The order is the rank, and rank is not cost order alone:
+    /// readings that differ from `segments` or an earlier alternative only
+    /// by a merge or split come after every reading that does not, so the
+    /// first alternatives are genuinely different analyses rather than
+    /// re-splits of the top one (Phase 2b design §3, §4). Empty unless the
+    /// caller asked for more than one reading through
+    /// [`ParseOptions::with_readings`].
     pub alternatives: Vec<Vec<Segment>>,
 }
 
