@@ -191,47 +191,56 @@ pub fn run(
     if json {
         println!("{}", serde_json::to_string_pretty(&t)?);
     } else {
-        render(&t);
+        print!("{}", render(&t));
     }
     Ok(())
 }
 
-fn render(t: &Timings) {
+/// The human form, as a string rather than a series of `println!`s.
+///
+/// Returned rather than printed for the reason `score::render` is: the format
+/// is the thing a recorded baseline is transcribed from, and a function that
+/// prints can only be tested by capturing stdout. Same signature shape and
+/// the same `print!` at the one call site above.
+fn render(t: &Timings) -> String {
+    let w = LABEL_WIDTH;
+    let mut out = String::new();
     if let Some(generation) = &t.index_generation {
-        println!("{:<LABEL_WIDTH$}{generation}", "index:");
+        out.push_str(&format!("{:<w$}{generation}\n", "index:"));
     }
-    println!(
-        "{:<LABEL_WIDTH$}{}",
-        "hints:",
-        if t.hints { "on" } else { "off" }
-    );
-    println!("{:<LABEL_WIDTH$}{}", "readings:", t.readings);
-    println!("{:<LABEL_WIDTH$}{}", "runs:", t.runs);
-    println!();
-    println!(
-        "{:>10}  {:>10}  {:>7}  {:>7}",
+    let hints = if t.hints { "on" } else { "off" };
+    out.push_str(&format!("{:<w$}{hints}\n", "hints:"));
+    out.push_str(&format!("{:<w$}{}\n", "readings:", t.readings));
+    out.push_str(&format!("{:<w$}{}\n", "runs:", t.runs));
+    out.push('\n');
+    out.push_str(&format!(
+        "{:>10}  {:>10}  {:>7}  {:>7}\n",
         "chars", "median ms", "min", "max"
-    );
+    ));
     for p in &t.points {
-        println!(
-            "{:>10}  {:>10}  {:>7}  {:>7}",
+        out.push_str(&format!(
+            "{:>10}  {:>10}  {:>7}  {:>7}\n",
             p.chars, p.median_ms, p.min_ms, p.max_ms
-        );
+        ));
     }
-    println!();
-    // The recorded cell. Printed with its own reference points because a bare
-    // multiple invites the reader to compare it against 1.
+    out.push('\n');
+    // The recorded cell, printed with its own reference points because a bare
+    // multiple invites the reader to compare it against 1. `checked_div`
+    // rather than a length assumption: `points` is built by this module's own
+    // loop over two lengths, but a zero-length corpus would make the short
+    // point 0 characters and the reference meaningless rather than a panic.
     let quadratic = (t.points[1].chars * 100)
         .checked_div(t.points[0].chars)
         .unwrap_or(0);
-    println!(
-        "{:<LABEL_WIDTH$}{}.{:02}x   (linear 1.00x, quadratic {}.{:02}x)",
+    out.push_str(&format!(
+        "{:<w$}{}.{:02}x   (linear 1.00x, quadratic {}.{:02}x)\n",
         "scaling:",
         t.scaling_centi / 100,
         t.scaling_centi % 100,
         quadratic / 100,
         quadratic % 100,
-    );
+    ));
+    out
 }
 
 #[cfg(test)]
@@ -287,5 +296,79 @@ mod tests {
             max_ms: ms,
         };
         assert_eq!(scaling_centi(&point(1_000, 0), &point(10_000, 500)), 0);
+    }
+
+    fn timings(scaling_centi: u128) -> Timings {
+        Timings {
+            index_generation: Some("gen-1".to_string()),
+            hints: true,
+            readings: 3,
+            runs: 5,
+            points: vec![
+                Point {
+                    chars: 1_005,
+                    median_ms: 46,
+                    min_ms: 44,
+                    max_ms: 47,
+                },
+                Point {
+                    chars: 10_040,
+                    median_ms: 518,
+                    min_ms: 497,
+                    max_ms: 523,
+                },
+            ],
+            scaling_centi,
+        }
+    }
+
+    /// Exact output, for `score`'s own reason: the format is what a recorded
+    /// baseline is transcribed from, so a change to it must break a test
+    /// rather than quietly change what a later phase is compared against.
+    #[test]
+    fn render_prints_the_two_points_and_the_scaling_cell() {
+        assert_eq!(
+            render(&timings(112)),
+            "index:            gen-1\n\
+             hints:            on\n\
+             readings:         3\n\
+             runs:             5\n\
+             \n\
+             \x20    chars   median ms      min      max\n\
+             \x20     1005          46       44       47\n\
+             \x20    10040         518      497      523\n\
+             \n\
+             scaling:          1.12x   (linear 1.00x, quadratic 9.99x)\n"
+        );
+    }
+
+    /// The reference points are the whole value of the cell: 1.12 means
+    /// nothing until it is read against a linear 1.00 and this corpus's own
+    /// quadratic 9.99.
+    #[test]
+    fn the_scaling_cell_carries_both_reference_points() {
+        let out = render(&timings(999));
+        assert!(
+            out.contains("scaling:          9.99x   (linear 1.00x, quadratic 9.99x)"),
+            "a quadratic reading must be indistinguishable from its own reference: {out}"
+        );
+    }
+
+    #[test]
+    fn an_unmeasurable_scaling_renders_as_zero_rather_than_being_omitted() {
+        // `scaling_centi` returns 0 when the short point is below the clock's
+        // resolution. A missing line would read as "no regression"; a 0.00x
+        // reads as what it is — nothing was measurable.
+        assert!(render(&timings(0)).contains("scaling:          0.00x"));
+    }
+
+    #[test]
+    fn hints_off_and_a_bare_index_directory_render_without_their_lines() {
+        let mut t = timings(100);
+        t.hints = false;
+        t.index_generation = None;
+        let out = render(&t);
+        assert!(out.starts_with("hints:            off\n"), "{out}");
+        assert!(!out.contains("index:"), "{out}");
     }
 }
