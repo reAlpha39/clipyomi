@@ -146,19 +146,34 @@ fn parse_v2_over(dir: &Path, text: &str) -> jparser::ParseResult {
 /// same override `hints.rs`'s doc comments and the CLI's `--hints`/startup
 /// path already use), else the path `jparser-cli fetch-hints` publishes to by
 /// default on this machine.
+///
+/// `TA_HINTS_DICT` is the portable route and the only one anywhere but
+/// Windows: the fallback is a `%APPDATA%` location, and the panic below used
+/// to read "APPDATA must be set on Windows" — true, unhelpful, and reached
+/// only when the reader is *not* on Windows. CI is the case that matters
+/// (`.github/workflows/ci.yml` runs the `mecab` jobs on `ubuntu-latest`), so
+/// the message names the fetch that fixes it.
 #[cfg(feature = "mecab")]
 fn dictionary_path() -> PathBuf {
     if let Ok(path) = std::env::var("TA_HINTS_DICT") {
         return PathBuf::from(path);
     }
-    PathBuf::from(std::env::var("APPDATA").expect("APPDATA must be set on Windows"))
+    let Ok(appdata) = std::env::var("APPDATA") else {
+        panic!(
+            "no boundary-hint dictionary: TA_HINTS_DICT is unset and there is no APPDATA to \
+             fall back to. Publish one with `cargo run -p jparser --features hints-source \
+             --bin jparser-cli -- fetch-hints <dir>` and point TA_HINTS_DICT at its \
+             `current/system.dic`."
+        )
+    };
+    PathBuf::from(appdata)
         .join("dev.jparser.clipyomi")
         .join("hints")
         .join("current")
         .join("system.dic")
 }
 
-/// Real Vibrato boundaries for `text`, needed only by the one test that pins
+/// Real Vibrato boundaries for `text`, needed only by the two tests that pin
 /// master plan success criterion 3 against genuine IPADIC tokenization rather
 /// than a hand-built stand-in dictionary.
 #[cfg(feature = "mecab")]
