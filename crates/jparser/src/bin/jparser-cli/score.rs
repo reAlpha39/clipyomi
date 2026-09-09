@@ -25,6 +25,7 @@ use std::path::Path;
 use jparser::index::load::Index;
 use jparser::{ParseOptions, ParseResult, Segment};
 
+use crate::compounds::{self, CompoundMetrics};
 use crate::corpus::{read_gold, validate, GoldRecord, GoldSpan};
 
 /// Field width for the label column in [`render`]. `span accuracy:` is the
@@ -110,6 +111,12 @@ pub struct Metrics {
     /// (e.g. `gen-3`), or `None` if the path has none. Recorded beside the
     /// numbers for the same reason as `hints`.
     pub index_generation: Option<String>,
+    /// Present only with `--compounds`: the adjudicated compound metric, the
+    /// one of the three that can register compound preservation as a gain
+    /// (see [`crate::compounds`]). Absent by default so the recorded
+    /// baselines serialize unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compounds: Option<CompoundMetrics>,
     /// Present only when `--readings` asked for more than one: how often the
     /// gold is reachable anywhere in the reading list, not just at the top.
     /// Absent at the default so the recorded baselines serialize unchanged.
@@ -401,11 +408,41 @@ pub fn run(
     gold_path: &Path,
     #[cfg(feature = "mecab")] hints: Option<&Path>,
     readings: usize,
+    compounds_path: Option<&Path>,
+    compounds_detail: bool,
     json: bool,
 ) -> Result<(), Box<dyn Error>> {
     let table = jparser::engine::table::Table::new();
     let index = Index::open(index_dir)?;
     let (records, superseded) = read_gold(gold_path)?;
+    let adjudicated = match compounds_path {
+        Some(path) => Some(compounds::read(path)?),
+        None => None,
+    };
+    // A fixture sentence the corpus no longer holds would shrink the metric's
+    // denominator without saying so, so it is an error rather than a skip.
+    if let Some(by_text) = &adjudicated {
+        let corpus: std::collections::HashSet<&str> =
+            records.iter().map(|r| r.text.as_str()).collect();
+        let mut orphans: Vec<&str> = by_text
+            .keys()
+            .map(String::as_str)
+            .filter(|t| !corpus.contains(t))
+            .collect();
+        if !orphans.is_empty() {
+            orphans.sort_unstable();
+            return Err(format!(
+                "{}: {} adjudicated sentence(s) are not in {}, starting with {:?}",
+                compounds_path
+                    .expect("adjudicated implies a path")
+                    .display(),
+                orphans.len(),
+                gold_path.display(),
+                orphans[0]
+            )
+            .into());
+        }
+    }
 
     #[cfg(feature = "mecab")]
     let tokenizer = match hints {
@@ -424,6 +461,7 @@ pub fn run(
         superseded,
         hints: hints_used,
         index_generation,
+        compounds: adjudicated.is_some().then(CompoundMetrics::default),
         oracle: (readings > 1).then(|| Oracle {
             readings,
             ..Oracle::default()
@@ -431,6 +469,7 @@ pub fn run(
         ..Metrics::default()
     };
     let mut ent_seq_cache: HashMap<u32, bool> = HashMap::new();
+    let mut detail: Vec<String> = Vec::new();
     let opts = ParseOptions::with_readings(readings);
     for record in &records {
         validate(record)?;
@@ -448,6 +487,16 @@ pub fn run(
         let bounds: Option<&dyn jparser::engine::Boundaries> = None;
         let parsed = jparser::parse(&index, &table, &record.text, &opts, bounds)?;
         accumulate(record, &parsed, &mut m);
+        if let (Some(by_text), Some(cm)) = (&adjudicated, &mut m.compounds) {
+            if let Some(recs) = by_text.get(&record.text) {
+                compounds::accumulate(recs, &parsed.segments, cm);
+                if compounds_detail {
+                    for line in compounds::misses(recs, &parsed.segments) {
+                        detail.push(format!("{} {line}", record.source));
+                    }
+                }
+            }
+        }
     }
     m.by_decision
         .sort_by(|a, b| decision_rank(&a.decision).cmp(&decision_rank(&b.decision)));
@@ -456,6 +505,12 @@ pub fn run(
         println!("{}", serde_json::to_string(&m)?);
     } else {
         print!("{}", render(&m));
+        if let Some(cm) = &m.compounds {
+            print!("{}", compounds::render(cm));
+        }
+        for line in &detail {
+            println!("{line}");
+        }
     }
     Ok(())
 }

@@ -2,6 +2,7 @@
 
 //! JParser Phase 1 harness. No UI, no Tauri, no network.
 
+mod compounds;
 mod corpus;
 #[cfg(feature = "mecab")]
 mod diff;
@@ -138,6 +139,15 @@ enum Command {
         #[cfg(feature = "mecab")]
         #[arg(long)]
         hints: Option<PathBuf>,
+        /// Readings to return. Above 1 the alternatives are printed after the
+        /// top reading, as `|`-joined surfaces. The app runs at 3, so this is
+        /// how a clipboard-length input is reproduced at the app's own `k`.
+        #[arg(
+            long,
+            default_value_t = 1,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        readings: usize,
     },
     /// Score a gold corpus against the current engine: span accuracy and
     /// entry top-1, reported separately.
@@ -159,6 +169,16 @@ enum Command {
             value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
         )]
         readings: usize,
+        /// Adjudicated compound file (JSONL). Adds the compound metric, the
+        /// only one of the three that can register compound preservation as a
+        /// gain — see `compounds.rs` and
+        /// `docs/superpowers/2026-09-09-frequency-signal-candidates.md` §10.
+        #[arg(long)]
+        compounds: Option<PathBuf>,
+        /// With `--compounds`, list every window the parse handled against
+        /// its adjudication, so a regression names its cases.
+        #[arg(long, requires = "compounds")]
+        compounds_detail: bool,
         /// Emit the metrics as one JSON object instead of the human form.
         #[arg(long)]
         json: bool,
@@ -320,6 +340,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             text,
             #[cfg(feature = "mecab")]
             hints,
+            readings,
         } => {
             let index = Index::open(&index)?;
 
@@ -337,7 +358,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(not(feature = "mecab"))]
             let bounds: Option<&dyn jparser::engine::Boundaries> = None;
 
-            let opts = ParseOptions::default();
+            let opts = ParseOptions::with_readings(readings);
             let table = jparser::engine::table::Table::new();
             let result = jparser::parse(&index, &table, &text, &opts, bounds)?;
             for seg in &result.segments {
@@ -369,6 +390,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             }
+            for (i, alt) in result.alternatives.iter().enumerate() {
+                let surfaces: Vec<&str> = alt.iter().map(|s| s.surface.as_str()).collect();
+                println!("reading {}: {}", i + 2, surfaces.join("|"));
+            }
         }
         Command::Score {
             index,
@@ -376,6 +401,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(feature = "mecab")]
             hints,
             readings,
+            compounds,
+            compounds_detail,
             json,
         } => score::run(
             &index,
@@ -383,6 +410,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(feature = "mecab")]
             hints.as_deref(),
             readings,
+            compounds.as_deref(),
+            compounds_detail,
             json,
         )?,
         #[cfg(feature = "mecab")]

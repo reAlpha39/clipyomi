@@ -299,3 +299,120 @@ class. A frequency rank is exactly what separates those two groups; a
 derivation cannot, and the current harness scores both groups identically.
 That is the argument for frequency over derivation, and it is also why
 neither can be adopted until 10.3's instrument exists.
+
+## 11. The gate instrument §10.3 asked for, built and read
+
+§10.3 concluded that the blocker in front of Phase 3 is not which corpus to
+choose but that the gate has no instrument able to reward a compound. That
+instrument now exists: `score --compounds`, backed by
+[`crates/jparser/tests/fixtures/compound_gold.jsonl`](../../crates/jparser/tests/fixtures/compound_gold.jsonl),
+built by
+[`tools/adjudicate_compounds.py`](../../tools/adjudicate_compounds.py)
+from the probe's `--emit` output, and implemented in
+[`crates/jparser/src/bin/jparser-cli/compounds.rs`](../../crates/jparser/src/bin/jparser-cli/compounds.rs).
+
+### 11.1 What was adjudicated, and by what rule
+
+All 194 windows of both §10 populations — the 53 merges the parse made and the
+141 compounds it declined — so the metric can register a preserved compound
+*and* a spurious merge with one rule rather than only the half a change is
+trying to move. Judged once per distinct `(surface, headword)` type, 139 of
+them, into four classes:
+
+| class | verdict | n windows | what it is |
+| --- | --- | --- | --- |
+| `lexical` | should merge | 112 | a dictionary unit a reader looks up whole: compound noun (`副大統領`), expression (`首を振る`), numeral + counter (`16日`), a conjugated single verb (`行かなきゃ`), or a fixed construction whose force is not its parts stacked (`である`, `によると`, `ことになっている`) |
+| `transparent` | should split | 42 | function-word stacking whose parts are each what the reader needs: `には`, `にも`, `での`, `との`, `のか`, `彼の` |
+| `false-match` | should split | 32 | the headword is a different word; merging shows a wrong gloss: `がした` as `がす`, `名の` as `名のる`, `はこう` as `はく` |
+| `ambiguous` | excluded | 8 | context-dependent at type level: `では`, `でも`, `時に`, `にして`, `天と地`, and the `どうか`/`かなあ` overlap in 「それはどうかなあ」 |
+
+Overlaps are resolved per sentence, not per type: two windows cannot both be
+segments, so among overlapping `lexical` windows the longest is the one
+expected to merge and the rest carry `expect: split` with a note naming the
+winner. Six windows are resolved that way, and one of the six needed a hand
+override — `服を着る` is a real expression but in 「立派な黒服を着て」 it
+straddles the noun `黒服`, so longest-wins was wrong there.
+
+**Excluding rather than guessing the `ambiguous` eight is deliberate**, on
+§5.2's own precedent: it records that every mechanical discriminator tried for
+the spurious-merge class cut the wrong way, and a metric that guesses would
+inherit exactly that. The count is printed beside the ratio so the
+denominator is never quietly smaller than the file.
+
+**The judgment most open to dispute is the `transparent` class.** `には` and
+`にも` are JMdict headwords and the engine merges them today; they are
+adjudicated *split* here on the ground that merging hides the particle doing
+the work — a reader's difficulty with `には` is knowing that `は` is the topic
+marker attaching after `に`, and a merged segment puts neither particle within
+reach. That call alone accounts for 12 of the metric's misses. Because the
+class is stored per record, reversing it is a filter over the file rather than
+a re-adjudication, and the by-class line makes its contribution visible
+without recomputing anything.
+
+### 11.2 What the engine scores
+
+Baseline, unchanged by any of this (the eight recorded cells are byte-identical
+and `score` without `--compounds` prints exactly what it printed before):
+
+| | span strict | span tolerant | entry top-1 | **compounds** | kept whole | split apart |
+| --- | --- | --- | --- | --- | --- | --- |
+| hints off | 0.7272 | 0.7975 | 0.9075 | **0.5161** (96 / 186) | 43 / 106 | 53 / 80 |
+| hints on | 0.8031 | 0.8521 | 0.9063 | **0.5430** (101 / 186) | 35 / 106 | 66 / 80 |
+
+By class, hints on: `lexical` 41 / 112, `transparent` 30 / 42,
+`false-match` 30 / 32.
+
+Two readings the span metrics could not give.
+
+**The engine keeps 35 of 106 adjudicated compounds whole — 33%.** That is the
+size of the gap Phase 3 exists to close, stated as a number for the first
+time, and §10.2's finding is what it is made of: the compounds it declines are
+overwhelmingly the ones whose priority marker is inverted.
+
+**And the hint benefit is not what the span metrics reported.** Hints improve
+the compound metric overall (0.5161 → 0.5430) but they do it *entirely* by
+suppressing bad merges — `false-match` 24 → 30 of 32, `transparent` 27 → 30 of
+42 — while compound preservation gets *worse*, `lexical` 45 → 41 of 112.
+Vibrato's boundaries are a constraint, so this is the shape one should expect
+and neither span metric could show it: §5.2 recorded the hint benefit as
++1.53 strict / +2.13 tolerant with no sign that the two halves move in
+opposite directions.
+
+### 11.3 What it says about the three candidates
+
+The flip test of §10.3, rescored on this metric: a COMMON-sized discount on
+the compound — how any parity signal, frequency rank included, reaches the DP
+— moves the metric **0.5430 → 0.6774, +25 windows**, where the strict span
+metric scored the same change at about −6.9 points. That is the instrument
+doing its job: the change Phase 3 wants is now measurable as a gain.
+
+The per-class split is the finding that chooses between a frequency layer and
+the free alternative:
+
+| class | now | after a blanket COMMON discount |
+| --- | --- | --- |
+| `lexical` | 41 / 112 | **88 / 112** (+47) |
+| `transparent` | 30 / 42 | 10 / 42 (−20) |
+| `false-match` | 30 / 32 | 28 / 32 (−2) |
+
+A build-time derivation cannot tell `副大統領` from `名の`, so it buys the +47
+and pays the −22; net +25 is real but it ships 22 wrong merges, two of them
+displaying an outright wrong word. **Separating those two groups is precisely
+what a frequency rank does and a derivation cannot** — which is the argument
+for Phase 3's layer, now with a number on both the prize and the price.
+
+### 11.4 What is still open
+
+The metric is 194 windows from 150 sentences, so it is small, and it is a
+model's adjudication rather than the author's — `corpus_staging/build_gold.py`
+draws that distinction for the gold corpus and it holds here. Neither is a
+reason to wait: the corpus choice of §8 can now be made on evidence, since a
+candidate frequency table can be built, priced into `cost.rs`, and scored on
+this metric without asking anyone to accept a −6.9-point strict regression as
+progress.
+
+What has *not* changed is §9's licence question. Aozora remains buildable
+today with tooling already in `corpus_staging` and its weakness remains
+register; the capture pool remains the only candidate turning on a judgment
+about distributing counts over copyrighted text. The instrument decides which
+is worth having, not whether it may be shipped.

@@ -184,3 +184,40 @@ Run at `9fcab9b`: `cargo test -p jparser` (296 passed), the same with
   decides. Coverage is invariant, the segmentation of a pathological gap is
   not, and the comment already said so. Both figures now live in the
   constants' doc comments rather than in a handoff.
+- ~~**The multiplier this phase set out to measure is still unmeasured.**
+  §1 records that the intent was to time `with_readings(3)` at the app's
+  10,000-character ceiling and that the k = 1 baseline never finished, so the
+  restructure was measured at k = 1 only. The app runs at 3.~~
+  **Closed 2026-09-09, after this phase.** `jparser-cli parse` gained
+  `--readings`, which it had never had — the app ran at a `k` the CLI could
+  not reproduce — and the §2 method was repeated at both values: full
+  218,449-entry index built from the `JMdict_e.gz` on disk, paste files of
+  gold-corpus sentences cycled to length (365 sentences at the full size,
+  reproducing §2's 366), release build, stdout to a file.
+
+  | input chars | k = 1 | k = 3 | ratio |
+  | --- | --- | --- | --- |
+  | 455 | 0.107 s | 0.121 s | ×1.13 |
+  | 975 | 0.134 s | 0.167 s | ×1.25 |
+  | 1,973 | 0.183 s | 0.247 s | ×1.35 |
+  | 4,960 | 0.300 s | 0.515 s | ×1.72 |
+  | 9,987 | **0.501 s** | **0.897 s** | **×1.79** |
+
+  **The k = 1 column reproduces this phase's recorded 0.506 s at 10,000
+  characters to within 0.005 s**, which is what makes the k = 3 column
+  comparable rather than a fresh measurement on an unvalidated instrument.
+
+  **The multiplier at the ceiling is ×1.79, not the ×12 the pool size would
+  suggest.** `RAW_FACTOR` takes the DP's per-position list from 1 to 12 at
+  k = 3, but the DP is not where the time goes — `lex::candidates` runs once
+  per parse whatever `k` is, and it is still the dominant cost after this
+  phase's fix. Hints on, which is the app's own configuration, the ceiling is
+  0.879 s median of three runs (0.830 / 0.879 / 0.885) with stdout discarded,
+  and 0.920 s with the segment dump written out.
+
+  So the app's worst case is **under one second at its own input ceiling**,
+  and the Phase 2b risk recorded as "no latency figure exists anywhere" is
+  closed with figures rather than by argument. What the bullet above still
+  says stands: 0.9 s is seconds rather than milliseconds, nothing here
+  profiled where it goes, and the sub-linearity caveat of §3 applies to both
+  columns equally — the paste files are repetitive by construction.

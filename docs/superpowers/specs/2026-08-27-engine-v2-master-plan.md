@@ -476,7 +476,12 @@ Two, because the failures are different and a combined number would hide
 both. Every metric here is measured at corpus sentence lengths, and nothing
 in the harness measures a clipboard-length input — which is why a
 superlinearity that made the app's own 10,000-character ceiling unusable
-survived four phases (Phase 2c).
+survived four phases (Phase 2c). Latency at that ceiling is now recorded
+outside the harness, at the `k` the app actually runs: 0.897 s hints off and
+0.879 s hints on for 9,987 characters at `--readings 3`, against 0.501 s at
+k = 1, so the k-best pool costs ×1.79 and not the ×12 its size suggests
+(Phase 2c handoff §5). A timing figure inside the harness, compared against a
+recorded baseline, is still not built.
 
 **Span accuracy.** Fraction of gold spans the parser reproduces exactly (same
 start, same length). Measures whether the word is correctly delimited — whether
@@ -500,6 +505,22 @@ corpus of §5.3 is disagreement-sampled against a tokenizer, so it was
 adjudicated at the tokenizer's short-unit granularity — and strict span
 accuracy against a short-unit corpus penalises compound preservation exactly
 as boundary F1 would. Measured: it costs **16.5 points**.
+
+**Neither span metric can reward compound preservation, and a third
+answers that.** Both are scored against a corpus adjudicated at short-unit
+granularity, so strict *punishes* keeping `東京都` whole and tolerant only
+declines to punish it. Measured 2026-09-09: a signal giving an
+inverted-priority compound parity with its parts costs about 6.9 points
+strict for at most 0.8 points tolerant, so the Phase 3 frequency layer below
+could never have passed a gate built on this pair. **Compound accuracy**, the
+third metric, is the fraction of hand-adjudicated compound decisions the
+parse handles as adjudicated — 194 windows over this corpus, each classed
+`lexical` (should merge), `transparent` or `false-match` (should split), or
+`ambiguous` (excluded). It is 0.5430 hints on and 0.5161 hints off, it needs
+its own file (`score --compounds`), and it is reported separately from the
+two below like everything else here. See
+`docs/superpowers/2026-09-09-frequency-signal-candidates.md` §10-§11 and
+`src/bin/jparser-cli/compounds.rs`.
 
 **Compound-tolerant span accuracy.** A gold span strict accuracy scored as a
 miss counts as a hit when a single *matched* segment swallows it whole and that
@@ -1067,6 +1088,23 @@ own licensing gate, adopted only if its data source is permissive:
 | Pitch accent | — | **Highest risk.** NHK's dictionary is not free, and community accent datasets have murky provenance — precisely the trap this plan exists to escape |
 
 No layer ships without its licence established in writing first.
+
+**The premise was sized on the corpus 2026-09-09, and the blocker turned
+out to be the gate rather than the corpus.** The inversion is real and is the
+mechanism: of 141 windows where a compound was available and the parse
+declined it, 104 are inverted, and every example this plan names that occurs
+in the corpus — `音がする` in five sentences, `首を振る`, `ことになっている` —
+is among them. But `score`'s coarsening count cannot show that (0 of its 53
+merges are inverted, structurally: with `CROSS = 0` an under-evidenced
+compound is priced out before it can become a merge), and neither span metric
+above can score fixing it as a gain. §5.2's third metric was built for that
+reason, and on it the same fix reads +25 windows where strict read −6.9
+points. It also prices the free alternative: a build-time COMMON derivation
+takes the `lexical` class from 41 to 88 of 112 and pays 22 wrong merges,
+because it cannot tell `副大統領` from `名の` — which is exactly what a
+frequency rank does, and is the sharpest argument for this layer that exists.
+Details in `docs/superpowers/2026-09-09-frequency-signal-candidates.md`
+§10-§11; the licence question below is untouched by any of it.
 
 **Frequency rank stopped being a nice-to-have at Phase 1a (2026-09-01
 handoff §4).** It is the signal §5.2's compound-preservation finding shows is
