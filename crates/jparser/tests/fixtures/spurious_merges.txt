@@ -36,33 +36,50 @@
 # (`docs/superpowers/2026-09-01-engine-v2-phase1a-handoff.md`) §5 and §8 on
 # why the third column is documentation rather than an assertion.
 #
+# THE FOURTH COLUMN IS CHECKED. It names a `source` in
+# tests/fixtures/gold.jsonl: a committed, adjudicated sentence that contains
+# the surface AND whose gold segmentation puts a boundary strictly inside it,
+# so the corpus itself asserts that the surface must not be one word there.
+# All 26 rows have one; none of the sentences is invented for this test.
+#
+# It was added because testing the surface in isolation could not measure what
+# this file is about. Given only a bare two-character string, Vibrato treats
+# はこ, うん and んで as one token each, so `cost.rs`'s crossing count -- which
+# looks strictly *between* a span's endpoints -- finds no interior boundary and
+# neither CROSS nor PRONOUNCE_CROSS can fire at any magnitude. Three of the
+# four rows that failed before this column existed failed for that reason and
+# not for an engine one; the fourth (いんじゃない) failed because じゃ is
+# missing from the small curated tests/fixtures/jmdict_subset.xml, which is why
+# the test now builds from gold_jmdict_subset.xml, where じゃ is one of four
+# real JMdict entries.
+#
 # Nothing here is captured text or ported expression: these are ordinary
 # Japanese strings this project measured about its own engine.
 #
-# surface	ent_seq	what it actually is
-はいた	1399760	は + いた
-はこう	1399760	は + こう
-ももう	1567610	も + もう
-はこ	1585650	は + この
-がい	1204330	が + いった
-になって	1599900	に + なる
-になった	1599900	に + なった
-してい	1308000	して + いた
-どうし	1451380	どう + しました
-ことし	1579130	こと + してる
-はそう	2791750	は + そう
-いんじゃない	2511890	い + んじゃない
-もうどう	1571370	もう + どう
-らが	2601290	ら + が
-せいか	1375650	せい + か
-のうち	1470740	の + うち
-ことだった	2229780	こと + だった
-ことだ	2229780	こと + だ
-がいい	1203350	が + いい
-それを	2855684	それ + を
-うん	1001090	う + ん
-んで	1009970	ん + で
-いっしょ	1163400	い + っしょ
-きかかる	1547820	き + かかる
-それに	1007040	それ + に
-タッとい	1598620	タッ + とい
+# surface	ent_seq	what it actually is	gold sentence asserting the split
+はいた	1399760	は + いた	d:a:003521-6
+はこう	1399760	は + こう	a:004842-3
+ももう	1567610	も + もう	a:004601-8
+はこ	1585650	は + この	b:wn3065-1
+がい	1204330	が + いった	a:053148-4
+になって	1599900	に + なる	b:wn28412-1
+になった	1599900	に + なった	a:004601-8
+してい	1308000	して + いた	b:wn25517-3
+どうし	1451380	どう + しました	d:a:000323-3
+ことし	1579130	こと + してる	c1:cas-14
+はそう	2791750	は + そう	c1:elo-09
+いんじゃない	2511890	い + んじゃない	c1:cas-04
+もうどう	1571370	もう + どう	c1:elo-02
+らが	2601290	ら + が	b:wn21710-1
+せいか	1375650	せい + か	a:043426-2
+のうち	1470740	の + うち	a:049597-2
+ことだった	2229780	こと + だった	a:059739-8
+ことだ	2229780	こと + だ	a:059739-8
+がいい	1203350	が + いい	a:058135-2
+それを	2855684	それ + を	a:000883-7
+うん	1001090	う + ん	c1:cas-06
+んで	1009970	ん + で	a:045339-6
+いっしょ	1163400	い + っしょ	c1:cas-14
+きかかる	1547820	き + かかる	a:045670-4
+それに	1007040	それ + に	a:004842-3
+タッとい	1598620	タッ + とい	a:045670-4

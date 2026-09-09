@@ -28,6 +28,19 @@ fn build_v2(dir: &Path) {
         .expect("v2 build");
 }
 
+/// An index over the gold corpus's own JMdict subset rather than the small
+/// curated one, for the one test whose subject is a gold sentence.
+///
+/// `FIXTURE` is 1,472 hand-picked entries and covers isolated probe words; a
+/// gold sentence needs the 5,402 that `score` measures against, or a row
+/// passes because nothing in it matched at all.
+#[cfg(feature = "mecab")]
+fn build_gold_v2(dir: &Path) {
+    const GOLD_FIXTURE: &str = include_str!("fixtures/gold_jmdict_subset.xml");
+    jparser::engine::build::build_from_reader(BufReader::new(GOLD_FIXTURE.as_bytes()), dir)
+        .expect("gold v2 build");
+}
+
 #[test]
 fn a_v2_index_opens_under_the_engines_fingerprint() {
     let dir = scratch("build");
@@ -170,22 +183,10 @@ fn kurumadehakou_parses_as_four_words() {
     assert_eq!(cuts, ["くる", "まで", "は", "こう"]);
 }
 
-/// Every character offset `bounds` marks as a cut, `0` and `text`'s char
-/// length included. Mirrors `jparser-cli`'s own private
-/// `diff::boundaries_from_segments` (unreachable from this integration test
-/// binary), computed the other direction: from a `Boundaries` source rather
-/// than a `Segment` cover.
-#[cfg(feature = "mecab")]
-fn cuts_of(text: &str, bounds: &dyn jparser::engine::Boundaries) -> Vec<usize> {
-    (0..=text.chars().count())
-        .filter(|&p| bounds.is_boundary(p))
-        .collect()
-}
-
 /// The cut offsets a `ParseResult`'s own segments imply: every `start`, plus
-/// the final segment's `start + len`. See [`cuts_of`] -- comparing this
-/// against a real `Boundaries` source's own cuts is what
-/// `the_particle_absorbing_merges_are_gone` needs.
+/// the final segment's `start + len`. The intermediate ends need no entry of
+/// their own -- a `ParseResult` is a contiguous cover, so every segment's end
+/// is the next one's start.
 #[cfg(feature = "mecab")]
 fn segment_cuts(segments: &[jparser::Segment]) -> Vec<usize> {
     let mut out: Vec<usize> = segments.iter().map(|s| s.start).collect();
@@ -195,115 +196,180 @@ fn segment_cuts(segments: &[jparser::Segment]) -> Vec<usize> {
     out
 }
 
+/// One gold record, reduced to what
+/// [`the_particle_absorbing_merges_are_gone`] asks of it.
+#[cfg(feature = "mecab")]
+struct GoldSentence {
+    source: String,
+    text: String,
+    /// Every adjudicated boundary: each span's `start`, plus each span's end.
+    cuts: Vec<usize>,
+}
+
+/// The committed gold corpus, as sentences with their adjudicated boundaries.
+///
+/// Read rather than transcribed: the fixture names a `source` and the
+/// sentence itself stays in exactly one place, so a corpus edit cannot leave
+/// this test asserting against a sentence the corpus no longer holds. A
+/// missing `source` is a panic below, never a skip -- the same rule
+/// `jparser-cli score` applies to an adjudicated sentence absent from the
+/// corpus.
+#[cfg(feature = "mecab")]
+fn gold_records() -> Vec<GoldSentence> {
+    const GOLD: &str = include_str!("fixtures/gold.jsonl");
+    GOLD.lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            let v: serde_json::Value = serde_json::from_str(line).expect("gold.jsonl is JSONL");
+            let spans = v["spans"].as_array().expect("spans");
+            let mut cuts: Vec<usize> = Vec::with_capacity(spans.len() + 1);
+            for span in spans {
+                let start = span["start"].as_u64().expect("start") as usize;
+                let len = span["len"].as_u64().expect("len") as usize;
+                cuts.push(start);
+                cuts.push(start + len);
+            }
+            cuts.sort_unstable();
+            cuts.dedup();
+            GoldSentence {
+                source: v["source"].as_str().expect("source").to_string(),
+                text: v["text"].as_str().expect("text").to_string(),
+                cuts,
+            }
+        })
+        .collect()
+}
+
+/// `needle`'s first occurrence in `text` as a **character** offset, which is
+/// the unit every boundary in this crate is expressed in.
+#[cfg(feature = "mecab")]
+fn char_index_of(text: &str, needle: &str) -> Option<usize> {
+    text.find(needle).map(|b| text[..b].chars().count())
+}
+
 #[cfg(feature = "mecab")]
 #[test]
-#[ignore = "Task 16b re-measured this against the tuned cost model (COMMON \
-            length-proportional, CROSS=0, PRONOUNCE_CROSS unchanged at 25): \
-            still 22 of 26 rows pass, the same 4 fail, for two DIFFERENT \
-            reasons neither of which cost.rs magnitude tuning can reach --  \
-            はこ/うん/んで: each returns ONE matched segment [0, 2] via a \
-            PRONOUNCE-flagged conjugation-chain match (はこ -> はく [1399760] \
-            掃く; うん -> entry_ids [1473950, 1588410, 2759530, 1470570, \
-            1578290, 2600390, 2612280]; んで -> entry_ids [1009970, 2836540]). \
-            In every one of these three, Vibrato's OWN isolated-surface \
-            tokenization also cuts at [0, 2] -- it treats the 2-character \
-            string as one token when given no sentence context. `cost::cost`'s \
-            crossing count is computed strictly *between* a span's endpoints \
-            (cost.rs's `is_allowed` doc comment), so with no interior boundary \
-            to find, `crossings == 0` and neither `CROSS` nor `PRONOUNCE_CROSS` \
-            fire at all, at any magnitude -- confirmed empirically: these three \
-            rows fail identically at PRONOUNCE_CROSS = 0, 1, 2, 5, 10, and 25 \
-            (handoff §10's trial log). There is no interior-boundary \
-            signal for cost.rs to price against; fixing this needs a different \
-            mechanism (a real sentence-context boundary source, or a wider \
-            fixture than the isolated 2-character surface this test supplies), \
-            not a constant.  \
-            いんじゃない: still a partial merge, got [0, 4, 6] \
-            [\"いんじゃ\", \"ない\"], Vibrato's isolated cut is \
-            [0, 2, 4, 6] (いん/じゃ/ない). Here `crossings == 1` and \
-            `PRONOUNCE_CROSS` DOES fire (the いんじゃ candidate costs 21: \
-            COVER*4=4, COMMON*4=-8, PRONOUNCE_CROSS*1=25). It still wins \
-            because `crates/jparser/tests/fixtures/jmdict_subset.xml` (this \
-            test's small curated fixture) has no dictionary entry at all \
-            covering じゃ as a standalone 2-character span, so the only way \
-            to respect Vibrato's boundary there is the UNMATCHED-run fallback \
-            at UNMATCHED*2=60 -- far above the 21+(-2)=19 the merge pays. \
-            Raising PRONOUNCE_CROSS to roughly 80 would flip this one row (not \
-            tested against the full corpus, since every value from 1 to 25 \
-            already measures identically there -- see cost.rs's \
-            PRONOUNCE_CROSS comment), but じゃ (the ordinary contraction of \
-            では) is almost certainly a real JMdict entry missing only from \
-            this small curated fixture, so that reads as a fixture gap, not a \
-            cost-model defect worth a magnitude change six times the value \
-            every other measurement on this corpus already settled on."]
 fn the_particle_absorbing_merges_are_gone() {
-    // Handoff §9.5's defect class. The metric cannot catch this: the tolerant
-    // accuracy *credits* these merges, because their endpoints are both gold
-    // boundaries. Spec §2.3.
+    // Handoff §9.5's defect class: jparser absorbing a preceding particle
+    // into the word after it and landing on a kana-unified headword that is
+    // semantically absurd -- `は`+`いた` as 履く, `も`+`もう` as 揉む,
+    // `が`+`いった` as 甲斐. Neither span metric can catch it. Strict scores
+    // it as an ordinary miss, and tolerant actively *credits* it, because the
+    // merge's endpoints are both gold boundaries -- master plan §5.2 records
+    // the ~1.3 points it over-forgives for exactly this class, and refuses to
+    // add a heuristic to the metric to fix it. This fixture is the only guard
+    // that exists.
     //
-    // The brief's own sketch asserts only the literal defect signature (one
-    // matched segment covering the whole surface). That check is real, not
-    // vacuous, once real per-surface `bounds` are supplied (see below) -- an
-    // earlier pass on this task replaced it outright with the cut comparison
-    // below on the mistaken belief that it was vacuous too (conflating a
-    // `bounds = None` measurement -- 63 of 81 multi-character spans shattered
-    // across the 30-sentence snapshot at the time, since fallen to 18 of 81
-    // after Task 16b's tuning, see handoff §10 -- with this test's
-    // `bounds = Some(..)` path, where `cost::is_allowed` forbids cutting
-    // inside a Vibrato token and the shattering defect above cannot reach).
-    // That swap introduced a
-    // real blind spot: any row where Vibrato, given only the isolated
-    // surface, reproduces the very merge under test now passes for the wrong
-    // reason. Both checks run now, unioned -- see the loop below -- because
-    // each catches something the other cannot: the literal check catches
-    // はこ/うん/んで (one matched segment; Vibrato's isolated cut coincides
-    // with the wrong merge, so the cut comparison alone missed all three),
-    // and the cut comparison catches いんじゃない (a partial merge -- two
-    // segments, not one -- that still crosses a real interior Vibrato cut).
+    // Each row is measured inside a committed gold sentence that contains the
+    // surface and whose adjudication puts a boundary strictly inside it; the
+    // fixture's fourth column names it, and all 26 rows have one. The
+    // sentences are the corpus's, not invented here.
     //
-    // The cut comparison needs no hand-transcription of the fixture's third
-    // column, which documents the wider sentence each merge was measured in
-    // (sometimes a lemma, sometimes text outside the isolated surface) rather
-    // than always being a literal reconstruction of the surface alone -- see
-    // the fixture's header.
-    const FIXTURE: &str = include_str!("fixtures/spurious_merges.txt");
+    // Until 2026-09-09 the subject was the bare surface, and that could not
+    // measure the class. Given two characters and no context, Vibrato calls
+    // はこ, うん and んで one token each, so `cost::cost`'s crossing count --
+    // which looks strictly *between* a span's endpoints -- finds no interior
+    // boundary and neither CROSS nor PRONOUNCE_CROSS can fire at any
+    // magnitude (measured flat at 0, 1, 2, 5, 10 and 25; Task 16b, handoff
+    // §10). Those three rows plus いんじゃない, whose じゃ is absent from the
+    // small curated `jmdict_subset.xml`, were the four failures this test was
+    // ignored for, and all four were properties of the subject rather than
+    // defects in the engine. The index is built from `gold_jmdict_subset.xml`
+    // for both reasons: it carries じゃ (four real JMdict entries) and it
+    // covers the gold sentences, so a row cannot pass because nothing
+    // matched.
+    //
+    // Two assertions, because either alone is weak. The absorption check is
+    // §9.5's literal signature. The interior-cut check is its positive form
+    // and is what stops the first passing vacuously.
+    //
+    // The interior-cut check asks for *a* boundary inside the surface, not
+    // for the gold one. That is deliberate and it is not free: measured
+    // 2026-09-09, 24 of the 26 rows land on the gold boundary exactly, and
+    // はいた (`d:a:003521-6`) and タッとい (`a:045670-4`) cut inside the
+    // surface at a position gold does not agree with. Those two are ordinary
+    // span misses, already counted in strict span accuracy's 0.8031, and
+    // requiring the exact offset here would fail this test for a reason it
+    // does not exist to measure. What it exists to measure is whether the
+    // particle got absorbed, and the answer for all 26 is no.
+    //
+    // Vibrato's own cut set is deliberately no longer the standard: a gold
+    // boundary is adjudicated where a tokenizer's is another opinion, and
+    // `cost::is_allowed` already forbids a span starting or ending inside a
+    // Vibrato token structurally, so asserting it here measured the
+    // constraint rather than the engine.
+    const FIXTURE_SPURIOUS: &str = include_str!("fixtures/spurious_merges.txt");
     let dir = scratch("spurious");
-    build_v2(&dir);
+    build_gold_v2(&dir);
+    let gold = gold_records();
 
     let mut wrong = Vec::new();
-    for line in FIXTURE
+    let mut rows = 0;
+    for line in FIXTURE_SPURIOUS
         .lines()
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
     {
-        let surface = line.split('\t').next().expect("surface");
-        let bounds = boundaries_over(surface);
-        let want = cuts_of(surface, &bounds);
-        let r = parse_v2_with_bounds(&dir, surface, Some(&bounds));
-        let got = segment_cuts(&r.segments);
-        // Union, not either alone. The brief's own literal signature (one
-        // matched segment covering the whole surface) is the defect itself
-        // and the cut comparison cannot see it whenever Vibrato, given only
-        // the isolated surface with no sentence context, reproduces the same
-        // wrong merge -- はこ, うん and んで all do. The cut comparison stays
-        // because it catches what the literal check cannot: いんじゃない's
-        // partial merge, which is neither a single matched segment nor a
-        // Vibrato-reproduced merge, only a real interior boundary crossed.
-        let one_matched_span = r.segments.len() == 1 && r.segments[0].matched;
-        if one_matched_span || got != want {
+        let mut cols = line.split('\t');
+        let surface = cols.next().expect("column 1 is the surface");
+        let source = cols
+            .nth(2)
+            .unwrap_or_else(|| panic!("{surface}: no fourth column naming a gold sentence"));
+        rows += 1;
+
+        let record = gold.iter().find(|r| r.source == source).unwrap_or_else(|| {
+            panic!("{surface}: gold.jsonl carries no sentence with source {source}")
+        });
+        let at = char_index_of(&record.text, surface)
+            .unwrap_or_else(|| panic!("{surface} does not occur in {source}"));
+        let len = surface.chars().count();
+
+        // Re-derived rather than trusted: if a corpus edit moved the boundary
+        // out of the surface, this row would assert nothing, and a row that
+        // asserts nothing must fail loudly instead of passing quietly.
+        let gold_inside: Vec<usize> = record
+            .cuts
+            .iter()
+            .copied()
+            .filter(|&c| c > at && c < at + len)
+            .collect();
+        assert!(
+            !gold_inside.is_empty(),
+            "{surface} at {at} in {source}: the gold segmentation no longer puts a \
+             boundary inside it, so this row cannot assert a split -- repoint the \
+             fixture's fourth column"
+        );
+
+        let bounds = boundaries_over(&record.text);
+        let r = parse_v2_with_bounds(&dir, &record.text, Some(&bounds));
+        let absorbed = r
+            .segments
+            .iter()
+            .any(|s| s.matched && s.start == at && s.len == len);
+        let cuts = segment_cuts(&r.segments);
+        let interior = cuts.iter().any(|&c| c > at && c < at + len);
+
+        if absorbed || !interior {
             let surfaces: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
-            let ids: Vec<Vec<u32>> = r
-                .segments
-                .iter()
-                .map(|s| s.entries.iter().map(|e| e.entry_id).collect())
-                .collect();
+            let reason = if absorbed {
+                "absorbed into one matched segment"
+            } else {
+                "no segment boundary inside it"
+            };
             wrong.push(format!(
-                "{surface}: v2 cut at {got:?} {surfaces:?} entry_ids={ids:?}, Vibrato cuts at {want:?}"
+                "{surface} at {at} in {source}: {reason}; gold cuts inside at \
+                 {gold_inside:?}, parse cut at {cuts:?} {surfaces:?}"
             ));
         }
     }
+
+    // The fixture's own count, asserted so a truncated or mis-parsed file
+    // cannot make this test pass by measuring nothing. The fixture header
+    // explains why 26 is a lower bound on the class rather than a closed
+    // count; it is still an exact count of this file.
+    assert_eq!(rows, 26, "the fixture should hold 26 rows");
     assert!(
         wrong.is_empty(),
-        "did not land on Vibrato's own cuts:\n{}",
+        "particle-absorbing merges are back:\n{}",
         wrong.join("\n")
     );
 }
