@@ -12,6 +12,13 @@
 //! generated and flagged instead. `exact` is that flag: false whenever a
 //! candidate exists only because [`kana::fold`] unified hiragana and
 //! katakana, which is the signal spec §7.4's cost term prices.
+//!
+//! Generation walks the key FST once per start position, not once per span:
+//! the walk holds the stem, each conjugation class's remove-suffix is tried
+//! against it without repeating the walk, and the walk's own dead end is
+//! what bounds how far a span can reach. Before Phase 2c this enumerated
+//! every `(start, end)` pair and built a key per pair, which was superlinear
+//! in input length.
 
 use std::collections::HashMap;
 
@@ -91,44 +98,68 @@ pub fn candidates(
         .map(|end| table.chains_ending_at(chars, end, MAX_CHAIN))
         .collect();
 
+    // The same chains, indexed by where the *stem* ends rather than where
+    // the span does. One walk from `start` arrives at stem ends ascending,
+    // so that is the order the lookups need; each entry carries the span end
+    // it implies and its position in its own `chains_by_end` bucket, which
+    // the emission order below needs (Phase 2c design §3.2, §3.3).
+    let mut chains_by_stem_end: Vec<Vec<(usize, usize, &ChainHit)>> = vec![Vec::new(); len + 1];
+    for (i, bucket) in chains_by_end.iter().enumerate() {
+        let end = i + 1;
+        for (chain_index, hit) in bucket.iter().enumerate() {
+            chains_by_stem_end[end - hit.consumed].push((end, chain_index, hit));
+        }
+    }
+
     let mut class_cache: HashMap<u32, Vec<ClassId>> = HashMap::new();
 
     for start in 0..len {
-        // Longest span first: a span's own suffix can independently satisfy
-        // a shorter span ending mid-chain (e.g. 書いた's onbin fragment 書い
-        // alone reconstructs 書く too, one step short of the full た-chain),
-        // so the same headword can legitimately recur at several lengths.
-        // Both are kept -- the DP chooses among them -- but the fuller match
-        // is pushed first.
-        for end in (start + 1..=len).rev() {
-            for hit in &chains_by_end[end - 1] {
-                // `hit.consumed` can never exceed `end`: `Table::search`
-                // walks leftward from `end` and stops before running past
-                // its start, so this subtraction never wraps.
-                let stem_end = end - hit.consumed;
-                if stem_end < start {
+        // Collected as the walk finds them -- stem-end ascending -- and
+        // emitted longest span first below, which is the order the old
+        // `(start + 1..=len).rev()` loop pushed in and `dedup_shallowest`
+        // depends on.
+        let mut found: Vec<(usize, usize, Candidate)> = Vec::new();
+        let mut walk = index.walk();
+        let mut stem_end = start;
+
+        loop {
+            for &(end, chain_index, hit) in &chains_by_stem_end[stem_end] {
+                // The old loop ran `end` from `start + 1`, so a zero-length
+                // span was unreachable; indexed by stem end, the identity
+                // chain at `stem_end == start` implies `end == start`
+                // (design §3.2).
+                if end <= start {
                     continue;
                 }
-                let stem: String = chars[start..stem_end].iter().collect();
-                let key = match hit.stem_class {
-                    Some(class) => format!("{stem}{}", CLASSES[class as usize].remove),
-                    None => stem,
+                let remove = match hit.stem_class {
+                    Some(class) => CLASSES[class as usize].remove,
+                    None => "",
                 };
-                let key_len = key.chars().count();
-
-                for prefix_hit in index.prefixes_of_with(&key, kana::fold)? {
-                    // Only the hit spanning the whole key: the FST also
-                    // returns every dictionary key that is a prefix of it,
-                    // and those are prefixes of the constructed key, not
-                    // matches for it.
-                    if prefix_hit.key_chars != key_len {
+                // Ask the index whether anything is there before building a
+                // key to ask with: the walk already holds the stem.
+                let found_records = if remove.is_empty() {
+                    walk.records()?
+                } else {
+                    walk.records_after(remove, kana::fold)?
+                };
+                let Some(records) = found_records else {
+                    continue;
+                };
+                // Built only for a span that matched, because `exact`
+                // compares against it.
+                let key: String = chars[start..stem_end]
+                    .iter()
+                    .copied()
+                    .chain(remove.chars())
+                    .collect();
+                for record in &records {
+                    if !allows_chain(index, &mut class_cache, record, hit.stem_class)? {
                         continue;
                     }
-                    for record in &prefix_hit.records {
-                        if !allows_chain(index, &mut class_cache, record, hit.stem_class)? {
-                            continue;
-                        }
-                        out[start].push(Candidate {
+                    found.push((
+                        end,
+                        chain_index,
+                        Candidate {
                             start,
                             len: end - start,
                             entry_id: record.entry_id,
@@ -136,12 +167,26 @@ pub fn candidates(
                             steps: hit.steps.clone(),
                             exact: record.surface == key,
                             headword: record.surface.clone(),
-                        });
-                    }
+                        },
+                    ));
                 }
             }
+
+            // The walk's own dead end bounds the span: no key has this
+            // prefix, so none has a longer one, and nothing further from
+            // this start can match. That is the bound the old shape lacked.
+            if stem_end == len || !walk.push(chars[stem_end], kana::fold) {
+                break;
+            }
+            stem_end += 1;
         }
-        out[start] = dedup_shallowest(std::mem::take(&mut out[start]));
+
+        // Longest span first, and within one span end the order that end's
+        // own chain bucket had. `sort_by` is stable, so record order within
+        // one chain hit survives too -- which is what makes this reproduce
+        // the old push order term for term (design §3.3).
+        found.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        out[start] = dedup_shallowest(found.into_iter().map(|(_, _, c)| c).collect());
     }
 
     Ok(out)

@@ -1090,3 +1090,79 @@ fn alternatives_serialize_as_an_array_of_segment_arrays() {
     assert_eq!(json["alternatives"][0][1]["surface"], "都");
     assert_eq!(json["alternatives"][0][1]["start"], 2);
 }
+
+/// Phase 2c: candidate generation used to be superlinear in input length —
+/// it walked the index from each start for every span end, so a
+/// 10,000-character paste, which is the app's own clipboard ceiling, did not
+/// finish in ten minutes. This asserts nothing about the clock: a wall-time
+/// threshold is flaky on shared hardware. It is a canary. If the blowup
+/// returns, this test stops finishing and the suite hangs, which is the
+/// loud signal whose absence let the defect survive four phases.
+#[test]
+fn a_long_input_parses_in_reasonable_time() {
+    let dir = scratch("long-input");
+    build_v2(&dir);
+    let index = open_v2(&dir);
+    let table = jparser::engine::table::Table::new();
+
+    // Roughly 4,000 characters of the crate's own corpus sentences, which is
+    // far past where the old shape became unusable and well short of the
+    // clipboard ceiling.
+    let mut text = String::new();
+    while text.chars().count() < 4000 {
+        for sentence in sentences() {
+            text.push_str(sentence);
+            if text.chars().count() >= 4000 {
+                break;
+            }
+        }
+    }
+
+    let result = jparser::parse(
+        &index,
+        &table,
+        &text,
+        &jparser::ParseOptions::default(),
+        None,
+    )
+    .expect("parse");
+
+    // The cover is contiguous and complete, as for any input.
+    let mut at = 0;
+    for segment in &result.segments {
+        assert_eq!(segment.start, at);
+        at += segment.len;
+    }
+    assert_eq!(at, text.chars().count());
+}
+
+/// Phase 2c design §3.2: the old `(start + 1..=len)` loop bound made a
+/// zero-length span unreachable. Indexed by stem end, the identity chain hit
+/// (`consumed: 0`) at `stem_end == start` implies `end == start`, so the
+/// restructure has to exclude it explicitly. A candidate of length zero
+/// would break every consumer of a contiguous cover.
+///
+/// The build is hoisted out of the per-sentence loop (unlike `cands`, which
+/// rebuilds per call) -- the same shape
+/// `asking_for_readings_never_moves_the_top_reading_on_the_corpus` above
+/// already uses -- since this iterates every corpus sentence.
+#[test]
+fn no_candidate_has_zero_length() {
+    let dir = scratch("zero-length");
+    build_v2(&dir);
+    let index = open_v2(&dir);
+    let table = jparser::engine::table::Table::new();
+    for text in sentences() {
+        let chars: Vec<char> = text.chars().collect();
+        let out = jparser::engine::lex::candidates(&index, &table, &chars).expect("candidates");
+        for bucket in out {
+            for candidate in bucket {
+                assert!(
+                    candidate.len >= 1,
+                    "zero-length candidate at {} in {text}",
+                    candidate.start
+                );
+            }
+        }
+    }
+}
