@@ -81,7 +81,7 @@ app.innerHTML = `
     </div>
   </header>
   <div id="parse-error"></div>
-  <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
+  <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output" tabindex="-1"></div></div>
 `;
 
 const output = app.querySelector<HTMLElement>('#output')!;
@@ -1275,6 +1275,18 @@ function display(result: ParseResult | null): void {
   const same = result === lastResult;
   if (!same) readingIndex = 0;
   const scrollTop = same ? panes.scrollTop : 0;
+  // Read before the mutation below, for exactly the reason `renderDictionary`
+  // reads its own: `replaceChildren` on a parent holding focus drops focus to
+  // `<body>` the instant the focused child leaves the document. The scroll
+  // guard above was written without this half, and a reading switch is a
+  // *keyboard* gesture (`]`/`[`) — so cycling readings threw away the
+  // keyboard position of the reader who made the gesture, on every press.
+  // Gated on focus having been inside, so a background parse arriving while
+  // the user is elsewhere never steals it.
+  const hadFocus = output.contains(document.activeElement);
+  const focusedStart = hadFocus
+    ? Number((document.activeElement as HTMLElement).dataset.start ?? Number.NaN)
+    : Number.NaN;
   lastResult = result;
 
   const sentence = renderSentence(
@@ -1288,7 +1300,41 @@ function display(result: ParseResult | null): void {
   // re-render, to the top for a new result rather than wherever a previous,
   // longer parse happened to leave it.
   panes.scrollTop = scrollTop;
+  if (hadFocus) {
+    // By character offset, not by chip ordinal: a different reading segments
+    // the same sentence differently, so chip *i* is a different word while
+    // character *i* is the same character the reader was looking at. Only for
+    // a re-render — a new sentence is new text, and putting focus back on
+    // "the word at offset 12" of something the reader has not read yet would
+    // be a guess, so that case lands on the pane.
+    const chip = same ? chipCovering(focusedStart) : null;
+    // `#output` carries `tabindex="-1"` for the same reason `#dictionary`
+    // does: somewhere to land when there is no focusable chip to return to —
+    // a new sentence, or an offset that now falls inside an unmatched run,
+    // which is a `<span>` and deliberately not in the tab order.
+    (chip ?? output).focus();
+  }
   syncHistoryButtons();
+}
+
+/**
+ * The chip whose segment contains character `offset`, or `null` when that is
+ * an unmatched run or no chip covers it.
+ *
+ * Chips carry only their `start`, so the covering one is the last whose start
+ * is at or before `offset` — which relies on `renderSentence` emitting them in
+ * ascending order, as a segment cover is by construction. An unmatched run
+ * returns `null` rather than itself: `focus()` on a `<span>` with no tabindex
+ * is silently a no-op, and a caller needs to know to land somewhere else.
+ */
+function chipCovering(offset: number): HTMLElement | null {
+  if (!Number.isFinite(offset)) return null;
+  let covering: HTMLElement | null = null;
+  for (const el of output.querySelectorAll<HTMLElement>('[data-start]')) {
+    if (Number(el.dataset.start) > offset) break;
+    covering = el;
+  }
+  return covering instanceof HTMLButtonElement ? covering : null;
 }
 
 function show(result: ParseResult): void {
