@@ -155,6 +155,36 @@ mod spike {
         fresh
     }
 
+    /// Like [`demote`], but asymmetric: a reading sinks only when it is a
+    /// *refinement* of a kept one -- its cut set a superset, i.e. the same
+    /// reading with boundaries added. A coarser reading stays fresh.
+    ///
+    /// The asymmetry mirrors the tolerant rule's own. Forgiveness runs one
+    /// way: a matched segment swallowing gold spans whole at gold boundaries
+    /// is credited, a segment finer than the gold span is not. So a
+    /// refinement of a kept reading cannot earn tolerant credit the kept one
+    /// does not already have, while a *coarser* reading can -- where gold
+    /// merges and the kept reading splits, only the coarse alternative is
+    /// forgiven. Symmetric demotion sinks those too, which is a loss it need
+    /// not take.
+    fn demote_refinements(readings: &[Vec<Segment>]) -> Vec<usize> {
+        let mut fresh: Vec<usize> = Vec::new();
+        let mut dupes: Vec<usize> = Vec::new();
+        let mut fresh_cuts: Vec<BTreeSet<usize>> = Vec::new();
+        for (i, reading) in readings.iter().enumerate() {
+            let c = cuts(reading);
+            if fresh_cuts.iter().any(|k| c.is_superset(k)) {
+                dupes.push(i);
+            } else {
+                fresh_cuts.push(c);
+                fresh.push(i);
+            }
+        }
+        fresh.extend(dupes);
+        fresh.truncate(KEEP);
+        fresh
+    }
+
     /// One gold span against one reading, by `score.rs`'s two rules: a
     /// segment sitting exactly on it, or a matched segment swallowing it
     /// whole with both endpoints on gold boundaries.
@@ -194,6 +224,10 @@ mod spike {
         /// strict hit and can never subtract one.
         demoted_strict: usize,
         demoted_tolerant: usize,
+        /// oracle@3 after demoting refinements only -- the asymmetric
+        /// variant, see `demote_refinements`.
+        refined_strict: usize,
+        refined_tolerant: usize,
         /// Sentences whose whole gold cover appears as one reading. Cycling
         /// only ever fully fixes a sentence when this fires, so it is the
         /// honest ceiling on the feature rather than on the metric.
@@ -277,9 +311,12 @@ mod spike {
 
                 let kept = collapse(&readings);
                 let ranked = demote(&readings);
+                let refined_ranks = demote_refinements(&readings);
                 let plain: Vec<&Vec<Segment>> = readings.iter().take(KEEP).collect();
                 let filtered: Vec<&Vec<Segment>> = kept.iter().map(|&i| &readings[i]).collect();
                 let demoted: Vec<&Vec<Segment>> = ranked.iter().map(|&i| &readings[i]).collect();
+                let refined: Vec<&Vec<Segment>> =
+                    refined_ranks.iter().map(|&i| &readings[i]).collect();
 
                 let deepest = kept.last().copied().unwrap_or(0);
                 t.deepest_rank_used = t.deepest_rank_used.max(deepest);
@@ -331,6 +368,9 @@ mod spike {
                     let (ds, dt) = union(&demoted, span, &gold_bounds);
                     t.demoted_strict += ds as usize;
                     t.demoted_tolerant += dt as usize;
+                    let (rs, rt) = union(&refined, span, &gold_bounds);
+                    t.refined_strict += rs as usize;
+                    t.refined_tolerant += rt as usize;
                 }
             }
             Ok(t)
@@ -340,19 +380,21 @@ mod spike {
 
         // How deep must the engine look for demotion to pay? The shipped k is
         // 3; every row above it costs the DP a wider list at every position.
-        println!("       tolerant gain over top-1      strict gain over top-1");
-        println!("deep   plain  collapsed   demoted    plain  collapsed   demoted");
+        println!("       tolerant gain over top-1        strict gain over top-1");
+        println!("deep   plain  collaps  demote  refine    plain  collaps  demote  refine");
         let mut deepest = Tally::default();
         for deep in DEEPS {
             let t = measure(&index, &table, &tokenizer, &gold, deep)?;
             println!(
-                "{deep:<5}  {:+5}  {:+9}  {:+8}   {:+6}  {:+9}  {:+8}",
+                "{deep:<5}  {:+5}  {:+9}  {:+7}  {:+7}    {:+5}  {:+9}  {:+7}  {:+7}",
                 g(t.plain_tolerant, t.top1_tolerant),
                 g(t.filtered_tolerant, t.top1_tolerant),
                 g(t.demoted_tolerant, t.top1_tolerant),
+                g(t.refined_tolerant, t.top1_tolerant),
                 g(t.plain_strict, t.top1_strict),
                 g(t.filtered_strict, t.top1_strict),
                 g(t.demoted_strict, t.top1_strict),
+                g(t.refined_strict, t.top1_strict),
             );
             deepest = t;
         }
@@ -384,6 +426,11 @@ mod spike {
             "oracle@3 demoted  {}   {}   <- deletes nothing",
             ratio(t.demoted_strict, t.spans),
             ratio(t.demoted_tolerant, t.spans)
+        );
+        println!(
+            "oracle@3 refined  {}   {}   <- demotes refinements only",
+            ratio(t.refined_strict, t.spans),
+            ratio(t.refined_tolerant, t.spans)
         );
         println!();
         println!(
