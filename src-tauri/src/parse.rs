@@ -77,6 +77,12 @@ pub fn current_hints(
     hints.borrow().clone()
 }
 
+/// Readings the app asks the engine for, top-1 included: Phase 2 design §1
+/// fixes it at three. The webview shows `segments` and offers the two
+/// `alternatives` from its right-click menu, in the order Phase 2b's
+/// `lattice::demote` gives them.
+const READINGS: usize = 3;
+
 /// Parse each new input and emit the outcome to the webview.
 ///
 /// The index arrives through `index` rather than being passed by value, because
@@ -108,7 +114,7 @@ pub async fn run_worker(
                     &state.index,
                     &state.table,
                     &text,
-                    &ParseOptions::default(),
+                    &ParseOptions::with_readings(READINGS),
                     bounds.as_ref().map(|b| b as &dyn Boundaries),
                 )
                 .map_err(|e| e.to_string())

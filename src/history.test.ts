@@ -18,6 +18,7 @@ function parse(...surfaces: string[]): ParseResult {
       start += surface.length;
       return segment;
     }),
+    alternatives: [],
   };
 }
 

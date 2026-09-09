@@ -485,7 +485,7 @@ function chromeMenuEntries(): MenuEntry[] {
  */
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
-  openContextMenu(chromeMenuEntries(), event.clientX, event.clientY);
+  openContextMenu([...readingMenuEntries(), ...chromeMenuEntries()], event.clientX, event.clientY);
 });
 
 // The cursor anywhere inside the window reveals the bar; only leaving the
@@ -697,12 +697,62 @@ const DWELL_MS = 350;
  */
 let lastResult: ParseResult | null = null;
 
+/**
+ * Which of `lastResult`'s readings is on screen: 0 is `segments`, n ≥ 1 is
+ * `alternatives[n - 1]` (Phase 2 design §6). `display` resets it whenever a
+ * different result arrives; a re-render of the same result — a furigana
+ * change, a reading switch — keeps it.
+ */
+let readingIndex = 0;
+
+/** Every reading of `result`, top-1 first. */
+function readings(result: ParseResult): Segment[][] {
+  return [result.segments, ...result.alternatives];
+}
+
+/** The reading currently rendered, or `[]` before the first parse. */
+function displayedSegments(): Segment[] {
+  if (lastResult === null) return [];
+  return readings(lastResult)[readingIndex] ?? lastResult.segments;
+}
+
+/** Show reading `index` of the current result, wrapping at either end. */
+function showReading(index: number): void {
+  if (lastResult === null) return;
+  const count = readings(lastResult).length;
+  if (count < 2) return;
+  readingIndex = ((index % count) + count) % count;
+  display(lastResult);
+}
+
+/**
+ * `Reading n of k` radio rows for the right-click menu, then a separator —
+ * or nothing at all when the parse has one reading, so the menu is exactly
+ * what it was before Phase 2.
+ */
+function readingMenuEntries(): MenuEntry[] {
+  if (lastResult === null) return [];
+  const count = readings(lastResult).length;
+  if (count < 2) return [];
+  const entries: MenuEntry[] = [];
+  for (let i = 0; i < count; i += 1) {
+    entries.push({
+      kind: 'radio',
+      label: `Reading ${i + 1} of ${count}`,
+      checked: i === readingIndex,
+      onSelect: () => showReading(i),
+    });
+  }
+  entries.push({ kind: 'separator' });
+  return entries;
+}
+
 /** Pending dwell timer, or `undefined` when none is armed. */
 let dwell: number | undefined;
 
 function segmentAt(start: string | undefined): Segment | undefined {
   if (start === undefined || lastResult === null) return undefined;
-  return lastResult.segments.find((segment) => String(segment.start) === start);
+  return displayedSegments().find((segment) => String(segment.start) === start);
 }
 
 /**
@@ -1054,6 +1104,14 @@ document.addEventListener('keydown', (e) => {
   // Focus is deliberately not moved: the user is mid-sentence, and Escape
   // dismissing a tooltip should not cost them their place in the tab order.
   if (e.key === 'Escape') closePopover();
+  // `]` / `[` step through the current parse's readings (Phase 2 design §6).
+  // Bare keys: this window has no text input, both exist on JIS and US
+  // layouts, and neither scrolls `.panes`. The Alt-modified pair is history
+  // (`history-step`, Rust-side) and the webview sees that keydown too, so a
+  // modifier means this is not a reading step.
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === ']') showReading(readingIndex + 1);
+  if (e.key === '[') showReading(readingIndex - 1);
 });
 
 let lastUnfocusedChip: HTMLElement | null = null;
@@ -1195,16 +1253,28 @@ function display(result: ParseResult | null): void {
   // Before anything is replaced: a popover left open would be anchored to a
   // chip from the previous sentence that is about to leave the document.
   closePopover();
+  // The same result re-rendered — a reading switch, a furigana change — keeps
+  // the reading on screen and the reader's place in the pane: both happen
+  // while reading one word, and losing the scroll position would make a
+  // reading switch useless on exactly the long sentences it is for (Phase 2b
+  // design §6). A different result is a new sentence: reading 1, top of the
+  // pane.
+  const same = result === lastResult;
+  if (!same) readingIndex = 0;
+  const scrollTop = same ? panes.scrollTop : 0;
   lastResult = result;
 
-  const sentence = renderSentence(result, currentFuriganaMode);
+  const sentence = renderSentence(
+    { segments: displayedSegments(), alternatives: [] },
+    currentFuriganaMode,
+  );
   output.replaceChildren(sentence);
   // `.panes` is the scroll container (up to 10,000 clipboard characters can
   // far exceed a viewport), and replacing `#output`'s children never touches
-  // it on its own — every render therefore lands the reader at the top of
-  // whatever it just rendered, rather than wherever a previous, longer parse
-  // happened to leave the scroll position.
-  panes.scrollTop = 0;
+  // it on its own — so it is set explicitly: back to where it was for a
+  // re-render, to the top for a new result rather than wherever a previous,
+  // longer parse happened to leave it.
+  panes.scrollTop = scrollTop;
   syncHistoryButtons();
 }
 

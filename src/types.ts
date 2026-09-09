@@ -40,6 +40,12 @@ export interface Segment {
 
 export interface ParseResult {
   segments: Segment[];
+  /**
+   * Readings 2..k, each a full cover like `segments`. The order is the rank:
+   * readings that differ from an earlier one only by a merge or split come
+   * after every reading that does not (Phase 2b design §4).
+   */
+  alternatives: Segment[][];
 }
 
 export type FuriganaMode = 'none' | 'hiragana' | 'katakana' | 'romaji';
