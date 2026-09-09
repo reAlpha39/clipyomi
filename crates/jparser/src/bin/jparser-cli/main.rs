@@ -2,6 +2,7 @@
 
 //! JParser Phase 1 harness. No UI, no Tauri, no network.
 
+mod bench;
 mod compounds;
 mod corpus;
 #[cfg(feature = "mecab")]
@@ -180,6 +181,44 @@ enum Command {
         #[arg(long, requires = "compounds")]
         compounds_detail: bool,
         /// Emit the metrics as one JSON object instead of the human form.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Wall time at clipboard length, with the scaling figure `score` cannot
+    /// give.
+    ///
+    /// Separate from `score` on purpose: master plan §5.2 records that every
+    /// metric there is measured at corpus sentence lengths, which is why
+    /// Phase 2c's superlinearity survived four phases. The paste is built
+    /// deterministically by cycling the gold sentences, so the figure needs
+    /// no fixture of its own.
+    Bench {
+        /// Index directory.
+        index: PathBuf,
+        /// Gold corpus JSONL, cycled to build the paste.
+        gold: PathBuf,
+        /// Path to an uncompressed compiled Vibrato dictionary. Given,
+        /// tokenization is timed with the parse, as the app pays it.
+        #[cfg(feature = "mecab")]
+        #[arg(long)]
+        hints: Option<PathBuf>,
+        /// Readings per parse. Defaults to what the app runs, not to 1: the
+        /// untimed risk this closes was the app moving to `with_readings(3)`.
+        #[arg(
+            long,
+            default_value_t = 3,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        readings: usize,
+        /// Parses per length. The median is reported, with min and max
+        /// beside it so a noisy machine is visible rather than averaged in.
+        #[arg(
+            long,
+            default_value_t = 5,
+            value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+        )]
+        runs: usize,
+        /// Emit the timings as one JSON object instead of the human form.
         #[arg(long)]
         json: bool,
     },
@@ -412,6 +451,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             readings,
             compounds.as_deref(),
             compounds_detail,
+            json,
+        )?,
+        Command::Bench {
+            index,
+            gold,
+            #[cfg(feature = "mecab")]
+            hints,
+            readings,
+            runs,
+            json,
+        } => bench::run(
+            &index,
+            &gold,
+            #[cfg(feature = "mecab")]
+            hints.as_deref(),
+            readings,
+            runs,
             json,
         )?,
         #[cfg(feature = "mecab")]
