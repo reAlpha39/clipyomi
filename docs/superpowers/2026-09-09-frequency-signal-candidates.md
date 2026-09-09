@@ -370,8 +370,12 @@ without recomputing anything.
 
 ### 11.2 What the engine scores
 
-Baseline, unchanged by any of this (the eight recorded cells are byte-identical
-and `score` without `--compounds` prints exactly what it printed before):
+Baseline as it stood when §11 was written, and unchanged by anything in §10 or
+§11 — the eight recorded cells were byte-identical throughout and `score`
+without `--compounds` printed exactly what it printed before. **§13.2 has since
+replaced these cells deliberately**, so read the table below as the figure
+every measurement in §10 through §12 was taken against, and master plan §5.2's
+current-baseline block for what the engine scores now:
 
 | | span strict | span tolerant | entry top-1 | **compounds** | kept whole | split apart |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -386,7 +390,9 @@ Two readings the span metrics could not give.
 **The engine keeps 35 of 106 adjudicated compounds whole — 33%.** That is the
 size of the gap Phase 3 exists to close, stated as a number for the first
 time, and §10.2's finding is what it is made of: the compounds it declines are
-overwhelmingly the ones whose priority marker is inverted.
+overwhelmingly the ones whose priority marker is inverted. (36 of 106 as of
+§13.2, so the gap this sentence names is almost exactly where it was: what
+§13 closed was the `transparent` class, not this.)
 
 **And the hint benefit is not what the span metrics reported.** Hints improve
 the compound metric overall (0.5161 → 0.5430) but they do it *entirely* by
