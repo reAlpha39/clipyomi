@@ -8,7 +8,10 @@
 
 ## 1. What landed
 
-Three commits.
+Three commits change code or its rationale. Five stand between the plan
+(`6b0bef7`) and `HEAD`: the other two are this handoff's own commit
+(`b8c52d6`), which cannot name itself, and a follow-up documentation fix
+(`7db3c63`) that lands after it.
 
 `7468d6b` (`feat(engine-v2): expose the key FST's forward walk as a
 resumable Walk`) adds `Index::walk` and the `Walk` type — a position that
@@ -33,6 +36,9 @@ the key `String` is built only for a span that already matched. No span
 bound and no constant is introduced — the walk's own dead end is the bound.
 
 ## 2. The gate — byte-identical output
+
+Gold index rebuilt from `crates/jparser/tests/fixtures/gold_jmdict_subset.xml`;
+Vibrato dictionary at `%APPDATA%\dev.jparser.clipyomi\hints\current\system.dic`.
 
 ```
 --- hints off ---
@@ -73,9 +79,38 @@ oracle@3 tolerant:  0.8821  (1908 / 2163)
 oracle@3 sentences: 0.1533  (23 / 150)
 ```
 
+Spec §5 clause 1 asked for this triple in both hint states; the hints-off
+side of it was not run before this handoff was written. Measured after the
+fact, over the same gold index:
+
+```
+--- readings 3, hints off ---
+sentences:      150
+gold spans:     2163
+superseded:     0
+span accuracy:  0.7272  (1573 / 2163)
+entry top-1:    0.9075  (1108 / 1221)
+  by decision:  e 0.7272 (1573 / 2163)
+span tolerant:  0.7975  (1725 / 2163)
+  coarsening:   152 gold spans inside 75 dictionary merges
+oracle@3 strict:    0.7628  (1650 / 2163)
+oracle@3 tolerant:  0.8206  (1775 / 2163)
+oracle@3 sentences: 0.0067  (1 / 150)
+```
+
+That matches Phase 2b handoff §2's own recorded hints-off `oracle@3` --
+1,650 / 1,775 / 1 -- exactly, not Phase 2's earlier, pre-`demote` 1,629 /
+1,749 / 1 (Phase 2 handoff §2). The two are different measurements of
+different code: 1,629 / 1,749 / 1 predates `lattice::demote`, which Phase 2b
+landed and which moved both hint states' figures (hints on 1,846 → 1,867
+tracks the same change); 1,650 / 1,775 / 1 is Phase 2b's own post-`demote`
+gate. Phase 2c changes nothing downstream of candidate generation, so
+Phase 2b's own figures are the correct reference, and this measurement
+reproduces them.
+
 All eight cells at `--readings 1` in both hint states, and all three
-`oracle@3` figures at `--readings 3 --hints`, match the recorded Phase 2b
-values exactly. The candidate set did not move.
+`oracle@3` figures at `--readings 3` in both hint states, match the recorded
+Phase 2b values exactly. The candidate set did not move.
 
 ## 3. What it bought
 
@@ -91,8 +126,13 @@ k = 1:
 | 10,000 | did not finish in 600 s | 0.506 s |
 
 Time per character, against the 500-character row: 1.00, 0.70, 0.56, 0.45,
-0.46 — design §5 clause 3 asked for linear to within a factor of two, and
-every ratio is within it.
+0.46 — every ratio is at or below 1.00, so the curve is sub-linear rather
+than super-linear across the whole range. Design §5 clause 3 asked for
+linear to within a factor of two as a guard against super-linearity; two of
+the five ratios (0.45 and 0.46) are themselves more than a factor of two
+*below* 1.00, which is outside that band on the fast side, not the slow one
+— sub-linear is the direction clause 3 exists to allow, not the direction it
+was watching for, and nothing here exceeds 1.00.
 
 **That curve is sub-linear, and the sub-linearity is not a property of the
 algorithm.** Time per character falls from 0.000110 s at 500 characters to
@@ -131,13 +171,3 @@ Run at `9fcab9b`: `cargo test -p jparser` (296 passed), the same with
 - **`MAX_CHAIN`'s and `MAX_UNMATCHED_RUN`'s adequacy is still unmeasured**
   against the full corpus, as the Phase 2 handoff's "three size/shape
   assumptions" bullet recorded. This phase did not touch either.
-- **The reindex's non-wrapping invariant lost its comment.** The restructure
-  in `crates/jparser/src/engine/lex.rs`, around the `chains_by_stem_end`
-  reindex loop (`chains_by_stem_end[end - hit.consumed].push(...)`),
-  performs the same `end - hit.consumed` subtraction the old loop did, but
-  the old code carried an explicit comment noting the subtraction cannot
-  wrap because `Table::search` guarantees `consumed <= end`. That comment
-  was not carried over. The invariant still holds — the task review
-  re-proved it against `Table::search`'s unchanged `len >= end` break — but
-  a future reader auditing that line for panic-safety no longer has the
-  pointer. Documentation debt, not a correctness gap.

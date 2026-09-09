@@ -274,6 +274,31 @@ fn a_walk_that_leaves_the_index_is_spent() {
 }
 
 #[test]
+fn a_walk_that_leaves_the_index_mid_character_is_spent() {
+    let dir = tmpdir("walk-dead-mid-char");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+
+    // 'z' fails on its first (and only) UTF-8 byte, so it never exercises a
+    // `push` that has already advanced `node`/`output` partway through a
+    // character before the walk dies. 'う' (E3 81 86) shares its first two
+    // UTF-8 bytes with the fixture's only key starting there, 'は' (E3 81
+    // AF), and diverges only on the third -- so this push advances the walk
+    // two bytes into the transition before finding none for the third,
+    // which is exactly the half-advanced case the `alive` latch exists to
+    // make unobservable.
+    let mut walk = index.walk();
+    assert!(
+        !walk.push('う', fold),
+        "no fixture key is 'う' or starts with it"
+    );
+    assert!(walk.records().expect("records").is_none());
+    // Spent, and it stays spent, same as the first-byte-failure case above.
+    assert!(!walk.push('は', fold));
+    assert!(walk.records().expect("records").is_none());
+}
+
+#[test]
 fn records_after_reaches_a_key_the_walk_itself_has_not() {
     let dir = tmpdir("walk-after");
     build(&dir);

@@ -643,10 +643,14 @@ fn the_same_headword_at_two_different_lengths_is_not_deduplicated_away() {
         .filter(|x| x.headword == "書く")
         .map(|x| x.len)
         .collect();
-    assert!(
-        lens.contains(&3) && lens.contains(&2),
+    // Asserted on the emitted order, not just membership: both 書いた's full
+    // chain (len 3) and its 書い fragment (len 2) must survive the dedup,
+    // longest span first.
+    assert_eq!(
+        lens,
+        vec![3, 2],
         "both 書いた's full chain (len 3) and its 書い fragment (len 2) must \
-         survive the dedup, got lens {lens:?}"
+         survive the dedup in longest-first order, got lens {lens:?}"
     );
 }
 
