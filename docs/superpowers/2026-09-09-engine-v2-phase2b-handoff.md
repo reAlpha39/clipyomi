@@ -63,5 +63,43 @@ tolerant hints on must be at least 1,898 of 2,163, 55 spans over top-1's
 
 Strict oracle@3 hints on: 1,867 of 2,163 (Phase 2: 1,846). Whole-sentence gold
 cover in the top three: 23 of 150 (Phase 2: 25). Neither is thresholded
-(design §8 clause 3); both are recorded here rather than averaged away, and
-the sentence count is the one the off-engine spike saw regress, 25 → 24.
+(design §8 clause 3); both are recorded here rather than averaged away. This
+on-engine figure, 25 → 23, is a deeper regression than the off-engine spike's
+25 → 24; the spike ran a wider reading pool, which is why.
+
+## 4. What landed after the gate
+
+`src-tauri/src/parse.rs` asks for three readings; `src/main.ts` renders the
+chosen one, offers the others as `Reading n of 3` radio rows in the
+right-click menu, steps through them with `]` and `[`, and keeps the
+sentence pane's scroll position across a reading switch and a furigana
+re-render (design §6). Commit `4cbfd50`.
+
+## 5. Standing gates at the phase's final code commit
+
+Run at `4cbfd50`: `cargo test -p jparser` (290 passed), the same with
+`--features mecab` (316 passed, 1 ignored), both clippy invocations clean,
+`cargo check -p jparser --no-default-features` clean, `cargo fmt -p jparser
+-- --check` clean, `npm test` (278 passed), `npx tsc --noEmit` clean,
+`cargo test --manifest-path src-tauri/Cargo.toml` (149 passed). Eight cells
+byte-identical at `--readings 1`, per §1 above — not re-run here, since no
+crate code has changed since and the comparison needs a release build and the
+46 MB dictionary.
+
+## 6. Open items
+
+- **The product question is now live, not hypothetical.** `くるまで` against
+  `くる` + `まで` is exactly the relation `demote` sinks (design §13). The
+  order that ships is the one the gate can see; whether it is the one a
+  reader wants is what the UI now makes observable for the first time. The
+  whole-sentence cover count in §3 is the measured footprint so far.
+- **k stays at 3 on the wire**, so the sunk merge/split variants do not reach
+  the reader at all. Raising k for the app while the gate stays at 3 is the
+  named follow-up once there is UI evidence to argue from (design §13).
+- **The scroll guard covers furigana re-renders too**, because both paths
+  re-render `lastResult`. If that turns out to change furigana behaviour
+  someone relies on, the guard narrows to the reading-switch path
+  (design §13).
+- The 9 gold spans with no candidate and the 3 with the span but not the
+  entry (Phase 2 handoff §6) are unchanged by this phase and remain lexicon
+  or index findings.
