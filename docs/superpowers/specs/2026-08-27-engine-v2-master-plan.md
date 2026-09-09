@@ -683,6 +683,8 @@ metric independent, and it costs nothing.
 Phase 0  Harness + gold corpus + baseline      ← proves everything after it
 Phase 1  Clean-room core, k = 1                ← the relicence
 Phase 2  k-best readings + UI                  ← the quality win
+         2   instrument only, gate failed at +40 spans
+         2b  reading identity, gate cleared at +65 off-engine
 Phase 3  Extra linguistic layers               ← independent, per-layer licensing
 ```
 
@@ -1015,6 +1017,19 @@ worked around.
 **Measured 2026-09-02 and not met:** oracle@3 tolerant hints on reached
 1,883 of 2,163, 40 spans over top-1, against the 55 required. Phase 2 shipped the
 measurement only; see the Phase 2 handoff §3.
+
+**Reopened 2026-09-09 as Phase 2b.** The lever the Phase 2 handoff §6 named —
+reading identity, not list capacity — clears the same gate when measured
+*outside* the engine: demoting readings that differ from a kept one only by a
+merge or split reaches 1,908 of 2,163 (+65) at reading depth 12 and 1,911
+(+68) at depth 64, against the 55 required, with top-1 unmoved. Deleting them
+instead reaches only +54. The gate itself is unmoved and is re-measured
+through the shipped path in Phase 2b, whose first task is to find out whether
+the reorder pays over the reading pool k = 3 already holds — which would cost
+the DP nothing — or needs a deeper one. See the Phase 2 handoff §7 for the
+measurement and its two recorded costs (one whole-sentence cover lost of 150,
+and an unresolved product question about the readings demotion sinks), and
+[the Phase 2b design](2026-09-09-engine-v2-phase2b-design.md) for what ships.
 
 ### Phase 3 — Extra linguistic layers
 
