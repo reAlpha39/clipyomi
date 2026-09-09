@@ -6,8 +6,8 @@ unmeasured (its handoff §6, and the final review's pre-merge note)
 **Status:** fixed in Phase 2c — see its handoff. The restructure there
 supersedes §4's experimental bound and §5's four ways of sourcing a
 constant; neither was needed.
-**Severity:** the app's own input ceiling is unusable. A 10,000-character
-clipboard paste — the maximum `src-tauri` accepts — does not return.
+**Severity:** the app's own input ceiling was unusable. A 10,000-character
+clipboard paste — the maximum `src-tauri` accepts — did not return.
 
 ## 1. What was being measured, and what turned up instead
 
