@@ -480,8 +480,38 @@ survived four phases (Phase 2c). Latency at that ceiling is now recorded
 outside the harness, at the `k` the app actually runs: 0.897 s hints off and
 0.879 s hints on for 9,987 characters at `--readings 3`, against 0.501 s at
 k = 1, so the k-best pool costs ×1.79 and not the ×12 its size suggests
-(Phase 2c handoff §5). A timing figure inside the harness, compared against a
-recorded baseline, is still not built.
+(Phase 2c handoff §5).
+
+**A timing figure inside the harness now exists: `jparser-cli bench`
+(`src/bin/jparser-cli/bench.rs`).** It is deliberately not a timer on `score`
+— timing the 150-sentence corpus would reproduce the exact blindness above,
+since Phase 2c's defect was invisible at corpus sentence lengths and fatal at
+paste lengths. Instead it parses a paste built by cycling the gold sentences
+(deterministic from the committed fixture, so no paste file has to be kept) at
+two lengths: 1,000 characters and the app's own 10,000-character ceiling.
+
+**The recorded cell is `scaling`, not the milliseconds** — the time ratio
+divided by the length ratio, which is 1.00 for linear behaviour on any
+machine, while absolute times are not comparable across hardware or across
+indexes. Phase 2c's once-per-position index walk would have read near 10.
+
+Baseline, gold index rebuilt from `gold_jmdict_subset.xml`, 5 runs per point,
+median (the absolute figures are gold-index numbers and are **not** comparable
+to the full-index paragraph above; the scaling column is what carries across):
+
+| | k | 1,005 chars | 10,040 chars | scaling |
+| --- | --- | --- | --- | --- |
+| hints on | 1 | 24 ms | 263 ms | **1.09x** |
+| hints off | 1 | 26 ms | 260 ms | **1.00x** |
+| hints on | 3 | 46 ms | 518 ms | **1.12x** |
+| hints off | 3 | 58 ms | 614 ms | **1.05x** |
+
+Linear in all four states, which is what Phase 2c's fix claimed and nothing in
+the harness could previously check. The k = 3 pool costs ×1.97 over k = 1
+hints-on here against the full index's ×1.79, which is the instrument agreeing
+with the out-of-harness measurement it was built to replace. `bench` reads the
+index and the tokenizer and writes nothing; `score`'s output is untouched, so
+the eight recorded baseline cells and the test that pins them are unaffected.
 
 **Span accuracy.** Fraction of gold spans the parser reproduces exactly (same
 start, same length). Measures whether the word is correctly delimited — whether
