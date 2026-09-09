@@ -94,6 +94,7 @@ describe('the event-driven render path', () => {
           }],
         },
       ],
+      alternatives: [],
     });
     expect(document.querySelector('.chip')?.textContent).toBe('東京');
     expect(document.querySelector('.sentence')).not.toBeNull();
@@ -128,10 +129,10 @@ describe('the event-driven render path', () => {
     const chips = () =>
       [...document.querySelectorAll('.chip')].map((c) => c.textContent);
 
-    emit('parse-result', { segments: [seg(0, '東京'), seg(2, '都')] });
+    emit('parse-result', { segments: [seg(0, '東京'), seg(2, '都')], alternatives: [] });
     expect(chips()).toEqual(['東京', '都']);
 
-    emit('parse-result', { segments: [seg(0, '東京都')] });
+    emit('parse-result', { segments: [seg(0, '東京都')], alternatives: [] });
 
     expect(chips()).toEqual(['東京都']);
   });
@@ -162,12 +163,144 @@ describe('the event-driven render path', () => {
       segments: [
         { start: 0, len: 1, surface: '本', reading: 'ほん', matched: true, entries: [] },
       ],
+      alternatives: [],
     });
     emit('parse-error', 'the parser panicked on an input of 4096 characters');
     emit('parse-error', 'a second failure');
 
     expect(document.querySelectorAll('.startup-error')).toHaveLength(1);
     expect(document.querySelector('.sentence')).not.toBeNull();
+  });
+
+  // Phase 2 design §6, landed by Phase 2b: readings 2..k ride on the same
+  // event as `alternatives`, in the order Phase 2b's `demote` gives them.
+  const readingSeg = (start: number, surface: string, matched = true) => ({
+    start,
+    len: surface.length,
+    surface,
+    reading: null,
+    matched,
+    entries: matched
+      ? [
+          {
+            headword: surface,
+            reading: null,
+            conjugation: null,
+            pos: ['n'],
+            senses: [{ pos: ['n'], glosses: [surface], xrefs: [], misc: [], info: [] }],
+            flags: ['primary'],
+          },
+        ]
+      : [],
+  });
+  /** Every rendered segment in order, chip or unmatched run. */
+  const rendered = () => [...document.querySelectorAll('.sentence > *')].map((el) => el.textContent);
+  const menuLabels = () => {
+    document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    return [...document.querySelectorAll('.context-menu button')].map((b) => b.textContent);
+  };
+  const press = (key: string, init: KeyboardEventInit = {}) =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+  const panes = () => document.querySelector<HTMLElement>('.panes')!;
+  const tokyo = () => ({
+    segments: [readingSeg(0, '東京都')],
+    alternatives: [
+      [readingSeg(0, '東京'), readingSeg(2, '都')],
+      [readingSeg(0, '東', false), readingSeg(1, '京都')],
+    ],
+  });
+
+  test('alternates appear as reading rows and a row switches the sentence', () => {
+    emit('parse-result', tokyo());
+    expect(rendered()).toEqual(['東京都']);
+
+    expect(menuLabels().slice(0, 3)).toEqual(['Reading 1 of 3', 'Reading 2 of 3', 'Reading 3 of 3']);
+    [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')]
+      .find((b) => b.textContent === 'Reading 3 of 3')!
+      .click();
+
+    expect(rendered()).toEqual(['東', '京都']);
+    expect(document.querySelector('.unmatched')?.textContent).toBe('東');
+    // Reopened, the menu marks the reading now on screen.
+    document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    const checked = [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')]
+      .filter((b) => b.getAttribute('aria-checked') === 'true')
+      .map((b) => b.textContent);
+    expect(checked).toContain('Reading 3 of 3');
+  });
+
+  test('a result with no alternates offers no reading rows', () => {
+    emit('parse-result', { segments: [readingSeg(0, '東京都')], alternatives: [] });
+    expect(menuLabels().some((label) => label?.startsWith('Reading'))).toBe(false);
+  });
+
+  test('] and [ cycle the readings and wrap at both ends', () => {
+    emit('parse-result', tokyo());
+    press(']');
+    expect(rendered()).toEqual(['東京', '都']);
+    press(']');
+    press(']');
+    expect(rendered()).toEqual(['東京都']);
+    press('[');
+    expect(rendered()).toEqual(['東', '京都']);
+  });
+
+  test('a modified bracket is not a reading step', () => {
+    // Alt+] and Alt+[ are history navigation, handled on the Rust side; the
+    // webview still sees the keydown and must not also cycle readings.
+    emit('parse-result', tokyo());
+    press(']', { altKey: true });
+    press('[', { ctrlKey: true });
+    expect(rendered()).toEqual(['東京都']);
+  });
+
+  test('a new result starts at reading 1 again', () => {
+    emit('parse-result', tokyo());
+    press(']');
+    emit('parse-result', {
+      segments: [readingSeg(0, '東京'), readingSeg(2, '都')],
+      alternatives: [[readingSeg(0, '東京都')]],
+    });
+    expect(rendered()).toEqual(['東京', '都']);
+  });
+
+  test('the popover reads the displayed reading, not the top one', () => {
+    emit('parse-result', tokyo());
+    press(']');
+    document
+      .querySelector<HTMLElement>('.chip[data-start="2"]')
+      ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+
+    const content = emitted.find(([event]) => event === 'popover-content');
+    expect(content).toBeDefined();
+    const payload = content![1] as { entries: { headword: string }[] };
+    expect(payload.entries[0].headword).toBe('都');
+  });
+
+  test('a furigana change re-renders the reading on screen, not reading 1', () => {
+    emit('parse-result', tokyo());
+    press(']');
+    emit('settings-changed', { furigana_mode: 'hiragana' });
+    expect(rendered()).toEqual(['東京', '都']);
+  });
+
+  test('cycling keeps the scroll position; a new result returns to the top', () => {
+    // Phase 2b design §6: a reading switch is made while reading one word,
+    // and must not lose the reader's place. A different result is a new
+    // sentence and starts at the top, as every render did before.
+    emit('parse-result', tokyo());
+    panes().scrollTop = 120;
+    press(']');
+    expect(panes().scrollTop).toBe(120);
+    emit('parse-result', { segments: [readingSeg(0, '東京')], alternatives: [] });
+    expect(panes().scrollTop).toBe(0);
+  });
+
+  test('a furigana change keeps the scroll position too', () => {
+    emit('parse-result', tokyo());
+    panes().scrollTop = 120;
+    emit('settings-changed', { furigana_mode: 'hiragana' });
+    expect(panes().scrollTop).toBe(120);
   });
 });
 
@@ -209,6 +342,7 @@ describe('the frontend_ready call', () => {
       segments: [
         { start: 0, len: 1, surface: '本', reading: 'ほん', matched: true, entries: [] },
       ],
+      alternatives: [],
     });
     expect(document.querySelector('.sentence')).not.toBeNull();
   });
@@ -1329,6 +1463,7 @@ describe('furigana mode reaching the render', () => {
           ],
         },
       ],
+      alternatives: [],
     });
 
     expect(document.querySelector('.chip ruby')).toBeNull();
@@ -1371,6 +1506,7 @@ describe('furigana mode reaching the render', () => {
           entries: [],
         },
       ],
+      alternatives: [],
     });
 
     expect(document.querySelector('.chip ruby rt')?.textContent).toBe('トウキョウ');
@@ -1447,6 +1583,7 @@ describe('settings window and gloss filters', () => {
       segments: [
         { start: 0, len: 2, surface: '東京', reading: 'とうきょう', matched: true, entries },
       ],
+      alternatives: [],
     });
 
     // The filters are not observable directly; the popover payload is what
@@ -1502,6 +1639,7 @@ describe('settings window and gloss filters', () => {
           entries: sampleEntries,
         },
       ],
+      alternatives: [],
     });
 
     const chip = document.querySelector<HTMLElement>('.chip');
@@ -1699,6 +1837,7 @@ describe('font sizes reaching the root element', () => {
           entries: [],
         },
       ],
+      alternatives: [],
     });
     expect(document.querySelector('.chip ruby')).toBeNull();
 
@@ -1769,6 +1908,7 @@ describe('the gloss size reaching the popover window', () => {
           entries: sampleEntries,
         },
       ],
+      alternatives: [],
     });
     document
       .querySelector<HTMLElement>('.chip')
@@ -1847,6 +1987,7 @@ describe('the header history buttons', () => {
           entries: opts.entries ?? [],
         },
       ],
+      alternatives: [],
     };
   }
 

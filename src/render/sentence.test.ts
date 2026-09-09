@@ -34,7 +34,7 @@ describe('renderSentence', () => {
   });
 
   test('renders an empty result without throwing', () => {
-    expect(renderSentence({ segments: [] }).querySelectorAll('[data-start]')).toHaveLength(0);
+    expect(renderSentence({ segments: [], alternatives: [] }).querySelectorAll('[data-start]')).toHaveLength(0);
   });
 
   test('only a matched chip is a real control; an unmatched run is not focusable', () => {
@@ -75,6 +75,7 @@ describe('renderSentence with furigana modes', () => {
         entries: [],
       },
     ],
+    alternatives: [],
   };
 
   test('mode none renders clean text without ruby', () => {

@@ -130,6 +130,7 @@ describe('the hover tooltip', () => {
         ],
       },
     ],
+    alternatives: [],
   };
 
   // Three separate chips (distinct `start`s): a single-chip fixture cannot
@@ -153,6 +154,7 @@ describe('the hover tooltip', () => {
         },
       ],
     })),
+    alternatives: [],
   };
 
   function chip(): HTMLButtonElement {
@@ -217,6 +219,7 @@ describe('the hover tooltip', () => {
       segments: [
         { start: 0, len: 2, surface: '𠮟る', reading: null, matched: false, entries: [] },
       ],
+      alternatives: [],
     });
     const span = document.querySelector<HTMLElement>('.unmatched');
     if (span === null) throw new Error('.unmatched missing');
@@ -335,6 +338,7 @@ describe('the tooltip round trip', () => {
         ],
       },
     ],
+    alternatives: [],
   };
 
   function chip(): HTMLButtonElement {
@@ -753,6 +757,7 @@ describe('unfocused background hover', () => {
           ],
         },
       ],
+      alternatives: [],
     });
   });
 
