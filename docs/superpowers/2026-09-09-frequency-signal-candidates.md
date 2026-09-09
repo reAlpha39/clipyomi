@@ -734,3 +734,66 @@ derivation **can** separate function-word stacking from lexical compounds, and
 the conjunction that does it was simply not among the ones tested. What no
 derivation and no frequency table has done is the other half — telling
 `副大統領` from its parts — and that half is still open with no candidate.
+
+### 13.5 Re-pricing the derivation §10.4 rejected, and why it still fails
+
+§13.4 left the other half open: `lexical` at 42 of 112, `副大統領` still split
+by the inverted marker §10.2 measured. §10.4's blanket derivation — grant
+COMMON to an entry whose parts all carry it — was rejected at +47 `lexical`
+windows against −22 wrong merges, and **20 of that −22 was the `transparent`
+class**. §13.2 has just taken `transparent` to 42 of 42 with a term that fires
+on evidence of its own, whether or not a discount was granted. So the −22
+looked largely pre-paid, and a rejected option was worth re-pricing rather
+than left closed on an arithmetic that had changed.
+
+It was implemented as `DERIVED_COMMON = COMMON`, granted per character to an
+entry carrying no marker whose span partitions into parts that all carry one —
+exactly §10.3's "COMMON-sized discount", reusing `lex::candidates`' second
+pass for a second property.
+
+**It buys what §10.4 said it would and costs more than §10.4 could see.**
+Hints on: `lexical` 42 → **82 of 112**, kept-whole 36 → 77 of 106, compounds
+0.6129 → 0.7688 (+29 windows), tolerant 1844 → 1870 (+26). And strict 1768 →
+**1664, −104 spans**, which is §10.3's own prediction (it priced this at "about
+−6.9 points strict", and −104 spans is −4.8) arriving as measured.
+
+Three further findings, and the last of them is what decides it.
+
+**The hypothesis was wrong, and the reason is worth keeping.** `transparent`
+fell 42 → 33 and `false-match` 30 → 28, so the −22 was *not* pre-paid.
+`FUNCTION_STACK` blocks *particle* stacking — `に` + `は`, both `PARTICLE` —
+while the merges this discount creates are `これは`, `時間が`: **noun plus
+particle**, which that predicate never covers. The −22 was never one class,
+and fixing the particle-stack half does nothing for the other.
+
+**It is not a sizing conflict.** `DERIVED_COMMON` gives a two-character stack
+−4 where `FUNCTION_STACK` adds +4, so the two appeared to cancel exactly.
+Raising `FUNCTION_STACK` to 12 changed **nothing** — every cell identical,
+`transparent` still 33 — so the interaction is not arithmetic and no
+re-sizing recovers the class.
+
+**It re-breaks success criterion 3.** `the_particle_absorbing_merges_are_gone`
+fails with this term in place, and the curated snapshot shows `これは` merged
+as one segment where it was `これ` + `は`. That fixture is the only guard for a
+class §5.2 records that *neither* span metric catches — strict scores it as an
+ordinary miss and tolerant actively credits it. A change that lifts tolerant
+26 spans while that gate fails is the §5.2 coarsening warning happening in
+front of us: merges went 38 → 93.
+
+**Reverted.** Not because the compound gain is not real — it is the largest
+move on that metric anything has produced, and Phase 3 exists for exactly it —
+but because it is bought by reintroducing the defect the branch's own success
+criterion names, and no magnitude separates the two. §10.4's rejection stands,
+now with the number it lacked and with its one stated reason corrected: the
+obstacle is not that a derivation cannot tell `副大統領` from `名の`, since
+§13.1 found one that separates function stacking cleanly. The obstacle is that
+the discount which reaches `副大統領` also reaches `これは`, and nothing
+measured so far distinguishes those two.
+
+**What that leaves.** Compound preservation is still the open half of Phase 3,
+still at 42 of 112, and it now has three ruled-out candidates rather than two:
+frequency (§12), the blanket derivation (§10.4, re-priced here), and the
+COMMON+PARTICLE conjunction (§13.2, which solves a different problem well).
+The next candidate would have to price a *noun*-plus-particle absorption apart
+from a noun-plus-noun compound, and this document has no evidence bearing on
+that.
