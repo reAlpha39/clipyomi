@@ -171,6 +171,60 @@ const PRONOUNCE_CROSS: i32 = 25;
 /// is part of why hints-off/on tolerant still trail baseline after tuning.
 const COMMON: i32 = -2;
 
+/// Penalty for a match whose span is nothing but stacked common function
+/// words -- `には` where `に` + `は` are both there.
+///
+/// A tie-breaker, not a tax. `には` as one COMMON entry of length 2 costs
+/// `COVER*2 + COMMON*2 = -2`; `に` + `は` as two COMMON entries of length 1
+/// cost `(1-2) + (1-2) = -2` as well, and `lattice::relax`'s longer-run
+/// tie-break then hands the tie to the merge. Any positive value here hands
+/// it back to the split, which is why this is flat rather than
+/// length-proportional: `COMMON`'s proportionality exists to stay neutral
+/// across lengths (see its comment), while this term is aimed at one shape.
+///
+/// Measured 2026-09-09 before it was written, off-engine, over the 139
+/// adjudicated compound types (`examples/derivation_probe.rs`): the property
+/// holds for 7 of 22 `transparent` types, 3 of 23 `false-match`, and 2 of 87
+/// `lexical`. Cross-referenced against what the engine does today, that is
+/// **+12 windows** it can fix (`には` in 8 sentences, `にも` in 4 -- every one
+/// of the `transparent` class's misses) against **-3** it breaks (`として` in
+/// 2, `となり` in 1, all three currently kept whole).
+///
+/// Unusually for a Phase 3 candidate, the two span metrics point the same
+/// way: the short-unit gold corpus splits all four surfaces, so the merges
+/// this blocks currently destroy 30 gold spans (16 + 8 + 4 + 2) that strict
+/// accuracy scores as misses today. Frequency could not manage that -- doc
+/// §10.3 priced it at about -6.9 points strict for the compound gain -- and
+/// it is why this term was worth trying where a blanket COMMON derivation
+/// (doc §10.4) was not.
+///
+/// **What it measured on-engine, hints on:** strict 1737 -> 1768 spans
+/// (+31), tolerant 1843 -> 1844 (+1), entry top-1 0.9063 -> 0.9092,
+/// compounds 101 -> 114 windows, `transparent` 30 -> 42 of 42 with
+/// `lexical` 41 -> 42 and `false-match` 30 -> 30 -- no class regressed.
+/// Hints off: strict 1573 -> 1588, compounds 96 -> 109, tolerant 1725 ->
+/// 1714 (-11, against 75 -> 62 merges, so it is coarsening the tolerant
+/// metric was crediting; §5.2 records that metric as over-forgiving by about
+/// 1.3 points for exactly this reason). Latency unmoved: `bench`'s scaling
+/// cell reads 1.10x hints on against 1.12x before.
+///
+/// **Magnitude is flat from 1 to 50 in both hint states** -- identical cells
+/// throughout -- so only the sign matters here, as with `PRONOUNCE_CROSS`
+/// above. 4 is the small end: this term suppresses a *shape* that overlaps a
+/// legitimate class, so unlike `PRONOUNCE_CROSS` there is no argument for
+/// extra margin, and less of any lattice this corpus does not cover is
+/// perturbed.
+///
+/// **The `steps.is_empty()` gate below is load-bearing and was measured, not
+/// assumed.** Ungated, this term shattered `なりたいです` into `なり` +
+/// `たいです` and `して` into `し` + `て`, because `なり` and `し` are
+/// themselves COMMON particle entries -- the §4.3 shattering class this whole
+/// rewrite exists to remove, and a worse defect than the merge it cures. The
+/// gold corpus's own metrics *improved* through that damage; the curated
+/// `parse_sentences.txt` snapshot is what caught it. With the gate the
+/// snapshot is byte-identical.
+const FUNCTION_STACK: i32 = 4;
+
 /// Penalty for a match whose source characters differ from the stored surface
 /// before folding.
 ///
@@ -221,6 +275,16 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     }
     if cand.flags.contains(WordFlags::COMMON) {
         total += COMMON * cand.len as i32;
+    }
+    // Gated on an unconjugated match. A conjugated form is not function-word
+    // stacking, and without this gate the term shatters exactly the class
+    // §4.3 exists to protect: measured, `なりたいです` (`なる` Want-to Polite,
+    // one segment) split into `なり` + `たいです`, and `して` into `し` + `て`,
+    // because `なり` and `し` are themselves COMMON particle entries. Both are
+    // in `parse_sentences.txt`, so the curated snapshot caught what the gold
+    // corpus's own metrics did not -- they improved through it.
+    if cand.function_stack && cand.steps.is_empty() {
+        total += FUNCTION_STACK;
     }
 
     if let Some(bounds) = bounds {
@@ -285,6 +349,7 @@ pub fn unmatched_cost(chars: &[char], start: usize, len: usize) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::ConjStep;
 
     struct At(&'static [usize]);
     impl crate::engine::Boundaries for At {
@@ -301,8 +366,38 @@ mod tests {
             flags,
             steps: Vec::new(),
             exact,
+            function_stack: false,
             headword: String::new(),
         }
+    }
+
+    #[test]
+    fn a_function_stack_pays_only_while_it_is_unconjugated() {
+        // The gate `FUNCTION_STACK`'s comment calls load-bearing, as an
+        // arithmetic contract rather than as a corpus number. Ungated the
+        // same term shattered `なりたいです`, because a conjugated match whose
+        // span happens to decompose into common particles is not stacking.
+        let plain = cand(0, 2, WordFlags::COMMON, true);
+        let mut stacked = plain.clone();
+        stacked.function_stack = true;
+        let mut conjugated = stacked.clone();
+        conjugated.steps = vec![ConjStep {
+            class: 0,
+            form: 0,
+            range: 0..2,
+            aux: None,
+        }];
+
+        assert_eq!(
+            cost(&stacked, None) - cost(&plain, None),
+            FUNCTION_STACK,
+            "an unconjugated function stack pays the term exactly once"
+        );
+        assert_eq!(
+            cost(&conjugated, None),
+            cost(&plain, None),
+            "a conjugated match pays nothing, however its span decomposes"
+        );
     }
 
     #[test]

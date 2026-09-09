@@ -270,6 +270,7 @@ mod tests {
             flags,
             steps,
             exact: true,
+            function_stack: false,
             headword: String::new(),
         }
     }
@@ -440,6 +441,7 @@ mod tests {
                 step_count
             ],
             exact,
+            function_stack: false,
             headword: String::new(),
         }
     }

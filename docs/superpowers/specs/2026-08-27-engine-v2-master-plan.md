@@ -71,7 +71,8 @@ The plan succeeds when all four hold:
    matched. **26 of 26 pass and nothing is absorbed**; the suite has no
    ignored test. Two rows (`はいた`, `タッとい`) cut inside the surface at a
    position gold does not agree with — ordinary strict-span misses already
-   inside 0.8031, deliberately not this test's subject, and recorded in it.
+   inside the strict figure, deliberately not this test's subject, and
+   recorded in it.
    This matters because §5.2 records that neither span metric can catch this
    class: strict counts it as an ordinary miss and tolerant actively *credits*
    it, since the merge's endpoints are both gold boundaries. The fixture is
@@ -572,11 +573,36 @@ could never have passed a gate built on this pair. **Compound accuracy**, the
 third metric, is the fraction of hand-adjudicated compound decisions the
 parse handles as adjudicated — 194 windows over this corpus, each classed
 `lexical` (should merge), `transparent` or `false-match` (should split), or
-`ambiguous` (excluded). It is 0.5430 hints on and 0.5161 hints off, it needs
-its own file (`score --compounds`), and it is reported separately from the
-two below like everything else here. See
+`ambiguous` (excluded). It needs its own file (`score --compounds`), and it is
+reported separately from the two below like everything else here. See
 `docs/superpowers/2026-09-09-frequency-signal-candidates.md` §10-§11 and
 `src/bin/jparser-cli/compounds.rs`.
+
+**THE CURRENT BASELINE, and the one place to read it from.** Every table below
+this point in §5.2 and in §7 is a dated record of what a given phase measured,
+and none of them is rewritten when the engine moves — so this block is the
+authoritative current figure and those are history. Gold index rebuilt from
+`gold_jmdict_subset.xml`, 150 sentences, 2,163 gold spans.
+
+| | strict | tolerant | entry top-1 | compounds | coarsening |
+| --- | --- | --- | --- | --- | --- |
+| hints off | 0.7342 (1588) | 0.7924 (1714) | 0.9093 | 0.5860 (109 / 186) | 126 spans in 62 merges |
+| hints on | **0.8174 (1768)** | **0.8525 (1844)** | **0.9092** | **0.6129 (114 / 186)** | 76 spans in 38 merges |
+
+Compounds by class, hints on: `lexical` 42 / 112, `false-match` 30 / 32,
+`transparent` 42 / 42, 8 `ambiguous` excluded. Latency at the app's ceiling
+(`jparser-cli bench`, gold index, k = 3): scaling 1.10x hints on, 1.05x off.
+
+**Set 2026-09-09 by `cost.rs`'s `FUNCTION_STACK`, the first deliberate
+cost-model change since Task 16b.** It replaces the eight cells every earlier
+document quotes — hints on 0.8031 / 0.8521 / 0.9063 with 53 merges and
+compounds 0.5430; hints off 0.7272 / 0.7975 / 0.9075 with 75 merges and
+compounds 0.5161. All four hints-on metrics rose and no compound class
+regressed; hints-off tolerant fell 11 spans against a merge count falling 75
+to 62, which is coarsening the tolerant metric was crediting. Details and the
+trial log in doc §13, including the `steps.is_empty()` gate without which the
+same term shatters `なりたいです` while *improving* every number in this
+table.
 
 **Compound-tolerant span accuracy.** A gold span strict accuracy scored as a
 miss counts as a hit when a single *matched* segment swallows it whole and that
