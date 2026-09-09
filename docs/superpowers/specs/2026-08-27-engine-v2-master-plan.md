@@ -684,7 +684,7 @@ Phase 0  Harness + gold corpus + baseline      ← proves everything after it
 Phase 1  Clean-room core, k = 1                ← the relicence
 Phase 2  k-best readings + UI                  ← the quality win
          2   instrument only, gate failed at +40 spans
-         2b  reading identity, gate cleared at +65 off-engine
+         2b  reading identity, gate cleared at +65 on-engine, UI shipped
 Phase 3  Extra linguistic layers               ← independent, per-layer licensing
 ```
 
@@ -1030,6 +1030,12 @@ the DP nothing — or needs a deeper one. See the Phase 2 handoff §7 for the
 measurement and its two recorded costs (one whole-sentence cover lost of 150,
 and an unresolved product question about the readings demotion sinks), and
 [the Phase 2b design](2026-09-09-engine-v2-phase2b-design.md) for what ships.
+
+**Measured 2026-09-09 and met:** oracle@3 tolerant hints on reached 1,908 of
+2,163 through the shipped path, 65 spans over top-1, against the 55 required,
+over the pool k = 3 already holds. Phase 2b shipped the reading-cycling UI;
+see the Phase 2b handoff §3 and §4. Whole-sentence cover in the top three is
+23 of 150 (Phase 2: 25), recorded and unthresholded.
 
 ### Phase 3 — Extra linguistic layers
 
