@@ -803,3 +803,52 @@ COMMON+PARTICLE conjunction (§13.2, which solves a different problem well).
 The next candidate would have to price a *noun*-plus-particle absorption apart
 from a noun-plus-noun compound, and this document has no evidence bearing on
 that.
+
+### 13.6 Why no predicate over the parts' part-of-speech can work
+
+§13.5 ended by naming what a next candidate would have to do: price
+*noun*-plus-particle absorption (`これは`, `時間が`) apart from noun-plus-noun
+compounding (`副大統領`). Those two differ in one visible way — `これは` ends in
+a `PARTICLE` and `副大統領` does not — and `音がする` shows the constraint has to
+be on the *last* part rather than on every part, since it carries `が` in the
+middle and still ends in a verb. That is a specific, cheap hypothesis, so it
+was measured rather than argued about.
+
+**It does almost nothing.** Adding "and the partition's last part is not a
+`PARTICLE`" to the all-parts-COMMON derivation moves `transparent` from 21 of
+22 types to 20, `false-match` from 21 of 23 to 21, and `lexical` not at all
+(72 of 87 either way). `これは`, `それは`, `彼の` and `名の` all still qualify.
+
+**The reason is the engine's own subject matter.** `jparser-cli lookup` on the
+single kana `は`:
+
+```text
+は  [reading,common,common-line] tooth; teeth
+は  [reading,common,common-line] edge (of a knife or sword); blade
+は  [reading,common,common-line] group; faction; clique
+は  [reading,common,common-line] leaf; blade (of grass)
+は  [primary,common,common-line,particle] indicates sentence topic
+```
+
+Five COMMON entries that are **not** particles sit beside the particle one. So
+"the last part is not a `PARTICLE`" is satisfied by 歯, 刃, 派 or 葉 for any
+span ending in `は`, and the constraint excludes nothing. Every kana particle
+also spells a common noun; that is the ambiguity this whole engine exists to
+resolve, and it is fatal to this shape of rule.
+
+**The general form, which is the finding worth keeping.** A predicate over
+candidate flags may be **existential over partitions** but never **universal
+over readings**:
+
+- `FUNCTION_STACK` (§13.2) asks *does some all-`PARTICLE` partition exist?*
+  Ambiguity can only help it find one, and it still fires only where the whole
+  span is coverable by particles — which a real compound is not. Robust.
+- This asks *is there no particle in the tail?* Ambiguity always supplies a
+  non-particle reading, so the answer is always "none". Vacuous.
+
+That distinction is why one of these two derivations works and the other
+cannot, and it rules out the whole family of "look at what the parts are"
+rules rather than this one member. **No further POS-shaped candidate should be
+tried**; the routes left are the long-unit inventory of §12.5 and whatever
+evidence a corpus adjudicated at *long*-unit granularity would supply, neither
+of which this project has.
