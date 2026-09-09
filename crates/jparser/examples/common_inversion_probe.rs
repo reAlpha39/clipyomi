@@ -338,13 +338,44 @@ mod probe {
         Some(total)
     }
 
+    /// One compound decision the engine faced, for the adjudication file
+    /// §10.3 asks for. Emitted for every window in both populations, whether
+    /// the parse merged it or declined it, so the adjudicated metric can
+    /// reward a preserved compound and punish a spurious merge with one rule.
+    #[derive(serde::Serialize)]
+    struct Decision<'a> {
+        text: &'a str,
+        source: &'a str,
+        start: usize,
+        len: usize,
+        surface: String,
+        headword: &'a str,
+        entry_id: u32,
+        /// `true` when the parse placed a segment on exactly this window.
+        merged: bool,
+        exact: bool,
+        compound_common: bool,
+        inverted: bool,
+        /// Present only for a declined window the parse tiles: whether a
+        /// COMMON-sized discount would have won it.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        flips: Option<bool>,
+        parts: String,
+    }
+
     pub fn run() -> Result<(), Box<dyn Error>> {
         let args: Vec<String> = std::env::args().collect();
-        let [_, index_dir, gold_path, dic] = args.as_slice() else {
-            return Err(
-                "usage: common_inversion_probe <index-dir> <gold.jsonl> <system.dic>".into(),
-            );
+        let (index_dir, gold_path, dic, emit) = match args.as_slice() {
+            [_, i, g, d] => (i, g, d, None),
+            [_, i, g, d, e] => (i, g, d, Some(e)),
+            _ => {
+                return Err(
+                    "usage: common_inversion_probe <index-dir> <gold.jsonl> <system.dic> [decisions.jsonl]"
+                        .into(),
+                )
+            }
         };
+        let mut decisions: Vec<String> = Vec::new();
         let table = Table::new();
         let index = Index::open(Path::new(index_dir))?;
         let tokenizer = VibratoTokenizer::load(Path::new(dic))?;
@@ -395,6 +426,23 @@ mod probe {
                     if c.exact { "exact" } else { "inexact" },
                     parts_text(rec, &chars, a, b, &ps)
                 ));
+                if emit.is_some() {
+                    decisions.push(serde_json::to_string(&Decision {
+                        text: &rec.text,
+                        source: &rec.source,
+                        start: a,
+                        len: b - a,
+                        surface: slice(&chars, a, b),
+                        headword: &c.headword,
+                        entry_id: c.entry_id,
+                        merged: true,
+                        exact: c.exact,
+                        compound_common: cc,
+                        inverted: !cc && ps.contains(&Some(true)),
+                        flips: None,
+                        parts: parts_text(rec, &chars, a, b, &ps),
+                    })?);
+                }
             }
 
             // Population 2: windows with an allowed compound the parse declined.
@@ -450,6 +498,23 @@ mod probe {
                         for s in inside(rec, a, b) {
                             set.insert((rec.source.clone(), s.start));
                         }
+                    }
+                    if emit.is_some() {
+                        decisions.push(serde_json::to_string(&Decision {
+                            text: &rec.text,
+                            source: &rec.source,
+                            start: a,
+                            len: b - a,
+                            surface: slice(&chars, a, b),
+                            headword: &c.headword,
+                            entry_id: c.entry_id,
+                            merged: false,
+                            exact: c.exact,
+                            compound_common: cc,
+                            inverted,
+                            flips,
+                            parts: parts_text(rec, &chars, a, b, &ps),
+                        })?);
                     }
                     {
                         declined.samples.push(format!(
@@ -522,6 +587,13 @@ mod probe {
         );
         for l in &declined.samples {
             println!("{l}");
+        }
+
+        if let Some(path) = emit {
+            let mut body = decisions.join("\n");
+            body.push('\n');
+            std::fs::write(Path::new(path), body)?;
+            println!("\nwrote {} compound decisions to {path}", decisions.len());
         }
         Ok(())
     }

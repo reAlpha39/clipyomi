@@ -70,6 +70,51 @@ a real `JMdict_e.xml` — the committed subset will not contain the new
 vocabulary, and the snapshot will show unmatched spans instead of failing
 loudly.
 
+## `compound_gold.jsonl`
+
+The adjudicated compound corpus behind `score --compounds` and
+`src/bin/jparser-cli/compounds.rs`. One record per window where the engine
+faced a compound decision on `gold.jsonl` — 194 of them, being the 53 merges
+it made plus the 141 compounds it declined, enumerated by
+`examples/common_inversion_probe.rs`. Each carries a `class` (the type-level
+judgment) and an `expect` (what that sentence permits after overlapping
+windows are resolved).
+
+It exists because neither span metric can register compound preservation as
+a gain: the gold corpus is adjudicated at short-unit granularity, so keeping
+`音がする` whole costs strict accuracy and earns tolerant nothing. See
+`docs/superpowers/2026-09-09-frequency-signal-candidates.md` §10–§11 for the
+measurement that forced it and `compounds.rs` for the four classes.
+
+It carries JMdict content in its `headword` and `entry_id` columns — 139
+dictionary forms and the `ent_seq` each came from — so the note on
+`jmdict_subset.xml` above applies: **this file contains material from JMdict,
+Copyright (C) EDRDG, CC BY-SA 4.0**, <https://www.edrdg.org/edrdg/licence.html>.
+The `text` and `surface` columns come from `gold.jsonl`, whose own provenance
+is in `gold_sources.md`. JSONL carries no comment syntax, which is why the
+notice lives here rather than in the file.
+
+**This is a model's adjudication, not the author's.** `corpus_staging/build_gold.py`
+records that distinction for the gold corpus and it applies here too: every
+verdict is revisable, and because the class is stored per record, reversing a
+whole class's judgment is a filter over this file rather than a re-read of the
+corpus. The judgment most likely to be disputed is the `transparent` class —
+`には`, `にも`, `での`, `との` are JMdict headwords adjudicated *split* here,
+on the ground that merging them hides the particle a reader needs; the engine
+merges `には` and `にも` today, so that call alone accounts for 12 of the
+metric's misses.
+
+Regenerate with:
+
+```bash
+cargo run --release -p jparser --features mecab --example common_inversion_probe --   <gold-index> crates/jparser/tests/fixtures/gold.jsonl <system.dic> /tmp/decisions.jsonl
+python3 tools/adjudicate_compounds.py /tmp/decisions.jsonl   crates/jparser/tests/fixtures/compound_gold.jsonl
+```
+
+The adjudication script hard-fails on any `(surface, headword)` type it has no
+verdict for, so a corpus change that introduces a new compound cannot silently
+drop out of the metric.
+
 ## `conjugation_labels.txt`
 
 Hand-written, no external data source. Phase 1b-i's class × chain gate:

@@ -346,3 +346,146 @@ fn the_json_form_nests_the_oracle_block_only_when_asked() {
         "got {stdout}"
     );
 }
+
+/// The compound metric is additive: absent `--compounds`, `score`'s output is
+/// byte-for-byte what it was before the metric existed. Every recorded
+/// baseline is transcribed from that output, so this is the test that keeps
+/// them comparable.
+#[test]
+fn the_compound_metric_is_absent_without_its_file() {
+    let dir = scratch("cli-score-compounds-absent");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n",
+    )
+    .unwrap();
+
+    assert!(!score(&index, &gold).contains("compounds"));
+}
+
+/// `言った` parses as one span over all three characters (`cli_parse.rs` pins
+/// that), so a `merge` expectation on 0..3 is a hit and a `split` expectation
+/// on the same window is a miss. One of each, so neither direction can pass by
+/// always answering the same way — and the `skip` record must move the
+/// ambiguous counter without entering the ratio.
+#[test]
+fn the_compound_metric_scores_both_directions_and_excludes_the_ambiguous() {
+    let dir = scratch("cli-score-compounds");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n\
+         {\"text\":\"は\",\"source\":\"test:2\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+    let compounds = dir.join("compounds.jsonl");
+    std::fs::write(
+        &compounds,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"start\":0,\"len\":3,\"surface\":\"言った\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"lexical\",\"expect\":\"merge\"}\n\
+         {\"text\":\"言った\",\"source\":\"test:1\",\"start\":0,\"len\":2,\"surface\":\"言っ\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"transparent\",\"expect\":\"split\"}\n\
+         {\"text\":\"言った\",\"source\":\"test:1\",\"start\":1,\"len\":2,\"surface\":\"った\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"ambiguous\",\"expect\":\"skip\"}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--compounds")
+        .arg(&compounds)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = String::from_utf8(out.stdout).unwrap();
+
+    assert!(
+        out.contains("compounds:      1.0000  (2 / 2)"),
+        "the merge and the split are both hits: {out}"
+    );
+    assert!(
+        out.contains("kept whole:   1 / 1     split apart: 1 / 1"),
+        "{out}"
+    );
+    assert!(
+        out.contains("lexical 1 / 1  transparent 1 / 1   (1 ambiguous, excluded)"),
+        "the skip counts beside the ratio, not inside it: {out}"
+    );
+}
+
+/// A fixture sentence the corpus no longer holds would shrink the metric's
+/// denominator without saying so, which is exactly the drift the file is meant
+/// to guard against — so it is a hard error, like an absent `ent_seq`.
+#[test]
+fn an_adjudicated_sentence_missing_from_the_corpus_is_a_hard_error() {
+    let dir = scratch("cli-score-compounds-orphan");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+    let compounds = dir.join("compounds.jsonl");
+    std::fs::write(
+        &compounds,
+        "{\"text\":\"言った\",\"source\":\"test:9\",\"start\":0,\"len\":3,\"surface\":\"言った\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"lexical\",\"expect\":\"merge\"}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--compounds")
+        .arg(&compounds)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(
+        !out.status.success(),
+        "an orphaned adjudication must not score"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("adjudicated sentence"), "stderr: {err}");
+}
+
+/// A window reaching past the end of its own sentence is a malformed record,
+/// caught on read rather than scored as a miss.
+#[test]
+fn an_adjudicated_window_past_the_end_of_its_text_is_a_hard_error() {
+    let dir = scratch("cli-score-compounds-bad-window");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+    let compounds = dir.join("compounds.jsonl");
+    std::fs::write(
+        &compounds,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"start\":0,\"len\":4,\"surface\":\"は\",\"headword\":\"は\",\"entry_id\":1000020,\"class\":\"lexical\",\"expect\":\"merge\"}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--compounds")
+        .arg(&compounds)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(!out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("outside a 1-character sentence"),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
