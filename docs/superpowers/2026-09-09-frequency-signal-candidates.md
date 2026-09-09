@@ -113,30 +113,56 @@ nothing the layer exists for, and a display-facing "common word" marker built
 on them would be wrong in a way users would notice — 邂逅 marked commoner
 than 人.
 
-## 7. UniDic, checked the same day — ruled out on three grounds
+## 7. UniDic, checked the same day — ruled out on two grounds, licence not among them
 
 §5 named UniDic as the next candidate. It does not survive either.
 
-**Licence: the BSD leg is real, but not established where the gate requires.**
-The `unidic-py` distribution states UniDic 3.1.0 is "available under the GPL,
-LGPL, or BSD license" and redistributes it "under the BSD License", which
-matches what §3.3 recorded. But NINJAL's own pages are the authority and they
-did not yield it: `clrd.ninjal.ac.jp/unidic/en/about_unidic_en.html` states no
-licence at all, and `unidic.ninjal.ac.jp` did not resolve. Master plan §7
-requires a layer's licence "established in writing first", and a third-party
-wrapper's README is not the copyright holder's terms. Anyone returning to
-UniDic owes NINJAL's own licence text, not this.
+> **This section originally gave three grounds and one of them was wrong.**
+> It claimed UniDic's licence was "not established where the gate requires",
+> on the basis that NINJAL's own pages did not state it — `about_unidic_en.html`
+> states no licence and `unidic.ninjal.ac.jp` did not resolve, so the only
+> attestation found was a third-party wrapper's README. That was a failure to
+> find the page, not an absence. The maintainer supplied
+> `https://clrd.ninjal.ac.jp/unidic/en/`, which states the licence plainly and
+> links its texts. **The licence ground is withdrawn.** The two below stand,
+> and the corrected licence finding is recorded first because it is the one a
+> later reader is most likely to need.
 
-**Size: 770 MB installed**, against the roughly 47 MB compiled `system.dic`
-the app ships today. That is not a shippable increment for a desktop reading
-aid, and it would be paid on every user's first run.
+**Licence: established, and permissive.** NINJAL's own page states "Licence:
+GPL v2.0/LGPL v2.1/BSD New triple license" and links each text.
+`clrd.ninjal.ac.jp/unidic/copying/BSD` is a 3-clause New BSD licence,
+"Copyright (c) 2011-2021, The UniDic Consortium", with the usual
+notice-retention pair plus the no-endorsement clause. That is compatible with
+`MIT OR Apache-2.0` and it is the copyright holder's own written statement, so
+master plan §7's "established in writing first" is satisfiable for UniDic.
+Worth knowing for any future use of the dictionary itself — its readings are
+better than IPADIC's (§3.3) — even though it fails this layer's purpose below.
+One wrinkle for a redistributor: the archive bundles a `ChaMame` UI installer
+that its README marks as separately licensed.
 
-**And it carries no frequency data anyway.** UniDic's `lex.csv` columns are
+**Size: 576 MB at minimum**, from NINJAL's own download table — 576 MB for
+Contemporary Written Japanese without `model.def`/`matrix.def` and 2.1 GB
+with, 609 MB and 2.2 GB for the Spoken edition. Against the roughly 47 MB
+compiled `system.dic` the app ships today, paid on every user's first run.
+(An earlier draft of this section said 770 MB, which was a wrapper's installed
+footprint rather than the distribution.)
+
+**And it carries no frequency data.** UniDic's `lex.csv` columns are
 `pos1`–`pos4`, `cType`, `cForm`, `lForm`, `lemma`, `orth`, `pron`,
 `orthBase`, `pronBase`, `goshu`, `iType`, `iForm`, `fType`, `fForm`, with
-`lemma_id` last. Every one is morphological, orthographic or phonological.
-The only numeric weight is MeCab's `cost` field — the same trained
-segmentation weight §3 measured and rejected, one dictionary over.
+`lemma_id` last — every one morphological, orthographic or phonological. The
+archive's own README confirms it: it reports lexicon statistics (228,315
+lexemes, and short-unit counts up to 879,222 under different normalisations)
+and documents no frequency or occurrence-count column anywhere. The only
+numeric weight is MeCab's `cost` field — the same trained segmentation weight
+§3 measured and rejected, one dictionary over.
+
+**A note for a different question.** NINJAL also publishes UniDic for
+Contemporary *Spoken* Japanese, whose register is far closer to the dialogue
+this app is mostly pointed at than either IPADIC or the written edition. It
+carries no frequency data either, so it is irrelevant to this layer — but if
+boundary-hint quality is ever revisited, it is the candidate §3.3 did not
+know about.
 
 ## 8. The reframing this forces
 
