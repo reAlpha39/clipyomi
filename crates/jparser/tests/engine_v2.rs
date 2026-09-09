@@ -947,6 +947,12 @@ fn three_readings_come_out_in_cost_order_with_dominated_ones_dropped() {
     let r = parse_tokyo("tokyo-three", 3);
     assert_eq!(surfaces(&r.segments), [("東京都", true)]);
     assert_eq!(r.alternatives.len(), 2);
+    // Phase 2b's demotion leaves this order alone, and not by luck: top-1 is
+    // the single word 東京都, so every full cover cuts at a superset of its
+    // {0,3} and every alternative sinks together, keeping the cost order they
+    // arrived in. Demotion reorders between fresh and sunk readings, never
+    // within a group; `a_reading_unrelated_to_the_top_one_outranks_a_re_split_of_it`
+    // below is the case where the groups differ.
     assert_eq!(surfaces(&r.alternatives[0]), [("東京", true), ("都", true)]);
     // 東 has no entry here, so leaving it unmatched is the only way to read
     // 京都. 東京 + unmatched 都 is absent: 東京 + 都 is cheaper and matches
@@ -977,6 +983,60 @@ fn every_alternative_is_a_contiguous_cover() {
         }
         assert_eq!(at, 3);
     }
+}
+
+// Phase 2b: a private five-entry fixture on which 東京都市 has exactly three
+// undominated readings at distinct costs -- 東京+都市 (both COMMON through
+// `news1`), 東+京+都市, 東+京都市 -- so `demote`'s reorder is visible through
+// `parse` with no tie-break in play. Private for the reason `KURU_FIXTURE` is.
+const TOSHI_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+]>
+<JMdict>
+<entry><ent_seq>1000200</ent_seq><k_ele><keb>東京</keb><ke_pri>news1</ke_pri></k_ele><r_ele><reb>とうきょう</reb></r_ele><sense><pos>&n;</pos><gloss>Tokyo</gloss></sense></entry>
+<entry><ent_seq>1000210</ent_seq><k_ele><keb>都市</keb><ke_pri>news1</ke_pri></k_ele><r_ele><reb>とし</reb></r_ele><sense><pos>&n;</pos><gloss>city</gloss></sense></entry>
+<entry><ent_seq>1000220</ent_seq><k_ele><keb>東</keb></k_ele><r_ele><reb>ひがし</reb></r_ele><sense><pos>&n;</pos><gloss>east</gloss></sense></entry>
+<entry><ent_seq>1000230</ent_seq><k_ele><keb>京</keb></k_ele><r_ele><reb>きょう</reb></r_ele><sense><pos>&n;</pos><gloss>capital</gloss></sense></entry>
+<entry><ent_seq>1000240</ent_seq><k_ele><keb>京都市</keb></k_ele><r_ele><reb>きょうとし</reb></r_ele><sense><pos>&n;</pos><gloss>Kyoto City</gloss></sense></entry>
+</JMdict>
+"#;
+
+fn parse_toshi(name: &str, readings: usize) -> jparser::ParseResult {
+    let dir = scratch(name);
+    jparser::engine::build::build_from_reader(BufReader::new(TOSHI_FIXTURE.as_bytes()), &dir)
+        .expect("v2 build");
+    let index = open_v2(&dir);
+    let table = jparser::engine::table::Table::new();
+    jparser::parse(
+        &index,
+        &table,
+        "東京都市",
+        &jparser::ParseOptions::with_readings(readings),
+        None,
+    )
+    .expect("parse")
+}
+
+/// Phase 2b design §3: a reading that is not a merge or split of the top one
+/// outranks one that is, even when the re-split is cheaper.
+#[test]
+fn a_reading_unrelated_to_the_top_one_outranks_a_re_split_of_it() {
+    let r = parse_toshi("toshi-three", 3);
+    assert_eq!(surfaces(&r.segments), [("東京", true), ("都市", true)]);
+    assert_eq!(r.alternatives.len(), 2);
+    // By cost, 東+京+都市 (0) precedes 東+京都市 (4). The first cuts at
+    // {0,1,2,4}, a superset of top-1's {0,2,4} -- the same reading
+    // re-split -- and sinks; the second cuts at {0,1,4}, comparable with
+    // neither, and is the first alternative a reader is offered.
+    assert_eq!(
+        surfaces(&r.alternatives[0]),
+        [("東", true), ("京都市", true)]
+    );
+    assert_eq!(
+        surfaces(&r.alternatives[1]),
+        [("東", true), ("京", true), ("都市", true)]
+    );
 }
 
 /// Global constraint: asking for more readings never moves the first one.

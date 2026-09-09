@@ -14,6 +14,8 @@
 //! (Phase 2 design §3). [`best_path`] is the k = 1 case and is what the
 //! engine produced before Phase 2, node for node.
 
+use std::collections::BTreeSet;
+
 use crate::engine::cost::{cost, is_allowed, unmatched_cost};
 use crate::engine::lex::Candidate;
 use crate::engine::Boundaries;
@@ -200,20 +202,26 @@ fn matched_spans(path: &[Step]) -> Vec<(usize, usize)> {
         .collect()
 }
 
-/// The first `k` of `readings` (already in cost order) that no cheaper kept
-/// reading dominates. A reading is dominated when another, cheaper one
+/// The first `bound` of `readings` (already in cost order) that no cheaper
+/// kept reading dominates. A reading is dominated when another, cheaper one
 /// matches every span it matches: it only leaves words unmatched that the
 /// other found, a worse copy of that reading rather than a different one.
 /// Rank 0 is never dominated. Checking against the kept list alone is
 /// enough, because every dominator of a dropped reading is cheaper than it
 /// and so was either kept or dominated in turn by something kept.
-fn undominated(readings: Vec<Vec<Step>>, k: usize) -> Vec<Vec<Step>> {
-    // No `Vec::with_capacity(k)`: `k` is caller-controlled (see `k_best`) and
-    // must not let a huge request pre-allocate an absurd amount up front.
+///
+/// The kept list is built in cost order and stops when full, so its first
+/// `n` entries are the same for every `bound >= n`: a larger bound extends
+/// the list and never disturbs its prefix. `k_best` relies on that to pass
+/// the whole raw pool's bound here and cut to `k` only after `demote`.
+fn undominated(readings: Vec<Vec<Step>>, bound: usize) -> Vec<Vec<Step>> {
+    // No `Vec::with_capacity(bound)`: `bound` derives from a caller-controlled
+    // `k` (see `k_best`) and must not let a huge request pre-allocate an
+    // absurd amount up front.
     let mut kept: Vec<Vec<Step>> = Vec::new();
     let mut kept_spans: Vec<Vec<(usize, usize)>> = Vec::new();
     for reading in readings {
-        if kept.len() == k {
+        if kept.len() == bound {
             break;
         }
         let spans = matched_spans(&reading);
@@ -229,12 +237,66 @@ fn undominated(readings: Vec<Vec<Step>>, k: usize) -> Vec<Vec<Step>> {
     kept
 }
 
-/// The `k` cheapest distinct contiguous covers of `chars`, cheapest first,
-/// choosing among `by_start`'s candidates under the boundaries `bounds`
-/// allows. Distinct means by the set of spans matched (see `Node::key`), and
-/// a reading that only un-matches what a cheaper one matches is not offered
-/// (see `undominated`). Always at least one path; empty input yields exactly
-/// one empty path.
+/// Where a reading cuts: 0, then the end of every step. A path is a
+/// contiguous cover from 0, so the step ends alone determine it.
+fn cuts(path: &[Step]) -> BTreeSet<usize> {
+    let mut at = 0;
+    let mut set = BTreeSet::from([0]);
+    for step in path {
+        at += step.len();
+        set.insert(at);
+    }
+    set
+}
+
+/// `pool`, in cost order, reordered so that a reading merge/split equivalent
+/// to an earlier *fresh* reading sinks below every reading that is not, then
+/// cut to `k`. Two readings are merge/split equivalent when one's cut set is
+/// contained in the other's -- `東京都` at {0,3} against `東京`+`都` at
+/// {0,2,3} -- in either direction, because merge and split are one relation
+/// read from opposite ends (Phase 2b design §3.1; the asymmetric variant was
+/// measured and loses, Phase 2 handoff §7).
+///
+/// Rank 0 meets an empty fresh list, so it is always fresh and always first:
+/// at k = 1 this is the identity, which is what keeps `best_path` and the
+/// eight cells untouched by construction. A reading is compared against the
+/// fresh list only, never against sunk ones -- otherwise one sunk reading
+/// would drag unrelated readings down behind it. Containment in either
+/// direction is not transitive, so this is a greedy sweep whose result
+/// depends on the order it sweeps; cost order is the only order there is,
+/// and rank 0 is the reading the engine chose.
+///
+/// Nothing is deleted. A sunk reading past `k` is not returned, as any
+/// reading past `k` never was; what changes is which readings the cut
+/// keeps.
+fn demote(pool: Vec<Vec<Step>>, k: usize) -> Vec<Vec<Step>> {
+    // No `Vec::with_capacity(k)`, for `undominated`'s reason.
+    let mut fresh: Vec<Vec<Step>> = Vec::new();
+    let mut fresh_cuts: Vec<BTreeSet<usize>> = Vec::new();
+    let mut sunk: Vec<Vec<Step>> = Vec::new();
+    for reading in pool {
+        let c = cuts(&reading);
+        if fresh_cuts.iter().any(|f| f.is_subset(&c) || c.is_subset(f)) {
+            sunk.push(reading);
+        } else {
+            fresh_cuts.push(c);
+            fresh.push(reading);
+        }
+    }
+    fresh.extend(sunk);
+    fresh.truncate(k);
+    fresh
+}
+
+/// The `k` best distinct contiguous covers of `chars`, choosing among
+/// `by_start`'s candidates under the boundaries `bounds` allows. Distinct
+/// means by the set of spans matched (see `Node::key`), and a reading that
+/// only un-matches what a cheaper one matches is not offered (see
+/// `undominated`). Rank 0 is the cheapest; below it the order is cost order
+/// among readings not merge/split equivalent to an earlier one, then the
+/// equivalent ones in cost order (see `demote`) -- so a re-split of the top
+/// reading does not spend a rank a genuinely different reading could hold.
+/// Always at least one path; empty input yields exactly one empty path.
 ///
 /// `by_start[i]` is every candidate starting at character offset `i`, the
 /// shape [`lex::candidates`] produces; a position past the end of a short
@@ -256,11 +318,14 @@ fn undominated(readings: Vec<Vec<Step>>, k: usize) -> Vec<Vec<Step>> {
 /// undominated covers -- 35 of the 150 gold-corpus sentences do, measured at
 /// a cap eight times the shipped one.
 ///
-/// That ceiling is measured, not merely bounded: at k = 3 the shipped cap of
-/// 12 returns byte-identical reading lists to a cap of 96 on all 150
-/// gold-corpus sentences in both hint states, because with `CROSS = 0` the
-/// interesting alternates are exact-cost ties while the one-word-unmatched
-/// variants they compete with cost about +30.
+/// That ceiling was measured before `demote`, not merely bounded: at k = 3
+/// the shipped cap of 12 returned byte-identical top-three lists to a cap of
+/// 96 on all 150 gold-corpus sentences in both hint states, because with
+/// `CROSS = 0` the interesting alternates are exact-cost ties while the
+/// one-word-unmatched variants they compete with cost about +30. With
+/// `demote` the top three depend on the whole pool, not its first three, so
+/// that measurement no longer covers them; the Phase 2b handoff §2 records
+/// what the pool at this cap reaches.
 pub fn k_best(
     chars: &[char],
     by_start: &[Vec<Candidate>],
@@ -323,7 +388,9 @@ pub fn k_best(
     let raw: Vec<Vec<Step>> = (0..best[n].len())
         .map(|rank| path_of(&best, n, rank))
         .collect();
-    undominated(raw, k)
+    // Filter the whole raw pool, not the first `k`: `demote` can only free a
+    // rank if it runs before the list is cut (Phase 2b design §3.2).
+    demote(undominated(raw, cap), k)
 }
 
 /// The min-cost contiguous cover of `chars`: [`k_best`] at k = 1.
@@ -645,5 +712,115 @@ mod tests {
         let readings = k_best(&chars, &cands, None, usize::MAX / 2 + 1);
         assert!(!readings.is_empty());
         assert!(readings.len() <= crate::MAX_READINGS);
+    }
+    // Phase 2b (design §3): rank is cost order among readings not merge/split
+    // equivalent to an earlier kept one, then the equivalent ones in cost
+    // order. Two readings are equivalent when one's cut set is contained in
+    // the other's, in either direction.
+
+    /// 東京都市 over five candidates: 東京 and 都市 COMMON, 東, 京 and 京都市
+    /// plain. Exactly three undominated readings, at distinct costs, so no
+    /// assertion below rides on a tie-break: 東京+都市 at (2-4)+(2-4) = -4,
+    /// 東+京+都市 at 1+1+(2-4) = 0, 東+京都市 at 1+3 = 4. Every other cover
+    /// leaves a word unmatched that one of these three matches, and is
+    /// dropped by `undominated` before `demote` sees it.
+    fn tokyo_toshi() -> (Vec<char>, Vec<Vec<Candidate>>) {
+        let mut common = WordFlags::PRIMARY;
+        common.insert(WordFlags::COMMON);
+        let chars: Vec<char> = "東京都市".chars().collect();
+        let cands = by_start(
+            4,
+            vec![
+                c(0, 2, 1, common),             // 東京
+                c(2, 2, 2, common),             // 都市
+                c(0, 1, 3, WordFlags::PRIMARY), // 東
+                c(1, 1, 4, WordFlags::PRIMARY), // 京
+                c(1, 3, 5, WordFlags::PRIMARY), // 京都市
+            ],
+        );
+        (chars, cands)
+    }
+
+    #[test]
+    fn a_reading_unrelated_to_rank_zero_outranks_a_re_split_of_it() {
+        let (chars, cands) = tokyo_toshi();
+        let readings = k_best(&chars, &cands, None, 3);
+        let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| matched_spans(p)).collect();
+        // Cost order is 東京+都市, 東+京+都市, 東+京都市. The middle one cuts
+        // at {0,1,2,4}, a superset of rank 0's {0,2,4} -- the same reading
+        // re-split -- so it sinks. 東+京都市 cuts at {0,1,4}, comparable with
+        // rank 0's set in neither direction, so it is fresh and now rank 1.
+        //
+        // {0,1,4} *is* a subset of the sunk reading's {0,1,2,4}. Were readings
+        // compared against sunk ones too, 東+京都市 would sink behind it; it
+        // is compared against the fresh list only, and does not. A refactor
+        // that compares against every earlier reading fails here.
+        assert_eq!(
+            spans,
+            vec![
+                vec![(0, 2), (2, 2)],
+                vec![(0, 1), (1, 3)],
+                vec![(0, 1), (1, 1), (2, 2)]
+            ]
+        );
+    }
+
+    #[test]
+    fn demotion_frees_a_rank_the_cut_would_have_spent() {
+        // The point of the phase: at k = 2 the re-split no longer occupies the
+        // second slot, so a reading the old cut never returned now does.
+        let (chars, cands) = tokyo_toshi();
+        let readings = k_best(&chars, &cands, None, 2);
+        let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| matched_spans(p)).collect();
+        assert_eq!(spans, vec![vec![(0, 2), (2, 2)], vec![(0, 1), (1, 3)]]);
+    }
+
+    #[test]
+    fn demotion_never_moves_rank_zero() {
+        let (chars, cands) = tokyo_toshi();
+        assert_eq!(
+            k_best(&chars, &cands, None, 3)[0],
+            best_path(&chars, &cands, None)
+        );
+    }
+
+    #[test]
+    fn readings_all_equivalent_to_rank_zero_keep_their_cost_order() {
+        // 東京都 as one word, or 東京+都, or 東+京都. Every full cover cuts at
+        // a superset of the single word's {0,3}, so every alternative sinks,
+        // and sinking together they keep the order they arrived in: demotion
+        // reorders between the fresh group and the sunk group, never inside
+        // either. 東+京都 and 東京+都 cut at {0,1,3} and {0,2,3}, comparable
+        // with neither each other -- the relation is not transitive, and the
+        // sweep does not pretend it is.
+        let chars: Vec<char> = "東京都".chars().collect();
+        let cands = by_start(
+            3,
+            vec![
+                c(0, 3, 1, WordFlags::PRIMARY),
+                c(0, 2, 2, WordFlags::PRIMARY),
+                c(2, 1, 3, WordFlags::PRIMARY),
+                c(0, 1, 4, WordFlags::PRIMARY),
+                c(1, 2, 5, WordFlags::PRIMARY),
+            ],
+        );
+        let readings = k_best(&chars, &cands, None, 3);
+        let spans: Vec<Vec<(usize, usize)>> = readings.iter().map(|p| matched_spans(p)).collect();
+        // All three cost 3; the longer last step wins each tie, as at k = 1.
+        assert_eq!(
+            spans,
+            vec![vec![(0, 3)], vec![(0, 1), (1, 2)], vec![(0, 2), (2, 1)]]
+        );
+    }
+
+    #[test]
+    fn cuts_are_zero_and_every_step_end() {
+        let path = vec![
+            Step::Matched(c(0, 2, 1, WordFlags::PRIMARY)),
+            Step::Unmatched { start: 2, len: 1 },
+            Step::Matched(c(3, 2, 2, WordFlags::PRIMARY)),
+        ];
+        assert_eq!(cuts(&path), BTreeSet::from([0, 2, 3, 5]));
+        assert_eq!(cuts(&[]), BTreeSet::from([0]));
     }
 }
