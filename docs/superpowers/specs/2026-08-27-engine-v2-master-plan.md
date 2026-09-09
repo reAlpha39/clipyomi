@@ -472,7 +472,11 @@ sampler.
 
 ### 5.2 Metrics
 
-Two, because the failures are different and a combined number would hide both.
+Two, because the failures are different and a combined number would hide
+both. Every metric here is measured at corpus sentence lengths, and nothing
+in the harness measures a clipboard-length input — which is why a
+superlinearity that made the app's own 10,000-character ceiling unusable
+survived four phases (Phase 2c).
 
 **Span accuracy.** Fraction of gold spans the parser reproduces exactly (same
 start, same length). Measures whether the word is correctly delimited — whether
@@ -1036,6 +1040,16 @@ and an unresolved product question about the readings demotion sinks), and
 over the pool k = 3 already holds. Phase 2b shipped the reading-cycling UI;
 see the Phase 2b handoff §3 and §4. Whole-sentence cover in the top three is
 23 of 150 (Phase 2: 25), recorded and unthresholded.
+
+### Phase 2c — Candidate generation walks the index once per position — **COMPLETE**
+
+Not a quality change: the candidate set is byte-identical, and so are the
+eight cells and Phase 2b's oracle@3 figures. `lex::candidates` enumerated
+every `(start, end)` span pair and built a key per pair, making generation
+superlinear in input length — a 10,000-character paste, the app's own
+clipboard ceiling, did not finish in ten minutes. It now walks the key FST
+once per start position, with the walk's own dead end bounding the span. See
+the Phase 2c handoff for the before-and-after timings.
 
 ### Phase 3 — Extra linguistic layers
 
