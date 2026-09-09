@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Entry } from './types';
 

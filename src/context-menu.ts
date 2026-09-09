@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 /** Closest the menu may sit to a viewport edge, in px. */
 export const MENU_MARGIN = 4;
 

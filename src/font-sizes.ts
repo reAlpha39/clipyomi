@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import type { Settings } from './types';
 
 /** The three sizes the user can move. Furigana is a percentage, the rest px. */

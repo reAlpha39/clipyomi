@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! The tooltip window: a second, undecorated, always-on-top webview that can
 //! extend past the main window onto the desktop.
 //!

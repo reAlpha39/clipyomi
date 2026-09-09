@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 // Split out of `main.test.ts` (Task 6 review, round 2) once the tooltip

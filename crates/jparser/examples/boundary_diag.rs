@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Where do the gold boundaries jparser misses actually go?
 //!
 //! Master plan §9.7's measurement produced a number nobody was looking for:

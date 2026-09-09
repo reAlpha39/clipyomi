@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { emit, listen } from '@tauri-apps/api/event';
 import { clampFont } from './font-sizes';
 import { renderTooltip } from './render/tooltip';

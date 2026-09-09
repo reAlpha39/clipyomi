@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { HISTORY_CAP, createHistory } from './history';
 import type { ParseResult } from './types';

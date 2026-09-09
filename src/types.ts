@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Mirrors crates/jparser/src/lib.rs. The Rust test
 // `parse_result_serializes_to_the_documented_wire_shape` pins these names on the
 // other side; changing one side alone breaks rendering silently.
