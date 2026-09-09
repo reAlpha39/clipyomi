@@ -103,3 +103,26 @@ crate code has changed since and the comparison needs a release build and the
 - The 9 gold spans with no candidate and the 3 with the span but not the
   entry (Phase 2 handoff §6) are unchanged by this phase and remain lexicon
   or index findings.
+- ~~**A reading switch lost keyboard focus.**~~ **FIXED 2026-09-09.** The
+  scroll guard this phase added was written with only half the problem in
+  view: `replaceChildren` on `#output` drops focus to `<body>` the instant
+  the focused child leaves the document, so `]`/`[` — a *keyboard* gesture —
+  threw away the keyboard position of the reader who pressed it, on every
+  press. Scroll survived; focus did not. `renderDictionary` already carried
+  the pattern (read whether focus was inside *before* mutating, restore
+  after, gated so a background render steals nothing) and `display` now uses
+  it. Focus returns to the chip covering the **character** the reader was on
+  rather than the chip at the same ordinal, because another reading segments
+  the sentence differently — reading 2 splits `東京都` into `東京` + `都`, and
+  offset 2 is `都` where index 0 is not. `#output` gained `tabindex="-1"`, for
+  the reason `#dictionary` has it: somewhere to land when the offset now
+  falls inside an unmatched run, which is a `<span>` and deliberately not in
+  the tab order. Four tests; two of them fail against the pre-fix code with
+  `expected <body> to be <div id="output">`, which is the defect stated
+  exactly.
+
+  Worth recording as a process note, not just a fix: this defect was written
+  down in a session note and **not** in the repository, so success criterion
+  4 — "every deliberate shortcut is recorded, not discovered later" — was
+  satisfied only by luck. A known defect belongs in this list on the day it
+  is known.

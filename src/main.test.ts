@@ -305,6 +305,48 @@ describe('the event-driven render path', () => {
     expect(panes().scrollTop).toBe(120);
   });
 
+  test('cycling keeps the keyboard position, by character and not by chip', () => {
+    // The other half of the scroll guard above, and the more direct defect of
+    // the two: `]`/`[` is a keyboard gesture, so replacing `#output`'s
+    // children under a focused chip threw away the position of the very
+    // reader who pressed the key. Reading 2 splits 東京都 into 東京 + 都, so
+    // focus must land on the chip covering character 2 — 都, the second chip —
+    // rather than on chip index 0 where it started.
+    emit('parse-result', tokyo());
+    document.querySelector<HTMLButtonElement>('[data-start="0"]')!.focus();
+    press(']');
+    expect(rendered()).toEqual(['東京', '都']);
+    expect((document.activeElement as HTMLElement).dataset.start).toBe('0');
+
+    document.querySelector<HTMLButtonElement>('[data-start="2"]')!.focus();
+    press('[');
+    expect(rendered()).toEqual(['東京都']);
+    expect((document.activeElement as HTMLElement).dataset.start).toBe('0');
+  });
+
+  test('cycling onto an unmatched run lands on the pane, never on the body', () => {
+    // Reading 3 is 東 (unmatched) + 京都, and an unmatched run is a <span>
+    // with no tabindex on purpose — so there is no chip to return to. The
+    // point of `#output`'s own `tabindex="-1"` is that focus stays in the
+    // sentence pane instead of falling all the way to <body>, which is where
+    // it went for every switch before this.
+    emit('parse-result', tokyo());
+    document.querySelector<HTMLButtonElement>('[data-start="0"]')!.focus();
+    press('[');
+    expect(rendered()).toEqual(['東', '京都']);
+    expect(document.activeElement).toBe(document.querySelector('#output'));
+  });
+
+  test('a render nobody was focused on does not steal focus', () => {
+    // The gate `renderDictionary` already applies: a parse arriving while the
+    // reader is somewhere else entirely must not pull them into the pane.
+    emit('parse-result', tokyo());
+    const outside = document.querySelector<HTMLButtonElement>('#window-close')!;
+    outside.focus();
+    press(']');
+    expect(document.activeElement).toBe(outside);
+  });
+
   test('cycling readings from the keyboard closes an open context menu', () => {
     // `openContextMenu` moves focus into the menu, and a bracket keypress
     // there bubbles to `document` — without a close, the menu would keep
