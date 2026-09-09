@@ -1082,7 +1082,7 @@ own licensing gate, adopted only if its data source is permissive:
 
 | Layer | Source | Licence status |
 | --- | --- | --- |
-| Frequency rank | corpus-derived | Depends on corpus; unresolved |
+| Frequency rank | corpus-derived | **Moot** — the layer is ruled out on measurement, so no licence needs establishing |
 | JLPT level | community lists | Unofficial, provenance varies |
 | Kanji readings | KANJIDIC (EDRDG) | CC BY-SA, same family as JMdict |
 | Pitch accent | — | **Highest risk.** NHK's dictionary is not free, and community accent datasets have murky provenance — precisely the trap this plan exists to escape |
@@ -1111,8 +1111,29 @@ handoff §4).** It is the signal §5.2's compound-preservation finding shows is
 missing: JMdict's own priority marker is inverted on exactly the compounds
 this plan exists to preserve, so it actively rewards splitting them, and no
 cost-model magnitude can fix a signal that points the wrong way. A genuine
-frequency-rank layer is the candidate fix for that specific gap. Its
-licensing is still unresolved and this does not change that.
+frequency-rank layer was the candidate fix for that specific gap.
+
+**It is now ruled out on measurement, and the licence question with it
+(2026-09-09, doc §12).** Both buildable corpora of §8 were built — 400 Aozora
+works, 12.1 M characters, and the whole `jawikinews` dump, 2.7 M — and each was
+scored on the adjudicated type list held out to the *other* register, since
+Aozora carries no news words and a Wikinews table would otherwise score on
+windows the gold corpus itself sampled from Wikinews. Both traps measured out
+as predicted (Aozora is blank on 26 of 39 news-sourced compound types;
+Wikinews is blank on 0 of 39 of its own). On the held-out sets **every
+count-derived ranking scores AUC ≤ 0.51 and none beats a blanket discount by
+more than two windows**, while two signals needing no corpus at all — surface
+length and part count — beat all of them. The volume rankings are worse than
+chance: `には` occurs 2,585 times on token boundaries in the news corpus, between
+`である` (2,569) and `として` (4,852). The reason is structural rather than a
+matter of corpus or size: what the metric asks for is **wordhood, which
+frequency does not measure**, and under a short-unit inventory only 5 of the 87
+should-merge types are a token at all. So the third candidate — the `vn_data`
+capture pool, whose licence turns on a judgment only the copyright holder could
+make — is settled too, without anyone making that judgment. The route the
+measurements leave open is a **long-unit** token inventory rather than another
+corpus, which is a segmenter question with its own gates and is untested; see
+doc §12.5, and do not read it as reopening the dictionary hunt §8 closed.
 
 ---
 
