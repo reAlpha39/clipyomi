@@ -50,6 +50,32 @@ The plan succeeds when all four hold:
    each no lower than the current engine's, measured by the same harness.
 3. `くるまではこう` and the wider class of kana-heavy ambiguity it represents
    parse correctly — the case that motivated this work (§4.3).
+
+   **Met, and the "wider class" half is now a live gate (2026-09-09).** The
+   named sentence has been pinned since Phase 1b by
+   `kurumadehakou_parses_as_four_words`. The class around it is
+   `tests/fixtures/spurious_merges.txt`, 26 rows of handoff §9.5's
+   particle-absorbing merges, and its test was **ignored** from Task 16b until
+   now on 4 of 26 failures. All four were properties of the test's subject
+   rather than of the engine: it measured each surface in isolation, and given
+   two bare characters Vibrato calls `はこ`, `うん` and `んで` one token each,
+   so `cost.rs`'s crossing count found no interior boundary and neither
+   `CROSS` nor `PRONOUNCE_CROSS` could fire at any magnitude — which is why
+   every trial from 1 to 25 measured those rows identically. The fourth,
+   `いんじゃない`, needed `じゃ`, which is four real JMdict entries absent from
+   the small curated subset.
+
+   Each row now names a committed gold sentence that contains its surface and
+   whose adjudication puts a boundary strictly inside it, and the index is
+   built from `gold_jmdict_subset.xml` so no row can pass because nothing
+   matched. **26 of 26 pass and nothing is absorbed**; the suite has no
+   ignored test. Two rows (`はいた`, `タッとい`) cut inside the surface at a
+   position gold does not agree with — ordinary strict-span misses already
+   inside 0.8031, deliberately not this test's subject, and recorded in it.
+   This matters because §5.2 records that neither span metric can catch this
+   class: strict counts it as an ordinary miss and tolerant actively *credits*
+   it, since the merge's endpoints are both gold boundaries. The fixture is
+   the only guard there is, and it was not running.
 4. Every deliberate shortcut is recorded, not discovered later.
 
 Criterion 2 is the one that can fail quietly. It is why Phase 0 exists and why

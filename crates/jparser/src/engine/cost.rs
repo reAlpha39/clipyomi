@@ -120,6 +120,17 @@ const CROSS: i32 = 0;
 /// handoff §10. Left at the original value since nothing measured
 /// argues for changing it, and it carries a larger margin against any
 /// spurious-merge shape this corpus and fixture do not already cover.
+///
+/// **The 4-of-26 those trials held constant were an artefact of the fixture's
+/// subject, not of this term (2026-09-09).** The test measured each surface in
+/// isolation, and given two bare characters Vibrato calls `はこ`, `うん` and
+/// `んで` one token each -- so the crossing count below, which looks strictly
+/// *between* a span's endpoints, found nothing to price and this term could
+/// not fire at any magnitude. That is why every trial in the range measured
+/// identically on those rows. Re-pointed at the gold sentence each surface
+/// occurs in, the fixture passes 26 of 26 and the test is no longer ignored;
+/// the flatness finding above stands, since it was measured on the corpus as
+/// well.
 const PRONOUNCE_CROSS: i32 = 25;
 
 /// Discount per character for a match whose entry carries a priority marker.
