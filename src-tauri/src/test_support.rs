@@ -23,6 +23,19 @@ const FIXTURE_XML: &str = concat!(
     "</JMdict>",
 );
 
+/// A one-character KANJIDIC2 fixture for the same headword, so a command test
+/// can see the kanji block without a real download.
+pub(crate) const FIXTURE_KANJIDIC: &str = concat!(
+    r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+    "<kanjidic2>",
+    "<character><literal>本</literal><reading_meaning><rmgroup>",
+    r#"<reading r_type="ja_on">ホン</reading><reading r_type="ja_kun">もと</reading>"#,
+    "<meaning>book</meaning><meaning>present</meaning><meaning>main</meaning>",
+    "<meaning>origin</meaning><meaning>true</meaning>",
+    "</rmgroup></reading_meaning></character>",
+    "</kanjidic2>",
+);
+
 /// A scratch directory unique to `name`, freshly emptied.
 pub(crate) fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("ta-src-tauri-test-{name}"));
@@ -35,7 +48,10 @@ pub(crate) fn scratch(name: &str) -> PathBuf {
 /// generation's own directory (`root/gen-1`).
 pub(crate) fn build_index_generation(root: &Path) -> PathBuf {
     drop(
-        ensure_dictionary(root, 1, || Ok(FIXTURE_XML.as_bytes())).expect("build the fixture index"),
+        ensure_dictionary(root, 1, || {
+            Ok((FIXTURE_XML.as_bytes(), FIXTURE_KANJIDIC.as_bytes()))
+        })
+        .expect("build the fixture index"),
     );
     generations::latest(root)
         .expect("read back the generation just built")

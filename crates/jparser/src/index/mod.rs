@@ -149,19 +149,22 @@ pub enum IndexError {
 
 /// Open the newest usable index in `root`, building one first if necessary.
 ///
-/// `source` is a *lazy* producer of JMdict XML: it is invoked only when a
-/// build is actually required, because the real source is a ~60 MB download
-/// and the steady-state path must not pay for it.
+/// `source` is a *lazy* producer of the two EDRDG files, JMdict XML then
+/// KANJIDIC2 XML: it is invoked only when a build is actually required,
+/// because the real sources are a ~10 MB and a ~1.5 MB download and the
+/// steady-state path must not pay for them. One closure rather than two so a
+/// caller's "downloading" phase covers both fetches (Phase 3a design §3.2).
 ///
 /// A version or conjugation-fingerprint mismatch triggers a rebuild — both are
 /// expected after an application upgrade or a regenerated conjugation table.
 /// Any **other** open failure is returned rather than rebuilt: a generation
 /// that was published as complete but does not read back is a bug or a failing
 /// disk, and silently rebuilding would hide it.
-pub fn ensure_dictionary<R, F>(root: &Path, keep: usize, source: F) -> Result<Index, IndexError>
+pub fn ensure_dictionary<J, K, F>(root: &Path, keep: usize, source: F) -> Result<Index, IndexError>
 where
-    F: FnOnce() -> std::io::Result<R>,
-    R: std::io::BufRead,
+    F: FnOnce() -> std::io::Result<(J, K)>,
+    J: std::io::BufRead,
+    K: std::io::BufRead,
 {
     // `keep = 0` would let `sweep` delete the generation this very call just
     // published, so the trailing `Index::open` below would fail with a bare
@@ -190,8 +193,8 @@ where
         }
     }
 
-    let xml = source()?;
-    let (published, _report) = generations::build_new(root, xml)?;
+    let (jmdict, kanjidic) = source()?;
+    let (published, _report) = generations::build_new(root, jmdict, kanjidic)?;
     // Sweep after the publish, never before: sweeping first could delete the
     // generation the caller would have fallen back to had the build failed.
     //
@@ -257,6 +260,10 @@ mod tests {
         "</JMdict>",
     );
 
+    /// The empty KANJIDIC2 half of every source pair in this module. Kanji
+    /// records are the roundtrip tests' subject, not this module's.
+    const NO_KANJIDIC: &[u8] = b"";
+
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -280,7 +287,7 @@ mod tests {
 
         let index = ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("ensure_dictionary");
 
@@ -301,7 +308,7 @@ mod tests {
         let first = Cell::new(0usize);
         ensure_dictionary(&root, 2, || {
             first.set(first.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("first");
         assert_eq!(first.get(), 1);
@@ -309,7 +316,7 @@ mod tests {
         let second = Cell::new(0usize);
         ensure_dictionary(&root, 2, || {
             second.set(second.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("second");
         assert_eq!(second.get(), 0, "the source was consulted on a valid index");
@@ -322,7 +329,7 @@ mod tests {
     #[test]
     fn a_version_mismatch_rebuilds() {
         let root = scratch("ensure-version");
-        ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("first");
 
         corrupt_header(&root.join("gen-1"), |h| {
             h.version = INDEX_FORMAT_VERSION - 1;
@@ -331,7 +338,7 @@ mod tests {
         let calls = Cell::new(0usize);
         ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("rebuild");
         assert_eq!(calls.get(), 1, "a stale version must rebuild");
@@ -341,7 +348,7 @@ mod tests {
     #[test]
     fn a_fingerprint_mismatch_rebuilds() {
         let root = scratch("ensure-fingerprint");
-        ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("first");
 
         corrupt_header(&root.join("gen-1"), |h| {
             h.conjugation_fingerprint ^= 1;
@@ -350,7 +357,7 @@ mod tests {
         let calls = Cell::new(0usize);
         ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("rebuild");
         assert_eq!(calls.get(), 1);
@@ -362,7 +369,7 @@ mod tests {
     #[test]
     fn a_corrupt_generation_errors_rather_than_rebuilding() {
         let root = scratch("ensure-corrupt");
-        ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("first");
 
         // Truncate a file `open` reads eagerly, leaving the header intact so
         // version and fingerprint both still validate.
@@ -371,7 +378,7 @@ mod tests {
         let calls = Cell::new(0usize);
         let err = ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect_err("corruption must surface");
 
@@ -389,7 +396,7 @@ mod tests {
 
         // Four rounds, invalidating the head each time so every round rebuilds.
         for _ in 0..4 {
-            ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
@@ -421,12 +428,13 @@ mod tests {
         // Three rounds at keep=2, so all three generations would survive
         // under the default — the point below is the fourth round's keep=1.
         for _ in 0..3 {
-            ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
 
-        let index = ensure_dictionary(&root, 1, || Ok(XML.as_bytes())).expect("ensure with keep=1");
+        let index = ensure_dictionary(&root, 1, || Ok((XML.as_bytes(), NO_KANJIDIC)))
+            .expect("ensure with keep=1");
 
         let remaining = std::fs::read_dir(&root)
             .expect("read_dir")
@@ -453,7 +461,7 @@ mod tests {
     fn a_zero_keep_is_clamped_rather_than_self_destructive() {
         let root = scratch("ensure-keep-zero");
 
-        let index = ensure_dictionary(&root, 0, || Ok(XML.as_bytes()))
+        let index = ensure_dictionary(&root, 0, || Ok((XML.as_bytes(), NO_KANJIDIC)))
             .expect("ensure_dictionary must not self-destruct on keep=0");
 
         assert!(
@@ -483,8 +491,8 @@ mod tests {
     fn open_published_or_newest_falls_back_when_its_own_generation_is_swept() {
         let root = scratch("ensure-superseded");
 
-        let (gen1, _) = generations::build_new(&root, XML.as_bytes()).expect("gen-1");
-        let (gen2, _) = generations::build_new(&root, XML.as_bytes()).expect("gen-2");
+        let (gen1, _) = generations::build_new(&root, XML.as_bytes(), NO_KANJIDIC).expect("gen-1");
+        let (gen2, _) = generations::build_new(&root, XML.as_bytes(), NO_KANJIDIC).expect("gen-2");
 
         // Simulate a different call's sweep removing gen1 — the generation
         // this call "published" — before this call's own open ran.
@@ -553,7 +561,7 @@ mod tests {
         // operation already sweeps gen-1 away during this loop, leaving
         // gen-2 and gen-3 (corrupt) once it finishes.
         for _ in 0..3 {
-            ensure_dictionary(&root, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
@@ -581,7 +589,7 @@ mod tests {
             return;
         }
 
-        let index = ensure_dictionary(&root, 2, || Ok(XML.as_bytes()))
+        let index = ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC)))
             .expect("a failed sweep must not fail ensure_dictionary");
 
         assert_eq!(
@@ -596,5 +604,19 @@ mod tests {
             root.join("gen-2").exists(),
             "the un-removable generation must survive the failed sweep"
         );
+    }
+
+    /// The source closure is consulted once and yields both files; a
+    /// generation built through it carries the kanji records.
+    #[test]
+    fn ensure_dictionary_stores_the_kanjidic_half_of_the_pair() {
+        let root = scratch("ensure-kanji");
+        const KANJIDIC: &str = "<kanjidic2><character><literal>本</literal>\
+            <reading_meaning><rmgroup><reading r_type=\"ja_on\">ホン</reading>\
+            <meaning>book</meaning></rmgroup></reading_meaning></character></kanjidic2>";
+        let index = ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), KANJIDIC.as_bytes())))
+            .expect("ensure_dictionary");
+        assert_eq!(index.kanji_count(), 1);
+        assert_eq!(index.kanji('本').expect("本").meanings, vec!["book"]);
     }
 }

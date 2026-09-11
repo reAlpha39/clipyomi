@@ -1447,18 +1447,21 @@ fn describe_index_error(err: &jparser::index::IndexError) -> String {
 /// names `source_dir_display`.
 ///
 /// `SourceError::Http` and `SourceError::TooManyAttempts` already end with
-/// "place a JMdict_e.gz in `<source_dir>` manually to bypass the download"
-/// (`crates/jmdict-source/src/lib.rs`) — appending the same instructions
-/// again would say it twice on screen. Every other failure (a corrupt
-/// archive, a dead worker) says nothing about the directory at all, so this
-/// is the only place those would ever learn about the manual escape hatch.
+/// "place a <file> in `<source_dir>` manually to bypass the download"
+/// (`crates/jmdict-source/src/lib.rs`), naming whichever of the two files
+/// failed — appending again would say it twice on screen. Every other
+/// failure (a corrupt archive, a dead worker) says nothing about the
+/// directory at all, so this is the only place those learn about the
+/// escape hatch, and it names both files because it cannot tell which one
+/// the reader is missing.
 fn with_fallback(reason: String, source_dir_display: &str) -> String {
     if reason.contains(source_dir_display) {
         format!("{reason}. Retry.")
     } else {
         format!(
-            "{reason}. Retry, or place {} in {source_dir_display} and retry.",
-            jmdict_source::SOURCE_FILE,
+            "{reason}. Retry, or place {} and {} in {source_dir_display} and retry.",
+            jmdict_source::JMDICT.file_name,
+            jmdict_source::KANJIDIC.file_name,
         )
     }
 }
@@ -1498,15 +1501,16 @@ pub async fn download_dictionary(
             &root,
             jparser::index::generations::DEFAULT_KEEP_GENERATIONS,
             || {
-                let reader = jmdict_source::resolve(&source_dir)?;
-                // Emitted only after `resolve` returns, not before: the network
-                // fetch (or reuse of an already-downloaded archive) happens
-                // inside `resolve` itself, so emitting "building" any earlier
-                // would mislabel the download as index-building. Matches the
-                // design spec's §4 data flow: "downloading" covers `resolve`,
-                // "building" covers the `build_from_reader` work that follows.
+                let jmdict = jmdict_source::resolve(&source_dir)?;
+                let kanjidic = jmdict_source::resolve_kanjidic(&source_dir)?;
+                // Emitted only after both resolves return, not before: the
+                // network fetches (or reuse of already-downloaded archives)
+                // happen inside `resolve` itself, so emitting "building" any
+                // earlier would mislabel a download as index-building.
+                // "downloading" covers both files; "building" covers the
+                // `build_from_readers` work that follows.
                 emit_status(&handle, "building");
-                Ok(reader)
+                Ok((jmdict, kanjidic))
             },
         )
         .map_err(|e| describe_index_error(&e))?;
@@ -1773,6 +1777,10 @@ mod tests {
         assert!(full.contains(dir), "got {full}");
         assert!(full.contains("Retry"), "got {full}");
         assert!(full.contains(jmdict_source::SOURCE_FILE), "got {full}");
+        assert!(
+            full.contains(jmdict_source::KANJIDIC.file_name),
+            "got {full}"
+        );
     }
 
     fn scratch(name: &str) -> std::path::PathBuf {

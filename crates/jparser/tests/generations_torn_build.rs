@@ -43,6 +43,8 @@ const XML_B: &str = concat!(
     "</JMdict>",
 );
 
+const NO_KANJIDIC: &[u8] = b"";
+
 const FILES: [&str; 6] = [
     FST_FILE,
     RECORDS_FILE,
@@ -167,7 +169,7 @@ fn no_interrupted_build_is_ever_served() {
         let root = scratch(&format!("torn-state-{state}"));
 
         // A good generation is already published and being served.
-        let (good, _) = build_new(&root, XML_A.as_bytes()).expect("build_new");
+        let (good, _) = build_new(&root, XML_A.as_bytes(), NO_KANJIDIC).expect("build_new");
         assert_eq!(good, root.join("gen-1"));
 
         let orphan = strand_interrupted_build(&root, state);
@@ -217,7 +219,8 @@ fn no_interrupted_build_is_ever_served() {
         }
 
         // 4. A later build still succeeds despite the orphan.
-        let (next, _) = build_new(&root, XML_A.as_bytes()).expect("build after orphan");
+        let (next, _) =
+            build_new(&root, XML_A.as_bytes(), NO_KANJIDIC).expect("build after orphan");
         assert_eq!(
             next,
             root.join("gen-2"),

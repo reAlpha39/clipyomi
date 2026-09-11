@@ -47,12 +47,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Build an index from a JMdict XML file.
+    /// Build an index from a JMdict XML file, and optionally a KANJIDIC2 one.
     BuildIndex {
         /// Path to JMdict_e.xml (uncompressed).
         xml: PathBuf,
         /// Directory to write the index into.
         out: PathBuf,
+        /// Path to kanjidic2.xml (uncompressed). Absent, the index carries no
+        /// kanji records and the popover shows no kanji block; the parse is
+        /// unaffected either way.
+        #[arg(long)]
+        kanjidic: Option<PathBuf>,
     },
     /// Open the newest usable index in ROOT, building from a source if needed.
     #[command(group(
@@ -67,6 +72,10 @@ enum Command {
         /// Directory holding the source archive, downloading it if absent.
         #[arg(long)]
         source_dir: Option<PathBuf>,
+        /// KANJIDIC2 XML beside a positional XML. Ignored with `--source-dir`,
+        /// which resolves both files from that directory.
+        #[arg(long)]
+        kanjidic: Option<PathBuf>,
         /// Generations to retain after a rebuild. Must be at least 1.
         #[arg(
             long,
@@ -75,7 +84,7 @@ enum Command {
         )]
         keep: usize,
     },
-    /// Download the JMdict archive into DIR without building an index.
+    /// Download the JMdict and KANJIDIC2 archives into DIR without building an index.
     FetchSource {
         /// Directory to download into. Conventionally named `source`.
         dir: PathBuf,
@@ -263,11 +272,22 @@ enum Command {
     Romaji { text: String },
 }
 
+/// The KANJIDIC2 half of a build's source pair: the file at `path`, or an
+/// empty reader when none was given. `Box<dyn BufRead>` so both arms are one
+/// type.
+fn kanjidic_reader(path: Option<&std::path::Path>) -> std::io::Result<Box<dyn std::io::BufRead>> {
+    match path {
+        Some(path) => Ok(Box::new(BufReader::new(std::fs::File::open(path)?))),
+        None => Ok(Box::new(std::io::empty())),
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().command {
-        Command::BuildIndex { xml, out } => {
+        Command::BuildIndex { xml, out, kanjidic } => {
             let file = BufReader::new(std::fs::File::open(&xml)?);
-            let report = jparser::engine::build::build_from_reader(file, &out)?;
+            let kanjidic = kanjidic_reader(kanjidic.as_deref())?;
+            let report = jparser::engine::build::build_from_readers(file, kanjidic, &out)?;
             println!("entries:             {}", report.entries);
             println!("skipped entries:     {}", report.skipped_entries);
             println!("keys:                {}", report.keys);
@@ -291,17 +311,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             root,
             xml,
             source_dir,
+            kanjidic,
             keep,
         } => {
             // The ArgGroup guarantees exactly one is set, so both real branches
             // are reachable and the third exists only to satisfy the compiler.
             let index = match (&xml, &source_dir) {
-                (Some(xml), _) => {
-                    ensure_dictionary(&root, keep, || std::fs::File::open(xml).map(BufReader::new))?
-                }
-                (None, Some(dir)) => {
-                    ensure_dictionary(&root, keep, || jmdict_source::resolve(dir))?
-                }
+                (Some(xml), _) => ensure_dictionary(&root, keep, || {
+                    Ok((
+                        BufReader::new(std::fs::File::open(xml)?),
+                        kanjidic_reader(kanjidic.as_deref())?,
+                    ))
+                })?,
+                (None, Some(dir)) => ensure_dictionary(&root, keep, || {
+                    Ok((
+                        jmdict_source::resolve(dir)?,
+                        jmdict_source::resolve_kanjidic(dir)?,
+                    ))
+                })?,
                 (None, None) => return Err("no source given".into()),
             };
             let current = latest(&root)?;
@@ -312,11 +339,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_else(|| NONE_LABEL.to_string());
             println!("generation: {name}");
             println!("entries:    {}", index.entry_count());
+            println!("kanji:      {}", index.kanji_count());
         }
         Command::FetchSource { dir } => {
-            let path = jmdict_source::fetch::fetch(&dir)?;
-            println!("archive:    {}", path.display());
-            println!("convention: keep it in a directory named {SOURCE_DIR}");
+            let jmdict = jmdict_source::fetch::fetch(&dir)?;
+            let kanjidic = jmdict_source::fetch::fetch_kanjidic(&dir)?;
+            println!("archive:    {}", jmdict.display());
+            println!("kanjidic:   {}", kanjidic.display());
+            println!("convention: keep them in a directory named {SOURCE_DIR}");
         }
         #[cfg(feature = "hints-source")]
         Command::FetchHints { dir } => {
