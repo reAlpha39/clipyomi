@@ -60,6 +60,14 @@
 <codepoint>
 <cp_value cp_type="ucs">90fd</cp_value>
 </codepoint>
+<misc>
+<grade>3</grade>
+<stroke_count>11</stroke_count>
+<stroke_count>10</stroke_count>
+<variant var_type="jis213">1-92-74</variant>
+<freq>123</freq>
+<jlpt>3</jlpt>
+</misc>
 <reading_meaning>
 <rmgroup>
 <reading r_type="ja_on">ト</reading>
@@ -77,6 +85,10 @@
 <codepoint>
 <cp_value cp_type="ucs">98df</cp_value>
 </codepoint>
+<misc>
+<grade>2</grade>
+<stroke_count>9</stroke_count>
+</misc>
 <reading_meaning>
 <rmgroup>
 <reading r_type="ja_on">ショク</reading>

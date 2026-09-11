@@ -368,6 +368,18 @@ fn a_kanjidic_record_round_trips() {
     assert_eq!(east.on, vec!["トウ"]);
     assert_eq!(east.kun, vec!["ひがし"]);
     assert_eq!(east.meanings, vec!["east"]);
+    // Phase 3b: the four misc numbers survive the disk round trip, and a
+    // character without a <misc> block reads back as four Nones.
+    assert_eq!(
+        (east.grade, east.strokes, east.freq, east.jlpt),
+        (Some(2), Some(8), Some(37), Some(4))
+    );
+    let kyo = index.kanji('京').expect("京");
+    assert_eq!(
+        (kyo.grade, kyo.strokes, kyo.freq, kyo.jlpt),
+        (None, None, None, None)
+    );
+    assert_eq!(index.kanji('都').expect("都").strokes, Some(11));
 }
 
 #[test]
