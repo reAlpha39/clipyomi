@@ -182,6 +182,10 @@ impl<R: BufRead> Iterator for KanjidicReader<R> {
                                     on: std::mem::take(&mut on),
                                     kun: std::mem::take(&mut kun),
                                     meanings: std::mem::take(&mut meanings),
+                                    grade: None,
+                                    strokes: None,
+                                    freq: None,
+                                    jlpt: None,
                                 }));
                             }
                             _ => {

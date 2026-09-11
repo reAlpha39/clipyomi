@@ -974,6 +974,10 @@ fn kanji_data_serializes_to_the_documented_wire_shape() {
         on: vec!["トウ".to_string()],
         kun: vec!["ひがし".to_string()],
         meanings: vec!["east".to_string()],
+        grade: None,
+        strokes: None,
+        freq: None,
+        jlpt: None,
     };
     let json = serde_json::to_value(&data).expect("serialize");
     assert_eq!(json["literal"], "東");
