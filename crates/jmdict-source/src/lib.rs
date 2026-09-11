@@ -536,9 +536,15 @@ mod tests {
     fn each_source_resolves_only_its_own_file() {
         let dir = scratch("resolve-independent");
         std::fs::write(dir.join(KANJIDIC.file_name), gz(KANJIDIC_XML)).expect("write");
+        // A port a listener just released, not the fixed `127.0.0.1:1`: that
+        // relied on a privileged port refusing, which is a guess about the
+        // machine running the test, not a guarantee of it.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
+        let addr = listener.local_addr().expect("local addr");
+        drop(listener);
         let err = resolve_from(
             &JMDICT,
-            "http://127.0.0.1:1/JMdict_e.gz",
+            &format!("http://{addr}/JMdict_e.gz"),
             &dir,
             std::time::Duration::ZERO,
         )
