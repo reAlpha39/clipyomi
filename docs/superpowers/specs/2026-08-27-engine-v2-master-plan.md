@@ -534,7 +534,10 @@ to the full-index paragraph above; the scaling column is what carries across):
 | hints off | 3 | 58 ms | 614 ms | **1.05x** |
 
 Linear in all four states, which is what Phase 2c's fix claimed and nothing in
-the harness could previously check. The k = 3 pool costs ×1.97 over k = 1
+the harness could previously check. The scaling cells are ratios of timing
+medians and are read to about ±0.1x — Phase 3a's untouched engine read 1.04x
+where 1.05x is recorded — while the accuracy cells are read to the digit. The
+k = 3 pool costs ×1.97 over k = 1
 hints-on here against the full index's ×1.79, which is the instrument agreeing
 with the out-of-harness measurement it was built to replace. `bench` reads the
 index and the tokenizer and writes nothing; `score`'s output is untouched, so
