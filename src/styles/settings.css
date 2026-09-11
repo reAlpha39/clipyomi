@@ -142,3 +142,17 @@
   font-size: var(--text-tag, 11px);
   color: var(--color-muted);
 }
+
+/* The attribution the EDRDG licence asks for, on the one persistent surface
+   the app has. Selectable, unlike the rest of the page, so the licence URL
+   can be copied — it is text rather than a link because no opener plugin is
+   installed and an anchor would navigate this webview away. */
+.settings-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-rule);
+}
+
+.settings-footer .settings-note {
+  user-select: text;
+}
