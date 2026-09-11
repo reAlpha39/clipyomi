@@ -1715,6 +1715,7 @@ mod tests {
             attempts: 3,
             source_dir: PathBuf::from("/tmp/example/source"),
             last: "downloading the dictionary failed: connection refused".to_string(),
+            file: jmdict_source::SOURCE_FILE,
         };
         let expected = source_err.to_string();
         let wrapped = jparser::index::IndexError::Io(std::io::Error::other(source_err));
