@@ -557,7 +557,7 @@ impl<R: BufRead> Iterator for KanjidicReader<R> {
 - [ ] **Step 5: Run the parser tests to verify they pass**
 
 Run: `cargo test -p jparser --lib kanjidic::tests`
-Expected: PASS, all fourteen — the nine existing ones (`reads_every_character_in_document_order`, `reads_on_and_kun_readings_in_order`, `keeps_okurigana_and_affix_marks_verbatim`, `drops_nanori_and_non_japanese_readings`, `keeps_english_meanings_only`, `caps_meanings_at_four`, `skips_a_character_with_a_bad_literal_and_counts_it`, `decodes_a_standard_escape_in_a_meaning`, `reports_malformed_xml_as_an_error`, `an_empty_reader_yields_nothing`) and the five new ones.
+Expected: PASS, all fifteen — the ten existing ones (`reads_every_character_in_document_order`, `reads_on_and_kun_readings_in_order`, `keeps_okurigana_and_affix_marks_verbatim`, `drops_nanori_and_non_japanese_readings`, `keeps_english_meanings_only`, `caps_meanings_at_four`, `skips_a_character_with_a_bad_literal_and_counts_it`, `decodes_a_standard_escape_in_a_meaning`, `reports_malformed_xml_as_an_error`, `an_empty_reader_yields_nothing`) and the five new ones.
 
 - [ ] **Step 6: Extend the round-trip test**
 
