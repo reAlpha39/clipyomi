@@ -969,7 +969,6 @@ function openFor(chip: HTMLElement): void {
   // cursor never left), and the focus path must not inherit a `true` left by
   // an earlier hover that never opened anything.
   keepArmed = false;
-  pendingChip = chip;
   // Captured before the one await below and re-checked after it, exactly as
   // `placeFor` does: a dismissal, or the next chip's own open, that lands
   // while the kanji lookup is in flight must not emit content for a popover
@@ -985,6 +984,12 @@ function openFor(chip: HTMLElement): void {
   void kanji
     .then((records) => {
       if (openId !== generation) return;
+      // Set only now, once content is actually about to be emitted — not
+      // before the lookup — so a chip left behind by a fast mouse move
+      // during the round trip finds `pendingChip` null (or already the next
+      // chip) when its own stale reply lands, and `closePopover`'s null
+      // stands: the reply is dropped instead of placed at the wrong chip.
+      pendingChip = chip;
       // Fire-and-forget: a failed emit just leaves the tooltip unshown, no
       // worse than the user never having hovered at all.
       // The size rides along with the content because the popover is a second
