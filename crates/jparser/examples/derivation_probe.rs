@@ -74,12 +74,10 @@ const DERIVATIONS: &[Derivation] = &[
 /// way: `これは` ends in a `PARTICLE` and `副大統領` does not. `音がする`
 /// contains one in the middle and still ends in a verb, so the constraint has
 /// to be on the last part rather than on every part.
-const TAIL_DERIVATIONS: &[Derivation] = &[
-    Derivation {
-        name: "all parts COMMON, last part not PARTICLE",
-        holds: |c| c.flags.contains(WordFlags::COMMON),
-    },
-];
+const TAIL_DERIVATIONS: &[Derivation] = &[Derivation {
+    name: "all parts COMMON, last part not PARTICLE",
+    holds: |c| c.flags.contains(WordFlags::COMMON),
+}];
 
 /// Whether `chars` admits a full cover by candidates that all satisfy `holds`
 /// **and** whose final part is not a `PARTICLE`.
