@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::{SourceError, PARTIAL_SUFFIX, SOURCE_FILE};
+use crate::{Source, SourceError, JMDICT, KANJIDIC, PARTIAL_SUFFIX};
 
 /// Prove `path` is a complete, well-formed gzip archive by decoding all of it
 /// and discarding the output.
@@ -56,24 +56,11 @@ pub(crate) fn verify_archive(path: &Path) -> Result<(), SourceError> {
 /// [`fetch_with_retry`] rather than needing its own handling.
 const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// Upper bound on the response body a download will accept, enforced via
-/// `ureq`'s `BodyWithConfig::limit`. The transport is plain HTTP with no
-/// authenticity guarantee (spec §10 — EDRDG's certificate fails
-/// subject-name validation), so nothing else bounds how much a misbehaving
-/// or malicious response could stream to disk before `verify_archive` ever
-/// runs.
+/// Download `url` into `source_dir` and publish it as `source.file_name`.
 ///
-/// 32 MiB: a little over 3x the measured 10,545,887-byte archive. Generous
-/// headroom for the dictionary to grow across future EDRDG releases, while
-/// still bounding a runaway body to tens of megabytes rather than an
-/// unbounded amount.
-const MAX_ARCHIVE_BYTES: u64 = 32 * 1024 * 1024;
-
-/// Download `url` into `source_dir` and publish it as [`crate::SOURCE_FILE`].
+/// One attempt. [`fetch_with_retry`] adds the retry policy.
 ///
-/// One attempt. [`fetch`] adds the retry policy.
-///
-/// Stages into `<SOURCE_FILE><PARTIAL_SUFFIX>.<pid>`, verifies it, and only
+/// Stages into `<file_name><PARTIAL_SUFFIX>.<pid>`, verifies it, and only
 /// then renames — so a file at the resolved name is always a complete, valid
 /// archive. Two failures make that necessary: a killed process leaves a
 /// truncation, and a proxy can answer 200 with an HTML page of the right
@@ -93,25 +80,27 @@ const MAX_ARCHIVE_BYTES: u64 = 32 * 1024 * 1024;
 ///
 /// **Not part of the supported surface.** It is separate from [`fetch`] so tests
 /// can point it at a local listener; production callers use [`fetch`].
-pub fn fetch_from(url: &str, source_dir: &Path) -> Result<PathBuf, SourceError> {
+pub fn fetch_from(source: &Source, url: &str, source_dir: &Path) -> Result<PathBuf, SourceError> {
     std::fs::create_dir_all(source_dir)?;
-    let target = source_dir.join(SOURCE_FILE);
+    let target = source_dir.join(source.file_name);
     // The PID makes the staging name unique per process. Without it, two
     // concurrent invocations against the same `source_dir` share one inode:
     // `File::create` truncates whichever one runs second, and a `rename`
     // from either side can publish the other's still-partial bytes. Do not
     // simplify this back to a fixed name.
     let staging = source_dir.join(format!(
-        "{SOURCE_FILE}{PARTIAL_SUFFIX}.{}",
+        "{}{PARTIAL_SUFFIX}.{}",
+        source.file_name,
         std::process::id()
     ));
 
     match download_and_verify(
+        source,
         url,
         source_dir,
         &staging,
         DOWNLOAD_TIMEOUT,
-        MAX_ARCHIVE_BYTES,
+        source.max_bytes,
     ) {
         Ok(()) => {
             std::fs::rename(&staging, &target)?;
@@ -130,10 +119,11 @@ pub fn fetch_from(url: &str, source_dir: &Path) -> Result<PathBuf, SourceError> 
 /// Write `url`'s body to `staging`, then prove it is a valid archive.
 ///
 /// `timeout` and `max_bytes` are parameters (rather than reading
-/// [`DOWNLOAD_TIMEOUT`] and [`MAX_ARCHIVE_BYTES`] directly) purely so unit
+/// [`DOWNLOAD_TIMEOUT`] and `source.max_bytes` directly) purely so unit
 /// tests can exercise the real timeout and limiting mechanisms against a
 /// tiny stall and a tiny body instead of the production values.
 fn download_and_verify(
+    source: &Source,
     url: &str,
     source_dir: &Path,
     staging: &Path,
@@ -152,6 +142,7 @@ fn download_and_verify(
                 status,
                 url: url.to_string(),
                 source_dir: source_dir.to_path_buf(),
+                file: source.file_name,
             })
         }
         Err(e) => return Err(SourceError::Transport(e.to_string())),
@@ -173,24 +164,20 @@ fn download_and_verify(
     verify_archive(staging)
 }
 
-/// The published archive. `pub(crate)` rather than private only so `lib.rs`'s
-/// `resolve` can hand it to [`crate::resolve_from`]; not `pub`, since exposing
-/// it crate-externally would invite a caller to fetch it directly and skip
-/// the staging and verification in [`fetch_from`], which are the only things
-/// standing between a proxy's error page and the resolved name. EDRDG serves
-/// no usable HTTPS — the certificate fails subject-name validation — so this
-/// is plain HTTP by necessity, which is precisely why verification is
-/// mandatory rather than defensive.
-pub(crate) const JMDICT_URL: &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz";
-
 /// Download the archive into `source_dir`, retrying transient failures.
 pub fn fetch(source_dir: &Path) -> Result<PathBuf, SourceError> {
-    fetch_with_retry(JMDICT_URL, source_dir, crate::RETRY_BACKOFF)
+    fetch_with_retry(&JMDICT, JMDICT.url, source_dir, crate::RETRY_BACKOFF)
 }
 
-/// [`fetch`] with the URL and backoff injected, so tests can point at a local
-/// listener without sleeping.
+/// [`fetch`] for KANJIDIC2.
+pub fn fetch_kanjidic(source_dir: &Path) -> Result<PathBuf, SourceError> {
+    fetch_with_retry(&KANJIDIC, KANJIDIC.url, source_dir, crate::RETRY_BACKOFF)
+}
+
+/// [`fetch`] with the source, URL and backoff injected, so tests can point at
+/// a local listener without sleeping.
 pub fn fetch_with_retry(
+    source: &Source,
     url: &str,
     source_dir: &Path,
     backoff: std::time::Duration,
@@ -199,7 +186,7 @@ pub fn fetch_with_retry(
     let mut last = String::new();
 
     for attempt in 1..=crate::DOWNLOAD_ATTEMPTS {
-        match fetch_from(url, source_dir) {
+        match fetch_from(source, url, source_dir) {
             Ok(path) => return Ok(path),
             // A 4xx will not change on a retry, and neither will a local write
             // failure. Surface both immediately rather than sleeping first.
@@ -232,6 +219,7 @@ pub fn fetch_with_retry(
         attempts: crate::DOWNLOAD_ATTEMPTS,
         source_dir: source_dir.to_path_buf(),
         last,
+        file: source.file_name,
     })
 }
 
@@ -325,7 +313,7 @@ mod tests {
     }
 
     /// Exercises the real `ureq` limiting mechanism — not a mock — against a
-    /// tiny body and a tiny limit, rather than transferring `MAX_ARCHIVE_BYTES`
+    /// tiny body and a tiny limit, rather than transferring `JMDICT.max_bytes`
     /// worth of data just to prove the same code path. `download_and_verify`
     /// takes the limit as a parameter for exactly this reason.
     #[test]
@@ -351,8 +339,8 @@ mod tests {
         let url = format!("http://{addr}/archive");
         let staging = dir.join("staging");
         // A limit far below `body`'s length: enough to prove rejection without
-        // needing to move `MAX_ARCHIVE_BYTES` of data through a test socket.
-        let err = download_and_verify(&url, &dir, &staging, DOWNLOAD_TIMEOUT, 8)
+        // needing to move `JMDICT.max_bytes` of data through a test socket.
+        let err = download_and_verify(&JMDICT, &url, &dir, &staging, DOWNLOAD_TIMEOUT, 8)
             .expect_err("a body over the limit must not verify as Ok");
         // `Transport`, specifically. `ureq`'s `LimitReader` errors on the read
         // that would exceed the cap, *before* touching the inner reader, so the
@@ -390,11 +378,12 @@ mod tests {
         let url = format!("http://{addr}/archive");
         let staging = dir.join("staging");
         let err = download_and_verify(
+            &JMDICT,
             &url,
             &dir,
             &staging,
             std::time::Duration::from_millis(50),
-            MAX_ARCHIVE_BYTES,
+            JMDICT.max_bytes,
         )
         .expect_err("a stalled server must not hang forever");
         assert!(!matches!(err, SourceError::Http { .. }), "got {err:?}");

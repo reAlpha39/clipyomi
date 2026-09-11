@@ -21,10 +21,6 @@ pub mod fetch;
 /// enforced — every function here takes the directory it is given.
 pub const SOURCE_DIR: &str = "source";
 
-/// The archive's name, as EDRDG publishes it. The extension is a location, not
-/// a claim: [`open_local`] decides compression from the bytes.
-pub const SOURCE_FILE: &str = "JMdict_e.gz";
-
 /// Suffix marking a download that is in progress or not yet verified.
 /// `fetch_from` appends the writing process's PID after it, so the staging
 /// name is actually `<SOURCE_FILE><PARTIAL_SUFFIX>.<pid>` rather than this
@@ -35,7 +31,7 @@ pub const SOURCE_FILE: &str = "JMdict_e.gz";
 ///
 /// **These accumulate.** A download that fails or is killed leaves its staging
 /// file behind under a name no later run reuses, so an interrupted transfer
-/// costs up to `MAX_ARCHIVE_BYTES` of disk permanently. Nothing sweeps them,
+/// costs up to the source's `max_bytes` of disk permanently. Nothing sweeps them,
 /// deliberately: a process cannot tell another's live staging file from a dead
 /// one's leftovers, so deleting by pattern would reintroduce exactly the race
 /// the PID exists to prevent. They are inert — never resolved, never verified
@@ -52,23 +48,69 @@ pub const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_secs(2)
 /// The two-byte gzip magic, `1f 8b`.
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
 
-/// Prefixes an ungzipped source file may start with: the real archive's XML
-/// prolog, its doctype, and its root element for a hand-trimmed copy.
-///
-/// Matched against JMdict specifically rather than against `<`: the parser reads
-/// markup it does not recognise as zero entries, so a saved error page would
-/// otherwise build an empty index and report success.
-const XML_PREFIXES: [&[u8]; 3] = [b"<?xml", b"<!DOCTYPE JMdict", b"<JMdict"];
-
 /// A leading UTF-8 BOM, skipped before the prefix check: editors on Windows add
 /// one, and the XML behind it is still the archive the user meant to place.
 const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 
-/// Whether `head` — a file's first bytes — begins JMdict XML.
-fn begins_jmdict_xml(head: &[u8]) -> bool {
+/// One EDRDG source file: where it is published, what it is called, how an
+/// ungzipped copy of it begins, and how large a download may be.
+///
+/// Two exist, [`JMDICT`] and [`KANJIDIC`]. Everything in this crate that
+/// downloads, verifies, stages or opens a file takes one of these, so the
+/// second file shares the first's retry, staging, size cap and prolog
+/// discipline rather than copying it (Phase 3a design §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Source {
+    /// Plain HTTP by necessity: EDRDG serves no usable HTTPS (certificate
+    /// subject-name mismatch) and this crate has no TLS backend. That is
+    /// precisely why [`fetch::fetch_from`]'s verification is mandatory.
+    pub url: &'static str,
+    /// The archive's name, as EDRDG publishes it. The extension is a
+    /// location, not a claim: [`open_local`] decides compression from bytes.
+    pub file_name: &'static str,
+    /// Byte prefixes an ungzipped file may start with. Matched against the
+    /// specific file rather than `<`: the parser reads markup it does not
+    /// recognise as zero entries, so a saved error page — or the other
+    /// source's file under this name — would otherwise build an empty
+    /// index and report success.
+    pub prologs: &'static [&'static [u8]],
+    /// Upper bound on the response body a download will accept, enforced via
+    /// `ureq`'s `BodyWithConfig::limit`. Nothing else bounds how much a
+    /// misbehaving response could stream to disk before verification runs.
+    pub max_bytes: u64,
+}
+
+const JMDICT_PROLOGS: &[&[u8]] = &[b"<?xml", b"<!DOCTYPE JMdict", b"<JMdict"];
+const KANJIDIC_PROLOGS: &[&[u8]] = &[b"<?xml", b"<!DOCTYPE kanjidic2", b"<kanjidic2"];
+
+/// JMdict, English glosses. 32 MiB is a little over 3x the measured
+/// 10,545,887-byte archive.
+pub const JMDICT: Source = Source {
+    url: "http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz",
+    file_name: "JMdict_e.gz",
+    prologs: JMDICT_PROLOGS,
+    max_bytes: 32 * 1024 * 1024,
+};
+
+/// KANJIDIC2. 8 MiB is a little over 5x the 1,488,571 bytes measured on
+/// 2026-09-11; the same host and the same regenerate-daily policy as JMdict,
+/// so it cannot be hash-pinned either.
+pub const KANJIDIC: Source = Source {
+    url: "http://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz",
+    file_name: "kanjidic2.xml.gz",
+    prologs: KANJIDIC_PROLOGS,
+    max_bytes: 8 * 1024 * 1024,
+};
+
+/// JMdict's file name. Kept as a constant because every message, test and
+/// caller that predates the second source names it this way.
+pub const SOURCE_FILE: &str = JMDICT.file_name;
+
+/// Whether `head` — a file's first bytes — begins `source`'s XML.
+fn begins_xml(source: &Source, head: &[u8]) -> bool {
     let head = head.strip_prefix(&UTF8_BOM).unwrap_or(head);
     let head = head.trim_ascii_start();
-    XML_PREFIXES.iter().any(|prefix| head.starts_with(prefix))
+    source.prologs.iter().any(|prefix| head.starts_with(prefix))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -79,8 +121,7 @@ pub enum SourceError {
     Transport(String),
     #[error(
         "the dictionary server returned HTTP {status} for {url}; place a {file} \
-         in {source_dir} manually to bypass the download",
-        file = SOURCE_FILE,
+         in {source_dir} manually to bypass the download"
     )]
     Http {
         status: u16,
@@ -92,6 +133,8 @@ pub enum SourceError {
         /// Named for the same reason [`SourceError::TooManyAttempts`] carries
         /// it: the escape-hatch clause needs to say where to place the file.
         source_dir: PathBuf,
+        /// Which of the two files this was, so the escape hatch names it.
+        file: &'static str,
     },
     /// The downloaded bytes did not decode as a valid gzip archive. Distinct
     /// from [`SourceError::Io`]: opening or writing a local file failed for
@@ -107,10 +150,9 @@ pub enum SourceError {
     /// "the server sent us something broken, retrying may help" — here nothing
     /// will change until the file itself does, so the message says so.
     #[error(
-        "{path} is neither a gzip archive nor JMdict XML — it starts with \"{head}\". \
+        "{path} is neither a gzip archive nor {file}'s XML — it starts with \"{head}\". \
          Delete it, or replace it with a real {file}",
         path = path.display(),
-        file = SOURCE_FILE,
     )]
     NotAnArchive {
         path: PathBuf,
@@ -118,11 +160,11 @@ pub enum SourceError {
         /// file usually recognises it from its opening — an unquoted length or
         /// byte count would not tell them which file they grabbed.
         head: String,
+        file: &'static str,
     },
     #[error(
         "could not obtain the dictionary after {attempts} attempts ({last}); \
-         place a {file} in {source_dir} manually to bypass the download",
-        file = SOURCE_FILE,
+         place a {file} in {source_dir} manually to bypass the download"
     )]
     TooManyAttempts {
         attempts: usize,
@@ -131,6 +173,7 @@ pub enum SourceError {
         /// a transport error, a 5xx, or a corrupt archive, and those are three
         /// different things for a user to act on.
         last: String,
+        file: &'static str,
     },
 }
 
@@ -146,7 +189,7 @@ pub enum SourceError {
 /// wrong file used to publish an empty index and report success. This is the
 /// only boundary where those bytes are still identifiable as a wrong *file*
 /// rather than an empty dictionary.
-pub fn open_local(path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
+pub fn open_local(source: &Source, path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
     let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
     // `fill_buf` peeks without consuming, so the sniffed bytes remain available
     // to whichever reader is constructed below. The borrow ends with this block,
@@ -155,7 +198,7 @@ pub fn open_local(path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
         let head = reader.fill_buf()?;
         (
             head.starts_with(&GZIP_MAGIC),
-            begins_jmdict_xml(head),
+            begins_xml(source, head),
             // Enough to recognise a saved web page or a text file by, short
             // enough to sit inside a one-line message.
             String::from_utf8_lossy(&head[..head.len().min(24)])
@@ -175,6 +218,7 @@ pub fn open_local(path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
     Err(SourceError::NotAnArchive {
         path: path.to_path_buf(),
         head,
+        file: source.file_name,
     })
 }
 
@@ -196,27 +240,36 @@ pub fn open_local(path: &Path) -> Result<Box<dyn BufRead>, SourceError> {
 /// a download in progress or one that failed verification, and treating it as a
 /// hand-placed archive is how a truncation reaches the parser.
 pub fn resolve(source_dir: &Path) -> std::io::Result<Box<dyn BufRead>> {
-    resolve_from(fetch::JMDICT_URL, source_dir, RETRY_BACKOFF)
+    resolve_from(&JMDICT, JMDICT.url, source_dir, RETRY_BACKOFF)
 }
 
-/// [`resolve`] with the URL and backoff injected, so tests can point at a
-/// local listener without touching the real network or sleeping at the
+/// [`resolve`] for KANJIDIC2: the second half of `ensure_dictionary`'s
+/// source pair. A hand-placed `kanjidic2.xml.gz` or `kanjidic2.xml`-content
+/// file at that name is honoured exactly as a hand-placed JMdict is.
+pub fn resolve_kanjidic(source_dir: &Path) -> std::io::Result<Box<dyn BufRead>> {
+    resolve_from(&KANJIDIC, KANJIDIC.url, source_dir, RETRY_BACKOFF)
+}
+
+/// [`resolve`] with the source, URL and backoff injected, so tests can point
+/// at a local listener without touching the real network or sleeping at the
 /// production backoff — the same reason [`fetch::fetch_with_retry`] exists
 /// for [`fetch::fetch`].
 ///
-/// **Not part of the supported surface.** Production callers use [`resolve`].
+/// **Not part of the supported surface.** Production callers use [`resolve`]
+/// and [`resolve_kanjidic`].
 pub fn resolve_from(
+    source: &Source,
     url: &str,
     source_dir: &Path,
     backoff: std::time::Duration,
 ) -> std::io::Result<Box<dyn BufRead>> {
-    let target = source_dir.join(SOURCE_FILE);
+    let target = source_dir.join(source.file_name);
     let path = if target.exists() {
         target
     } else {
-        fetch::fetch_with_retry(url, source_dir, backoff).map_err(std::io::Error::other)?
+        fetch::fetch_with_retry(source, url, source_dir, backoff).map_err(std::io::Error::other)?
     };
-    open_local(&path).map_err(std::io::Error::other)
+    open_local(source, &path).map_err(std::io::Error::other)
 }
 
 #[cfg(test)]
@@ -251,7 +304,7 @@ mod tests {
         let dir = scratch("open-gz");
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, gz(XML)).expect("write");
-        assert_eq!(read_all(open_local(&path).expect("open")), XML);
+        assert_eq!(read_all(open_local(&JMDICT, &path).expect("open")), XML);
     }
 
     /// The extension says `.gz`, but the bytes decide. A user who decompressed
@@ -261,7 +314,7 @@ mod tests {
         let dir = scratch("open-plain");
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, XML).expect("write");
-        assert_eq!(read_all(open_local(&path).expect("open")), XML);
+        assert_eq!(read_all(open_local(&JMDICT, &path).expect("open")), XML);
     }
 
     /// A hand-trimmed file that starts at the root element, with no prolog.
@@ -271,7 +324,7 @@ mod tests {
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, b"<JMdict></JMdict>").expect("write");
         assert_eq!(
-            read_all(open_local(&path).expect("open")),
+            read_all(open_local(&JMDICT, &path).expect("open")),
             b"<JMdict></JMdict>"
         );
     }
@@ -285,7 +338,7 @@ mod tests {
         let mut bytes = vec![0xEF, 0xBB, 0xBF, b'\n', b' '];
         bytes.extend_from_slice(XML);
         std::fs::write(&path, &bytes).expect("write");
-        assert_eq!(read_all(open_local(&path).expect("open")), bytes);
+        assert_eq!(read_all(open_local(&JMDICT, &path).expect("open")), bytes);
     }
 
     /// The failure this rejection exists for: the XML parser reads anything it
@@ -299,7 +352,7 @@ mod tests {
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, b"this is not a dictionary").expect("write");
 
-        let err = open_local(&path).err().expect("must fail");
+        let err = open_local(&JMDICT, &path).err().expect("must fail");
         assert!(
             matches!(err, SourceError::NotAnArchive { .. }),
             "got {err:?}"
@@ -319,7 +372,7 @@ mod tests {
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, b"<!DOCTYPE html><html><body>404</body></html>").expect("write");
 
-        let err = open_local(&path).err().expect("must fail");
+        let err = open_local(&JMDICT, &path).err().expect("must fail");
         assert!(
             matches!(err, SourceError::NotAnArchive { .. }),
             "got {err:?}"
@@ -334,7 +387,7 @@ mod tests {
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, b"<").expect("write");
 
-        let err = open_local(&path).err().expect("must fail");
+        let err = open_local(&JMDICT, &path).err().expect("must fail");
         assert!(
             matches!(err, SourceError::NotAnArchive { .. }),
             "got {err:?}"
@@ -348,7 +401,7 @@ mod tests {
         let path = dir.join(SOURCE_FILE);
         std::fs::write(&path, b"").expect("write");
 
-        let err = open_local(&path).err().expect("must fail");
+        let err = open_local(&JMDICT, &path).err().expect("must fail");
         assert!(
             matches!(err, SourceError::NotAnArchive { .. }),
             "got {err:?}"
@@ -361,7 +414,9 @@ mod tests {
         // `expect_err` would require `Box<dyn BufRead>: Debug` to render the
         // Ok side of a hypothetical panic message; it does not implement
         // Debug, so go through `Option` instead, which needs no such bound.
-        let err = open_local(&dir.join(SOURCE_FILE)).err().expect("must fail");
+        let err = open_local(&JMDICT, &dir.join(SOURCE_FILE))
+            .err()
+            .expect("must fail");
         assert!(matches!(err, SourceError::Io(_)), "got {err:?}");
     }
 
@@ -392,4 +447,103 @@ mod tests {
     // local) listener, which belongs with the rest of the socket-driven tests,
     // not here. Moved by Ruling G after the brief's originals were found to
     // fall through to the real production URL.
+
+    const KANJIDIC_XML: &[u8] = b"<?xml version=\"1.0\"?><kanjidic2></kanjidic2>";
+
+    #[test]
+    fn the_kanjidic_descriptor_is_the_edrdg_one() {
+        assert_eq!(KANJIDIC.file_name, "kanjidic2.xml.gz");
+        // Plain HTTP on the same host as JMdict, for the same reason: this
+        // crate has no TLS backend. Verified reachable 2026-09-11 (HTTP 200,
+        // Content-Length 1488571).
+        assert_eq!(
+            KANJIDIC.url,
+            "http://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz"
+        );
+        assert_eq!(JMDICT.url, "http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz");
+        assert_eq!(SOURCE_FILE, JMDICT.file_name);
+    }
+
+    /// Each of KANJIDIC2's three legitimate openings passes the prolog check.
+    #[test]
+    fn every_kanjidic_prolog_is_accepted() {
+        for (i, head) in [
+            &b"<?xml version=\"1.0\"?><kanjidic2></kanjidic2>"[..],
+            b"<!DOCTYPE kanjidic2 [\n]><kanjidic2></kanjidic2>",
+            b"<kanjidic2></kanjidic2>",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let dir = scratch(&format!("open-kanjidic-prolog-{i}"));
+            let path = dir.join(KANJIDIC.file_name);
+            std::fs::write(&path, head).expect("write");
+            assert_eq!(read_all(open_local(&KANJIDIC, &path).expect("open")), *head);
+        }
+    }
+
+    /// The check is per source: a hand-trimmed JMdict copy — one that starts
+    /// at its root element — saved under the KANJIDIC2 name would parse as a
+    /// KANJIDIC2 with zero characters and build an index with no kanji
+    /// block, silently. It is refused at the only boundary where it is still
+    /// recognisable as the wrong file. A file led by an XML declaration is
+    /// not distinguishable this way: `<?xml` is a legitimate opening for
+    /// either source, so the sniff accepts it for both, exactly as the
+    /// JMdict-side check always has for any `<?xml`-led file.
+    #[test]
+    fn a_trimmed_jmdict_file_under_the_kanjidic_name_is_rejected() {
+        let dir = scratch("open-kanjidic-wrong-file");
+        let path = dir.join(KANJIDIC.file_name);
+        std::fs::write(&path, b"<JMdict></JMdict>").expect("write");
+
+        let err = open_local(&KANJIDIC, &path).err().expect("must fail");
+        assert!(
+            matches!(err, SourceError::NotAnArchive { .. }),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(msg.contains("kanjidic2.xml.gz"), "got {msg}");
+        assert!(!msg.contains("JMdict_e.gz"), "named the wrong file: {msg}");
+    }
+
+    #[test]
+    fn an_html_page_under_the_kanjidic_name_is_rejected() {
+        let dir = scratch("open-kanjidic-html");
+        let path = dir.join(KANJIDIC.file_name);
+        std::fs::write(&path, b"<!DOCTYPE html><html><body>404</body></html>").expect("write");
+        let err = open_local(&KANJIDIC, &path).err().expect("must fail");
+        assert!(
+            matches!(err, SourceError::NotAnArchive { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_present_kanjidic_archive_is_opened_without_downloading() {
+        let dir = scratch("resolve-kanjidic-local");
+        std::fs::write(dir.join(KANJIDIC.file_name), gz(KANJIDIC_XML)).expect("write");
+        assert_eq!(
+            read_all(resolve_kanjidic(&dir).expect("resolve")),
+            KANJIDIC_XML
+        );
+    }
+
+    /// The two sources resolve independently: a KANJIDIC2 archive does not
+    /// satisfy `resolve`, and vice versa. Without the file at its own name
+    /// `resolve_from` would go to the injected URL, so an unroutable one
+    /// makes the miss observable without a listener.
+    #[test]
+    fn each_source_resolves_only_its_own_file() {
+        let dir = scratch("resolve-independent");
+        std::fs::write(dir.join(KANJIDIC.file_name), gz(KANJIDIC_XML)).expect("write");
+        let err = resolve_from(
+            &JMDICT,
+            "http://127.0.0.1:1/JMdict_e.gz",
+            &dir,
+            std::time::Duration::ZERO,
+        )
+        .err()
+        .expect("JMdict is absent and must not be satisfied by KANJIDIC2");
+        assert!(err.to_string().contains("JMdict_e.gz"), "got {err}");
+    }
 }
