@@ -165,6 +165,15 @@ describe('the hover tooltip', () => {
     return el;
   }
 
+  /**
+   * Flush `openFor`'s one await — the `kanji_info` round trip — and the
+   * `.then` that emits. Four ticks is more than the chain needs; the exact
+   * count is not the property under test.
+   */
+  async function flushLookup(): Promise<void> {
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
+  }
+
   /** Names of the commands invoked so far, in order. */
   function calls(): string[] {
     return invoke.mock.calls.map((c) => c[0] as string);
@@ -197,16 +206,17 @@ describe('the hover tooltip', () => {
   });
 
   // The dwell is what stops the tooltip firing for every chip the cursor
-  // sweeps across on its way somewhere else.
-  test('a completed dwell sends the content', () => {
+  // sweeps across on its way somewhere else. The content follows one round
+  // trip after the dwell — the kanji lookup — hence the async advance.
+  test('a completed dwell sends the content', async () => {
     chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     expect(events()).not.toContain('popover-content');
-    vi.advanceTimersByTime(350);
+    await vi.advanceTimersByTimeAsync(350);
     expect(emitted).toContainEqual([
       'popover-content',
       {
         entries: SEGMENTS.segments[0].entries,
-        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false },
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false, hide_kanji: false },
       },
     ]);
   });
@@ -239,9 +249,10 @@ describe('the hover tooltip', () => {
   });
 
   // Focus moves only on a deliberate keypress, so it has no sweeping problem
-  // for a dwell to solve.
-  test('focus sends the content immediately, with no timer', () => {
+  // for a dwell to solve: no timer, only the kanji round trip.
+  test('focus sends the content immediately, with no timer', async () => {
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     expect(events()).toContain('popover-content');
   });
 
@@ -309,6 +320,64 @@ describe('the hover tooltip', () => {
 
     // Past DWELL_MS for every chip touched, including the last.
     vi.advanceTimersByTime(350);
+    expect(events()).not.toContain('popover-content');
+  });
+
+  // Phase 3a: the block rides in the same payload as the entries, so the
+  // popover renders once and measures once.
+  test('the kanji records ride along when the index has them', async () => {
+    const records = [
+      { literal: '東', on: ['トウ'], kun: ['ひがし'], meanings: ['east'] },
+      { literal: '京', on: ['キョウ'], kun: ['みやこ'], meanings: ['capital'] },
+    ];
+    invoke.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'kanji_info') {
+        expect(args).toEqual({ chars: '東京' });
+        return Promise.resolve(records);
+      }
+      return Promise.resolve(null);
+    });
+
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+
+    const content = emitted.find(([event]) => event === 'popover-content');
+    expect(content?.[1]).toEqual(expect.objectContaining({ kanji: records }));
+  });
+
+  // The cache is the whole point of doing this in the main window: the second
+  // hover on any character the session has seen costs no round trip.
+  test('kanji_info is asked once for two hovers of the same word', async () => {
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+
+    expect(calls().filter((c) => c === 'kanji_info')).toHaveLength(1);
+    expect(events().filter((e) => e === 'popover-content')).toHaveLength(2);
+  });
+
+  // A dismissal that lands while the lookup is in flight must win, the way
+  // it wins over `placeFor`'s round trip: no content for a closed popover.
+  test('a dismissal during the lookup suppresses the content', async () => {
+    let answer: ((records: unknown) => void) | undefined;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'kanji_info') return new Promise((resolve) => (answer = resolve));
+      return Promise.resolve(null);
+    });
+
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    answer?.([]);
+    await flushLookup();
+
     expect(events()).not.toContain('popover-content');
   });
 });

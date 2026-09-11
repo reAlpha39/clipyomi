@@ -28,6 +28,15 @@ const invoke = vi.fn();
 const show = vi.fn(() => Promise.resolve());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
+/**
+ * Flush `openFor`'s one await — the `kanji_info` round trip — and the
+ * `.then` that emits. Four ticks is more than the chain needs; the exact
+ * count is not the property under test.
+ */
+async function flushLookup(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) await Promise.resolve();
+}
+
 const startResizeDragging = vi.fn((_dir: string) => Promise.resolve());
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -266,12 +275,13 @@ describe('the event-driven render path', () => {
     expect(rendered()).toEqual(['東京', '都']);
   });
 
-  test('the popover reads the displayed reading, not the top one', () => {
+  test('the popover reads the displayed reading, not the top one', async () => {
     emit('parse-result', tokyo());
     press(']');
     document
       .querySelector<HTMLElement>('.chip[data-start="2"]')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     const content = emitted.find(([event]) => event === 'popover-content');
     expect(content).toBeDefined();
@@ -1646,10 +1656,11 @@ describe('settings window and gloss filters', () => {
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',
-      { entries, filters: { hide_pos: true, hide_xrefs: true, hide_usage: false } },
+      { entries, filters: { hide_pos: true, hide_xrefs: true, hide_usage: false, hide_kanji: false } },
     ]);
   });
 
@@ -1699,6 +1710,7 @@ describe('settings window and gloss filters', () => {
 
     const chip = document.querySelector<HTMLElement>('.chip');
     chip?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',
@@ -1708,6 +1720,7 @@ describe('settings window and gloss filters', () => {
           hide_pos: true,
           hide_xrefs: false,
           hide_usage: true,
+          hide_kanji: false,
         },
       },
     ]);
@@ -1968,6 +1981,7 @@ describe('the gloss size reaching the popover window', () => {
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
   }
 
   // The popover is a second webview with its own `:root`, so the size has to
@@ -2005,10 +2019,14 @@ describe('the gloss size reaching the popover window', () => {
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',
-      { entries: sampleEntries, filters: { hide_pos: false, hide_xrefs: false, hide_usage: false } },
+      {
+        entries: sampleEntries,
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false, hide_kanji: false },
+      },
     ]);
   });
 
@@ -2019,7 +2037,7 @@ describe('the gloss size reaching the popover window', () => {
       'popover-content',
       {
         entries: sampleEntries,
-        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false },
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false, hide_kanji: false },
       },
     ]);
   });
@@ -2115,7 +2133,7 @@ describe('the header history buttons', () => {
   // segmentAt resolves a hover against `lastResult`, which `display` — not
   // `show` — writes. If a nav step failed to update it, this would find the
   // newest parse's entries instead of the one actually on screen.
-  test('a hover after navigating emits popover-content for the displayed parse entries', () => {
+  test('a hover after navigating emits popover-content for the displayed parse entries', async () => {
     const catEntries = [
       { headword: '猫', reading: 'ねこ', conjugation: null, pos: ['n'], senses: [], flags: [] },
     ];
@@ -2129,6 +2147,7 @@ describe('the header history buttons', () => {
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',
