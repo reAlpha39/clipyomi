@@ -92,12 +92,12 @@ cargo test --workspace
 - **Backend Language:** [Rust](https://www.rust-lang.org/)
 - **Frontend:** [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
 - **Morphological Tokenizer:** [Vibrato](https://github.com/daac-tools/vibrato) (optional MeCab backend)
-- **Dictionary:** [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html) (EDRDG)
+- **Dictionary:** [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html) and [KANJIDIC2](https://www.edrdg.org/wiki/index.php/KANJIDIC_Project) (EDRDG)
 
 ---
 
 ## License & Acknowledgments
 
 - **ClipYomi** is dual-licensed under **MIT OR Apache-2.0** (`LICENSE-MIT`, `LICENSE-APACHE`). The parsing engine is a clean-room implementation; see `docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md` §3.5.
-- Dictionary data from the **EDRDG**'s JMdict is CC BY-SA 4.0 under its own notice (`crates/jparser/tests/fixtures/README.md`); the **IPADIC** conjugation data carries its notice in `crates/jparser/assets/IPADIC_NOTICE`.
+- Dictionary data from the **EDRDG**'s JMdict and KANJIDIC2 is CC BY-SA 4.0 under its own notice (`crates/jparser/tests/fixtures/README.md`); the **IPADIC** conjugation data carries its notice in `crates/jparser/assets/IPADIC_NOTICE`.
 - Dedicated to the authors and contributors of **Translation Aggregator** (Hongfire / Sinflower / TA contributors) for the original JParser design.

@@ -62,6 +62,7 @@ describe('Settings Window', () => {
           hide_pos: true,
           hide_xrefs: true,
           hide_usage: false,
+          hide_kanji: true,
         });
       }
       return Promise.resolve(null);
@@ -74,6 +75,7 @@ describe('Settings Window', () => {
     const hidePos = container.querySelector<HTMLInputElement>('#setting-hide-pos');
     const hideXrefs = container.querySelector<HTMLInputElement>('#setting-hide-xrefs');
     const hideUsage = container.querySelector<HTMLInputElement>('#setting-hide-usage');
+    const hideKanji = container.querySelector<HTMLInputElement>('#setting-hide-kanji');
     const alwaysOnTop = container.querySelector<HTMLInputElement>('#setting-always-on-top');
     const monitoring = container.querySelector<HTMLInputElement>('#setting-clipboard-monitoring');
     const kataBtn = container.querySelector<HTMLButtonElement>('button[data-mode="katakana"]');
@@ -81,9 +83,49 @@ describe('Settings Window', () => {
     expect(hidePos?.checked).toBe(true);
     expect(hideXrefs?.checked).toBe(true);
     expect(hideUsage?.checked).toBe(false);
+    expect(hideKanji?.checked).toBe(true);
     expect(alwaysOnTop?.checked).toBe(true);
     expect(monitoring?.checked).toBe(false);
     expect(kataBtn?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  test('toggling the kanji checkbox saves and broadcasts hide_kanji', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      return Promise.resolve(null);
+    });
+    initSettingsApp(container);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const hideKanji = container.querySelector<HTMLInputElement>('#setting-hide-kanji')!;
+    hideKanji.checked = true;
+    hideKanji.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(invoke).toHaveBeenCalledWith('save_settings', {
+      settings: expect.objectContaining({ hide_kanji: true }),
+    });
+    expect(emitted).toContainEqual([
+      'settings-changed',
+      expect.objectContaining({ hide_kanji: true }),
+    ]);
+  });
+
+  // CC BY-SA's condition is attribution, and this window is the app's only
+  // persistent surface for it (design §2.1). Text, not a link: no opener
+  // plugin is installed, and an anchor would navigate this webview away.
+  test('the footer attributes both EDRDG files and names the licence', () => {
+    invoke.mockImplementation(() => Promise.resolve(null));
+    initSettingsApp(container);
+    const footer = container.querySelector('.settings-footer')?.textContent ?? '';
+    expect(footer).toContain('JMdict');
+    expect(footer).toContain('KANJIDIC2');
+    expect(footer).toContain('Electronic Dictionary Research and Development Group');
+    expect(footer).toContain('CC BY-SA 4.0');
+    expect(footer).toContain('https://www.edrdg.org/edrdg/licence.html');
+    expect(container.querySelector('.settings-footer a')).toBeNull();
   });
 
   test('toggling gloss filter checkbox invokes save_settings and emits settings-changed', async () => {

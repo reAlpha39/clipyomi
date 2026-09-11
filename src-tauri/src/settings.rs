@@ -117,6 +117,9 @@ pub struct Settings {
     pub hide_xrefs: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_usage: Option<bool>,
+    /// Phase 3a: hides the KANJIDIC block at the foot of the popover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hide_kanji: Option<bool>,
     /// Sentence pane size in px. `None` leaves `tokens.css` owning the default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_sentence: Option<u32>,
@@ -167,6 +170,7 @@ impl Default for Settings {
             hide_pos: None,
             hide_xrefs: None,
             hide_usage: None,
+            hide_kanji: None,
             font_sentence: None,
             font_gloss: None,
             furigana_scale: None,

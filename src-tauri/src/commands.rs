@@ -1147,6 +1147,9 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     if incoming.hide_usage.is_some() {
         current.hide_usage = incoming.hide_usage;
     }
+    if incoming.hide_kanji.is_some() {
+        current.hide_kanji = incoming.hide_kanji;
+    }
     // Merged like the toggles above rather than assigned like the sizes below:
     // a range input cannot be cleared, so alpha has no "absent means reset"
     // state, and an unguarded assign would only give a future caller a way to
@@ -1948,6 +1951,7 @@ mod tests {
             hide_pos: Some(true),
             hide_xrefs: Some(true),
             hide_usage: Some(false),
+            hide_kanji: Some(true),
             ..Default::default()
         };
         save_settings(settings, state_arg).unwrap();
@@ -1955,6 +1959,7 @@ mod tests {
         assert_eq!(s.hide_pos, Some(true));
         assert_eq!(s.hide_xrefs, Some(true));
         assert_eq!(s.hide_usage, Some(false));
+        assert_eq!(s.hide_kanji, Some(true));
     }
 
     /// The guard that separates alpha from the font sizes. The sizes are

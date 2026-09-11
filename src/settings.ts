@@ -36,6 +36,10 @@ export function initSettingsApp(container: HTMLElement) {
           <input type="checkbox" id="setting-hide-usage" />
           <span class="label-text">Hide usage notes &amp; misc</span>
         </label>
+        <label class="settings-checkbox-row">
+          <input type="checkbox" id="setting-hide-kanji" />
+          <span class="label-text">Hide kanji readings &amp; meanings</span>
+        </label>
       </section>
 
       <section class="settings-group">
@@ -115,12 +119,20 @@ export function initSettingsApp(container: HTMLElement) {
           The native window frame is always fully opaque.
         </p>
       </section>
+
+      <footer class="settings-footer">
+        <p class="settings-note">
+          Dictionary data: JMdict and KANJIDIC2 &copy; Electronic Dictionary Research and Development Group,
+          CC BY-SA 4.0. Licence: https://www.edrdg.org/edrdg/licence.html
+        </p>
+      </footer>
     </div>
   `;
 
   const hidePos = container.querySelector<HTMLInputElement>('#setting-hide-pos')!;
   const hideXrefs = container.querySelector<HTMLInputElement>('#setting-hide-xrefs')!;
   const hideUsage = container.querySelector<HTMLInputElement>('#setting-hide-usage')!;
+  const hideKanji = container.querySelector<HTMLInputElement>('#setting-hide-kanji')!;
   const alwaysOnTop = container.querySelector<HTMLInputElement>('#setting-always-on-top')!;
   const monitoring = container.querySelector<HTMLInputElement>('#setting-clipboard-monitoring')!;
   const fontSentence = container.querySelector<HTMLInputElement>('#setting-font-sentence')!;
@@ -281,6 +293,7 @@ export function initSettingsApp(container: HTMLElement) {
       hide_pos: hidePos.checked,
       hide_xrefs: hideXrefs.checked,
       hide_usage: hideUsage.checked,
+      hide_kanji: hideKanji.checked,
       font_sentence: sizeOf(fontSentence, 'sentence'),
       font_gloss: sizeOf(fontGloss, 'gloss'),
       furigana_scale: sizeOf(furiganaScale, 'furigana'),
@@ -302,6 +315,7 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.hide_pos !== undefined) hidePos.checked = s.hide_pos;
     if (s.hide_xrefs !== undefined) hideXrefs.checked = s.hide_xrefs;
     if (s.hide_usage !== undefined) hideUsage.checked = s.hide_usage;
+    if (s.hide_kanji !== undefined) hideKanji.checked = s.hide_kanji;
     if (s.always_on_top !== undefined) alwaysOnTop.checked = s.always_on_top;
     if (s.clipboard_monitoring !== undefined) monitoring.checked = s.clipboard_monitoring;
     if (s.mecab_hints !== undefined) mecabHints.checked = s.mecab_hints;
@@ -335,6 +349,7 @@ export function initSettingsApp(container: HTMLElement) {
   hidePos.addEventListener('change', saveAndBroadcast);
   hideXrefs.addEventListener('change', saveAndBroadcast);
   hideUsage.addEventListener('change', saveAndBroadcast);
+  hideKanji.addEventListener('change', saveAndBroadcast);
 
   alwaysOnTop.addEventListener('change', () => {
     void invoke('set_always_on_top', { enabled: alwaysOnTop.checked }).catch(() => {});

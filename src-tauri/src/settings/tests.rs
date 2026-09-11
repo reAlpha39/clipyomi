@@ -148,6 +148,7 @@ fn defaults_leave_every_optional_key_unset() {
     assert_eq!(s.hide_pos, None);
     assert_eq!(s.hide_xrefs, None);
     assert_eq!(s.hide_usage, None);
+    assert_eq!(s.hide_kanji, None);
     assert_eq!(s.window_width, None);
     assert_eq!(s.window_height, None);
     assert_eq!(s.window_x, None);
@@ -190,6 +191,7 @@ fn settings_roundtrips_furigana_mode() {
         hide_pos: None,
         hide_xrefs: None,
         hide_usage: None,
+        hide_kanji: None,
         font_sentence: None,
         font_gloss: None,
         furigana_scale: None,
@@ -219,6 +221,7 @@ fn settings_roundtrips_gloss_filters() {
         hide_pos: Some(true),
         hide_xrefs: Some(false),
         hide_usage: Some(true),
+        hide_kanji: Some(false),
         font_sentence: None,
         font_gloss: None,
         furigana_scale: None,
@@ -234,10 +237,12 @@ fn settings_roundtrips_gloss_filters() {
     assert!(json.contains("\"hide_pos\":true"));
     assert!(json.contains("\"hide_xrefs\":false"));
     assert!(json.contains("\"hide_usage\":true"));
+    assert!(json.contains("\"hide_kanji\":false"));
     let deserialized: Settings = serde_json::from_str(&json).expect("deserialization succeeds");
     assert_eq!(deserialized.hide_pos, Some(true));
     assert_eq!(deserialized.hide_xrefs, Some(false));
     assert_eq!(deserialized.hide_usage, Some(true));
+    assert_eq!(deserialized.hide_kanji, Some(false));
 }
 
 /// The wire names are the strings that appear in settings.json, in
