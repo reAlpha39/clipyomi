@@ -428,6 +428,32 @@ fn a_v4_header_is_refused_with_a_version_mismatch() {
     }
 }
 
+/// Phase 3b changed `KanjiData`'s layout, so a v5 `kanji.bin` must never be
+/// decoded by this loader; the header's version is compared before that
+/// file is read. The header itself is still the 24-byte v4/v5 layout, which
+/// is what lets a v6 loader read a v5 file's version at all.
+#[test]
+fn a_v5_header_is_refused_with_a_version_mismatch() {
+    let dir = tmpdir("kanji-v5-header");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+    let fingerprint = index.header().conjugation_fingerprint;
+    drop(index);
+
+    // The v5 layout, byte for byte: version, keys, records, entries, fingerprint.
+    let v5 = bincode::serialize(&(5u32, 3u32, 3u32, 3u32, fingerprint)).unwrap();
+    assert_eq!(v5.len(), 24);
+    std::fs::write(dir.join("header.bin"), v5).unwrap();
+
+    match Index::open(&dir).unwrap_err() {
+        IndexError::VersionMismatch { found, expected } => {
+            assert_eq!(found, 5);
+            assert_eq!(expected, INDEX_FORMAT_VERSION);
+        }
+        other => panic!("a v5 header must be a version mismatch, got {other:?}"),
+    }
+}
+
 /// A build whose KANJIDIC2 is unreadable fails the build, the way a bad
 /// JMdict does — knowingly, over a silent-degrade path (design §4).
 #[test]

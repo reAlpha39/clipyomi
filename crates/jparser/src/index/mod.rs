@@ -25,7 +25,10 @@ use crate::index::load::Index;
 /// 5 (Phase 3a): a sixth file, `kanji.bin`. `IndexHeader`'s own layout is
 /// unchanged, and must stay so unless `open_with` learns to read the version
 /// before decoding the rest — see `a_v4_header_is_refused_with_a_version_mismatch`.
-pub const INDEX_FORMAT_VERSION: u32 = 5;
+/// 6 (Phase 3b): `KanjiData` gained `grade`, `strokes`, `freq` and `jlpt`, so
+/// `kanji.bin`'s record layout changed. The header is still untouched — see
+/// `a_v5_header_is_refused_with_a_version_mismatch`.
+pub const INDEX_FORMAT_VERSION: u32 = 6;
 
 pub const HEADER_FILE: &str = "header.bin";
 pub const FST_FILE: &str = "keys.fst";
@@ -89,9 +92,11 @@ pub struct EntryData {
 /// One KANJIDIC2 character, as the popover needs it.
 ///
 /// Also the wire shape `kanji_info` returns to the webview: `src/types.ts`'s
-/// `KanjiInfo` names these four fields, and
+/// `KanjiInfo` names these eight fields, and
 /// `kanji_data_serializes_to_the_documented_wire_shape` in
-/// `tests/engine_v2.rs` pins them, so neither side can drift alone.
+/// `tests/engine_v2.rs` pins them, so neither side can drift alone. The four
+/// `Option`s cross the wire as a number or `null`; bincode 1.x cannot skip a
+/// field on serialisation and read it back, so they are never omitted.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct KanjiData {
     pub literal: char,
@@ -103,6 +108,18 @@ pub struct KanjiData {
     /// `<meaning>` elements with no `m_lang` attribute -- English -- the
     /// first [`crate::kanjidic::MAX_MEANINGS`] of them.
     pub meanings: Vec<String>,
+    /// `<grade>`: 1–6 the school year a kyōiku kanji is taught in, 8 the
+    /// remaining jōyō kanji (secondary school), 9 and 10 jinmeiyō (name)
+    /// kanji. `None` for the 10,109 characters the file does not grade.
+    pub grade: Option<u8>,
+    /// The first `<stroke_count>` -- the accepted count. Later ones are
+    /// common miscounts and are dropped. The file's maximum is 34.
+    pub strokes: Option<u8>,
+    /// `<freq>`: newspaper frequency rank, 1–2,501. `None` when unranked.
+    pub freq: Option<u16>,
+    /// `<jlpt>`: level in the former four-level JLPT, 1 (advanced) to 4
+    /// (elementary). `None` when the character was on no level's list.
+    pub jlpt: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
