@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 import { describe, expect, test } from 'vitest';
-import type { Entry } from '../types';
+import type { Entry, KanjiInfo } from '../types';
 import { assembleTooltipText, CONJ_MARKER } from './tooltip-text';
 
 function entry(overrides: Partial<Entry> = {}): Entry {
@@ -177,6 +177,44 @@ describe('assembleTooltipText', () => {
       });
       expect(assembleTooltipText([e], { hide_pos: false })).toBe(
         '消える【きえる】\n(1) particle',
+      );
+    });
+  });
+
+  // Phase 3a: one blank line, then one flat line per kanji — literal, the on
+  // and kun readings joined by the katakana middle dot, the meanings — so
+  // `colourLine` colours the block as it colours everything else.
+  describe('the kanji block', () => {
+    const tokyo: KanjiInfo[] = [
+      { literal: '東', on: ['トウ'], kun: ['ひがし'], meanings: ['east', 'eastern'] },
+      { literal: '京', on: ['キョウ', 'ケイ'], kun: ['みやこ'], meanings: ['capital', '10**16'] },
+    ];
+
+    test('appends one line per kanji after a blank line', () => {
+      expect(assembleTooltipText([entry()], undefined, tokyo)).toBe(
+        '消える【きえる】\n(v1,vi) (1) to disappear/to vanish\n\n' +
+          '東  トウ・ひがし  east, eastern\n' +
+          '京  キョウ・ケイ・みやこ  capital, 10**16',
+      );
+    });
+
+    test('renders nothing extra when there are no kanji', () => {
+      expect(assembleTooltipText([entry()], undefined, [])).toBe(
+        '消える【きえる】\n(v1,vi) (1) to disappear/to vanish',
+      );
+    });
+
+    test('hide_kanji drops the block and the blank line with it', () => {
+      expect(assembleTooltipText([entry()], { hide_kanji: true }, tokyo)).toBe(
+        '消える【きえる】\n(v1,vi) (1) to disappear/to vanish',
+      );
+    });
+
+    // A record with no readings or no meanings must not leave a doubled gap.
+    test('omits an empty column rather than leaving a gap', () => {
+      const bare: KanjiInfo[] = [{ literal: '々', on: [], kun: [], meanings: ['repetition mark'] }];
+      expect(assembleTooltipText([entry()], undefined, bare)).toBe(
+        '消える【きえる】\n(v1,vi) (1) to disappear/to vanish\n\n々  repetition mark',
       );
     });
   });

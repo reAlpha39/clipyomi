@@ -72,6 +72,8 @@ export interface GlossFilters {
   hide_pos?: boolean;
   hide_xrefs?: boolean;
   hide_usage?: boolean;
+  /** Phase 3a: the KANJIDIC block at the foot of the popover. Default shown. */
+  hide_kanji?: boolean;
 }
 
 /** Which of the three window chrome shapes the main window wears (spec §7.4). */
@@ -90,6 +92,8 @@ export interface Settings {
   hide_pos?: boolean;
   hide_xrefs?: boolean;
   hide_usage?: boolean;
+  /** Phase 3a: the KANJIDIC block at the foot of the popover. Default shown. */
+  hide_kanji?: boolean;
   /** Sentence pane size in px, bound to `--text-sentence`. */
   font_sentence?: number;
   /** Definition and tooltip size in px, bound to `--text-gloss`. */
