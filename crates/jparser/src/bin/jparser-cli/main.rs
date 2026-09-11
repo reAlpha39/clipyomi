@@ -72,9 +72,9 @@ enum Command {
         /// Directory holding the source archive, downloading it if absent.
         #[arg(long)]
         source_dir: Option<PathBuf>,
-        /// KANJIDIC2 XML beside a positional XML. Ignored with `--source-dir`,
-        /// which resolves both files from that directory.
-        #[arg(long)]
+        /// KANJIDIC2 XML beside a positional XML. Exclusive with
+        /// `--source-dir`, which resolves both files from that directory.
+        #[arg(long, conflicts_with = "source_dir")]
         kanjidic: Option<PathBuf>,
         /// Generations to retain after a rebuild. Must be at least 1.
         #[arg(

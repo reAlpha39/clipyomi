@@ -244,6 +244,42 @@ fn ensure_dictionary_rejects_both_sources_at_once() {
     );
 }
 
+/// `--kanjidic` names a file beside a positional XML (design §4); with
+/// `--source-dir` there is no positional to be beside, and the flag was
+/// silently ignored rather than rejected. `conflicts_with` on the arg is what
+/// turns that into a clap error naming both flags.
+#[test]
+fn ensure_dictionary_rejects_kanjidic_with_source_dir() {
+    let dir = scratch("cli-kanjidic-with-sourcedir");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_jparser-cli"))
+        .args([
+            "ensure-dictionary",
+            "dict",
+            "--source-dir",
+            "src",
+            "--kanjidic",
+            "kanjidic2.xml",
+        ])
+        .current_dir(&dir)
+        .output()
+        .expect("run jparser-cli");
+
+    assert!(
+        !out.status.success(),
+        "kanjidic with source-dir must be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "expected a conflicts_with error, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("--kanjidic") && stderr.contains("--source-dir"),
+        "the conflict must name both --kanjidic and --source-dir, got: {stderr}"
+    );
+}
+
 /// Same reasoning as the test above: the pre-wiring binary already rejected
 /// this (missing required `xml` positional), so only the message proves the
 /// `ArgGroup`, not just the old positional, is what is enforcing it now.
