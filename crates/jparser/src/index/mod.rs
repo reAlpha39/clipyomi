@@ -81,6 +81,25 @@ pub struct EntryData {
     pub senses: Vec<SenseData>,
 }
 
+/// One KANJIDIC2 character, as the popover needs it.
+///
+/// Also the wire shape `kanji_info` returns to the webview: `src/types.ts`'s
+/// `KanjiInfo` names these four fields, and
+/// `kanji_data_serializes_to_the_documented_wire_shape` in
+/// `tests/engine_v2.rs` pins them, so neither side can drift alone.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KanjiData {
+    pub literal: char,
+    /// `ja_on` readings, katakana as KANJIDIC2 gives them.
+    pub on: Vec<String>,
+    /// `ja_kun` readings. KANJIDIC2's `.` (okurigana boundary) and `-`
+    /// (affix) marks are kept: `ひがし`, `た.べる`, `-がた`.
+    pub kun: Vec<String>,
+    /// `<meaning>` elements with no `m_lang` attribute -- English -- the
+    /// first [`crate::kanjidic::MAX_MEANINGS`] of them.
+    pub meanings: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BuildReport {
     pub keys: usize,
@@ -100,6 +119,8 @@ pub enum IndexError {
     Encoding(#[from] bincode::Error),
     #[error("reading JMdict failed: {0}")]
     Jmdict(#[from] crate::jmdict::JmdictError),
+    #[error("reading KANJIDIC2 failed: {0}")]
+    Kanjidic(#[from] crate::kanjidic::KanjidicError),
     #[error("index format version mismatch: found {found}, expected {expected}")]
     VersionMismatch { found: u32, expected: u32 },
     #[error(
@@ -155,6 +176,7 @@ where
             | Err(e @ IndexError::Fst(_))
             | Err(e @ IndexError::Encoding(_))
             | Err(e @ IndexError::Jmdict(_))
+            | Err(e @ IndexError::Kanjidic(_))
             | Err(e @ IndexError::GenerationExists { .. }) => return Err(e),
         }
     }
@@ -203,6 +225,7 @@ fn open_published_or_newest(root: &Path, published: &Path) -> Result<Index, Inde
         | Err(e @ IndexError::Fst(_))
         | Err(e @ IndexError::Encoding(_))
         | Err(e @ IndexError::Jmdict(_))
+        | Err(e @ IndexError::Kanjidic(_))
         | Err(e @ IndexError::VersionMismatch { .. })
         | Err(e @ IndexError::ConjugationMismatch { .. })
         | Err(e @ IndexError::GenerationExists { .. }) => Err(e),

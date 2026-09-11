@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- This file contains material from KANJIDIC2, Copyright (C) EDRDG, used
+     under CC BY-SA 4.0 (https://www.edrdg.org/edrdg/licence.html). Four
+     characters, structure as published; see README.md in this directory. -->
+<!DOCTYPE kanjidic2 [
+<!ELEMENT kanjidic2 (header,character*)>
+]>
+<kanjidic2>
+<header>
+<file_version>4</file_version>
+<database_version>2026-254</database_version>
+<date_of_creation>2026-09-11</date_of_creation>
+</header>
+<character>
+<literal>東</literal>
+<codepoint>
+<cp_value cp_type="ucs">6771</cp_value>
+</codepoint>
+<misc>
+<grade>2</grade>
+<stroke_count>8</stroke_count>
+<freq>37</freq>
+<jlpt>4</jlpt>
+</misc>
+<reading_meaning>
+<rmgroup>
+<reading r_type="pinyin">dong1</reading>
+<reading r_type="korean_h">동</reading>
+<reading r_type="ja_on">トウ</reading>
+<reading r_type="ja_kun">ひがし</reading>
+<meaning>east</meaning>
+<meaning m_lang="fr">Est</meaning>
+<meaning m_lang="es">Este</meaning>
+</rmgroup>
+<nanori>あずま</nanori>
+<nanori>ひが</nanori>
+</reading_meaning>
+</character>
+<character>
+<literal>京</literal>
+<codepoint>
+<cp_value cp_type="ucs">4eac</cp_value>
+</codepoint>
+<reading_meaning>
+<rmgroup>
+<reading r_type="ja_on">キョウ</reading>
+<reading r_type="ja_on">ケイ</reading>
+<reading r_type="ja_on">キン</reading>
+<reading r_type="ja_kun">みやこ</reading>
+<meaning>capital</meaning>
+<meaning>10**16</meaning>
+<meaning>metropolis</meaning>
+<meaning>ten quadrillion</meaning>
+<meaning>a fifth meaning, past the cap</meaning>
+</rmgroup>
+</reading_meaning>
+</character>
+<character>
+<literal>都</literal>
+<codepoint>
+<cp_value cp_type="ucs">90fd</cp_value>
+</codepoint>
+<reading_meaning>
+<rmgroup>
+<reading r_type="ja_on">ト</reading>
+<reading r_type="ja_on">ツ</reading>
+<reading r_type="ja_kun">みやこ</reading>
+<meaning>metropolis</meaning>
+<meaning>capital</meaning>
+<meaning>all</meaning>
+<meaning>everything</meaning>
+</rmgroup>
+</reading_meaning>
+</character>
+<character>
+<literal>食</literal>
+<codepoint>
+<cp_value cp_type="ucs">98df</cp_value>
+</codepoint>
+<reading_meaning>
+<rmgroup>
+<reading r_type="ja_on">ショク</reading>
+<reading r_type="ja_on">ジキ</reading>
+<reading r_type="ja_kun">く.う</reading>
+<reading r_type="ja_kun">く.らう</reading>
+<reading r_type="ja_kun">た.べる</reading>
+<reading r_type="ja_kun">は.む</reading>
+<reading r_type="ja_kun">-ぐ.い</reading>
+<meaning>eat</meaning>
+<meaning>food</meaning>
+</rmgroup>
+</reading_meaning>
+</character>
+</kanjidic2>

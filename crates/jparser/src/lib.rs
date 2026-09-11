@@ -16,6 +16,7 @@ pub mod engine;
 pub mod hints;
 pub mod index;
 pub mod jmdict;
+pub mod kanjidic;
 
 pub use crate::engine::flags::WordFlags;
 pub use crate::engine::parse;
