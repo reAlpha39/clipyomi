@@ -70,6 +70,17 @@ describe('createKanjiLookup', () => {
     expect(await createKanjiLookup(() => Promise.resolve(null))('東')).toEqual([]);
   });
 
+  // Phase 3b: the four misc fields cross the wire as a number or null, and a
+  // payload from an older main webview may lack them altogether. A string in
+  // one is a malformed record, like a numeric literal.
+  test('accepts the misc fields absent, null or numeric, and rejects a string', async () => {
+    const full: KanjiInfo = { ...東, grade: 2, strokes: 8, freq: 37, jlpt: 4 };
+    const nulls: KanjiInfo = { ...京, grade: null, strokes: null, freq: null, jlpt: null };
+    const bad = { ...都, grade: '3' };
+    const lookup = createKanjiLookup(() => Promise.resolve([full, nulls, bad]));
+    expect(await lookup('東京都')).toEqual([full, nulls]);
+  });
+
   test('a failed round trip yields no records and is asked again next time', async () => {
     const ask = vi
       .fn<(chars: string) => Promise<unknown>>()

@@ -966,7 +966,10 @@ fn parse_result_serializes_to_the_documented_wire_shape() {
 
 /// Pins the JSON `kanji_info` hands the webview. Field names here are the
 /// TypeScript property names of `src/types.ts`'s `KanjiInfo`; `literal` is a
-/// `char`, which serde_json writes as a one-character string.
+/// `char`, which serde_json writes as a one-character string. The four misc
+/// numbers cross as a number or `null`, never as a missing key: bincode 1.x
+/// cannot read back a struct whose fields were skipped on serialisation, so
+/// `skip_serializing_if` is not an option (Phase 3b design §4.1).
 #[test]
 fn kanji_data_serializes_to_the_documented_wire_shape() {
     let data = jparser::index::KanjiData {
@@ -974,9 +977,9 @@ fn kanji_data_serializes_to_the_documented_wire_shape() {
         on: vec!["トウ".to_string()],
         kun: vec!["ひがし".to_string()],
         meanings: vec!["east".to_string()],
-        grade: None,
-        strokes: None,
-        freq: None,
+        grade: Some(2),
+        strokes: Some(8),
+        freq: Some(37),
         jlpt: None,
     };
     let json = serde_json::to_value(&data).expect("serialize");
@@ -984,6 +987,20 @@ fn kanji_data_serializes_to_the_documented_wire_shape() {
     assert_eq!(json["on"][0], "トウ");
     assert_eq!(json["kun"][0], "ひがし");
     assert_eq!(json["meanings"][0], "east");
+    assert_eq!(json["grade"], 2);
+    assert_eq!(json["strokes"], 8);
+    assert_eq!(json["freq"], 37);
+    let keys = json.as_object().expect("an object");
+    assert!(
+        keys.contains_key("jlpt"),
+        "an absent field is a present key"
+    );
+    assert!(
+        json["jlpt"].is_null(),
+        "an absent field is null, got {:?}",
+        json["jlpt"]
+    );
+    assert_eq!(keys.len(), 8, "exactly the eight documented fields");
 }
 
 /// An unmatched run must still be a well-formed segment: the sentence pane
