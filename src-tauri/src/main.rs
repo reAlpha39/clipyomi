@@ -267,6 +267,7 @@ fn main() {
             commands::set_mecab_hints,
             commands::hints_warning,
             commands::hints_dir,
+            commands::kanji_info,
             popover::place_popover,
             popover::hide_popover
         ])

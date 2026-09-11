@@ -1406,6 +1406,36 @@ pub fn needs_dictionary(needs: State<'_, NeedsDictionary>) -> bool {
     needs.0
 }
 
+/// The KANJIDIC2 records for the kanji in `chars`, in input order, with
+/// misses and non-kanji omitted. Split from the command for the reason
+/// `merge_saved` is: a `#[tauri::command]` taking `State<'_, _>` needs a mock
+/// app to call, and the lookup rule is worth pinning on its own.
+pub(crate) fn lookup_kanji(
+    index: &jparser::index::load::Index,
+    chars: &str,
+) -> Vec<jparser::index::KanjiData> {
+    chars
+        .chars()
+        .filter_map(|ch| index.kanji(ch).cloned())
+        .collect()
+}
+
+/// The popover's kanji block: one record per character of `chars`, which the
+/// webview sends as the distinct kanji of the hovered surface. Asked lazily
+/// on hover so the parse payload does not grow (Phase 3a design §5). Empty
+/// until a dictionary has been published to the worker.
+#[tauri::command]
+pub fn kanji_info(chars: String, index: State<'_, IndexSender>) -> Vec<jparser::index::KanjiData> {
+    // Cloned out of the borrow before the lookup: `watch::Sender::borrow`
+    // holds the channel's read lock, and a `download_dictionary` publish
+    // would otherwise wait on this command.
+    let state = index.0.borrow().clone();
+    match state {
+        Some(state) => lookup_kanji(&state.index, &chars),
+        None => Vec::new(),
+    }
+}
+
 /// Emit a phase label, logging rather than propagating a failed emit.
 fn emit_status(app: &AppHandle, status: &str) {
     if let Err(e) = app.emit(DICTIONARY_STATUS_EVENT, status.to_string()) {
@@ -2630,5 +2660,55 @@ mod tests {
             before,
             "the published slot must be untouched by the offline short-circuit"
         );
+    }
+
+    /// Hits come back in input order; kana and characters the index has no
+    /// record for are simply absent. The fixture index carries 本 only.
+    #[test]
+    fn lookup_kanji_returns_hits_in_order_and_omits_misses() {
+        let root = crate::test_support::scratch("kanji-lookup");
+        let generation = crate::test_support::build_index_generation(&root);
+        let index = jparser::index::load::Index::open(&generation).expect("open");
+
+        let hits = lookup_kanji(&index, "あ本東");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].literal, '本');
+        assert_eq!(hits[0].on, vec!["ホン"]);
+        assert_eq!(hits[0].kun, vec!["もと"]);
+        // The parser's cap, visible end to end.
+        assert_eq!(hits[0].meanings, vec!["book", "present", "main", "origin"]);
+
+        assert!(lookup_kanji(&index, "").is_empty());
+        assert!(lookup_kanji(&index, "はいた").is_empty());
+    }
+
+    /// Before the first download the channel holds `None`; the command must
+    /// answer empty rather than fail, because the popover can open on a
+    /// stale parse while the download screen is up.
+    #[test]
+    fn kanji_info_is_empty_before_a_dictionary_is_loaded() {
+        let app = tauri::test::mock_app();
+        let (tx, _rx) = tokio::sync::watch::channel(None::<Arc<AppState>>);
+        app.manage(IndexSender(tx));
+        let out = kanji_info("本".to_string(), app.state::<IndexSender>());
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn kanji_info_answers_from_the_published_index() {
+        let root = crate::test_support::scratch("kanji-info");
+        let generation = crate::test_support::build_index_generation(&root);
+        let index = jparser::index::load::Index::open(&generation).expect("open");
+        let state = AppState {
+            index,
+            table: jparser::engine::table::Table::new(),
+        };
+        let app = tauri::test::mock_app();
+        let (tx, _rx) = tokio::sync::watch::channel(Some(Arc::new(state)));
+        app.manage(IndexSender(tx));
+
+        let out = kanji_info("本".to_string(), app.state::<IndexSender>());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].literal, '本');
     }
 }

@@ -31,6 +31,22 @@ export interface Entry {
   flags: FlagName[];
 }
 
+/**
+ * One KANJIDIC2 record, as `kanji_info` returns it. Mirrors
+ * `jparser::index::KanjiData`; the Rust test
+ * `kanji_data_serializes_to_the_documented_wire_shape` pins these names on the
+ * other side.
+ */
+export interface KanjiInfo {
+  literal: string;
+  /** On readings, katakana. */
+  on: string[];
+  /** Kun readings, with KANJIDIC2's `.` and `-` marks kept: `た.べる`, `-がた`. */
+  kun: string[];
+  /** English meanings, at most four. */
+  meanings: string[];
+}
+
 export interface Segment {
   start: number;
   len: number;
