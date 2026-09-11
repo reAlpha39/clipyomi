@@ -136,3 +136,23 @@ natural Japanese; their cause is an `ATTACHES_TO` row and is recorded in
 Class and form names are `engine/table_data.rs`'s IPADIC names; regenerating
 that table can rename or add forms, and the coverage test will then name
 every tuple that lost its row.
+
+## `kanjidic_mini.xml`
+
+Four characters (東, 京, 都, 食) in **KANJIDIC2**'s published structure,
+trimmed to the elements the reader keeps or must skip: a foreign-language
+`<meaning m_lang>`, `<nanori>`, non-Japanese `r_type`s, a character with five
+English meanings (the cap is four), and kun readings carrying the `.` and `-`
+marks. Used by `src/kanjidic.rs`'s own tests, `tests/index_roundtrip.rs`, and
+`src-tauri`'s command tests.
+
+- **Source:** Electronic Dictionary Research and Development Group (EDRDG),
+  <http://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz>
+- **Retrieved:** 2026-09-11 (KANJIDIC2 is regenerated continuously, like
+  JMdict, so the committed excerpt is the reproducible artifact)
+- **Licence:** Creative Commons Attribution-ShareAlike 4.0 International
+  (CC BY-SA 4.0), <https://www.edrdg.org/edrdg/licence.html>
+- **Notice:** This file contains material from KANJIDIC2, Copyright (C) EDRDG.
+
+Third-party **data**, not source, on the same footing as `jmdict_subset.xml`
+above: it carries the EDRDG notice in its own header and is not relicensed.
