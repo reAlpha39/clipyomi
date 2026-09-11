@@ -162,7 +162,8 @@ fn next_generation(root: &Path) -> Result<u64, IndexError> {
 /// alone.
 static BUILD_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Build an index from `xml` and publish it as the next generation.
+/// Build an index from `jmdict` and `kanjidic` and publish it as the next
+/// generation.
 ///
 /// Builds into `<root>/.build-<pid>-<nanos>-<seq>/` first, so `root` never
 /// contains a partially-written generation. `root` and the build directory
@@ -174,7 +175,11 @@ static BUILD_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU
 /// of a single attempt would otherwise fail even though a valid generation
 /// now exists. Each retry recomputes the target rather than reusing the one
 /// that just lost.
-pub fn build_new(root: &Path, xml: impl BufRead) -> Result<(PathBuf, BuildReport), IndexError> {
+pub fn build_new(
+    root: &Path,
+    jmdict: impl BufRead,
+    kanjidic: impl BufRead,
+) -> Result<(PathBuf, BuildReport), IndexError> {
     std::fs::create_dir_all(root)?;
 
     // A clock before the Unix epoch is not a reason to refuse to build a
@@ -193,7 +198,7 @@ pub fn build_new(root: &Path, xml: impl BufRead) -> Result<(PathBuf, BuildReport
     // and a collision is a signal worth surfacing rather than absorbing.
     std::fs::create_dir(&build_dir)?;
 
-    let report = crate::engine::build::build_from_reader(xml, &build_dir)?;
+    let report = crate::engine::build::build_from_readers(jmdict, kanjidic, &build_dir)?;
 
     let mut published = publish(&build_dir, root, next_generation(root)?);
     for _ in 1..PUBLISH_ATTEMPTS {
@@ -231,7 +236,7 @@ fn remove_if_present(path: &Path) -> Result<bool, IndexError> {
 /// Directories that are neither a valid generation nor a build orphan are left
 /// alone: this function did not create them.
 ///
-/// When `build_from_reader` itself fails — malformed XML, a full disk — `build_new`
+/// When `build_from_readers` itself fails — malformed XML, a full disk — `build_new`
 /// leaves its `.build-<pid>-<nanos>-<seq>` directory behind with no cleanup.
 /// `sweep` is what reclaims those.
 pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
@@ -283,8 +288,10 @@ mod tests {
         "</JMdict>",
     );
 
+    const NO_KANJIDIC: &[u8] = b"";
+
     fn build_into(root: &Path) -> PathBuf {
-        let (path, _) = build_new(root, MINI_XML.as_bytes()).expect("build_new");
+        let (path, _) = build_new(root, MINI_XML.as_bytes(), NO_KANJIDIC).expect("build_new");
         path
     }
 
@@ -435,7 +442,7 @@ mod tests {
 
         let results = std::thread::scope(|s| {
             let handles: Vec<_> = (0..2)
-                .map(|_| s.spawn(|| build_new(&root, MINI_XML.as_bytes())))
+                .map(|_| s.spawn(|| build_new(&root, MINI_XML.as_bytes(), NO_KANJIDIC)))
                 .collect();
             handles
                 .into_iter()

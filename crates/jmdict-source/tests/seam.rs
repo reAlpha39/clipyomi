@@ -9,7 +9,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use jmdict_source::SOURCE_FILE;
+use jmdict_source::{KANJIDIC, SOURCE_FILE};
 
 const XML: &str = concat!(
     r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -37,16 +37,34 @@ fn a_gzipped_archive_builds_an_index_through_ensure_dictionary() {
     let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     e.write_all(XML.as_bytes()).expect("gz write");
     std::fs::write(source_dir.join(SOURCE_FILE), e.finish().expect("gz")).expect("write");
+    // Plain XML at the gzip name: `open_local` decides by bytes, and this
+    // proves the second source takes the same path as the first.
+    std::fs::write(
+        source_dir.join(KANJIDIC.file_name),
+        "<kanjidic2><character><literal>本</literal><reading_meaning><rmgroup>\
+         <reading r_type=\"ja_kun\">もと</reading></rmgroup></reading_meaning></character></kanjidic2>",
+    )
+    .expect("write kanjidic");
 
-    let index = jparser::index::ensure_dictionary(&root, 2, || jmdict_source::resolve(&source_dir))
-        .expect("ensure_dictionary");
+    let index = jparser::index::ensure_dictionary(&root, 2, || {
+        Ok((
+            jmdict_source::resolve(&source_dir)?,
+            jmdict_source::resolve_kanjidic(&source_dir)?,
+        ))
+    })
+    .expect("ensure_dictionary");
 
     assert_eq!(
         index.entry(1000010).expect("entry").expect("present").id,
         1000010
     );
+    assert_eq!(index.kanji('本').expect("本").kun, vec!["もと"]);
     assert!(root.join("gen-1").exists());
     // The source directory is a sibling of the generation root, so 2A's
     // sweep-and-list machinery never sees it, and the archive is not consumed.
     assert!(source_dir.join(SOURCE_FILE).exists(), "the source vanished");
+    assert!(
+        source_dir.join(KANJIDIC.file_name).exists(),
+        "the kanjidic source vanished"
+    );
 }
