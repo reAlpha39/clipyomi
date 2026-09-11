@@ -332,10 +332,11 @@ Two further departures were ruled during execution rather than planned:
 **The design's §3 claim is that an existing install rebuilds once through the
 path that already exists.** Plan Step 3 asked for that to be seen in a running
 app — `npm run tauri dev`, hover 東京都, toggle the fourth checkbox. That needs
-a human at a GUI and was not performed. **The hover, the three lines at the
-foot of the popover, and the settings checkbox hiding them on the next hover
-remain unverified by eye and are left for the user.** What was verified is the
-upgrade path itself, headlessly, on a scratch copy of the real install —
+a human at a GUI and was not performed by the agent. **The user performed it
+on 2026-09-11, after the fix wave: the block renders on hover, and the
+settings checkbox "Hide kanji readings & meanings" hides it on the next
+hover.** What the agent verified is the upgrade path itself, headlessly, on a
+scratch copy of the real install —
 `%APPDATA%\dev.jparser.clipyomi` was never written to.
 
 The copied `dict/gen-1` is a pre-Phase-3a index built 2026-08-16: five files,
@@ -433,9 +434,6 @@ Surfaced by this phase:
   recorded 1.05x. The cell is a ratio of two wall-clock medians and a few
   milliseconds on the short one moves it by more than the gate's own
   resolution. If it is to stay a gate it wants a band, not a digit.
-- **The GUI has not been seen.** §4's proof is of the upgrade path, not of the
-  rendered block, the colouring, or the checkbox.
-
 Deferred minors, each raised and accepted during review:
 
 - `kanjidic.rs`'s `Iterator::next` is about 107 lines.
