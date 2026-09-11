@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-import type { Entry, GlossFilters } from '../types';
+import type { Entry, GlossFilters, KanjiInfo } from '../types';
 
 /**
  * Prefix marking a line as the conjugation label.
@@ -57,13 +57,34 @@ function entryLines(entry: Entry, filters?: GlossFilters): string[] {
 }
 
 /**
- * Every match for one word, as the tooltip's flat text block.
+ * One kanji's line: the literal, its on then kun readings joined by the
+ * katakana middle dot, its English meanings. Columns are two spaces apart;
+ * an empty column is dropped rather than left as a gap. KANJIDIC2's `.` and
+ * `-` marks in kun readings are rendered raw, deliberately (design §7).
+ */
+function kanjiLine(kanji: KanjiInfo): string {
+  const readings = [...kanji.on, ...kanji.kun].join('・');
+  return [kanji.literal, readings, kanji.meanings.join(', ')]
+    .filter((column) => column !== '')
+    .join('  ');
+}
+
+/**
+ * Every match for one word, as the tooltip's flat text block, followed —
+ * when there are any and the reader has not hidden them — by one blank line
+ * and one line per kanji in the hovered surface.
  *
  * Flat text rather than structured markup because the colouring that follows
  * is lexical, not semantic (see `tooltip-colour.ts`): it reads characters, so
  * what it needs is characters.
  */
-export function assembleTooltipText(entries: Entry[], filters?: GlossFilters): string {
-  return entries.flatMap((e) => entryLines(e, filters)).join('\n');
+export function assembleTooltipText(
+  entries: Entry[],
+  filters?: GlossFilters,
+  kanji: KanjiInfo[] = [],
+): string {
+  const lines = entries.flatMap((e) => entryLines(e, filters));
+  if (!filters?.hide_kanji && kanji.length > 0) lines.push('', ...kanji.map(kanjiLine));
+  return lines.join('\n');
 }
 

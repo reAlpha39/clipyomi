@@ -77,4 +77,29 @@ describe('the popover window', () => {
 
     expect(document.querySelector('#tooltip')?.textContent).toContain('東京');
   });
+
+  test('renders the kanji block it is sent, after a blank line', () => {
+    send({
+      entries,
+      kanji: [{ literal: '東', on: ['トウ'], kun: ['ひがし'], meanings: ['east'] }],
+    });
+
+    const lines = [...document.querySelectorAll('.tt-line')].map((el) => el.textContent);
+    expect(lines).toEqual(['東京【とうきょう】', '(n) (1) Tokyo', '', '東  トウ・ひがし  east']);
+    // The blank line keeps its height, as the gap between two entries does.
+    expect(document.querySelectorAll('.tt-line br')).toHaveLength(1);
+    // The literal is coloured as kanji, like a headword's characters.
+    const literal = [...document.querySelectorAll('.tt-kanji')].map((el) => el.textContent);
+    expect(literal).toContain('東');
+  });
+
+  test('renders no block under hide_kanji', () => {
+    send({
+      entries,
+      filters: { hide_kanji: true },
+      kanji: [{ literal: '東', on: ['トウ'], kun: ['ひがし'], meanings: ['east'] }],
+    });
+
+    expect(document.querySelectorAll('.tt-line')).toHaveLength(2);
+  });
 });
