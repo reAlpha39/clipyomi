@@ -964,6 +964,24 @@ fn parse_result_serializes_to_the_documented_wire_shape() {
     assert_eq!(json["alternatives"].as_array().map(Vec::len), Some(0));
 }
 
+/// Pins the JSON `kanji_info` hands the webview. Field names here are the
+/// TypeScript property names of `src/types.ts`'s `KanjiInfo`; `literal` is a
+/// `char`, which serde_json writes as a one-character string.
+#[test]
+fn kanji_data_serializes_to_the_documented_wire_shape() {
+    let data = jparser::index::KanjiData {
+        literal: '東',
+        on: vec!["トウ".to_string()],
+        kun: vec!["ひがし".to_string()],
+        meanings: vec!["east".to_string()],
+    };
+    let json = serde_json::to_value(&data).expect("serialize");
+    assert_eq!(json["literal"], "東");
+    assert_eq!(json["on"][0], "トウ");
+    assert_eq!(json["kun"][0], "ひがし");
+    assert_eq!(json["meanings"][0], "east");
+}
+
 /// An unmatched run must still be a well-formed segment: the sentence pane
 /// renders these muted and unchipped, so it needs them present, not omitted.
 #[test]
