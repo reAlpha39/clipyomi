@@ -143,8 +143,12 @@ Four characters (東, 京, 都, 食) in **KANJIDIC2**'s published structure,
 trimmed to the elements the reader keeps or must skip: a foreign-language
 `<meaning m_lang>`, `<nanori>`, non-Japanese `r_type`s, a character with five
 English meanings (the cap is four), and kun readings carrying the `.` and `-`
-marks. Used by `src/kanjidic.rs`'s own tests, `tests/index_roundtrip.rs`, and
-`src-tauri`'s command tests.
+marks. The `<misc>` blocks cover the four cases Phase 3b's parser handles:
+東 carries all four numbers; 京 has no `<misc>` at all; 都 has its real block,
+with two `<stroke_count>`s (the accepted 11, then the miscount 10) and a
+`<variant>` to ignore; 食 is trimmed to grade and stroke count only. Used by
+`src/kanjidic.rs`'s own tests, `tests/index_roundtrip.rs`, and `src-tauri`'s
+command tests.
 
 - **Source:** Electronic Dictionary Research and Development Group (EDRDG),
   <http://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz>

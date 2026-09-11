@@ -3,11 +3,12 @@
 //! Streaming KANJIDIC2 XML reader.
 //!
 //! One `<character>` per kanji. Kept: `<literal>`, every `<reading>` whose
-//! `r_type` is `ja_on` or `ja_kun`, and every `<meaning>` with no `m_lang`
-//! attribute (English), capped at [`MAX_MEANINGS`]. Read and discarded:
-//! `<nanori>`, every other `r_type` (pinyin, korean, vietnam), every other
-//! language, and `<misc>`'s grade, stroke count, frequency and JLPT fields —
-//! one line each to keep, the day a layer wants them (Phase 3a design §1).
+//! `r_type` is `ja_on` or `ja_kun`, every `<meaning>` with no `m_lang`
+//! attribute (English), capped at [`MAX_MEANINGS`], and four `<misc>`
+//! numbers -- `<grade>`, the first `<stroke_count>`, `<freq>` and `<jlpt>`
+//! (Phase 3b). Read and discarded: `<nanori>`, every other `r_type` (pinyin,
+//! korean, vietnam), every other language, later `<stroke_count>`s (the DTD
+//! calls them common miscounts), and `<misc>`'s `<variant>` and `<rad_name>`.
 //!
 //! KANJIDIC2 declares no entities in its DTD (checked against the 2026-09-11
 //! file: zero `<!ENTITY` lines), so the entity spike `jmdict.rs` records does
@@ -64,6 +65,10 @@ enum Field {
     On,
     Kun,
     Meaning,
+    Grade,
+    Strokes,
+    Freq,
+    Jlpt,
 }
 
 /// `r_type="ja_on"` or `"ja_kun"` selects a field; every other reading —
@@ -87,6 +92,97 @@ fn meaning_field(e: &BytesStart) -> Field {
     }
 }
 
+/// Which field a leaf element inside `<character>` feeds, or `None`.
+fn leaf_field(e: &BytesStart) -> Field {
+    match e.local_name().as_ref() {
+        b"literal" => Field::Literal,
+        b"reading" => reading_field(e),
+        b"meaning" => meaning_field(e),
+        b"grade" => Field::Grade,
+        b"stroke_count" => Field::Strokes,
+        b"freq" => Field::Freq,
+        b"jlpt" => Field::Jlpt,
+        _ => Field::None,
+    }
+}
+
+/// The character being read, before its `</character>`.
+#[derive(Default)]
+struct Pending {
+    literal: String,
+    on: Vec<String>,
+    kun: Vec<String>,
+    meanings: Vec<String>,
+    grade: Option<u8>,
+    strokes: Option<u8>,
+    freq: Option<u16>,
+    jlpt: Option<u8>,
+    /// Set when a `<misc>` number failed to parse. The character is then
+    /// skipped and counted at `</character>`, as one with a bad `<literal>`
+    /// is -- the build's one skip path, already surfaced (design §3.1).
+    bad: bool,
+}
+
+impl Pending {
+    /// Stores one closed leaf's trimmed text.
+    fn take(&mut self, field: Field, value: String) {
+        match field {
+            Field::Literal => self.literal = value,
+            Field::On => self.on.push(value),
+            Field::Kun => self.kun.push(value),
+            Field::Meaning => {
+                if self.meanings.len() < MAX_MEANINGS {
+                    self.meanings.push(value);
+                }
+            }
+            Field::Grade => self.grade = self.number(&value),
+            // The first count is the accepted one; later ones are common
+            // miscounts (KANJIDIC2 DTD) and are dropped.
+            Field::Strokes => {
+                if self.strokes.is_none() {
+                    self.strokes = self.number(&value);
+                }
+            }
+            Field::Freq => self.freq = self.number(&value),
+            Field::Jlpt => self.jlpt = self.number(&value),
+            Field::None => {}
+        }
+    }
+
+    /// `text` as a `T`, or `None` with the character marked bad. A value
+    /// that parses but does not fit the type (a grade of 300) is the same
+    /// case as one that does not parse at all.
+    fn number<T: std::str::FromStr>(&mut self, text: &str) -> Option<T> {
+        let parsed = text.parse().ok();
+        if parsed.is_none() {
+            self.bad = true;
+        }
+        parsed
+    }
+
+    /// The finished record, or `None` for a character to skip: a literal
+    /// that is not exactly one character, or a malformed `<misc>` number.
+    fn finish(self) -> Option<KanjiData> {
+        if self.bad {
+            return None;
+        }
+        let mut chars = self.literal.chars();
+        match (chars.next(), chars.next()) {
+            (Some(literal), None) => Some(KanjiData {
+                literal,
+                on: self.on,
+                kun: self.kun,
+                meanings: self.meanings,
+                grade: self.grade,
+                strokes: self.strokes,
+                freq: self.freq,
+                jlpt: self.jlpt,
+            }),
+            _ => None,
+        }
+    }
+}
+
 impl<R: BufRead> Iterator for KanjidicReader<R> {
     type Item = Result<KanjiData, KanjidicError>;
 
@@ -96,10 +192,7 @@ impl<R: BufRead> Iterator for KanjidicReader<R> {
         }
 
         let mut in_character = false;
-        let mut literal = String::new();
-        let mut on: Vec<String> = Vec::new();
-        let mut kun: Vec<String> = Vec::new();
-        let mut meanings: Vec<String> = Vec::new();
+        let mut pending = Pending::default();
         let mut field = Field::None;
         let mut text = String::new();
 
@@ -134,12 +227,7 @@ impl<R: BufRead> Iterator for KanjidicReader<R> {
                         }
                         continue;
                     }
-                    field = match e.local_name().as_ref() {
-                        b"literal" => Field::Literal,
-                        b"reading" => reading_field(&e),
-                        b"meaning" => meaning_field(&e),
-                        _ => Field::None,
-                    };
+                    field = leaf_field(&e);
                     text.clear();
                 }
                 Event::Text(t) => {
@@ -157,44 +245,15 @@ impl<R: BufRead> Iterator for KanjidicReader<R> {
                     if !in_character {
                         continue;
                     }
-                    let value = text.trim().to_string();
-                    match field {
-                        Field::Literal => literal = value,
-                        Field::On => on.push(value),
-                        Field::Kun => kun.push(value),
-                        Field::Meaning => {
-                            if meanings.len() < MAX_MEANINGS {
-                                meanings.push(value);
-                            }
-                        }
-                        Field::None => {}
-                    }
+                    pending.take(field, text.trim().to_string());
                     field = Field::None;
                     text.clear();
 
                     if e.local_name().as_ref() == b"character" {
                         in_character = false;
-                        let mut chars = literal.chars();
-                        match (chars.next(), chars.next()) {
-                            (Some(ch), None) => {
-                                return Some(Ok(KanjiData {
-                                    literal: ch,
-                                    on: std::mem::take(&mut on),
-                                    kun: std::mem::take(&mut kun),
-                                    meanings: std::mem::take(&mut meanings),
-                                    grade: None,
-                                    strokes: None,
-                                    freq: None,
-                                    jlpt: None,
-                                }));
-                            }
-                            _ => {
-                                self.skipped += 1;
-                                literal.clear();
-                                on.clear();
-                                kun.clear();
-                                meanings.clear();
-                            }
+                        match std::mem::take(&mut pending).finish() {
+                            Some(record) => return Some(Ok(record)),
+                            None => self.skipped += 1,
                         }
                     }
                 }
@@ -262,6 +321,60 @@ mod tests {
     #[test]
     fn keeps_english_meanings_only() {
         assert_eq!(find('東').meanings, vec!["east"]);
+    }
+
+    // Phase 3b: the four `<misc>` numbers. 東's block is the file's real one.
+    #[test]
+    fn reads_the_four_misc_fields() {
+        let k = find('東');
+        assert_eq!(
+            (k.grade, k.strokes, k.freq, k.jlpt),
+            (Some(2), Some(8), Some(37), Some(4))
+        );
+    }
+
+    #[test]
+    fn a_character_without_misc_has_none_in_every_field() {
+        let k = find('京');
+        assert_eq!(
+            (k.grade, k.strokes, k.freq, k.jlpt),
+            (None, None, None, None)
+        );
+    }
+
+    /// KANJIDIC2's DTD: the first count is the accepted one, later ones are
+    /// common miscounts. 都's real block lists 11 then 10.
+    #[test]
+    fn the_first_stroke_count_is_the_accepted_one() {
+        assert_eq!(find('都').strokes, Some(11));
+        assert_eq!(find('都').grade, Some(3));
+    }
+
+    #[test]
+    fn a_partial_misc_block_leaves_the_rest_none() {
+        let k = find('食');
+        assert_eq!(
+            (k.grade, k.strokes, k.freq, k.jlpt),
+            (Some(2), Some(9), None, None)
+        );
+    }
+
+    /// A number that does not parse into its field's type takes the same
+    /// path a two-character `<literal>` does: the character is skipped and
+    /// counted, never a build error and never a silent `None` (design §3.1).
+    #[test]
+    fn a_malformed_misc_number_skips_the_character_and_counts_it() {
+        let xml = "<kanjidic2>\
+            <character><literal>一</literal><misc><freq>abc</freq></misc></character>\
+            <character><literal>二</literal><misc><grade>300</grade></misc></character>\
+            <character><literal>本</literal><misc><grade>1</grade></misc></character>\
+            </kanjidic2>";
+        let mut reader = parse_characters(std::io::Cursor::new(xml));
+        let ok: Vec<_> = reader.by_ref().filter_map(Result::ok).collect();
+        assert_eq!(ok.len(), 1, "the good character must still be returned");
+        assert_eq!(ok[0].literal, '本');
+        assert_eq!(ok[0].grade, Some(1));
+        assert_eq!(reader.skipped_count(), 2);
     }
 
     #[test]
