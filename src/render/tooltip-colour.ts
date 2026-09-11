@@ -36,7 +36,7 @@ const LENTICULAR_CLOSE = '】';
  * them in, plus the iteration mark (see above). Deliberately broader than
  * the handful of ranges any single test happens to exercise.
  */
-function isIdeograph(ch: string): boolean {
+export function isIdeograph(ch: string): boolean {
   if (ch === ITERATION_MARK) return true;
   const cp = ch.codePointAt(0);
   if (cp === undefined) return false;

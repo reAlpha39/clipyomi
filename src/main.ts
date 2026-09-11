@@ -21,7 +21,17 @@ import { clampFont, fontVars } from './font-sizes';
 import { clampAlpha, surfaceAlphaVar } from './surface-alpha';
 import { createHistory } from './history';
 import { closeContextMenu, openContextMenu, type MenuEntry } from './context-menu';
-import type { ChromeMode, FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
+import { createKanjiLookup } from './kanji-lookup';
+import type {
+  ChromeMode,
+  Entry,
+  FuriganaMode,
+  GlossFilters,
+  KanjiInfo,
+  ParseResult,
+  Segment,
+  Settings,
+} from './types';
 import './styles/global.css';
 
 /**
@@ -216,7 +226,7 @@ function renderDictionary(status: string | null): void {
   const message = document.createElement('p');
   message.textContent =
     status === null
-      ? 'No dictionary yet. JMdict is a one-time download of roughly ten megabytes from EDRDG.'
+      ? 'No dictionary yet. JMdict and KANJIDIC2 are a one-time download of roughly twelve megabytes from EDRDG.'
       : status;
 
   const button = document.createElement('button');
@@ -267,7 +277,11 @@ const currentFilters: GlossFilters = {
   hide_pos: false,
   hide_xrefs: false,
   hide_usage: false,
+  hide_kanji: false,
 };
+
+/** The popover's kanji block, asked once per character for the page's life. */
+const lookupKanji = createKanjiLookup((chars) => invoke('kanji_info', { chars }));
 
 const settingsToggle = app.querySelector<HTMLButtonElement>('#settings-toggle');
 const windowMinimize = app.querySelector<HTMLButtonElement>('#window-minimize');
@@ -648,6 +662,9 @@ async function applySettings(): Promise<void> {
   if (settings.hide_usage !== undefined) {
     currentFilters.hide_usage = settings.hide_usage;
   }
+  if (settings.hide_kanji !== undefined) {
+    currentFilters.hide_kanji = settings.hide_kanji;
+  }
   applyFontSizes(settings);
   // Unconditional: a settings file with no `chrome_mode` never reaches
   // `applyChromeMode`, and the token still has to be written.
@@ -664,6 +681,7 @@ void listen<Partial<Settings>>('settings-changed', (e) => {
   if (settings.hide_pos !== undefined) currentFilters.hide_pos = settings.hide_pos;
   if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;
   if (settings.hide_usage !== undefined) currentFilters.hide_usage = settings.hide_usage;
+  if (settings.hide_kanji !== undefined) currentFilters.hide_kanji = settings.hide_kanji;
   // `applyFontSizes` reads an absent size as "clear it", which is right for a
   // full snapshot — the user emptied that box — and wrong for a partial
   // payload. `{ chrome_mode }` from the right-click menu and
@@ -926,12 +944,21 @@ function startKeepPoll(): void {
   }, KEEP_POLL_MS);
 }
 
+/** What `popover-content` carries. `kanji` is present only when there is a block to show. */
+interface PopoverPayload {
+  entries: Entry[];
+  filters: GlossFilters;
+  gloss?: number;
+  kanji?: KanjiInfo[];
+}
+
 /** Ask the popup to render CHIP's entries, if the last parse still knows that span. */
 function openFor(chip: HTMLElement): void {
-  const entries = segmentAt(chip.dataset.start)?.entries;
+  const segment = segmentAt(chip.dataset.start);
+  const entries = segment?.entries;
   // No entries means a stale chip from a superseded parse, or an unmatched
   // run — neither is an error worth surfacing.
-  if (entries === undefined || entries.length === 0) return;
+  if (segment === undefined || entries === undefined || entries.length === 0) return;
   // Bumped here, not only in `closePopover`: focus moving straight from chip
   // A to chip B (no `closePopover` in between — see the `focusin` listener
   // below) must still invalidate a `placeFor` already in flight for A, or
@@ -943,16 +970,33 @@ function openFor(chip: HTMLElement): void {
   // an earlier hover that never opened anything.
   keepArmed = false;
   pendingChip = chip;
-  // Fire-and-forget: a failed emit just leaves the tooltip unshown, no worse
-  // than the user never having hovered at all.
-  // The size rides along with the content because the popover is a second
-  // webview with its own `:root`, and it must be applied before that render:
-  // the window sizes itself off what the render measures.
-  const payload =
-    currentGloss === null
-      ? { entries, filters: currentFilters }
-      : { entries, filters: currentFilters, gloss: currentGloss };
-  void emit('popover-content', payload).catch(() => {});
+  // Captured before the one await below and re-checked after it, exactly as
+  // `placeFor` does: a dismissal, or the next chip's own open, that lands
+  // while the kanji lookup is in flight must not emit content for a popover
+  // nothing will place.
+  const generation = openId;
+  // The kanji of the SURFACE, not the headword (design §1.1): a PRONOUNCE
+  // match shows the reader kana, and a block for 履 would explain a
+  // character they are not looking at. Under `hide_kanji` there is nothing
+  // to ask for, so no round trip is paid.
+  const kanji = currentFilters.hide_kanji
+    ? Promise.resolve<KanjiInfo[]>([])
+    : lookupKanji(segment.surface);
+  void kanji
+    .then((records) => {
+      if (openId !== generation) return;
+      // Fire-and-forget: a failed emit just leaves the tooltip unshown, no
+      // worse than the user never having hovered at all.
+      // The size rides along with the content because the popover is a second
+      // webview with its own `:root`, and it must be applied before that
+      // render: the window sizes itself off what the render measures. The
+      // kanji ride along for the same reason — one render, one measurement.
+      const payload: PopoverPayload = { entries, filters: currentFilters };
+      if (currentGloss !== null) payload.gloss = currentGloss;
+      if (records.length > 0) payload.kanji = records;
+      return emit('popover-content', payload);
+    })
+    .catch(() => {});
 }
 
 /**
