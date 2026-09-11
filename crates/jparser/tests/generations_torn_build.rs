@@ -13,7 +13,9 @@ use std::path::{Path, PathBuf};
 use jparser::engine::build::build_from_reader;
 use jparser::index::generations::{build_new, latest, BUILD_PREFIX};
 use jparser::index::load::Index;
-use jparser::index::{ENTRIES_FILE, ENTRIES_INDEX_FILE, FST_FILE, HEADER_FILE, RECORDS_FILE};
+use jparser::index::{
+    ENTRIES_FILE, ENTRIES_INDEX_FILE, FST_FILE, HEADER_FILE, KANJI_FILE, RECORDS_FILE,
+};
 
 /// One dictionary.
 const XML_A: &str = concat!(
@@ -41,12 +43,16 @@ const XML_B: &str = concat!(
     "</JMdict>",
 );
 
-const FILES: [&str; 5] = [
+const FILES: [&str; 6] = [
     FST_FILE,
     RECORDS_FILE,
     ENTRIES_FILE,
     ENTRIES_INDEX_FILE,
     HEADER_FILE,
+    // Copied into every orphan so state 10's "whole, undamaged build" is
+    // actually whole under the six-file format (Phase 3a); never selected by
+    // `damage` itself, since `state / 2` for state 0..9 only reaches index 4.
+    KANJI_FILE,
 ];
 
 fn scratch(name: &str) -> PathBuf {

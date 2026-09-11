@@ -272,10 +272,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("skipped entries:     {}", report.skipped_entries);
             println!("keys:                {}", report.keys);
             println!("records:             {}", report.records);
+            println!("kanji:               {}", report.kanji);
+            println!("skipped kanji:       {}", report.skipped_kanji);
             if report.skipped_entries > 0 {
                 eprintln!(
                     "warning: {} malformed entries were skipped",
                     report.skipped_entries
+                );
+            }
+            if report.skipped_kanji > 0 {
+                eprintln!(
+                    "warning: {} malformed KANJIDIC2 characters were skipped",
+                    report.skipped_kanji
                 );
             }
         }

@@ -9,8 +9,8 @@ use fst::raw::Fst;
 use memmap2::Mmap;
 
 use crate::index::{
-    EntryData, IndexError, IndexHeader, StoredRecord, ENTRIES_FILE, ENTRIES_INDEX_FILE, FST_FILE,
-    HEADER_FILE, INDEX_FORMAT_VERSION, LEN_PREFIX_BYTES, RECORDS_FILE,
+    EntryData, IndexError, IndexHeader, KanjiData, StoredRecord, ENTRIES_FILE, ENTRIES_INDEX_FILE,
+    FST_FILE, HEADER_FILE, INDEX_FORMAT_VERSION, KANJI_FILE, LEN_PREFIX_BYTES, RECORDS_FILE,
 };
 
 /// One dictionary key that is a prefix of the queried text.
@@ -26,6 +26,10 @@ pub struct Index {
     records: Mmap,
     entries: Mmap,
     entry_offsets: Vec<(u32, u64)>,
+    /// Every KANJIDIC2 record, sorted by codepoint. Resident, not mapped:
+    /// 13k small records earn neither an mmap nor an FST, and a whole-file
+    /// read keeps `open`'s failure modes the ones it has.
+    kanji: Vec<KanjiData>,
     header: IndexHeader,
 }
 
@@ -58,7 +62,7 @@ fn map(path: &Path) -> Result<Mmap, IndexError> {
     // with readers taking the highest `gen-N` — and NOT a swap onto a live
     // path. Renaming over `dir`, flipping a symlink, and updating a `CURRENT`
     // pointer all look atomic and are all insufficient, because `Index::open`
-    // is not atomic: it reads five files in sequence, so a reader that starts
+    // is not atomic: it reads six files in sequence, so a reader that starts
     // mid-swap can splice one generation's `entries.idx` onto another's
     // `entries.bin` and then return well-formed wrong answers with no error.
     // A `gen-N` directory's contents never change after creation, so an open
@@ -115,11 +119,13 @@ impl Index {
         }
         let entry_offsets: Vec<(u32, u64)> =
             bincode::deserialize(&std::fs::read(dir.join(ENTRIES_INDEX_FILE))?)?;
+        let kanji: Vec<KanjiData> = bincode::deserialize(&std::fs::read(dir.join(KANJI_FILE))?)?;
         Ok(Self {
             fst: Fst::new(map(&dir.join(FST_FILE))?)?,
             records: map(&dir.join(RECORDS_FILE))?,
             entries: map(&dir.join(ENTRIES_FILE))?,
             entry_offsets,
+            kanji,
             header,
         })
     }
@@ -208,6 +214,21 @@ impl Index {
     /// resident after `open`, so this touches no mmap page.
     pub fn entry_count(&self) -> usize {
         self.entry_offsets.len()
+    }
+
+    /// The KANJIDIC2 record for `ch`, or `None`: every non-kanji character,
+    /// every character KANJIDIC2 does not carry, and every character of an
+    /// index built through `build_from_reader`, which supplies no KANJIDIC2.
+    pub fn kanji(&self, ch: char) -> Option<&KanjiData> {
+        self.kanji
+            .binary_search_by_key(&ch, |k| k.literal)
+            .ok()
+            .map(|i| &self.kanji[i])
+    }
+
+    /// Number of KANJIDIC2 records. Cheap: resident after `open`.
+    pub fn kanji_count(&self) -> usize {
+        self.kanji.len()
     }
 }
 
