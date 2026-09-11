@@ -1168,6 +1168,19 @@ clipboard ceiling, did not finish in ten minutes. It now walks the key FST
 once per start position, with the walk's own dead end bounding the span. See
 the Phase 2c handoff for the before-and-after timings.
 
+### Phase 3a — The KANJIDIC layer — **COMPLETE**
+
+One block at the foot of the popover, one line per distinct kanji in the
+hovered surface: on and kun readings and up to four English meanings from
+KANJIDIC2. Provisioned through the dictionary build (a sixth index file,
+format 4 → 5, so existing installs rebuild once), fetched beside JMdict by
+the same source crate, and reached lazily on hover through one command and a
+page-lifetime cache, so the parse payload did not grow. `hide_kanji` joins
+the gloss filters; the settings window gains the app's first persistent
+attribution. Design: `specs/2026-09-09-engine-v2-phase3a-design.md`; record:
+`2026-09-11-engine-v2-phase3a-handoff.md`. The engine was not touched, and
+§5.2's baseline block is unchanged to the cell.
+
 ### Phase 3 — Extra linguistic layers
 
 Independent of segmentation entirely. Each layer is its own increment with its
@@ -1177,7 +1190,7 @@ own licensing gate, adopted only if its data source is permissive:
 | --- | --- | --- |
 | Frequency rank | corpus-derived | **Moot** — the layer is ruled out on measurement, so no licence needs establishing |
 | JLPT level | community lists | Unofficial, provenance varies |
-| Kanji readings | KANJIDIC (EDRDG) | CC BY-SA, same family as JMdict |
+| Kanji readings | KANJIDIC2 (EDRDG) | **Shipped, Phase 3a (2026-09-11).** CC BY-SA 4.0, same publisher and licence as JMdict; attribution in the settings footer |
 | Pitch accent | — | **Highest risk.** NHK's dictionary is not free, and community accent datasets have murky provenance — precisely the trap this plan exists to escape |
 
 No layer ships without its licence established in writing first.
