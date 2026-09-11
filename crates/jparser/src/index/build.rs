@@ -10,13 +10,13 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use crate::index::{
-    EntryData, IndexError, IndexHeader, StoredRecord, ENTRIES_FILE, ENTRIES_INDEX_FILE, FST_FILE,
-    HEADER_FILE, INDEX_FORMAT_VERSION, LEN_PREFIX_BYTES, RECORDS_FILE,
+    EntryData, IndexError, IndexHeader, KanjiData, StoredRecord, ENTRIES_FILE, ENTRIES_INDEX_FILE,
+    FST_FILE, HEADER_FILE, INDEX_FORMAT_VERSION, KANJI_FILE, LEN_PREFIX_BYTES, RECORDS_FILE,
 };
 
-/// Writes the five index files from an already-assembled payload: the FST plus
+/// Writes the six index files from an already-assembled payload: the FST plus
 /// the two length-prefixed bincode blobs (records, entries), the entry offset
-/// table, and the header.
+/// table, the KANJIDIC2 blob, and the header.
 ///
 /// The format's one writer. `fingerprint` is a parameter rather than a
 /// constant read inside this function: the caller supplies the table
@@ -25,6 +25,7 @@ pub(crate) fn write_index(
     by_key: BTreeMap<String, Vec<StoredRecord>>,
     entries: Vec<EntryData>,
     record_count: usize,
+    mut kanji: Vec<KanjiData>,
     fingerprint: u64,
     out_dir: &Path,
 ) -> Result<(), IndexError> {
@@ -60,6 +61,13 @@ pub(crate) fn write_index(
         out_dir.join(ENTRIES_INDEX_FILE),
         bincode::serialize(&entry_offsets)?,
     )?;
+
+    // Sorted here, in the format's one writer, because the loader binary
+    // searches by codepoint; a duplicate literal would make that search
+    // ambiguous, so the later one is dropped.
+    kanji.sort_by_key(|k| k.literal);
+    kanji.dedup_by_key(|k| k.literal);
+    std::fs::write(out_dir.join(KANJI_FILE), bincode::serialize(&kanji)?)?;
 
     let header = IndexHeader {
         version: INDEX_FORMAT_VERSION,

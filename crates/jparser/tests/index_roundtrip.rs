@@ -2,13 +2,14 @@
 
 use std::path::{Path, PathBuf};
 
-use jparser::engine::build::build_from_reader;
+use jparser::engine::build::{build_from_reader, build_from_readers};
 use jparser::engine::kana::fold;
 use jparser::index::load::Index;
-use jparser::index::{BuildReport, INDEX_FORMAT_VERSION};
+use jparser::index::{BuildReport, IndexError, INDEX_FORMAT_VERSION};
 use jparser::WordFlags;
 
 const FIXTURE: &str = include_str!("fixtures/jmdict_mini.xml");
+const KANJIDIC_FIXTURE: &str = include_str!("fixtures/kanjidic_mini.xml");
 
 fn tmpdir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
@@ -19,6 +20,16 @@ fn tmpdir(name: &str) -> PathBuf {
 
 fn build(dir: &Path) -> BuildReport {
     build_from_reader(std::io::Cursor::new(FIXTURE), dir).expect("build must succeed")
+}
+
+/// The two-reader build: JMdict plus the four-character KANJIDIC2 fixture.
+fn build_with_kanji(dir: &Path) -> BuildReport {
+    build_from_readers(
+        std::io::Cursor::new(FIXTURE),
+        std::io::Cursor::new(KANJIDIC_FIXTURE),
+        dir,
+    )
+    .expect("build must succeed")
 }
 
 #[test]
@@ -40,6 +51,7 @@ fn writes_all_expected_files() {
         "records.bin",
         "entries.bin",
         "entries.idx",
+        "kanji.bin",
     ] {
         assert!(dir.join(name).exists(), "{name} must be written");
     }
@@ -335,4 +347,97 @@ fn records_after_does_not_move_the_walk_it_was_called_on() {
     assert!(walk.push('う', fold));
     let records = walk.records().expect("records").expect("言う ends here");
     assert!(records.iter().any(|r| r.surface == "言う"));
+}
+
+/// Phase 3a: the sixth file. Records are sorted by codepoint on write and
+/// binary-searched on read; the fixture's document order is 東 京 都 食,
+/// which is not codepoint order, so a writer that forgot to sort would miss.
+#[test]
+fn a_kanjidic_record_round_trips() {
+    let dir = tmpdir("kanji-hit");
+    let report = build_with_kanji(&dir);
+    assert_eq!(report.kanji, 4);
+    assert_eq!(report.skipped_kanji, 0);
+
+    let index = Index::open(&dir).unwrap();
+    assert_eq!(index.kanji_count(), 4);
+    for literal in ['東', '京', '都', '食'] {
+        assert!(index.kanji(literal).is_some(), "{literal} must be found");
+    }
+    let east = index.kanji('東').expect("東");
+    assert_eq!(east.on, vec!["トウ"]);
+    assert_eq!(east.kun, vec!["ひがし"]);
+    assert_eq!(east.meanings, vec!["east"]);
+}
+
+#[test]
+fn a_character_without_a_record_misses() {
+    let dir = tmpdir("kanji-miss");
+    build_with_kanji(&dir);
+    let index = Index::open(&dir).unwrap();
+    assert!(index.kanji('あ').is_none(), "kana have no record");
+    // A JMdict headword character that the KANJIDIC2 fixture does not carry.
+    assert!(index.kanji('本').is_none());
+}
+
+/// `build_from_reader` keeps its signature and supplies no KANJIDIC2, so
+/// every pre-existing fixture and probe builds a valid index whose kanji
+/// lookups all miss — never an error.
+#[test]
+fn an_index_built_without_kanjidic_opens_and_misses() {
+    let dir = tmpdir("kanji-none");
+    let report = build(&dir);
+    assert_eq!(report.kanji, 0);
+    assert!(
+        dir.join("kanji.bin").exists(),
+        "the file is written even when empty"
+    );
+
+    let index = Index::open(&dir).unwrap();
+    assert_eq!(index.kanji_count(), 0);
+    assert!(index.kanji('東').is_none());
+}
+
+/// The upgrade path. An installed v4 index has a 24-byte header — four `u32`
+/// counts and the `u64` fingerprint — and `ensure_dictionary` rebuilds on
+/// exactly `VersionMismatch`. That only works if a v5 loader can still
+/// *decode* a v4 header far enough to read its version, which is why
+/// `IndexHeader` did not gain a field for this format (plan §Global
+/// Constraints): a sixth field would turn this into an `Encoding` error
+/// before the version is ever compared, and the app would report a failure
+/// a download cannot fix instead of rebuilding.
+#[test]
+fn a_v4_header_is_refused_with_a_version_mismatch() {
+    let dir = tmpdir("kanji-v4-header");
+    build(&dir);
+    let index = Index::open(&dir).unwrap();
+    let fingerprint = index.header().conjugation_fingerprint;
+    drop(index);
+
+    // The v4 layout, byte for byte: version, keys, records, entries, fingerprint.
+    let v4 = bincode::serialize(&(4u32, 3u32, 3u32, 3u32, fingerprint)).unwrap();
+    assert_eq!(v4.len(), 24);
+    std::fs::write(dir.join("header.bin"), v4).unwrap();
+
+    match Index::open(&dir).unwrap_err() {
+        IndexError::VersionMismatch { found, expected } => {
+            assert_eq!(found, 4);
+            assert_eq!(expected, INDEX_FORMAT_VERSION);
+        }
+        other => panic!("a v4 header must be a version mismatch, got {other:?}"),
+    }
+}
+
+/// A build whose KANJIDIC2 is unreadable fails the build, the way a bad
+/// JMdict does — knowingly, over a silent-degrade path (design §4).
+#[test]
+fn a_malformed_kanjidic_fails_the_build() {
+    let dir = tmpdir("kanji-malformed");
+    let err = build_from_readers(
+        std::io::Cursor::new(FIXTURE),
+        std::io::Cursor::new("<kanjidic2><character><literal>本"),
+        &dir,
+    )
+    .unwrap_err();
+    assert!(matches!(err, IndexError::Kanjidic(_)), "got {err:?}");
 }

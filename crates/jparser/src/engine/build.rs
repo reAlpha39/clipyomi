@@ -4,9 +4,9 @@
 // JParser. See docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md
 // §3.5 for the clean-room discipline this file was written under.
 
-//! Builds the index from JMdict XML: one `StoredRecord` per
-//! [`crate::engine::flags::Headword`], keyed by the folded surface, and no
-//! generated stems — deinflection is a parse-time walk of
+//! Builds the index from JMdict XML and KANJIDIC2 XML: one `StoredRecord`
+//! per [`crate::engine::flags::Headword`], keyed by the folded surface, and
+//! no generated stems — deinflection is a parse-time walk of
 //! [`crate::engine::table::Table`]. [`fingerprint`] stamps the header so
 //! `Index::open` refuses an index built against a different table.
 
@@ -18,8 +18,9 @@ use crate::engine::flags::headwords;
 use crate::engine::kana::fold_str;
 use crate::engine::table::CLASSES;
 use crate::index::build::write_index;
-use crate::index::{BuildReport, EntryData, IndexError, SenseData, StoredRecord};
+use crate::index::{BuildReport, EntryData, IndexError, KanjiData, SenseData, StoredRecord};
 use crate::jmdict::parse_entries;
+use crate::kanjidic::parse_characters;
 
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -56,8 +57,20 @@ pub fn fingerprint() -> u64 {
     hash
 }
 
-/// Builds an index from `xml` into `out_dir`.
+/// Builds an index from JMdict `xml` alone: [`build_from_readers`] with an
+/// empty KANJIDIC2 reader, so `Index::kanji` answers `None` for every
+/// character. Kept with this signature so every fixture, test, example and
+/// probe that predates the kanji layer builds unchanged (Phase 3a design §3.2).
 pub fn build_from_reader<R: BufRead>(xml: R, out_dir: &Path) -> Result<BuildReport, IndexError> {
+    build_from_readers(xml, std::io::empty(), out_dir)
+}
+
+/// Builds an index from JMdict `xml` and KANJIDIC2 `kanjidic` into `out_dir`.
+pub fn build_from_readers<J: BufRead, K: BufRead>(
+    xml: J,
+    kanjidic: K,
+    out_dir: &Path,
+) -> Result<BuildReport, IndexError> {
     std::fs::create_dir_all(out_dir)?;
 
     // BTreeMap gives the lexicographic key order fst::MapBuilder requires.
@@ -109,15 +122,24 @@ pub fn build_from_reader<R: BufRead>(xml: R, out_dir: &Path) -> Result<BuildRepo
     }
     let skipped_entries = reader.skipped_count();
 
+    // Read after JMdict, not interleaved: the two files are independent and
+    // a failure in either fails the build the same way.
+    let mut kanji_reader = parse_characters(kanjidic);
+    let kanji: Vec<KanjiData> = kanji_reader.by_ref().collect::<Result<_, _>>()?;
+    let skipped_kanji = kanji_reader.skipped_count();
+    let kanji_count = kanji.len();
+
     let keys = by_key.len();
     let entry_count = entries.len();
-    write_index(by_key, entries, record_count, fingerprint(), out_dir)?;
+    write_index(by_key, entries, record_count, kanji, fingerprint(), out_dir)?;
 
     Ok(BuildReport {
         keys,
         records: record_count,
         entries: entry_count,
+        kanji: kanji_count,
         skipped_entries,
+        skipped_kanji,
     })
 }
 

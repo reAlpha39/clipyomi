@@ -22,13 +22,18 @@ use crate::index::load::Index;
 /// loader must never try to read an index it does not recognize.
 ///
 /// 4 (Phase 1b-ii): `StoredRecord` lost `verb_type`.
-pub const INDEX_FORMAT_VERSION: u32 = 4;
+/// 5 (Phase 3a): a sixth file, `kanji.bin`. `IndexHeader`'s own layout is
+/// unchanged, and must stay so unless `open_with` learns to read the version
+/// before decoding the rest — see `a_v4_header_is_refused_with_a_version_mismatch`.
+pub const INDEX_FORMAT_VERSION: u32 = 5;
 
 pub const HEADER_FILE: &str = "header.bin";
 pub const FST_FILE: &str = "keys.fst";
 pub const RECORDS_FILE: &str = "records.bin";
 pub const ENTRIES_FILE: &str = "entries.bin";
 pub const ENTRIES_INDEX_FILE: &str = "entries.idx";
+/// A bincode `Vec<KanjiData>` sorted by codepoint, read whole on open.
+pub const KANJI_FILE: &str = "kanji.bin";
 
 /// Byte width of the little-endian length prefix `build` writes ahead of
 /// each bincode blob in `records.bin`/`entries.bin`, and `load` reads back.
@@ -105,8 +110,12 @@ pub struct BuildReport {
     pub keys: usize,
     pub records: usize,
     pub entries: usize,
+    /// KANJIDIC2 characters stored. Zero for a `build_from_reader` build.
+    pub kanji: usize,
     /// Malformed JMdict entries skipped. Surfaced, never silently dropped.
     pub skipped_entries: usize,
+    /// KANJIDIC2 characters skipped for a literal that was not one character.
+    pub skipped_kanji: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
