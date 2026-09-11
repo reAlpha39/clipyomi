@@ -45,6 +45,17 @@ export interface KanjiInfo {
   kun: string[];
   /** English meanings, at most four. */
   meanings: string[];
+  // KANJIDIC2's `<misc>` numbers (Phase 3b). The backend always sends each
+  // as a number or `null`; they are optional here so a payload from an older
+  // main webview, and the test suites' shorter literals, stay valid.
+  /** School grade code: 1–6 the year taught, 8 remaining jōyō (secondary school), 9–10 name kanji. */
+  grade?: number | null;
+  /** The accepted stroke count. */
+  strokes?: number | null;
+  /** Newspaper frequency rank, 1–2,501. */
+  freq?: number | null;
+  /** Level in the former four-level JLPT, 1 (advanced) to 4 (elementary). */
+  jlpt?: number | null;
 }
 
 export interface Segment {

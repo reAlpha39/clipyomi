@@ -12,6 +12,11 @@ export function distinctKanji(surface: string): string[] {
   return [...seen];
 }
 
+/** Absent, `null`, or a number: the three ways an `Option<u8>` reaches this side. */
+function isOptionalNumber(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === 'number';
+}
+
 /** Whether `value` is a `KanjiInfo` as `kanji_info` serialises one. */
 function isKanjiInfo(value: unknown): value is KanjiInfo {
   if (typeof value !== 'object' || value === null) return false;
@@ -20,7 +25,11 @@ function isKanjiInfo(value: unknown): value is KanjiInfo {
     typeof v.literal === 'string' &&
     Array.isArray(v.on) &&
     Array.isArray(v.kun) &&
-    Array.isArray(v.meanings)
+    Array.isArray(v.meanings) &&
+    isOptionalNumber(v.grade) &&
+    isOptionalNumber(v.strokes) &&
+    isOptionalNumber(v.freq) &&
+    isOptionalNumber(v.jlpt)
   );
 }
 
