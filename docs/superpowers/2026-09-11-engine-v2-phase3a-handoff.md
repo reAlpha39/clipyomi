@@ -211,8 +211,13 @@ re-taken after the clean and is unchanged, so its numbers were never affected.
 
 ### Gate 5 — Playwright
 
-`npx playwright test`: **43 passed, 2 failed.** Both failures are
-`toHaveScreenshot` comparisons, and both are in `panes.spec.ts`:
+`npx playwright test`: **45 passed, 0 failed** — the whole suite green on this
+machine, after two baselines this plan itself invalidated were regenerated in
+this branch. The first run of the gate was not green, and the diagnosis is
+worth keeping.
+
+It reported **43 passed, 2 failed.** Both failures were
+`toHaveScreenshot` comparisons, and both were in `panes.spec.ts`:
 
 ```
   2 failed
@@ -243,11 +248,16 @@ the `toHaveScreenshot` call after it. The neighbouring
 `panes-download-downloading-*` screenshots pass, because that screen's copy
 did not change.
 
-The two `-win32` baselines therefore need refreshing, and the two `-darwin`
-ones need refreshing on a macOS machine, which this session could not do. That
-is left open in §5 rather than half-done here: regenerating only the Windows
-pair would leave the platform pair inconsistent, and this task was scoped to
-change no code.
+**The two `-win32` baselines were therefore regenerated in this branch** —
+`panes-download-offer-light-win32.png` and `panes-download-offer-dark-win32.png`,
+by `npx playwright test -g "the download screen's offer renders correctly"
+--update-snapshots` — because the screen they picture is correct and it was the
+pictures that were out of date. Those two files are the whole of that commit.
+A full `npx playwright test` then reported 45 passed and nothing failed.
+
+The two `-darwin` baselines for the same screen are still stale. They were
+captured on macOS and cannot be regenerated here, so they are owed a refresh
+on a Mac; §5 carries it.
 
 ## 3. Where the implementation departs from the design
 
@@ -386,16 +396,20 @@ Carried from design §7:
   surface the app has. If an About surface ever exists, it moves there.
 - **Existing installs pay one rebuild**, now with a second download. The
   design asked that the first-run screen name what it is fetching; `3ccf096`
-  did that, and §4 measured the rebuild at 3.9 seconds. The remaining cost is
-  the two stale screenshot baselines that copy change left behind, below.
+  did that, and §4 measured the rebuild at 3.9 seconds. What that copy change
+  left behind is four stale screenshot baselines; the `-win32` pair is
+  refreshed, the `-darwin` pair is below.
 
 Surfaced by this phase:
 
-- **Two Playwright screenshot baselines are stale** —
-  `panes-download-offer-light` and `panes-download-offer-dark` — because the
-  first-run sentence changed. The `-win32` pair can be regenerated here; the
-  `-darwin` pair needs a macOS machine, so neither was touched. Until both are
-  refreshed `npx playwright test` reports 2 failed locally. Full detail in §2.
+- **The `-darwin` pair of the first-run download-offer baselines is owed a
+  refresh on a Mac.** `panes-download-offer-light-darwin.png` and
+  `panes-download-offer-dark-darwin.png` still picture the old one-file
+  sentence. Their `-win32` counterparts were regenerated in this branch and
+  the suite is green here, so this will not surface on Windows — it will
+  surface the first time the suite runs on macOS, as two screenshot failures
+  with the same one-line diff described in §2, and the fix is to regenerate
+  them there rather than to investigate them.
 - **A JMdict file saved under the KANJIDIC name, with its XML declaration
   intact, passes the prolog sniff** and would build a kanji-less index while
   reporting success. This is the cost of the Task 3 ruling in §3, and it is the
