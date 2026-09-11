@@ -7,10 +7,15 @@
 
 ## 1. What landed
 
-Nine commits stand between the plan (`29131dc`) and this handoff's own commit,
-which cannot name itself. Eight carry the layer; one (`e23dc03`) is a rustfmt
-chore on `examples/derivation_probe.rs`, whose drift predates this plan and was
-cleared early so the `cargo fmt --all --check` gate was real from Task 2 on.
+Seventeen commits stand between the plan (`29131dc`) and this branch's final
+Phase 3a commit — up to and including this one, rather than stopping at the
+first docs commit as this section's original version did. Of those
+seventeen: eight carry the layer and one (`e23dc03`) is a rustfmt chore on
+`examples/derivation_probe.rs`, whose drift predates this plan and was
+cleared early so the `cargo fmt --all --check` gate was real from Task 2 on;
+one is this handoff's own first version (`727f354`); two are the win32
+first-run baseline refresh and the note recording it (`9c24099`, `94af376`);
+and five are the whole-branch review's fix commits, this one among them.
 
 `7cd025d` adds `crates/jparser/src/kanjidic.rs`, a streaming KANJIDIC2 reader
 built on the same `quick-xml` pattern as `jmdict.rs`. It yields `KanjiData
@@ -55,7 +60,8 @@ The first-run message names both files.
 TypeScript key, Rust field, `merge_saved` — and the settings window's
 attribution footer, the app's first persistent attribution surface.
 
-Forty files changed in total, 1,739 insertions against 226 deletions.
+Forty-four files changed in total, up to and including this branch's final
+Phase 3a commit: 2,337 insertions against 240 deletions.
 
 ## 2. The gates
 
@@ -261,7 +267,7 @@ on a Mac; §5 carries it.
 
 ## 3. Where the implementation departs from the design
 
-Six places. Five contradict something the design says; the sixth is a
+Seven places. Six contradict something the design says; the sixth is a
 placement the design left open and the plan pinned.
 
 1. **`IndexHeader`'s layout does not change**, against spec §3's "`IndexHeader`
@@ -298,6 +304,12 @@ placement the design left open and the plan pinned.
    one place. The design names the cap and its test but not its home; putting
    it at the parser keeps the four-meaning rule where the data is first read
    rather than at each consumer.
+7. **`jmdict-source` gains no `src/kanjidic.rs`**, against spec §4's "gains
+   `src/kanjidic.rs`". The `KANJIDIC` descriptor is a six-line `Source`
+   constant in `lib.rs`, beside `JMDICT`: the module `fetch_from`,
+   `resolve_from` and the prolog sniff all generalised over is the crate's
+   existing one, and a second file would hold one `pub const` and nothing
+   else that isn't already shared.
 
 Two further departures were ruled during execution rather than planned:
 
@@ -443,3 +455,10 @@ Deferred minors, each raised and accepted during review:
 - No `main.ts`-level test asserts that `hide_kanji` skips the `kanji_info`
   round trip.
 - `hide_kanji` carries a doc comment its three sibling settings fields lack.
+
+Deferred by the whole-branch review, raised and accepted rather than fixed:
+
+- The torn-build test has no state that damages `kanji.bin`.
+- `flushLookup` is a tick count, not a waited-for property.
+- `src-tauri/src/commands.rs` is 2,719 lines, and the kanji command could
+  move to its own module.
