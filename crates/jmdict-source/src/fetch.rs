@@ -79,7 +79,8 @@ const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120
 /// back to copying.
 ///
 /// **Not part of the supported surface.** It is separate from [`fetch`] so tests
-/// can point it at a local listener; production callers use [`fetch`].
+/// can point it at a local listener; production callers use [`fetch`] or
+/// [`fetch_kanjidic`] (both reach it through [`fetch_with_retry`]).
 pub fn fetch_from(source: &Source, url: &str, source_dir: &Path) -> Result<PathBuf, SourceError> {
     std::fs::create_dir_all(source_dir)?;
     let target = source_dir.join(source.file_name);

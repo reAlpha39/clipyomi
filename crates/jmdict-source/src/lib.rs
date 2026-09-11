@@ -36,7 +36,8 @@ pub const SOURCE_DIR: &str = "source";
 /// one's leftovers, so deleting by pattern would reintroduce exactly the race
 /// the PID exists to prevent. They are inert — never resolved, never verified
 /// — so the cost is disk, not correctness. Users who care can delete
-/// `JMdict_e.gz.partial.*` while no download is running.
+/// `JMdict_e.gz.partial.*` and `kanjidic2.xml.gz.partial.*` while no
+/// download is running.
 pub const PARTIAL_SUFFIX: &str = ".partial";
 
 /// Download attempts before [`fetch::fetch`] gives up.
@@ -144,11 +145,13 @@ pub enum SourceError {
     /// I/O failure is not (retrying will not free disk or fix permissions).
     #[error("the downloaded archive is corrupt: {0}")]
     Corrupt(String),
-    /// The file at the resolved name is neither gzip nor JMdict XML. Only a
-    /// hand-placed file reaches this: a download is gzip-verified before it is
-    /// renamed into place. Separate from [`SourceError::Corrupt`], which says
-    /// "the server sent us something broken, retrying may help" — here nothing
-    /// will change until the file itself does, so the message says so.
+    /// The file at the resolved name is neither gzip nor that source's own
+    /// XML — JMdict for [`JMDICT`], KANJIDIC2 for [`KANJIDIC`] — per the
+    /// `file` this variant carries. Only a hand-placed file reaches this: a
+    /// download is gzip-verified before it is renamed into place. Separate
+    /// from [`SourceError::Corrupt`], which says "the server sent us
+    /// something broken, retrying may help" — here nothing will change
+    /// until the file itself does, so the message says so.
     #[error(
         "{path} is neither a gzip archive nor {file}'s XML — it starts with \"{head}\". \
          Delete it, or replace it with a real {file}",
