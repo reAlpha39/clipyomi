@@ -13,6 +13,11 @@
   /* Furigana, the same grey in both themes: it was a hardcoded fallback in
      `global.css` until the colour settings needed a token to move. */
   --color-furigana: #8e8e93;
+  /* Punctuation and unmatched runs. A token of its own, defaulting to the
+     muted colour, so the colour setting can move it without dragging the
+     window chrome that shares `--color-muted` along. Follows the theme
+     through the reference. */
+  --color-unmatched: var(--color-muted);
   --color-shadow: oklch(0% 0 0 / 0.18);
   /* Window background opacity (§7.5), as a ratio. `main.ts` overrides it on
      the root element; nothing else does, which is what keeps the settings

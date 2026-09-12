@@ -423,7 +423,7 @@ body {
 .chip.kana { color: var(--color-kana); }
 .chip.particle { color: var(--color-particle); }
 .chip.counter { color: var(--color-counter); }
-.unmatched { color: var(--color-muted); }
+.unmatched { color: var(--color-unmatched); }
 
 /* --- Furigana Ruby Typography --- */
 ruby {

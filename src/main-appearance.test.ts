@@ -86,10 +86,11 @@ describe('appearance settings reaching the main window', () => {
   });
 
   test('applies the persisted colours on load', async () => {
-    await load({ colour_kanji: '#112233', colour_furigana: '#445566' });
+    await load({ colour_kanji: '#112233', colour_furigana: '#445566', colour_unmatched: '#778899' });
 
     expect(token('--color-kanji')).toBe('#112233');
     expect(token('--color-furigana')).toBe('#445566');
+    expect(token('--color-unmatched')).toBe('#778899');
     expect(token('--color-kana')).toBe('');
   });
 

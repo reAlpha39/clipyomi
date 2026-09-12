@@ -150,6 +150,9 @@ pub struct Settings {
     pub colour_counter: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub colour_furigana: Option<String>,
+    /// Punctuation and runs the parser matched nothing for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_unmatched: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_family_sentence: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -208,6 +211,7 @@ impl Default for Settings {
             colour_particle: None,
             colour_counter: None,
             colour_furigana: None,
+            colour_unmatched: None,
             font_family_sentence: None,
             font_family_furigana: None,
             font_family_gloss: None,
