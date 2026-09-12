@@ -585,9 +585,11 @@ describe('the tooltip round trip', () => {
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();
 
+    // The chip sits at (100, 128) with happy-dom's zero-size rect; above-first
+    // placement lands at 128 - 2 - 60.
     expect(invoke).toHaveBeenCalledWith('place_popover', {
       x: 100,
-      y: 130,
+      y: 66,
       width: 200,
       height: 60,
     });
@@ -677,11 +679,12 @@ describe('the tooltip round trip', () => {
     await flushPlacement();
 
     // Work area 0..1512 x 25..957 in CSS px; the chip sits at (1000, 150) with
-    // happy-dom's zero-size rect, so below-the-chip placement lands at 152 and
-    // the left edge needs no clamping (1000 < 1512 - 200 - 8).
+    // happy-dom's zero-size rect, so above-the-chip placement lands at
+    // 150 - 2 - 60 = 88, inside the work area, and the left edge needs no
+    // clamping (1000 < 1512 - 200 - 8).
     expect(invoke).toHaveBeenCalledWith('place_popover', {
       x: 1000,
-      y: 152,
+      y: 88,
       width: 200,
       height: 60,
     });
