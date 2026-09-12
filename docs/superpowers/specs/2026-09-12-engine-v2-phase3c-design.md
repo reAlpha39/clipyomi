@@ -51,7 +51,7 @@ in short order be batched, and this phase has none to batch.
 | Where the marks are handled | the popover renderer only | the 3a design §7 called it a popover-text question, not a data one; `kanji.bin`, the wire and the parser's own test stay verbatim |
 | How `-` is removed | trimmed from both ends of each kun reading | in the 2026-09-11 file every one of the 392 hyphenated kun readings carries it at an edge (266 leading, 126 trailing, none interior), so edge-trimming is exact and a blanket replace would only be equivalent by accident |
 | Sniff rule | DOCTYPE name first, root element as fallback | the real archives put `<!DOCTYPE` at byte 1,135 (JMdict) and 39 (KANJIDIC2), inside the reader's 8 KiB peek; their root elements sit at 23 KB and 13 KB, out of reach; a DTD's DOCTYPE name is its root name by definition |
-| When the peek cannot decide | accept | today's behaviour; a legitimate file with a very long leading comment must not start failing because a check that used to pass it grew stricter |
+| When the peek cannot decide | accept when the peek ended the head, reject when the file did | today's behaviour where it matters: a legitimate file with a very long leading comment must not start failing because a check that used to pass it grew stricter. A file the peek read to its end is the other case — nothing more is coming, and a file that simply stops holds no dictionary |
 | Gzip path | sniffed too, on the decompressed head | today it is not sniffed at all, so a renamed archive passes unexamined; the download path opens the archive through the same function |
 | `Source.prologs` | replaced by `root: &'static str` | three byte prefixes were the old rule's shape; the new rule needs one name; the field is read nowhere outside `lib.rs` |
 | Module split | two modules, not one | one file would land near 990 lines with its tests, over the 800-line rule on the day it is created; two land near 420 and 570 |
@@ -113,10 +113,16 @@ file with its declaration intact passes as a KANJIDIC2, and vice versa. And
 4. The next bytes must be `<!DOCTYPE {root}` or `<{root}`, followed by a
    delimiter: whitespace, `>`, `[` or `/`. That is the accept.
 5. If the head runs out inside step 2, 3 or 4 before a decision is reached,
-   **accept**. This is the one place the new rule is exactly as permissive
-   as the old one, and it is deliberate: the check exists to catch the
-   wrong file, not to fail a right one whose leading comment is longer than
-   the reader's buffer.
+   **what ran out decides**. When the *peek* ended the head — the read
+   filled all `PEEK_BYTES` and the file continues past them — **accept**:
+   the check exists to catch the wrong file, not to fail a right one whose
+   leading comment is longer than the reader's buffer, and accepting there
+   is exactly as permissive as the old rule. When the *end of the file*
+   ended the head, **reject**: everything the file holds was read and none
+   of it is this source's root, so a file that simply stops holds no
+   dictionary. A token the peek cut in half counts as the peek ending the
+   head — a half-written `<!DOCTYPE JMdict`, and equally the `<!-` of a
+   comment opener the loop in step 3 could not strip.
 
 Anything else is the reject, with the same `SourceError::NotAnArchive
 { path, head, file }` as today and the same 24-byte escaped head in the
@@ -161,8 +167,10 @@ counterparts) are rewritten to the new rule rather than kept alongside it:
 comment before `<!DOCTYPE` all accepted, for both sources. Added: a
 `<?xml`-led JMdict under the KANJIDIC2 name is rejected, plain and gzipped
 (the case the handoff records as open); a gzipped HTML page under either
-name is rejected; a `<?xml`-led file whose head ends inside a comment is
-accepted; `<!DOCTYPE JMdictX` is rejected. The existing
+name is rejected; a `<?xml`-led file whose comment outruns the peek is
+accepted, where the same shape ended by the end of the file, and a bare
+declaration, are rejected (§4.1 step 5); `<!DOCTYPE JMdictX` is rejected.
+The existing
 `a_trimmed_jmdict_file_under_the_kanjidic_name_is_rejected` test's doc
 comment, which explains why the `<?xml` case was not distinguishable, is
 rewritten to say that it now is.
@@ -282,9 +290,11 @@ Left open by this phase's own decisions:
   test and would move by cut and paste; it stays because it is Windows
   chrome, not engine work.
 - **The sniff accepts a file whose leading comment outruns the peek.** By
-  design (§4.1 step 5), and no real EDRDG file is shaped that way; a stricter
-  reading would need to read past the buffer, which is more machinery than
-  the case earns.
+  design (§4.1 step 5) — the peek, not the file, ended the head, so nothing
+  was decided and the accept stands; a comment that ends at the end of the
+  file is the other half of that step and is rejected. No real EDRDG file is
+  shaped the first way; a stricter reading would need to read past the
+  buffer, which is more machinery than the case earns.
 - **The two spikes the handoff names are next, and are not phases.** The
   long-unit separation test can run today with no new tooling —
   `corpus_staging/sudachi_result.txt` already holds Mode C output for the
