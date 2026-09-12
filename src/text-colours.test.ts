@@ -34,6 +34,7 @@ describe('colourVars', () => {
       ['--color-counter', ''],
       ['--color-furigana', ''],
       ['--color-unmatched', ''],
+      ['--color-bg', ''],
     ]);
   });
 
@@ -45,7 +46,15 @@ describe('colourVars', () => {
       ['--color-counter', ''],
       ['--color-furigana', '#445566'],
       ['--color-unmatched', ''],
+      ['--color-bg', ''],
     ]);
+  });
+
+  // The window background is a colour kind like the six text ones, so the
+  // same clamp, the same token removal on Reset. `--color-bg-surface` is
+  // mixed from it, so the opacity setting keeps working over a picked colour.
+  test('maps the window background onto its token', () => {
+    expect(colourVars({ colour_bg: '#102030' })).toContainEqual(['--color-bg', '#102030']);
   });
 
   test('treats a value that is not a hex colour as unset', () => {

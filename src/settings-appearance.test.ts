@@ -330,6 +330,83 @@ describe('the appearance controls', () => {
     });
   });
 
+  // The two appearance sizes ride the font-size flow, wired in `settings.ts`
+  // beside the other boxes; pinned here with the toggles they belong to.
+  describe('outline width and shadow size', () => {
+    test('shows the persisted sizes and saves a change', async () => {
+      await boot({ ...FULL, text_outline_width: 3, text_shadow_size: 5 });
+      const stroke = el<HTMLInputElement>('#setting-text-outline-width');
+      const shadow = el<HTMLInputElement>('#setting-text-shadow-size');
+      expect(stroke.value).toBe('3');
+      expect(shadow.value).toBe('5');
+
+      stroke.value = '6';
+      stroke.dispatchEvent(new Event('change'));
+
+      expect(saved().text_outline_width).toBe(6);
+      expect(saved().text_shadow_size).toBe(5);
+    });
+
+    test('an emptied box sends no size, handing the default back', async () => {
+      await boot({ ...FULL, text_outline_width: 3 });
+      const stroke = el<HTMLInputElement>('#setting-text-outline-width');
+
+      stroke.value = '';
+      stroke.dispatchEvent(new Event('change'));
+
+      expect(saved().text_outline_width).toBeUndefined();
+    });
+  });
+
+  // The window background sits with the opacity slider rather than among the
+  // text colours, being the thing they are read against, but it persists and
+  // previews by the same path as any of them.
+  describe('window background colour', () => {
+    test('shows the persisted background and saves a pick', async () => {
+      await boot({ ...FULL, colour_bg: '#102030' });
+      const swatch = el<HTMLInputElement>('#setting-colour-bg');
+      expect(swatch.value).toBe('#102030');
+
+      swatch.value = '#abcdef';
+      swatch.dispatchEvent(new Event('change'));
+
+      expect(saved().colour_bg).toBe('#abcdef');
+    });
+
+    test('dragging inside the picker previews without persisting', async () => {
+      await boot(FULL);
+      emitted.length = 0;
+      const swatch = el<HTMLInputElement>('#setting-colour-bg');
+
+      swatch.value = '#abcdef';
+      swatch.dispatchEvent(new Event('input'));
+
+      expect(emitted).toEqual([['settings-changed', { colour_bg: '#abcdef' }]]);
+      expect(invoke).not.toHaveBeenCalledWith('save_settings', expect.anything());
+    });
+
+    test('Reset drops the background and shows the stylesheet default again', async () => {
+      document.documentElement.style.setProperty('--color-bg', 'rgb(1, 2, 3)');
+      await boot({ ...FULL, colour_bg: '#102030' });
+
+      el<HTMLButtonElement>('#setting-colour-bg-reset').click();
+
+      expect(Object.keys(saved())).not.toContain('colour_bg');
+      expect(el<HTMLInputElement>('#setting-colour-bg').value).toBe('#010203');
+    });
+
+    // The Text Colours section is the six that colour the sentence; the
+    // background belongs with the opacity slider it is read through.
+    test('is not listed among the text colours', async () => {
+      await boot(FULL);
+
+      const section = [...container.querySelectorAll('.settings-group')].find((g) =>
+        g.querySelector('.settings-group-title')?.textContent?.includes('Text Colours'),
+      );
+      expect(section?.querySelector('#setting-colour-bg')).toBeNull();
+    });
+  });
+
   describe('drop shadow', () => {
     test('the checkbox reflects the persisted setting', async () => {
       await boot({ ...FULL, text_shadow: true });

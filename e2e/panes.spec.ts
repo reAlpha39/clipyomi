@@ -374,12 +374,13 @@ for (const theme of THEMES) {
   });
 }
 
-// The outline setting is one `text-shadow` rule on `.sentence`, relied on to
-// inherit. Chips are `<button>`s, and Chromium's UA stylesheet resets
-// `text-shadow: none` on buttons the way it resets `font` and `color` — so
-// without `.chip` undoing that too, only the unmatched `<span>` runs ever got
-// the halo. happy-dom has no UA stylesheet, so only a real browser can prove
-// it; asserted per element type, since the two take different paths.
+// The outline setting is one `-webkit-text-stroke` rule on `.sentence`,
+// relied on to inherit. Chips are `<button>`s, and Chromium's UA stylesheet
+// resets `text-shadow` on buttons the way it resets `font` and `color`, which
+// is what once kept the old halo off every chip; the stroke is not in that
+// reset, and this test is what says so. happy-dom has no UA stylesheet, so
+// only a real browser can prove it; asserted per element type, since the two
+// take different paths.
 test('the outline setting reaches chips and unmatched runs alike', async ({ page }) => {
   const outlineStub = `
   ${STUB}
@@ -393,10 +394,13 @@ test('the outline setting reaches chips and unmatched runs alike', async ({ page
   await page.goto('/');
   await emitFixtureResult(page);
 
-  const shadowOf = (selector: string) =>
-    page.locator(selector).first().evaluate((el) => getComputedStyle(el).textShadow);
-  expect(await shadowOf('.unmatched')).not.toBe('none');
-  expect(await shadowOf('.chip')).not.toBe('none');
+  const strokeOf = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).webkitTextStrokeWidth));
+  expect(await strokeOf('.unmatched')).toBeGreaterThan(0);
+  expect(await strokeOf('.chip')).toBeGreaterThan(0);
 });
 
 // The romaji reading used to pin its own monospace family, which outranked
@@ -419,8 +423,8 @@ test('romaji furigana follows the furigana family setting', async ({ page }) => 
   expect(await rt.evaluate((el) => getComputedStyle(el).fontFamily)).toBe('"MS Gothic"');
 });
 
-/** Boot with the given appearance toggles and return a chip's computed text-shadow. */
-async function chipShadowWith(page: Page, toggles: string): Promise<string> {
+/** Boot with the given appearance toggles and return a chip's computed shadow and stroke. */
+async function chipPaintWith(page: Page, toggles: string): Promise<[string, number]> {
   const stub = `
   ${STUB}
   const realInvoke = window.__TAURI_INTERNALS__.invoke;
@@ -432,19 +436,75 @@ async function chipShadowWith(page: Page, toggles: string): Promise<string> {
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${stub}`);
   await page.goto('/');
   await emitFixtureResult(page);
-  return page.locator('.chip').first().evaluate((el) => getComputedStyle(el).textShadow);
+  return page.locator('.chip').first().evaluate((el) => {
+    const style = getComputedStyle(el);
+    return [style.textShadow, parseFloat(style.webkitTextStrokeWidth)];
+  });
 }
 
-// `text-shadow` is one property, so the halo and the drop shadow cannot each
-// own a rule and both apply: a third rule lists both when both toggles are
-// on. Pinned as three distinct computed values, since the shadow list's
-// serialization carries commas inside its colours and cannot be counted.
-test('the drop shadow applies alone and stacks with the outline', async ({ page }) => {
-  const drop = await chipShadowWith(page, 'text_shadow: true');
-  const halo = await chipShadowWith(page, 'text_outline: true');
-  const both = await chipShadowWith(page, 'text_outline: true, text_shadow: true');
+// The outline is a stroke and the drop shadow a `text-shadow`: separate
+// properties now, so each toggle owns one rule and both apply together with
+// no third rule to state the pair.
+test('the drop shadow and the outline apply alone and together', async ({ page }) => {
+  const [dropShadow, dropStroke] = await chipPaintWith(page, 'text_shadow: true');
+  const [haloShadow, haloStroke] = await chipPaintWith(page, 'text_outline: true');
+  const [bothShadow, bothStroke] = await chipPaintWith(
+    page,
+    'text_outline: true, text_shadow: true',
+  );
 
-  expect(drop).not.toBe('none');
-  expect(both).not.toBe(drop);
-  expect(both).not.toBe(halo);
+  expect(dropShadow).not.toBe('none');
+  expect(dropStroke).toBe(0);
+  expect(haloShadow).toBe('none');
+  expect(haloStroke).toBeGreaterThan(0);
+  expect(bothShadow).not.toBe('none');
+  expect(bothStroke).toBeGreaterThan(0);
+});
+
+// The stroke width and the shadow size are sizes like the font sizes, and a
+// stroke is painted under the fill so a thin kana keeps its weight.
+test('the stroke width and shadow size move with their settings', async ({ page }) => {
+  const [, stroke] = await chipPaintWith(page, 'text_outline: true, text_outline_width: 6');
+  expect(stroke).toBe(6);
+
+  const paintOrder = await page
+    .locator('.chip')
+    .first()
+    .evaluate((el) => getComputedStyle(el).paintOrder);
+  expect(paintOrder).toContain('stroke');
+
+  // Offset and blur are derived from the one size: 8 gives `4px 8px 12px`,
+  // the proportions the rule was authored with. The colour leads the computed
+  // value and serializes in the space it was authored in, so only the lengths
+  // are asserted.
+  const [shadow] = await chipPaintWith(page, 'text_shadow: true, text_shadow_size: 8');
+  expect(shadow).toContain('4px 8px 12px');
+});
+
+// A picked background is one colour for both themes, and `--color-bg-surface`
+// is mixed from it, so the opacity setting still applies over it.
+test('a picked background colour paints the window', async ({ page }) => {
+  const stub = `
+  ${STUB}
+  const realInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header', colour_bg: '#102030' });
+    return realInvoke(cmd, args);
+  };
+`;
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${stub}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  // Resolved through a canvas rather than string-matched: Chromium serializes
+  // a `color-mix()` result as `color(srgb ...)`, so the triple is the only
+  // stable thing to assert on.
+  const bg = await page.evaluate(() => {
+    const ctx = document.createElement('canvas').getContext('2d')!;
+    ctx.fillStyle = getComputedStyle(document.body).backgroundColor;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return [r, g, b];
+  });
+  expect(bg).toEqual([0x10, 0x20, 0x30]);
 });

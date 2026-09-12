@@ -13,6 +13,8 @@ describe('fontVars', () => {
       ['--text-furigana', ''],
       ['--text-furigana-romaji', ''],
       ['--furigana-gap', ''],
+      ['--text-stroke-width', ''],
+      ['--text-shadow-size', ''],
     ]);
   });
 
@@ -21,6 +23,17 @@ describe('fontVars', () => {
   // hairline.
   test('maps the furigana gap onto its token in px', () => {
     expect(fontVars({ furigana_gap: 6 })).toContainEqual(['--furigana-gap', '6px']);
+  });
+
+  // How thick the outline stroke is drawn. Half of it falls outside the
+  // glyph, so the default 2px reads as a 1px edge.
+  test('maps the outline width onto its token in px', () => {
+    expect(fontVars({ text_outline_width: 3 })).toContainEqual(['--text-stroke-width', '3px']);
+  });
+
+  // One knob for the drop shadow: the rule derives offset and blur from it.
+  test('maps the shadow size onto its token in px', () => {
+    expect(fontVars({ text_shadow_size: 5 })).toContainEqual(['--text-shadow-size', '5px']);
   });
 
   test('maps the sentence size onto its token in px', () => {
@@ -45,13 +58,22 @@ describe('fontVars', () => {
 
   test('emits every persisted size at once', () => {
     expect(
-      fontVars({ font_sentence: 24, font_gloss: 14, furigana_scale: 50, furigana_gap: 4 }),
+      fontVars({
+        font_sentence: 24,
+        font_gloss: 14,
+        furigana_scale: 50,
+        furigana_gap: 4,
+        text_outline_width: 3,
+        text_shadow_size: 5,
+      }),
     ).toEqual([
       ['--text-sentence', '24px'],
       ['--text-gloss', '14px'],
       ['--text-furigana', '0.5em'],
       ['--text-furigana-romaji', '0.45em'],
       ['--furigana-gap', '4px'],
+      ['--text-stroke-width', '3px'],
+      ['--text-shadow-size', '5px'],
     ]);
   });
 
@@ -59,13 +81,22 @@ describe('fontVars', () => {
   // untrusted input, not just whatever the number inputs allowed.
   test('clamps sizes read from a hand-edited settings file', () => {
     expect(
-      fontVars({ font_sentence: 999, font_gloss: 2, furigana_scale: 5, furigana_gap: 99 }),
+      fontVars({
+        font_sentence: 999,
+        font_gloss: 2,
+        furigana_scale: 5,
+        furigana_gap: 99,
+        text_outline_width: 0,
+        text_shadow_size: 99,
+      }),
     ).toEqual([
       ['--text-sentence', '48px'],
       ['--text-gloss', '10px'],
       ['--text-furigana', '0.3em'],
       ['--text-furigana-romaji', '0.27em'],
       ['--furigana-gap', '24px'],
+      ['--text-stroke-width', '1px'],
+      ['--text-shadow-size', '12px'],
     ]);
   });
 
@@ -77,6 +108,13 @@ describe('fontVars', () => {
 });
 
 describe('clampFont', () => {
+  // Zero is inside the shadow's range and means "no shadow", which is not the
+  // same as an empty box: the box hands the stylesheet default back instead.
+  test('keeps a zero shadow size rather than reading it as unset', () => {
+    expect(clampFont('shadow', 0)).toBe(0);
+    expect(fontVars({ text_shadow_size: 0 })).toContainEqual(['--text-shadow-size', '0px']);
+  });
+
   test('passes an in-range value through', () => {
     expect(clampFont('sentence', 24)).toBe(24);
   });

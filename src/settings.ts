@@ -4,7 +4,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { FONT_LIMITS, clampFont, stylesheetDefault, type FontKind } from './font-sizes';
 import { ALPHA_LIMITS, clampAlpha } from './surface-alpha';
-import { APPEARANCE_SECTIONS, OUTLINE_ROW, initAppearanceControls } from './settings-appearance';
+import {
+  APPEARANCE_SECTIONS,
+  BG_COLOUR_ROW,
+  OUTLINE_ROW,
+  initAppearanceControls,
+} from './settings-appearance';
 import type { ChromeMode, FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
@@ -117,6 +122,7 @@ export function initSettingsApp(container: HTMLElement) {
 
       <section class="settings-group">
         <h2 class="settings-group-title">Background</h2>
+        ${BG_COLOUR_ROW}
         <label class="settings-range-row">
           <span class="label-text">Opacity</span>
           <input type="range" id="setting-surface-alpha"
@@ -148,6 +154,8 @@ export function initSettingsApp(container: HTMLElement) {
   const fontGloss = container.querySelector<HTMLInputElement>('#setting-font-gloss')!;
   const furiganaScale = container.querySelector<HTMLInputElement>('#setting-furigana-scale')!;
   const furiganaGap = container.querySelector<HTMLInputElement>('#setting-furigana-gap')!;
+  const outlineWidth = container.querySelector<HTMLInputElement>('#setting-text-outline-width')!;
+  const shadowSize = container.querySelector<HTMLInputElement>('#setting-text-shadow-size')!;
   const furiganaButtons = container.querySelectorAll<HTMLButtonElement>(
     '.segmented-control button[data-mode]',
   );
@@ -320,6 +328,8 @@ export function initSettingsApp(container: HTMLElement) {
       font_gloss: sizeOf(fontGloss, 'gloss'),
       furigana_scale: sizeOf(furiganaScale, 'furigana'),
       furigana_gap: sizeOf(furiganaGap, 'gap'),
+      text_outline_width: sizeOf(outlineWidth, 'outline'),
+      text_shadow_size: sizeOf(shadowSize, 'shadow'),
       surface_alpha: clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max,
       ...appearance.snapshot(),
     };
@@ -359,6 +369,8 @@ export function initSettingsApp(container: HTMLElement) {
       fontGloss.value = s.font_gloss === undefined ? '' : String(s.font_gloss);
       furiganaScale.value = s.furigana_scale === undefined ? '' : String(s.furigana_scale);
       furiganaGap.value = s.furigana_gap === undefined ? '' : String(s.furigana_gap);
+      outlineWidth.value = s.text_outline_width === undefined ? '' : String(s.text_outline_width);
+      shadowSize.value = s.text_shadow_size === undefined ? '' : String(s.text_shadow_size);
     }
     appearance.apply(s, isFullSnapshot);
     if (s.surface_alpha !== undefined) {
@@ -372,6 +384,8 @@ export function initSettingsApp(container: HTMLElement) {
   fontGloss.addEventListener('change', saveAndBroadcast);
   furiganaScale.addEventListener('change', saveAndBroadcast);
   furiganaGap.addEventListener('change', saveAndBroadcast);
+  outlineWidth.addEventListener('change', saveAndBroadcast);
+  shadowSize.addEventListener('change', saveAndBroadcast);
 
   hidePos.addEventListener('change', saveAndBroadcast);
   hideXrefs.addEventListener('change', saveAndBroadcast);
@@ -456,6 +470,8 @@ export function initSettingsApp(container: HTMLElement) {
       [fontGloss, 'gloss'],
       [furiganaScale, 'furigana'],
       [furiganaGap, 'gap'],
+      [outlineWidth, 'outline'],
+      [shadowSize, 'shadow'],
     ];
     for (const [input, kind] of boxes) {
       if (input.value !== '') continue;
