@@ -58,9 +58,9 @@ arriving at a new address.
 
 Across the phase's code range, `git diff --stat 009b427..1e91ebb` reads
 **nine files, 1,491 insertions against 1,108 deletions**. Measured from the
-design commit instead — `git diff --stat b287236..HEAD` — it reads ten files
-and 2,556 insertions, the difference being the plan document's own 1,065
-lines; the code figure is the one above.
+design commit instead — `git diff --stat b287236..1e91ebb` — it reads ten
+files and 2,556 insertions, the difference being the plan document's own
+1,065 lines; the code figure is the one above.
 
 **`INDEX_FORMAT_VERSION` is still 6** (`crates/jparser/src/index/mod.rs:31`)
 and **no install rebuilds.** Nothing under `crates/jparser/src/engine/` or
@@ -358,8 +358,11 @@ assumed, since both could have gone the other way:
   leaves only the enumerated edits unmatched on either side. And
   `git diff --color-moved=dimmed-zebra aa535f1..1e91ebb -- src-tauri/src`,
   read here with the moved-block colours separated from the plain ones,
-  shows 1,972 line changes coloured as moved and **not one plain line inside
-  a moved block**. Every plain line is on the enumerated list: the rewritten
+  shows **2,012 line changes coloured as moved against 113 plain ones, and
+  not one plain line inside a moved block**. The two counts reconcile with
+  the commit exactly — 2,012 + 113 is 2,125, which is the 1,087 insertions
+  plus 1,038 deletions `git show --stat` reports — so no changed line escaped
+  the census. Every plain line is on the enumerated list: the rewritten
   module doc and the two new ones, the reshaped `use` blocks, the two
   `pub mod` lines, the three `pub(super)` signatures, the one
   `push_input` → `crate::commands::push_input` call, the `hints_scratch`
