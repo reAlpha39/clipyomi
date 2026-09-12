@@ -1199,6 +1199,23 @@ Design: `specs/2026-09-11-engine-v2-phase3b-design.md`; record:
 `2026-09-11-engine-v2-phase3b-handoff.md`. Nothing under `engine/` was
 touched, and §5.2's baseline block is unchanged to the cell.
 
+### Phase 3c — The KANJIDIC layer close-out — **COMPLETE**
+
+The three loose ends Phases 3a and 3b left, closed together and nothing
+else. Kun readings drop KANJIDIC2's affix hyphen at render time and keep
+the okurigana dot (`-ぐ.い` renders `ぐ.い`, `た.べる` is unchanged); the
+record and the wire keep the notation. The source sniff is root-aware on
+both the plain and the gzip path: each `Source` names its root element, and
+a JMdict file under the KANJIDIC2 name — declaration intact, or gzipped — is
+refused instead of building a kanji-less index. The dictionary commands left
+`src-tauri/src/commands.rs` for `commands/dictionary.rs` and
+`commands/hints.rs` by a pure move. No engine, index format, wire, settings
+or CSS change, so no install rebuilds and §5.2's baseline block is unchanged
+to the cell. Design: `specs/2026-09-12-engine-v2-phase3c-design.md`; record:
+`2026-09-12-engine-v2-phase3c-handoff.md`. The Phase 3 table is not changed
+by this phase; the two research items it leaves — the long-unit token
+inventory and a pitch-accent source hunt — are spikes, not phases.
+
 ### Phase 3 — Extra linguistic layers
 
 Independent of segmentation entirely. Each layer is its own increment with its
