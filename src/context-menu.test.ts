@@ -54,23 +54,25 @@ describe('the right-click menu', () => {
   test('asks the backend to pop the rows at the cursor', () => {
     openContextMenu(entries, 40, 50);
 
-    expect(shown()).toEqual({
-      items: [
-        { kind: 'radio', id: 'ctx-0', label: 'Header', checked: false },
-        { kind: 'radio', id: 'ctx-1', label: 'Content', checked: true },
-        { kind: 'separator' },
-        { kind: 'action', id: 'ctx-3', label: 'Quit' },
-      ],
-      x: 40,
-      y: 50,
-    });
+    const { items, x, y } = shown();
+    expect({ x, y }).toEqual({ x: 40, y: 50 });
+    expect(items.map((item) => ({ ...(item as object), id: undefined }))).toEqual([
+      { kind: 'radio', label: 'Header', checked: false, id: undefined },
+      { kind: 'radio', label: 'Content', checked: true, id: undefined },
+      { kind: 'separator', id: undefined },
+      { kind: 'action', label: 'Quit', id: undefined },
+    ]);
+    const ids = items.map((item) => (item as { id?: string }).id);
+    expect(ids[2]).toBeUndefined();
+    expect(new Set([ids[0], ids[1], ids[3]]).size).toBe(3);
   });
 
   test('a pick runs the matching entry once', () => {
     openContextMenu(entries, 0, 0);
+    const id = (shown().items[3] as { id: string }).id;
 
-    pick('ctx-3');
-    pick('ctx-3');
+    pick(id);
+    pick(id);
 
     expect(selected).toEqual(['quit']);
   });
@@ -78,20 +80,39 @@ describe('the right-click menu', () => {
   test('a pick for an id the open menu never offered runs nothing', () => {
     openContextMenu(entries, 0, 0);
 
-    pick('ctx-9');
+    pick('ctx-never');
 
     expect(selected).toEqual([]);
   });
 
-  // Opening again hands the ids to the new rows: a late pick from a menu the
-  // OS already replaced must not fire the old row that shared its id.
-  test('opening again retargets the ids to the new rows', () => {
+  // A pick travels OS -> backend -> webview while the user may already have
+  // right-clicked again. Ids carry the open they belong to, so a pick from a
+  // menu the OS already replaced runs nothing rather than the new menu's row
+  // at the same position.
+  test('a pick from a menu already replaced runs nothing', () => {
     openContextMenu(entries, 0, 0);
+    const stale = (shown().items[3] as { id: string }).id;
     openContextMenu([{ kind: 'action', label: 'Only', onSelect: () => selected.push('only') }], 0, 0);
+    const fresh = (shown().items[0] as { id: string }).id;
+    expect(fresh).not.toBe(stale);
 
-    pick('ctx-0');
+    pick(stale);
+    expect(selected).toEqual([]);
 
+    pick(fresh);
     expect(selected).toEqual(['only']);
+  });
+
+  test('a menu the backend failed to show forgets its rows', async () => {
+    invoke.mockRejectedValueOnce(new Error('no window'));
+    openContextMenu(entries, 0, 0);
+    const id = (shown().items[3] as { id: string }).id;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    pick(id);
+
+    expect(selected).toEqual([]);
   });
 
   test('closing discards the pending rows', () => {
