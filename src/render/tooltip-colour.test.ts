@@ -120,4 +120,21 @@ describe('colourLine', () => {
       kind: 'paren',
     });
   });
+
+  // Phase 3c: the affix hyphen is gone from kun readings before the line
+  // reaches this module, so a reading that carried one is a plain kana run
+  // again. The okurigana dot is not Japanese to this classifier and still
+  // splits the run, as it always has; the middle dot rides in the kana run.
+  test('a kun reading keeps its okurigana dot as a text run', () => {
+    expect(colourLine('食  ショク・た.べる・ぐ.い  eat')).toEqual([
+      { text: '食', kind: 'kanji' },
+      { text: '  ', kind: 'text' },
+      { text: 'ショク・た', kind: 'kana' },
+      { text: '.', kind: 'text' },
+      { text: 'べる・ぐ', kind: 'kana' },
+      { text: '.', kind: 'text' },
+      { text: 'い', kind: 'kana' },
+      { text: '  eat', kind: 'text' },
+    ]);
+  });
 });
