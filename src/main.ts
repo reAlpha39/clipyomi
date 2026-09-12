@@ -604,6 +604,9 @@ function applyAppearance(settings: Partial<Settings>, full: boolean): void {
   if (settings.text_outline !== undefined) {
     document.documentElement.classList.toggle('text-outline', settings.text_outline);
   }
+  if (settings.text_shadow !== undefined) {
+    document.documentElement.classList.toggle('text-shadow', settings.text_shadow);
+  }
 }
 
 /**

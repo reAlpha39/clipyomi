@@ -418,3 +418,33 @@ test('romaji furigana follows the furigana family setting', async ({ page }) => 
   const rt = page.locator('rt.romaji').first();
   expect(await rt.evaluate((el) => getComputedStyle(el).fontFamily)).toBe('"MS Gothic"');
 });
+
+/** Boot with the given appearance toggles and return a chip's computed text-shadow. */
+async function chipShadowWith(page: Page, toggles: string): Promise<string> {
+  const stub = `
+  ${STUB}
+  const realInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header', ${toggles} });
+    return realInvoke(cmd, args);
+  };
+`;
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${stub}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+  return page.locator('.chip').first().evaluate((el) => getComputedStyle(el).textShadow);
+}
+
+// `text-shadow` is one property, so the halo and the drop shadow cannot each
+// own a rule and both apply: a third rule lists both when both toggles are
+// on. Pinned as three distinct computed values, since the shadow list's
+// serialization carries commas inside its colours and cannot be counted.
+test('the drop shadow applies alone and stacks with the outline', async ({ page }) => {
+  const drop = await chipShadowWith(page, 'text_shadow: true');
+  const halo = await chipShadowWith(page, 'text_outline: true');
+  const both = await chipShadowWith(page, 'text_outline: true, text_shadow: true');
+
+  expect(drop).not.toBe('none');
+  expect(both).not.toBe(drop);
+  expect(both).not.toBe(halo);
+});

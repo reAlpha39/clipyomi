@@ -160,6 +160,9 @@ pub struct Settings {
     /// window. A toggle like `hide_*`, merged the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_outline: Option<bool>,
+    /// A drop shadow under the sentence text. A toggle like `text_outline`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_shadow: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -209,6 +212,7 @@ impl Default for Settings {
             font_family_furigana: None,
             font_family_gloss: None,
             text_outline: None,
+            text_shadow: None,
             window_width: None,
             window_height: None,
             window_x: None,

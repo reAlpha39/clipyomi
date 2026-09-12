@@ -135,6 +135,14 @@ describe('appearance settings reaching the main window', () => {
     expect(token('--font-cjk')).toBe('"Meiryo"');
   });
 
+  test('sets the drop-shadow class from the persisted toggle and drops it on a snapshot', async () => {
+    await load({ text_shadow: true });
+    expect(document.documentElement.classList.contains('text-shadow')).toBe(true);
+
+    emit('settings-changed', { ...FULL, text_shadow: false });
+    expect(document.documentElement.classList.contains('text-shadow')).toBe(false);
+  });
+
   test('a snapshot turning the outline off removes the class', async () => {
     await load({ text_outline: true });
 

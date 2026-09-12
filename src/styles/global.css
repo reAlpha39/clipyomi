@@ -466,6 +466,26 @@ rt.romaji {
     -1px 1px 0 var(--color-bg);
 }
 
+/* The drop-shadow setting: one soft shadow down and to the right, dark in
+   both themes — a shadow is a shadow whatever the text colour. */
+.text-shadow .sentence {
+  text-shadow: 1px 2px 3px oklch(0% 0 0 / 0.55);
+}
+
+/* Both on. `text-shadow` is one property, so the two rules above cannot both
+   apply; this one lists the halo first and the drop shadow after it, which
+   paints the shadow beneath the halo. */
+.text-outline.text-shadow .sentence {
+  text-shadow:
+    0 0 2px var(--color-bg),
+    0 0 2px var(--color-bg),
+    1px 1px 0 var(--color-bg),
+    -1px -1px 0 var(--color-bg),
+    1px -1px 0 var(--color-bg),
+    -1px 1px 0 var(--color-bg),
+    1px 2px 3px oklch(0% 0 0 / 0.55);
+}
+
 /* :focus-visible (not :focus) so the ring shows for keyboard traversal only,
    matching how a mouse click on a native button already behaves. The ring is
    a shape, not a colour swap, so it survives reduced motion (no transition

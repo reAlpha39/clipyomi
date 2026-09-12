@@ -1159,6 +1159,9 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     if incoming.text_outline.is_some() {
         current.text_outline = incoming.text_outline;
     }
+    if incoming.text_shadow.is_some() {
+        current.text_shadow = incoming.text_shadow;
+    }
     // Assigned, like the sizes below: a colour's Reset and a font select's
     // Default both reach here as the key gone, and only an assign can carry
     // "unset" to disk. The settings window always sends all eight.
@@ -1730,6 +1733,7 @@ mod tests {
                 colour_kanji: Some("#000000".into()),
                 font_family_sentence: Some("Yu Gothic".into()),
                 text_outline: Some(true),
+                text_shadow: Some(false),
                 ..Default::default()
             },
         ));
@@ -1755,6 +1759,11 @@ mod tests {
         assert_eq!(
             s.text_outline,
             Some(true),
+            "a toggle merges; omission never clears it"
+        );
+        assert_eq!(
+            s.text_shadow,
+            Some(false),
             "a toggle merges; omission never clears it"
         );
     }
