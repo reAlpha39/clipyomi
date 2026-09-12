@@ -31,28 +31,36 @@ type MenuSpec =
 
 const PICK_EVENT = 'context-menu-pick';
 
-/**
- * The rows of the menu currently up, by id, or `null` when none is. Ids are
- * positional and reused across opens, so this is replaced wholesale on each
- * open: a late pick from a menu the OS already replaced must not fire the old
- * row that shared its id.
- */
+/** The rows of the menu currently up, by id, or `null` when none is. */
 let pending: Map<string, () => void> | null = null;
 
+/**
+ * Counts opens, and prefixes every id with its open. A pick travels OS ->
+ * backend -> webview while the user may already have right-clicked again;
+ * with positional ids alone, the stale pick would land on the new menu's row
+ * at the same position. With the open in the id it matches nothing.
+ */
+let generation = 0;
+
 export function openContextMenu(entries: MenuEntry[], x: number, y: number): void {
+  generation += 1;
   const handlers = new Map<string, () => void>();
   const items: MenuSpec[] = entries.map((entry, index) => {
     if (entry.kind === 'separator') return { kind: 'separator' };
-    const id = `ctx-${index}`;
+    const id = `ctx-${generation}-${index}`;
     handlers.set(id, entry.onSelect);
     return entry.kind === 'radio'
       ? { kind: 'radio', id, label: entry.label, checked: entry.checked }
       : { kind: 'action', id, label: entry.label };
   });
   pending = handlers;
-  // Fire-and-forget: a menu that failed to pop leaves the user exactly where
-  // a dismissed one would, and the next right-click tries again.
-  void invoke('show_context_menu', { items, x, y }).catch(() => {});
+  // A menu that failed to pop leaves the user exactly where a dismissed one
+  // would, and the next right-click tries again — but its rows are forgotten,
+  // so nothing can pick from a menu that never showed. Guarded on identity:
+  // a rejection arriving after a newer open must not forget that one's rows.
+  void invoke('show_context_menu', { items, x, y }).catch(() => {
+    if (pending === handlers) pending = null;
+  });
 }
 
 /**
@@ -65,6 +73,9 @@ export function closeContextMenu(): void {
 
 void listen<string>(PICK_EVENT, (e) => {
   const handler = pending?.get(e.payload);
+  // An id from an open this menu is not: a stale pick, or one for a menu that
+  // failed to show. Ignored without touching the live menu's rows.
+  if (handler === undefined) return;
   pending = null;
-  handler?.();
+  handler();
 });
