@@ -189,6 +189,10 @@ describe('assembleTooltipText', () => {
       { literal: '東', on: ['トウ'], kun: ['ひがし'], meanings: ['east', 'eastern'] },
       { literal: '京', on: ['キョウ', 'ケイ'], kun: ['みやこ'], meanings: ['capital', '10**16'] },
     ];
+    const head = '消える【きえる】\n(v1,vi) (1) to disappear/to vanish\n\n';
+    /** One kanji's rendered line, with the entry block ahead of it cut off. */
+    const line = (k: KanjiInfo): string =>
+      assembleTooltipText([entry()], undefined, [k]).slice(head.length);
 
     test('appends one line per kanji after a blank line', () => {
       expect(assembleTooltipText([entry()], undefined, tokyo)).toBe(
@@ -218,14 +222,37 @@ describe('assembleTooltipText', () => {
       );
     });
 
+    // Phase 3c: KANJIDIC2 marks a reading used only as a suffix or a prefix
+    // with a hyphen (`-ぐ.い`, `ひと-`) and the okurigana boundary with a dot
+    // (`た.べる`). The hyphen is trimmed at render time; the dot stays, since
+    // it shows where the kanji stops and the reader's own kana begin. The
+    // record on the wire keeps both marks — this is the popover's choice.
+    describe('kun-reading marks', () => {
+      test('trims the affix hyphen from either end of a kun reading', () => {
+        expect(
+          line({ literal: '食', on: ['ショク'], kun: ['た.べる', '-ぐ.い'], meanings: ['eat'] }),
+        ).toBe('食  ショク・た.べる・ぐ.い  eat');
+        expect(line({ literal: '一', on: [], kun: ['ひと-', 'ひと.つ'], meanings: ['one'] })).toBe(
+          '一  ひと・ひと.つ  one',
+        );
+      });
+
+      test('keeps the okurigana dot', () => {
+        expect(line({ literal: '食', on: [], kun: ['た.べる'], meanings: [] })).toBe('食  た.べる');
+      });
+
+      test('leaves on readings alone', () => {
+        expect(line({ literal: '東', on: ['トウ'], kun: [], meanings: ['east'] })).toBe(
+          '東  トウ  east',
+        );
+      });
+    });
+
     // Phase 3b: KANJIDIC2's <misc> numbers ride the same line as one
     // parenthesised aside, in the file's order — grade, strokes, frequency,
     // JLPT — with absent fields left out. The JLPT number is the former
     // four-level scale and is labelled as such, never mapped to N-levels.
     describe('the misc aside', () => {
-      const head = '消える【きえる】\n(v1,vi) (1) to disappear/to vanish\n\n';
-      const line = (k: KanjiInfo): string =>
-        assembleTooltipText([entry()], undefined, [k]).slice(head.length);
       const east = tokyo[0];
 
       test('appends all four fields in KANJIDIC2 order', () => {

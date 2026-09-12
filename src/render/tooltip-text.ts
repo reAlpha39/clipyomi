@@ -90,14 +90,28 @@ function kanjiAside(kanji: KanjiInfo): string {
 }
 
 /**
+ * A kun reading as the popover shows it. KANJIDIC2 writes a hyphen on a
+ * reading used only as a suffix (`-がた`) or only as a prefix (`ひと-`) and a
+ * dot at the okurigana boundary (`た.べる`). The hyphen is trimmed: it is a
+ * lexicographer's fact that reads as a stray mark beside the middle-dot
+ * separators. The dot stays: it shows where the kanji stops and the reader's
+ * own kana begin, which is how the word is written. In the 2026-09-11 file
+ * every hyphen sits at an edge (266 leading, 126 trailing, none interior), so
+ * trimming both ends is the whole rule. The record itself keeps the notation;
+ * this is a rendering choice (Phase 3c design §3).
+ */
+function kunReading(reading: string): string {
+  return reading.replace(/^-+|-+$/g, '');
+}
+
+/**
  * One kanji's line: the literal, its on then kun readings joined by the
  * katakana middle dot, its English meanings, and the misc aside. Columns are
  * two spaces apart; an empty column is dropped rather than left as a gap.
- * KANJIDIC2's `.` and `-` marks in kun readings are rendered raw,
- * deliberately (design §7).
+ * Kun readings pass through `kunReading` first.
  */
 function kanjiLine(kanji: KanjiInfo): string {
-  const readings = [...kanji.on, ...kanji.kun].join('・');
+  const readings = [...kanji.on, ...kanji.kun.map(kunReading)].join('・');
   return [kanji.literal, readings, kanji.meanings.join(', '), kanjiAside(kanji)]
     .filter((column) => column !== '')
     .join('  ');
