@@ -87,7 +87,7 @@ const READINGS: usize = 3;
 ///
 /// The index arrives through `index` rather than being passed by value, because
 /// the worker is spawned before startup knows whether there is one: on a first
-/// run it starts empty and begins parsing when `commands::download_dictionary`
+/// run it starts empty and begins parsing when `commands::dictionary::download_dictionary`
 /// publishes. Input arriving before then is dropped — the download screen is on
 /// top at that point, so there is nothing a message could usefully tell the user.
 ///

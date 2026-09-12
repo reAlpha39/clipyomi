@@ -160,7 +160,7 @@ fn main() {
             // first-run download's result to arrive on. Starting it always
             // deletes that special case rather than adding one.
             let (index_tx, index_rx) = tokio::sync::watch::channel(None::<Arc<state::AppState>>);
-            app.manage(commands::IndexSender(index_tx.clone()));
+            app.manage(commands::dictionary::IndexSender(index_tx.clone()));
 
             // Hints travel on their own channel rather than inside `AppState`:
             // that state is built once and then read-only — which is what
@@ -168,17 +168,21 @@ fn main() {
             // toggle must not rebuild the index to change one flag.
             let (hints_tx, hints_rx) =
                 tokio::sync::watch::channel(None::<Arc<jparser::hints::VibratoTokenizer>>);
-            app.manage(commands::HintsSender(hints_tx.clone()));
+            app.manage(commands::hints::HintsSender(hints_tx.clone()));
 
             let source_dir = config_dir.join(jmdict_source::SOURCE_DIR);
             let hints_dir = config_dir.join(vibrato_source::HINTS_DIR);
-            app.manage(commands::DictionaryPaths {
+            app.manage(commands::dictionary::DictionaryPaths {
                 root: root.clone(),
                 source_dir,
                 hints_dir: hints_dir.clone(),
             });
-            app.manage(commands::DownloadInFlight(Arc::new(AtomicBool::new(false))));
-            app.manage(commands::HintsInFlight(Arc::new(AtomicBool::new(false))));
+            app.manage(commands::dictionary::DownloadInFlight(Arc::new(
+                AtomicBool::new(false),
+            )));
+            app.manage(commands::hints::HintsInFlight(Arc::new(AtomicBool::new(
+                false,
+            ))));
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, hints_rx, rx));
@@ -262,12 +266,12 @@ fn main() {
             commands::settings_warning,
             commands::shortcut_warning,
             commands::frontend_ready,
-            commands::download_dictionary,
-            commands::needs_dictionary,
-            commands::set_mecab_hints,
-            commands::hints_warning,
-            commands::hints_dir,
-            commands::kanji_info,
+            commands::dictionary::download_dictionary,
+            commands::dictionary::needs_dictionary,
+            commands::hints::set_mecab_hints,
+            commands::hints::hints_warning,
+            commands::hints::hints_dir,
+            commands::dictionary::kanji_info,
             popover::place_popover,
             popover::hide_popover
         ])
