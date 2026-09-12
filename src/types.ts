@@ -120,6 +120,8 @@ export interface Settings {
   colour_particle?: string;
   colour_counter?: string;
   colour_furigana?: string;
+  /** Punctuation and runs the parser matched nothing for, bound to `--color-unmatched`. */
+  colour_unmatched?: string;
   /** A family name, bound to `--font-cjk`. */
   font_family_sentence?: string;
   /** Bound to `--font-furigana`; unset, the ruby inherits the sentence font. */

@@ -33,6 +33,7 @@ describe('colourVars', () => {
       ['--color-particle', ''],
       ['--color-counter', ''],
       ['--color-furigana', ''],
+      ['--color-unmatched', ''],
     ]);
   });
 
@@ -43,6 +44,7 @@ describe('colourVars', () => {
       ['--color-particle', ''],
       ['--color-counter', ''],
       ['--color-furigana', '#445566'],
+      ['--color-unmatched', ''],
     ]);
   });
 

@@ -1170,6 +1170,7 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     current.colour_particle = incoming.colour_particle;
     current.colour_counter = incoming.colour_counter;
     current.colour_furigana = incoming.colour_furigana;
+    current.colour_unmatched = incoming.colour_unmatched;
     current.font_family_sentence = incoming.font_family_sentence;
     current.font_family_furigana = incoming.font_family_furigana;
     current.font_family_gloss = incoming.font_family_gloss;

@@ -563,6 +563,7 @@ fn appearance_keys_round_trip_through_the_file() {
         colour_particle: Some("#334455".into()),
         colour_counter: Some("#445566".into()),
         colour_furigana: Some("#556677".into()),
+        colour_unmatched: Some("#667788".into()),
         font_family_sentence: Some("Yu Gothic".into()),
         font_family_furigana: Some("Meiryo".into()),
         font_family_gloss: Some("Segoe UI".into()),

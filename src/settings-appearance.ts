@@ -26,6 +26,7 @@ const COLOUR_LABELS: Record<ColourKind, string> = {
   particle: 'Particles',
   counter: 'Counters',
   furigana: 'Furigana',
+  unmatched: 'Unmatched text',
 };
 
 function familyRow(kind: FamilyKind): string {

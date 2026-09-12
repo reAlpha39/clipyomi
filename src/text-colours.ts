@@ -3,7 +3,7 @@
 import type { Settings } from './types';
 
 /** The five text colours the user can move. */
-export type ColourKind = 'kanji' | 'kana' | 'particle' | 'counter' | 'furigana';
+export type ColourKind = 'kanji' | 'kana' | 'particle' | 'counter' | 'furigana' | 'unmatched';
 
 export const COLOUR_KINDS: readonly ColourKind[] = [
   'kanji',
@@ -11,6 +11,7 @@ export const COLOUR_KINDS: readonly ColourKind[] = [
   'particle',
   'counter',
   'furigana',
+  'unmatched',
 ];
 
 /** The token each kind is bound to. */
@@ -20,6 +21,7 @@ const TOKENS: Record<ColourKind, string> = {
   particle: '--color-particle',
   counter: '--color-counter',
   furigana: '--color-furigana',
+  unmatched: '--color-unmatched',
 };
 
 /** The settings key each kind is persisted under. */
@@ -29,6 +31,7 @@ export const COLOUR_KEYS: Record<ColourKind, keyof Settings> = {
   particle: 'colour_particle',
   counter: 'colour_counter',
   furigana: 'colour_furigana',
+  unmatched: 'colour_unmatched',
 };
 
 /**

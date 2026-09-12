@@ -138,6 +138,18 @@ describe('the appearance controls', () => {
       expect(invoke).not.toHaveBeenCalledWith('save_settings', expect.anything());
     });
 
+    // The grey of punctuation and unparsed runs is a sixth colour of its own,
+    // separate from the muted token the window chrome shares.
+    test('the unmatched-text swatch persists like the others', async () => {
+      await boot(FULL);
+      const swatch = el<HTMLInputElement>('#setting-colour-unmatched');
+
+      swatch.value = '#778899';
+      swatch.dispatchEvent(new Event('change'));
+
+      expect(saved().colour_unmatched).toBe('#778899');
+    });
+
     test('Reset drops the colour and shows the stylesheet default again', async () => {
       document.documentElement.style.setProperty('--color-kanji', 'rgb(1, 2, 3)');
       await boot({ ...FULL, colour_kanji: '#112233' });
