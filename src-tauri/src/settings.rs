@@ -157,19 +157,32 @@ pub struct Settings {
     /// Punctuation and runs the parser matched nothing for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub colour_unmatched: Option<String>,
+    /// The main window's background. A colour kind like the six above, sitting
+    /// with the opacity slider in the settings window because it is what they
+    /// are read against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_bg: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_family_sentence: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_family_furigana: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_family_gloss: Option<String>,
-    /// A halo behind the sentence text, for reading it over a see-through
+    /// A stroke around the sentence text, for reading it over a see-through
     /// window. A toggle like `hide_*`, merged the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_outline: Option<bool>,
+    /// The stroke's width in px. A size like the font sizes, not a toggle:
+    /// assigned in `merge_saved`, so an emptied box clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_outline_width: Option<u32>,
     /// A drop shadow under the sentence text. A toggle like `text_outline`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_shadow: Option<bool>,
+    /// The shadow's size in px, which its offset and blur are both derived
+    /// from. A size like `text_outline_width`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_shadow_size: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -217,11 +230,14 @@ impl Default for Settings {
             colour_counter: None,
             colour_furigana: None,
             colour_unmatched: None,
+            colour_bg: None,
             font_family_sentence: None,
             font_family_furigana: None,
             font_family_gloss: None,
             text_outline: None,
+            text_outline_width: None,
             text_shadow: None,
+            text_shadow_size: None,
             window_width: None,
             window_height: None,
             window_x: None,

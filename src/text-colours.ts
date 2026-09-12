@@ -2,10 +2,18 @@
 
 import type { Settings } from './types';
 
-/** The five text colours the user can move. */
-export type ColourKind = 'kanji' | 'kana' | 'particle' | 'counter' | 'furigana' | 'unmatched';
+/** The colours the user can move: six for the text, one for the window. */
+export type ColourKind =
+  | 'kanji'
+  | 'kana'
+  | 'particle'
+  | 'counter'
+  | 'furigana'
+  | 'unmatched'
+  | 'bg';
 
-export const COLOUR_KINDS: readonly ColourKind[] = [
+/** The six that colour the sentence, which the Text Colours section lists. */
+export const TEXT_COLOUR_KINDS: readonly ColourKind[] = [
   'kanji',
   'kana',
   'particle',
@@ -13,6 +21,13 @@ export const COLOUR_KINDS: readonly ColourKind[] = [
   'furigana',
   'unmatched',
 ];
+
+/**
+ * Every kind, the window background included. It sits with the opacity
+ * slider in the Background section rather than among the text colours, but
+ * it persists, clamps and previews by exactly the same path.
+ */
+export const COLOUR_KINDS: readonly ColourKind[] = [...TEXT_COLOUR_KINDS, 'bg'];
 
 /** The token each kind is bound to. */
 const TOKENS: Record<ColourKind, string> = {
@@ -22,6 +37,7 @@ const TOKENS: Record<ColourKind, string> = {
   counter: '--color-counter',
   furigana: '--color-furigana',
   unmatched: '--color-unmatched',
+  bg: '--color-bg',
 };
 
 /** The settings key each kind is persisted under. */
@@ -32,6 +48,7 @@ export const COLOUR_KEYS: Record<ColourKind, keyof Settings> = {
   counter: 'colour_counter',
   furigana: 'colour_furigana',
   unmatched: 'colour_unmatched',
+  bg: 'colour_bg',
 };
 
 /**

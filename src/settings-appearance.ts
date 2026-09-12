@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 import { invoke } from '@tauri-apps/api/core';
-import { COLOUR_KEYS, COLOUR_KINDS, clampColour, stylesheetDefault, type ColourKind } from './text-colours';
+import { FONT_LIMITS } from './font-sizes';
+import {
+  COLOUR_KEYS,
+  COLOUR_KINDS,
+  TEXT_COLOUR_KINDS,
+  clampColour,
+  stylesheetDefault,
+  type ColourKind,
+} from './text-colours';
 import { FAMILY_KEYS, clampFamily, type FamilyKind } from './text-fonts';
 import type { FuriganaMode, Settings } from './types';
 
@@ -27,6 +35,7 @@ const COLOUR_LABELS: Record<ColourKind, string> = {
   counter: 'Counters',
   furigana: 'Furigana',
   unmatched: 'Unmatched text',
+  bg: 'Background',
 };
 
 function familyRow(kind: FamilyKind): string {
@@ -56,19 +65,48 @@ export const APPEARANCE_SECTIONS = `
 
       <section class="settings-group">
         <h2 class="settings-group-title">Text Colours</h2>
-        ${COLOUR_KINDS.map(colourRow).join('')}
+        ${TEXT_COLOUR_KINDS.map(colourRow).join('')}
       </section>`;
 
-/** The outline and drop-shadow checkboxes, for the Background section beside the opacity slider. */
+/**
+ * The window background swatch, for the top of the Background section.
+ *
+ * Rendered here rather than in `settings.ts` so one function builds every
+ * colour row; wired by `initAppearanceControls` with the six text colours,
+ * which find it by id wherever the page puts it.
+ */
+export const BG_COLOUR_ROW = colourRow('bg');
+
+/**
+ * The outline and drop-shadow rows, for the Background section beside the
+ * opacity slider. Each carries a size box alongside its checkbox.
+ *
+ * A `div` wrapping a `label`, not a `label` wrapping everything: a number
+ * input inside the label would sit inside the checkbox's own hit area, and
+ * clicking to type would toggle the setting. The boxes are wired in
+ * `settings.ts` with the other sizes, whose flow they ride.
+ */
 export const OUTLINE_ROW = `
-        <label class="settings-checkbox-row">
-          <input type="checkbox" id="setting-text-outline" />
-          <span class="label-text">Outline text (helps at low opacity)</span>
-        </label>
-        <label class="settings-checkbox-row">
-          <input type="checkbox" id="setting-text-shadow" />
-          <span class="label-text">Drop shadow</span>
-        </label>`;
+        <div class="settings-checkbox-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="setting-text-outline" />
+            <span class="label-text">Outline text (helps at low opacity)</span>
+          </label>
+          <input type="number" id="setting-text-outline-width"
+                 aria-label="Outline width in pixels"
+                 min="${FONT_LIMITS.outline.min}" max="${FONT_LIMITS.outline.max}" step="1" />
+          <span class="unit">px</span>
+        </div>
+        <div class="settings-checkbox-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="setting-text-shadow" />
+            <span class="label-text">Drop shadow</span>
+          </label>
+          <input type="number" id="setting-text-shadow-size"
+                 aria-label="Drop shadow size in pixels"
+                 min="${FONT_LIMITS.shadow.min}" max="${FONT_LIMITS.shadow.max}" step="1" />
+          <span class="unit">px</span>
+        </div>`;
 
 export interface AppearanceHooks {
   /** Persist and broadcast the full snapshot. */

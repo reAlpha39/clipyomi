@@ -1172,17 +1172,21 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     current.colour_counter = incoming.colour_counter;
     current.colour_furigana = incoming.colour_furigana;
     current.colour_unmatched = incoming.colour_unmatched;
+    current.colour_bg = incoming.colour_bg;
     current.font_family_sentence = incoming.font_family_sentence;
     current.font_family_furigana = incoming.font_family_furigana;
     current.font_family_gloss = incoming.font_family_gloss;
     // Assigned rather than merged, unlike the toggles above: an absent size
     // means the user cleared that box and wants the stylesheet default back,
     // which a merge could never express. The settings window is the only
-    // caller and always sends all four.
+    // caller and always sends all six.
     current.font_sentence = incoming.font_sentence;
     current.font_gloss = incoming.font_gloss;
     current.furigana_scale = incoming.furigana_scale;
     current.furigana_gap = incoming.furigana_gap;
+    // The two toggles' sizes are sizes, whatever the toggles beside them are.
+    current.text_outline_width = incoming.text_outline_width;
+    current.text_shadow_size = incoming.text_shadow_size;
 }
 
 #[tauri::command]
@@ -1734,9 +1738,12 @@ mod tests {
             dir.join("settings.json"),
             Settings {
                 colour_kanji: Some("#000000".into()),
+                colour_bg: Some("#102030".into()),
                 font_family_sentence: Some("Yu Gothic".into()),
                 text_outline: Some(true),
+                text_outline_width: Some(3),
                 text_shadow: Some(false),
+                text_shadow_size: Some(5),
                 furigana_gap: Some(6),
                 ..Default::default()
             },
@@ -1773,6 +1780,18 @@ mod tests {
             s.text_shadow,
             Some(false),
             "a toggle merges; omission never clears it"
+        );
+        assert_eq!(
+            s.colour_bg, None,
+            "the window background is a colour; omission clears it"
+        );
+        assert_eq!(
+            s.text_outline_width, None,
+            "the toggles' sizes are sizes: omission clears them"
+        );
+        assert_eq!(
+            s.text_shadow_size, None,
+            "the toggles' sizes are sizes: omission clears them"
         );
     }
 }

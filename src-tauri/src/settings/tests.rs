@@ -551,9 +551,10 @@ fn an_unknown_key_inside_a_slot_survives_a_rewrite() {
     assert!(raw.contains("\"theme\""), "got {raw}");
 }
 
-/// The appearance keys: five text colours, three font families and the
-/// outline toggle. `Option` for the reason the font sizes are — "never set"
-/// has to stay distinguishable from a value equal to the stylesheet default.
+/// The appearance keys: six text colours, the window background, three font
+/// families, the two toggles and the two sizes they scale by. `Option` for
+/// the reason the font sizes are — "never set" has to stay distinguishable
+/// from a value equal to the stylesheet default.
 #[test]
 fn appearance_keys_round_trip_through_the_file() {
     let path = scratch("appearance").join("settings.json");
@@ -564,11 +565,14 @@ fn appearance_keys_round_trip_through_the_file() {
         colour_counter: Some("#445566".into()),
         colour_furigana: Some("#556677".into()),
         colour_unmatched: Some("#667788".into()),
+        colour_bg: Some("#778899".into()),
         font_family_sentence: Some("Yu Gothic".into()),
         font_family_furigana: Some("Meiryo".into()),
         font_family_gloss: Some("Segoe UI".into()),
         text_outline: Some(true),
+        text_outline_width: Some(3),
         text_shadow: Some(true),
+        text_shadow_size: Some(5),
         furigana_gap: Some(6),
         ..Default::default()
     };
@@ -585,7 +589,14 @@ fn unset_appearance_keys_are_left_out_of_the_file() {
     save(&path, &Settings::default()).expect("save");
 
     let raw = std::fs::read_to_string(&path).expect("read back");
-    for key in ["colour_", "font_family_", "text_outline", "text_shadow"] {
+    for key in [
+        "colour_",
+        "font_family_",
+        "text_outline",
+        "text_outline_width",
+        "text_shadow",
+        "text_shadow_size",
+    ] {
         assert!(!raw.contains(key), "{key} in {raw}");
     }
 }

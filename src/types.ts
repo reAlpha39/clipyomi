@@ -124,16 +124,22 @@ export interface Settings {
   colour_furigana?: string;
   /** Punctuation and runs the parser matched nothing for, bound to `--color-unmatched`. */
   colour_unmatched?: string;
+  /** The main window's background, bound to `--color-bg`. */
+  colour_bg?: string;
   /** A family name, bound to `--font-cjk`. */
   font_family_sentence?: string;
   /** Bound to `--font-furigana`; unset, the ruby inherits the sentence font. */
   font_family_furigana?: string;
   /** Rides the popover payload as `gloss_font`, bound to `--font-gloss` there. */
   font_family_gloss?: string;
-  /** A halo behind the sentence text, for reading it over a see-through window. */
+  /** A stroke around the sentence text, for reading it over a see-through window. */
   text_outline?: boolean;
+  /** Stroke width in px, bound to `--text-stroke-width`. */
+  text_outline_width?: number;
   /** A drop shadow under the sentence text. */
   text_shadow?: boolean;
+  /** Shadow offset and blur in px, bound to `--text-shadow-size`. */
+  text_shadow_size?: number;
   window_width?: number;
   window_height?: number;
   window_x?: number;

@@ -100,6 +100,37 @@ describe('appearance settings reaching the main window', () => {
     expect(token('--furigana-gap')).toBe('6px');
   });
 
+  test('applies the persisted stroke width and shadow size on load, in px', async () => {
+    await load({ text_outline_width: 3, text_shadow_size: 5 });
+
+    expect(token('--text-stroke-width')).toBe('3px');
+    expect(token('--text-shadow-size')).toBe('5px');
+  });
+
+  test('applies the persisted window background on load', async () => {
+    await load({ colour_bg: '#102030' });
+
+    expect(token('--color-bg')).toBe('#102030');
+  });
+
+  // Windows erases the pixels a peek newly exposes in the colour this page
+  // last reported. A picked background moves that colour, so the report has
+  // to run again or the strip keeps the old one.
+  test('reports the background to the backend when the colour changes', async () => {
+    document.body.style.backgroundColor = 'rgb(18, 18, 18)';
+    try {
+      await load(FULL);
+      const before = invoke.mock.calls.filter(([cmd]) => cmd === 'set_window_background').length;
+
+      emit('settings-changed', { colour_bg: '#102030' });
+
+      const after = invoke.mock.calls.filter(([cmd]) => cmd === 'set_window_background').length;
+      expect(after).toBeGreaterThan(before);
+    } finally {
+      document.body.style.backgroundColor = '';
+    }
+  });
+
   test('applies the persisted families on load, quoted', async () => {
     await load({ font_family_sentence: 'Yu Gothic', font_family_furigana: 'Meiryo' });
 

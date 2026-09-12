@@ -587,8 +587,9 @@ function setRootToken(token: string, value: string): void {
 }
 
 /**
- * Push the appearance tokens SETTINGS carries onto the root element: the
- * five text colours, the two font families, and the outline class.
+ * Push the appearance tokens SETTINGS carries onto the root element: the six
+ * text colours, the window background, the two font families, and the
+ * outline and drop-shadow classes.
  *
  * FULL says whether an absent key means "cleared" — a full snapshot, where
  * Reset or Default emptied it — or "not mentioned", as in the colour picker's
@@ -608,6 +609,11 @@ function applyAppearance(settings: Partial<Settings>, full: boolean): void {
   if (settings.text_shadow !== undefined) {
     document.documentElement.classList.toggle('text-shadow', settings.text_shadow);
   }
+  // The erase fill Windows paints over newly exposed pixels is whatever this
+  // page last reported, so a picked background has to re-report or a peek
+  // shows a strip of the old colour. A drag previews one payload per frame
+  // and each is a colour change like any other.
+  if (full || settings.colour_bg !== undefined) reportBackground();
 }
 
 /**

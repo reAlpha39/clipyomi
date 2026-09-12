@@ -449,42 +449,28 @@ rt.romaji {
   letter-spacing: -0.02em;
 }
 
-/* The outline setting: a halo in the surface colour behind the sentence, for
-   reading it over a see-through window. `text-shadow` rather than
-   `-webkit-text-stroke`: a stroke is centred on the glyph edge and eats thin
-   kana at 1px, and the `paint-order` that fixes it is Chromium 123+ only.
-   Four crisp diagonals plus two blurred passes, so both a thin stem and a
-   bold one read. `--color-bg` flips with the theme, and the text colours were
-   chosen against it, so the halo always contrasts the text. Inherited, so one
-   rule covers the chips, the unmatched runs and the ruby. */
+/* The outline setting: a stroke in the background colour around the sentence,
+   for reading it over a see-through window. A stroke is centred on the glyph
+   edge, so half of it falls inside and eats thin kana — `paint-order` puts
+   the fill back on top, which is what makes a stroke usable on text at all.
+   Chromium 123+ and WebKit, both older than any webview this ships against.
+   `--color-bg` follows the theme and the background picker, and the text
+   colours were chosen against it, so the stroke always contrasts the text.
+   Inherited, so one rule covers the chips, the unmatched runs and the ruby. */
 .text-outline .sentence {
-  text-shadow:
-    0 0 2px var(--color-bg),
-    0 0 2px var(--color-bg),
-    1px 1px 0 var(--color-bg),
-    -1px -1px 0 var(--color-bg),
-    1px -1px 0 var(--color-bg),
-    -1px 1px 0 var(--color-bg);
+  -webkit-text-stroke: var(--text-stroke-width) var(--color-bg);
+  paint-order: stroke fill;
 }
 
 /* The drop-shadow setting: one soft shadow down and to the right, dark in
-   both themes — a shadow is a shadow whatever the text colour. */
+   both themes — a shadow is a shadow whatever the text colour. Offset and
+   blur are derived from the one size the user sets, holding the proportions
+   of the `1px 2px 3px` this rule was authored with. A stroke and a shadow are
+   separate properties, so both settings apply together with no third rule. */
 .text-shadow .sentence {
-  text-shadow: 1px 2px 3px oklch(0% 0 0 / 0.55);
-}
-
-/* Both on. `text-shadow` is one property, so the two rules above cannot both
-   apply; this one lists the halo first and the drop shadow after it, which
-   paints the shadow beneath the halo. */
-.text-outline.text-shadow .sentence {
   text-shadow:
-    0 0 2px var(--color-bg),
-    0 0 2px var(--color-bg),
-    1px 1px 0 var(--color-bg),
-    -1px -1px 0 var(--color-bg),
-    1px -1px 0 var(--color-bg),
-    -1px 1px 0 var(--color-bg),
-    1px 2px 3px oklch(0% 0 0 / 0.55);
+    calc(var(--text-shadow-size) / 2) var(--text-shadow-size)
+    calc(var(--text-shadow-size) * 1.5) oklch(0% 0 0 / 0.55);
 }
 
 /* :focus-visible (not :focus) so the ring shows for keyboard traversal only,
