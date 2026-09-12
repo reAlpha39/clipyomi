@@ -440,8 +440,10 @@ rt {
   text-align: center;
 }
 
+/* No family of its own: the romaji reading follows `rt`'s token like kana,
+   so the furigana family setting reaches it. It used to pin `--font-mono`,
+   which outranked the setting and read as a picker that did nothing. */
 rt.romaji {
-  font-family: var(--font-mono, monospace);
   font-size: var(--text-furigana-romaji, 0.52em);
   letter-spacing: -0.02em;
 }
