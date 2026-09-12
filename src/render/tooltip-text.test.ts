@@ -217,6 +217,60 @@ describe('assembleTooltipText', () => {
         '消える【きえる】\n(v1,vi) (1) to disappear/to vanish\n\n々  repetition mark',
       );
     });
+
+    // Phase 3b: KANJIDIC2's <misc> numbers ride the same line as one
+    // parenthesised aside, in the file's order — grade, strokes, frequency,
+    // JLPT — with absent fields left out. The JLPT number is the former
+    // four-level scale and is labelled as such, never mapped to N-levels.
+    describe('the misc aside', () => {
+      const head = '消える【きえる】\n(v1,vi) (1) to disappear/to vanish\n\n';
+      const line = (k: KanjiInfo): string =>
+        assembleTooltipText([entry()], undefined, [k]).slice(head.length);
+      const east = tokyo[0];
+
+      test('appends all four fields in KANJIDIC2 order', () => {
+        expect(line({ ...east, grade: 2, strokes: 8, freq: 37, jlpt: 4 })).toBe(
+          '東  トウ・ひがし  east, eastern  (grade 2, 8 strokes, freq 37, old JLPT 4)',
+        );
+      });
+
+      test('leaves out absent fields, and the whole aside when none is present', () => {
+        expect(line({ ...east, grade: 2, strokes: 8 })).toBe(
+          '東  トウ・ひがし  east, eastern  (grade 2, 8 strokes)',
+        );
+        expect(line({ ...east, freq: 37 })).toBe('東  トウ・ひがし  east, eastern  (freq 37)');
+        expect(line({ ...east, grade: null, strokes: null, freq: null, jlpt: null })).toBe(
+          '東  トウ・ひがし  east, eastern',
+        );
+        expect(line(east)).toBe('東  トウ・ひがし  east, eastern');
+      });
+
+      test('one stroke is singular', () => {
+        expect(line({ literal: '一', on: ['イチ'], kun: ['ひと.つ'], meanings: ['one'], strokes: 1 })).toBe(
+          '一  イチ・ひと.つ  one  (1 stroke)',
+        );
+      });
+
+      // The DTD's codes: 1–6 are school years; 8 is the remaining jōyō kanji,
+      // learned in secondary school; 9 and 10 are jinmeiyō (name) kanji. An
+      // unknown code is shown raw rather than guessed at.
+      test('names the grade codes that are not school years', () => {
+        expect(line({ ...east, grade: 8 })).toBe('東  トウ・ひがし  east, eastern  (secondary school)');
+        expect(line({ ...east, grade: 9 })).toBe('東  トウ・ひがし  east, eastern  (name kanji)');
+        expect(line({ ...east, grade: 10 })).toBe('東  トウ・ひがし  east, eastern  (name kanji)');
+        expect(line({ ...east, grade: 7 })).toBe('東  トウ・ひがし  east, eastern  (grade 7)');
+      });
+
+      test('a record with nothing but an aside still has no doubled gap', () => {
+        expect(line({ literal: '々', on: [], kun: [], meanings: [], strokes: 3 })).toBe('々  (3 strokes)');
+      });
+
+      test('hide_kanji hides the aside with the line it is on', () => {
+        expect(
+          assembleTooltipText([entry()], { hide_kanji: true }, [{ ...east, grade: 2, strokes: 8 }]),
+        ).toBe('消える【きえる】\n(v1,vi) (1) to disappear/to vanish');
+      });
+    });
   });
 });
 
