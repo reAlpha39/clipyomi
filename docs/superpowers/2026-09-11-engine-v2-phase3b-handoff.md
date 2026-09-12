@@ -380,12 +380,13 @@ direct build produced. The same `lookup .../gen-3 東` that was refused against
 launch after this phase, and it is smaller than Phase 3a's 3.9 seconds because
 this one downloads nothing.
 
-**The GUI check is the user's, not the agent's, as it was for Phase 3a.**
-Hovering 東京都 in `npm run tauri dev` and reading three asides — `(grade 2, 8
-strokes, freq 37, old JLPT 4)`, `(grade 2, 8 strokes, freq 74, old JLPT 3)`
-and `(grade 3, 11 strokes, freq 123, old JLPT 3)` — and confirming that
-Settings' "Hide kanji readings & meanings" hides them needs a human at a GUI.
-This handoff does not claim it was performed.
+**The GUI check was the user's, not the agent's, as it was for Phase 3a, and
+the user performed it on 2026-09-12** after the final review's fix wave
+(`ba5820f`): hovering 東京都 in the running app shows the three asides —
+`(grade 2, 8 strokes, freq 37, old JLPT 4)`, `(grade 2, 8 strokes, freq 74,
+old JLPT 3)` and `(grade 3, 11 strokes, freq 123, old JLPT 3)` — and Settings'
+"Hide kanji readings & meanings" hides them. The agent's own proof of the same
+path stayed headless, above.
 
 ## 5. Open items
 
