@@ -135,6 +135,31 @@ pub struct Settings {
     /// exactly as the font sizes are.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface_alpha: Option<u32>,
+    // Text appearance. Each `None` leaves `tokens.css` owning the default,
+    // exactly as the font sizes do. The colours are `#rrggbb` strings and the
+    // families bare names; neither is validated here — a hand-edited file is
+    // pinned at apply time by `clampColour` and `clampFamily`, as the sizes
+    // are by `clampFont`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_kanji: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_kana: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_particle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_counter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour_furigana: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_family_sentence: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_family_furigana: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_family_gloss: Option<String>,
+    /// A halo behind the sentence text, for reading it over a see-through
+    /// window. A toggle like `hide_*`, merged the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_outline: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -175,6 +200,15 @@ impl Default for Settings {
             font_gloss: None,
             furigana_scale: None,
             surface_alpha: None,
+            colour_kanji: None,
+            colour_kana: None,
+            colour_particle: None,
+            colour_counter: None,
+            colour_furigana: None,
+            font_family_sentence: None,
+            font_family_furigana: None,
+            font_family_gloss: None,
+            text_outline: None,
             window_width: None,
             window_height: None,
             window_x: None,

@@ -48,6 +48,9 @@ vibrato-source = { path = "../crates/vibrato-source" }
 # MIT OR Apache-2.0, the same pair this project offers. Same for its
 # `global-hotkey` dependency.
 tauri-plugin-global-shortcut = "2.3.2"
+# MIT OR Apache-2.0, the same pair this project offers. Lists installed font
+# families for the settings window through DirectWrite, CoreText or fontconfig.
+font-enumeration = "0.9"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

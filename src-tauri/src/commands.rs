@@ -17,6 +17,7 @@ use crate::settings::{ChromeMode, Settings};
 use crate::state::{SettingsState, SettingsWarning, ShortcutWarning, StartupFailure};
 
 pub mod dictionary;
+pub mod fonts;
 pub mod hints;
 
 /// The sending half of the input channel, managed so commands can reach it.
@@ -1155,6 +1156,20 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     if incoming.surface_alpha.is_some() {
         current.surface_alpha = incoming.surface_alpha;
     }
+    if incoming.text_outline.is_some() {
+        current.text_outline = incoming.text_outline;
+    }
+    // Assigned, like the sizes below: a colour's Reset and a font select's
+    // Default both reach here as the key gone, and only an assign can carry
+    // "unset" to disk. The settings window always sends all eight.
+    current.colour_kanji = incoming.colour_kanji;
+    current.colour_kana = incoming.colour_kana;
+    current.colour_particle = incoming.colour_particle;
+    current.colour_counter = incoming.colour_counter;
+    current.colour_furigana = incoming.colour_furigana;
+    current.font_family_sentence = incoming.font_family_sentence;
+    current.font_family_furigana = incoming.font_family_furigana;
+    current.font_family_gloss = incoming.font_family_gloss;
     // Assigned rather than merged, unlike the toggles above: an absent size
     // means the user cleared that box and wants the stylesheet default back,
     // which a merge could never express. The settings window is the only
@@ -1700,5 +1715,47 @@ mod tests {
             "a settings save wiped a slot"
         );
         assert_eq!(current.layout_slots["1"].surface_alpha, Some(35));
+    }
+
+    /// The appearance keys follow the font sizes: assigned, so a snapshot
+    /// with a key gone reaches disk as "unset" — a colour's Reset and a font
+    /// select's Default are both expressed by omission. The outline toggle is
+    /// a checkbox, always sent, so it merges like `hide_*`.
+    #[test]
+    fn save_settings_assigns_the_appearance_keys_and_clears_omitted_ones() {
+        let dir = scratch("appearance-keys");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings {
+                colour_kanji: Some("#000000".into()),
+                font_family_sentence: Some("Yu Gothic".into()),
+                text_outline: Some(true),
+                ..Default::default()
+            },
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
+
+        save_settings(
+            Settings {
+                colour_kana: Some("#ffffff".into()),
+                font_family_gloss: Some("Segoe UI".into()),
+                ..Default::default()
+            },
+            state_arg,
+        )
+        .unwrap();
+
+        let s = state.snapshot();
+        assert_eq!(s.colour_kanji, None);
+        assert_eq!(s.colour_kana, Some("#ffffff".into()));
+        assert_eq!(s.font_family_sentence, None);
+        assert_eq!(s.font_family_gloss, Some("Segoe UI".into()));
+        assert_eq!(
+            s.text_outline,
+            Some(true),
+            "a toggle merges; omission never clears it"
+        );
     }
 }

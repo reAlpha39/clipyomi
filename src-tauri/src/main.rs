@@ -271,6 +271,7 @@ fn main() {
             commands::hints::set_mecab_hints,
             commands::hints::hints_warning,
             commands::hints::hints_dir,
+            commands::fonts::system_fonts,
             commands::dictionary::kanji_info,
             popover::place_popover,
             popover::hide_popover
