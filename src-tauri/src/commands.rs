@@ -16,7 +16,9 @@ use tokio::sync::{watch, Notify};
 use crate::settings::{ChromeMode, Settings};
 use crate::state::{SettingsState, SettingsWarning, ShortcutWarning, StartupFailure};
 
+pub mod context_menu;
 pub mod dictionary;
+pub mod fonts;
 pub mod hints;
 
 /// The sending half of the input channel, managed so commands can reach it.
@@ -1155,13 +1157,36 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     if incoming.surface_alpha.is_some() {
         current.surface_alpha = incoming.surface_alpha;
     }
+    if incoming.text_outline.is_some() {
+        current.text_outline = incoming.text_outline;
+    }
+    if incoming.text_shadow.is_some() {
+        current.text_shadow = incoming.text_shadow;
+    }
+    // Assigned, like the sizes below: a colour's Reset and a font select's
+    // Default both reach here as the key gone, and only an assign can carry
+    // "unset" to disk. The settings window always sends all eight.
+    current.colour_kanji = incoming.colour_kanji;
+    current.colour_kana = incoming.colour_kana;
+    current.colour_particle = incoming.colour_particle;
+    current.colour_counter = incoming.colour_counter;
+    current.colour_furigana = incoming.colour_furigana;
+    current.colour_unmatched = incoming.colour_unmatched;
+    current.colour_bg = incoming.colour_bg;
+    current.font_family_sentence = incoming.font_family_sentence;
+    current.font_family_furigana = incoming.font_family_furigana;
+    current.font_family_gloss = incoming.font_family_gloss;
     // Assigned rather than merged, unlike the toggles above: an absent size
     // means the user cleared that box and wants the stylesheet default back,
     // which a merge could never express. The settings window is the only
-    // caller and always sends all three.
+    // caller and always sends all six.
     current.font_sentence = incoming.font_sentence;
     current.font_gloss = incoming.font_gloss;
     current.furigana_scale = incoming.furigana_scale;
+    current.furigana_gap = incoming.furigana_gap;
+    // The two toggles' sizes are sizes, whatever the toggles beside them are.
+    current.text_outline_width = incoming.text_outline_width;
+    current.text_shadow_size = incoming.text_shadow_size;
 }
 
 #[tauri::command]
@@ -1700,5 +1725,73 @@ mod tests {
             "a settings save wiped a slot"
         );
         assert_eq!(current.layout_slots["1"].surface_alpha, Some(35));
+    }
+
+    /// The appearance keys follow the font sizes: assigned, so a snapshot
+    /// with a key gone reaches disk as "unset" — a colour's Reset and a font
+    /// select's Default are both expressed by omission. The outline toggle is
+    /// a checkbox, always sent, so it merges like `hide_*`.
+    #[test]
+    fn save_settings_assigns_the_appearance_keys_and_clears_omitted_ones() {
+        let dir = scratch("appearance-keys");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
+            Settings {
+                colour_kanji: Some("#000000".into()),
+                colour_bg: Some("#102030".into()),
+                font_family_sentence: Some("Yu Gothic".into()),
+                text_outline: Some(true),
+                text_outline_width: Some(3),
+                text_shadow: Some(false),
+                text_shadow_size: Some(5),
+                furigana_gap: Some(6),
+                ..Default::default()
+            },
+        ));
+        let app = tauri::test::mock_app();
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
+
+        save_settings(
+            Settings {
+                colour_kana: Some("#ffffff".into()),
+                font_family_gloss: Some("Segoe UI".into()),
+                ..Default::default()
+            },
+            state_arg,
+        )
+        .unwrap();
+
+        let s = state.snapshot();
+        assert_eq!(s.colour_kanji, None);
+        assert_eq!(s.colour_kana, Some("#ffffff".into()));
+        assert_eq!(s.font_family_sentence, None);
+        assert_eq!(
+            s.furigana_gap, None,
+            "a size is assigned; omission clears it"
+        );
+        assert_eq!(s.font_family_gloss, Some("Segoe UI".into()));
+        assert_eq!(
+            s.text_outline,
+            Some(true),
+            "a toggle merges; omission never clears it"
+        );
+        assert_eq!(
+            s.text_shadow,
+            Some(false),
+            "a toggle merges; omission never clears it"
+        );
+        assert_eq!(
+            s.colour_bg, None,
+            "the window background is a colour; omission clears it"
+        );
+        assert_eq!(
+            s.text_outline_width, None,
+            "the toggles' sizes are sizes: omission clears them"
+        );
+        assert_eq!(
+            s.text_shadow_size, None,
+            "the toggles' sizes are sizes: omission clears them"
+        );
     }
 }

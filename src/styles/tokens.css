@@ -10,6 +10,14 @@
   --color-kana: oklch(45% 0.08 160);
   --color-particle: oklch(55% 0.10 30);
   --color-counter: oklch(50% 0.10 300);
+  /* Furigana, the same grey in both themes: it was a hardcoded fallback in
+     `global.css` until the colour settings needed a token to move. */
+  --color-furigana: #8e8e93;
+  /* Punctuation and unmatched runs. A token of its own, defaulting to the
+     muted colour, so the colour setting can move it without dragging the
+     window chrome that shares `--color-muted` along. Follows the theme
+     through the reference. */
+  --color-unmatched: var(--color-muted);
   --color-shadow: oklch(0% 0 0 / 0.18);
   /* Window background opacity (§7.5), as a ratio. `main.ts` overrides it on
      the root element; nothing else does, which is what keeps the settings
@@ -18,8 +26,8 @@
   /* The see-through form of the background, derived once so it follows every
      theme branch without being restated in any of them. `color-mix`
      interpolates premultiplied, so this moves the alpha channel and leaves the
-     RGB exactly as authored. `--color-bg` itself stays opaque: `.context-menu`
-     uses it, and that menu is the app's only reach in content mode. */
+     RGB exactly as authored. `--color-bg` itself stays opaque: the settings
+     window and the outline halo read it as a solid colour. */
   --color-bg-surface: color-mix(
     in srgb,
     var(--color-bg) calc(var(--surface-alpha) * 100%),
@@ -42,6 +50,16 @@
      the `var(--text-furigana, 0.58em)` fallback in `global.css` so the settings
      window can read this default back instead of restating it. */
   --text-furigana: 0.58em;
+  /* Space between the furigana and the text it annotates. Padding on the
+     `rt`, so the line grows with it rather than the reading overlapping the
+     line above. Stated here so the settings window can read the default. */
+  --furigana-gap: 0px;
+  /* The outline stroke's width. Centred on the glyph edge, so half of it
+     shows: 2px reads as a 1px edge. */
+  --text-stroke-width: 2px;
+  /* The drop shadow's size, which its offset and blur are both derived from.
+     2px is the `1px 2px 3px` this setting shipped with. */
+  --text-shadow-size: 2px;
 
   --space-pane: 16px;
   --duration-fast: 120ms;

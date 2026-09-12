@@ -48,6 +48,14 @@ vibrato-source = { path = "../crates/vibrato-source" }
 # MIT OR Apache-2.0, the same pair this project offers. Same for its
 # `global-hotkey` dependency.
 tauri-plugin-global-shortcut = "2.3.2"
+# The installed font families for the settings window, both MIT OR Apache-2.0.
+# `font-enumeration` asks the platform — DirectWrite, CoreText, fontconfig —
+# because that is what the webview resolves CSS `font-family` against; a name
+# read from the file itself can differ and then never renders. `ttf-parser`
+# reads each file's cmap so the sentence and furigana selects can list only
+# families with Japanese glyphs.
+font-enumeration = "0.9"
+ttf-parser = "0.25"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

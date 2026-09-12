@@ -200,8 +200,7 @@ fn settings_roundtrips_furigana_mode() {
         window_height: Some(300),
         window_x: None,
         window_y: None,
-        layout_slots: BTreeMap::new(),
-        extra: serde_json::Map::new(),
+        ..Default::default()
     };
     let json = serde_json::to_string(&settings).expect("serialization succeeds");
     assert!(json.contains("\"furigana_mode\":\"hiragana\""));
@@ -230,8 +229,7 @@ fn settings_roundtrips_gloss_filters() {
         window_height: Some(300),
         window_x: None,
         window_y: None,
-        layout_slots: BTreeMap::new(),
-        extra: serde_json::Map::new(),
+        ..Default::default()
     };
     let json = serde_json::to_string(&settings).expect("serialization succeeds");
     assert!(json.contains("\"hide_pos\":true"));
@@ -551,4 +549,54 @@ fn an_unknown_key_inside_a_slot_survives_a_rewrite() {
 
     let raw = std::fs::read_to_string(&path).expect("read back");
     assert!(raw.contains("\"theme\""), "got {raw}");
+}
+
+/// The appearance keys: six text colours, the window background, three font
+/// families, the two toggles and the two sizes they scale by. `Option` for
+/// the reason the font sizes are — "never set" has to stay distinguishable
+/// from a value equal to the stylesheet default.
+#[test]
+fn appearance_keys_round_trip_through_the_file() {
+    let path = scratch("appearance").join("settings.json");
+    let written = Settings {
+        colour_kanji: Some("#112233".into()),
+        colour_kana: Some("#223344".into()),
+        colour_particle: Some("#334455".into()),
+        colour_counter: Some("#445566".into()),
+        colour_furigana: Some("#556677".into()),
+        colour_unmatched: Some("#667788".into()),
+        colour_bg: Some("#778899".into()),
+        font_family_sentence: Some("Yu Gothic".into()),
+        font_family_furigana: Some("Meiryo".into()),
+        font_family_gloss: Some("Segoe UI".into()),
+        text_outline: Some(true),
+        text_outline_width: Some(3),
+        text_shadow: Some(true),
+        text_shadow_size: Some(5),
+        furigana_gap: Some(6),
+        ..Default::default()
+    };
+
+    save(&path, &written).expect("save");
+    let (read_back, warning) = load(&path);
+    assert_eq!(read_back, normalize(written));
+    assert!(warning.is_none(), "got {warning:?}");
+}
+
+#[test]
+fn unset_appearance_keys_are_left_out_of_the_file() {
+    let path = scratch("appearance-unset").join("settings.json");
+    save(&path, &Settings::default()).expect("save");
+
+    let raw = std::fs::read_to_string(&path).expect("read back");
+    for key in [
+        "colour_",
+        "font_family_",
+        "text_outline",
+        "text_outline_width",
+        "text_shadow",
+        "text_shadow_size",
+    ] {
+        assert!(!raw.contains(key), "{key} in {raw}");
+    }
 }

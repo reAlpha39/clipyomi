@@ -531,6 +531,8 @@ describe('Settings Window', () => {
     document.documentElement.style.setProperty('--text-sentence', '24px');
     document.documentElement.style.setProperty('--text-gloss', '14px');
     document.documentElement.style.setProperty('--text-furigana', '0.58em');
+    document.documentElement.style.setProperty('--text-stroke-width', '2px');
+    document.documentElement.style.setProperty('--text-shadow-size', '3px');
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') {
         return Promise.resolve<Settings>({
@@ -549,6 +551,10 @@ describe('Settings Window', () => {
     expect(container.querySelector<HTMLInputElement>('#setting-font-sentence')?.value).toBe('24');
     expect(container.querySelector<HTMLInputElement>('#setting-font-gloss')?.value).toBe('14');
     expect(container.querySelector<HTMLInputElement>('#setting-furigana-scale')?.value).toBe('58');
+    expect(container.querySelector<HTMLInputElement>('#setting-text-outline-width')?.value).toBe(
+      '2',
+    );
+    expect(container.querySelector<HTMLInputElement>('#setting-text-shadow-size')?.value).toBe('3');
   });
 
   test('a persisted size wins over the stylesheet default', async () => {
