@@ -373,3 +373,28 @@ for (const theme of THEMES) {
     }
   });
 }
+
+// The outline setting is one `text-shadow` rule on `.sentence`, relied on to
+// inherit. Chips are `<button>`s, and Chromium's UA stylesheet resets
+// `text-shadow: none` on buttons the way it resets `font` and `color` — so
+// without `.chip` undoing that too, only the unmatched `<span>` runs ever got
+// the halo. happy-dom has no UA stylesheet, so only a real browser can prove
+// it; asserted per element type, since the two take different paths.
+test('the outline setting reaches chips and unmatched runs alike', async ({ page }) => {
+  const outlineStub = `
+  ${STUB}
+  const realInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header', text_outline: true });
+    return realInvoke(cmd, args);
+  };
+`;
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${outlineStub}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const shadowOf = (selector: string) =>
+    page.locator(selector).first().evaluate((el) => getComputedStyle(el).textShadow);
+  expect(await shadowOf('.unmatched')).not.toBe('none');
+  expect(await shadowOf('.chip')).not.toBe('none');
+});
