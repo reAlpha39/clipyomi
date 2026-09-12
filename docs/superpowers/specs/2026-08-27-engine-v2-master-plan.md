@@ -1184,6 +1184,21 @@ attribution. Design: `specs/2026-09-09-engine-v2-phase3a-design.md`; record:
 `2026-09-11-engine-v2-phase3a-handoff.md`. The engine was not touched, and
 §5.2's baseline block is unchanged to the cell.
 
+### Phase 3b — The KANJIDIC misc fields — **COMPLETE**
+
+The four `<misc>` numbers Phase 3a's parser read and discarded — school
+grade, stroke count, newspaper frequency rank, former JLPT level — kept on
+the same record and appended to the same kanji line as one parenthesised
+aside, `(grade 2, 8 strokes, freq 37, old JLPT 4)`, which `colourLine`
+paints as a paren run with no renderer or stylesheet change. Index format
+5 → 6 with the header untouched, so existing installs rebuild once from the
+archives they already hold. The JLPT number is labelled as the former
+four-level scale and never mapped to N-levels; the Phase 3 table's JLPT row
+is settled for kanji and declined for words, with the reasons in the design.
+Design: `specs/2026-09-11-engine-v2-phase3b-design.md`; record:
+`2026-09-11-engine-v2-phase3b-handoff.md`. Nothing under `engine/` was
+touched, and §5.2's baseline block is unchanged to the cell.
+
 ### Phase 3 — Extra linguistic layers
 
 Independent of segmentation entirely. Each layer is its own increment with its
@@ -1192,8 +1207,8 @@ own licensing gate, adopted only if its data source is permissive:
 | Layer | Source | Licence status |
 | --- | --- | --- |
 | Frequency rank | corpus-derived | **Moot** — the layer is ruled out on measurement, so no licence needs establishing |
-| JLPT level | community lists | Unofficial, provenance varies |
-| Kanji readings | KANJIDIC2 (EDRDG) | **Shipped, Phase 3a (2026-09-11).** CC BY-SA 4.0, same publisher and licence as JMdict; attribution in the settings footer |
+| JLPT level | KANJIDIC2 `<jlpt>`, kanji only, former four-level scale | **Kanji half shipped, Phase 3b (2026-09-11)**, labelled as the former scale. Word-level JLPT declined: no official N1–N5 list exists, so no source can meet the written-provenance gate |
+| Kanji readings | KANJIDIC2 (EDRDG) | **Shipped, Phase 3a (2026-09-11).** CC BY-SA 4.0, same publisher and licence as JMdict; attribution in the settings footer. Phase 3b added grade, stroke count, frequency rank and former JLPT level to the same line |
 | Pitch accent | — | **Highest risk.** NHK's dictionary is not free, and community accent datasets have murky provenance — precisely the trap this plan exists to escape |
 
 No layer ships without its licence established in writing first.
