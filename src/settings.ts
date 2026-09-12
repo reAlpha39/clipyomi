@@ -198,6 +198,7 @@ export function initSettingsApp(container: HTMLElement) {
       const match = btn.getAttribute('data-mode') === mode;
       btn.setAttribute('aria-checked', String(match));
     });
+    appearance.setFuriganaMode(mode);
   }
 
   /**

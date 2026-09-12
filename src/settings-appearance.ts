@@ -3,7 +3,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { COLOUR_KEYS, COLOUR_KINDS, clampColour, stylesheetDefault, type ColourKind } from './text-colours';
 import { FAMILY_KEYS, clampFamily, type FamilyKind } from './text-fonts';
-import type { Settings } from './types';
+import type { FuriganaMode, Settings } from './types';
 
 /**
  * The appearance controls of the settings window: three font selects, five
@@ -73,6 +73,13 @@ export interface AppearanceHooks {
 }
 
 export interface AppearanceControls {
+  /**
+   * The furigana mode decides what the furigana select offers: every family
+   * for romaji, Japanese-capable ones otherwise. Called by `settings.ts`
+   * wherever it moves the mode buttons, so a click and an incoming snapshot
+   * both refill the select.
+   */
+  setFuriganaMode(mode: FuriganaMode): void;
   /** The keys this module owns, only those that are set. */
   snapshot(): Partial<Settings>;
   /**
@@ -166,28 +173,40 @@ export function initAppearanceControls(
     select.value = name;
   }
 
+  /** What `system_fonts` answered, kept so a mode change can refill a select. */
+  let installed: Array<{ name: string; japanese: boolean }> = [];
+  let furiganaMode: FuriganaMode = 'none';
+
   /**
-   * Fill the selects from `system_fonts`. Sentence and furigana offer only
-   * families with Japanese glyphs: a Latin-only family applied to Japanese
-   * text falls back glyph by glyph to the system CJK font, and the pick looks
-   * like nothing happened. Definitions are English, so every family stands.
+   * Whether KIND's select needs Japanese glyphs. A Latin-only family applied
+   * to Japanese text falls back glyph by glyph to the system CJK font, and
+   * the pick looks like nothing happened — so the sentence, and the furigana
+   * while it is kana, list only families that cover the script. Romaji is
+   * Latin text and definitions are English: every family stands there.
    */
+  function needsJapanese(kind: FamilyKind): boolean {
+    if (kind === 'sentence') return true;
+    return kind === 'furigana' && furiganaMode !== 'romaji';
+  }
+
+  function fillSelect(kind: FamilyKind) {
+    const offered = needsJapanese(kind) ? installed.filter((f) => f.japanese) : installed;
+    selects[kind].replaceChildren(
+      option('Default', ''),
+      ...offered.map((f) => option(f.name, f.name)),
+    );
+    showFamily(kind);
+  }
+
   function populateFamilies(list: unknown) {
     if (!Array.isArray(list)) return;
-    const families = list.flatMap((entry: unknown) => {
+    installed = list.flatMap((entry: unknown) => {
       if (typeof entry !== 'object' || entry === null) return [];
       const { name, japanese } = entry as { name?: unknown; japanese?: unknown };
       const clean = clampFamily(name);
       return clean === null || typeof japanese !== 'boolean' ? [] : [{ name: clean, japanese }];
     });
-    for (const kind of FAMILY_KINDS) {
-      const offered = kind === 'gloss' ? families : families.filter((f) => f.japanese);
-      selects[kind].replaceChildren(
-        option('Default', ''),
-        ...offered.map((f) => option(f.name, f.name)),
-      );
-      showFamily(kind);
-    }
+    for (const kind of FAMILY_KINDS) fillSelect(kind);
   }
 
   for (const kind of FAMILY_KINDS) {
@@ -206,6 +225,12 @@ export function initAppearanceControls(
   outline.addEventListener('change', hooks.save);
 
   return {
+    setFuriganaMode(mode) {
+      if (mode === furiganaMode) return;
+      furiganaMode = mode;
+      fillSelect('furigana');
+    },
+
     snapshot() {
       const out: Partial<Settings> = { text_outline: outline.checked };
       for (const kind of COLOUR_KINDS) {

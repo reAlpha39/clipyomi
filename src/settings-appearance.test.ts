@@ -182,6 +182,34 @@ describe('the appearance controls', () => {
       expect(el<HTMLSelectElement>('#setting-font-family-sentence').value).toBe('');
     });
 
+    // Romaji is Latin text: a Japanese font's Latin glyphs are rarely what
+    // anyone wants there, and every installed family can render it.
+    test('in romaji mode the furigana select lists every family', async () => {
+      await boot({ ...FULL, furigana_mode: 'romaji' });
+
+      expect(options('#setting-font-family-furigana')).toEqual([
+        'Default',
+        'Meiryo',
+        'Segoe UI',
+        'Yu Gothic',
+      ]);
+      expect(options('#setting-font-family-sentence')).toEqual(['Default', 'Meiryo', 'Yu Gothic']);
+    });
+
+    test('switching the furigana mode re-filters the select and keeps the pick', async () => {
+      await boot({ ...FULL, furigana_mode: 'hiragana', font_family_furigana: 'Meiryo' });
+      const select = el<HTMLSelectElement>('#setting-font-family-furigana');
+      expect(options('#setting-font-family-furigana')).not.toContain('Segoe UI');
+
+      el<HTMLButtonElement>('[data-mode="romaji"]').click();
+      expect(options('#setting-font-family-furigana')).toContain('Segoe UI');
+      expect(select.value).toBe('Meiryo');
+
+      el<HTMLButtonElement>('[data-mode="katakana"]').click();
+      expect(options('#setting-font-family-furigana')).not.toContain('Segoe UI');
+      expect(select.value).toBe('Meiryo');
+    });
+
     // Definitions are English, so every installed family is a candidate.
     test('the definitions select lists every family', async () => {
       await boot(FULL);
