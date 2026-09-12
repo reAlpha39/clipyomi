@@ -2,10 +2,12 @@
 
 //! The installed font families, for the settings window's font selects.
 //!
-//! Enumerated once and cached: `fontdb` walks every installed face to answer,
-//! and the coverage check below opens each file, which is hundreds of
-//! milliseconds nobody wants paid on every open of the settings window.
+//! Enumerated once and cached: the platform walks every installed face to
+//! answer, and the coverage check below reads each file, which is hundreds
+//! of milliseconds nobody wants paid on every open of the settings window.
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use serde::Serialize;
@@ -57,21 +59,38 @@ pub fn covers_japanese(data: &[u8], index: u32) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether any face in the font file DATA covers Japanese. A collection
+/// (`.ttc`) is judged by its most capable face: the platform reports the
+/// family per face but not which face in the file it is, and the collections
+/// that ship with an OS group faces of one script anyway.
+pub fn any_face_covers_japanese(data: &[u8]) -> bool {
+    let faces = ttf_parser::fonts_in_collection(data).unwrap_or(1);
+    (0..faces).any(|index| covers_japanese(data, index))
+}
+
+/// Family names as the platform font system reports them — DirectWrite,
+/// CoreText or fontconfig — because that is the system the webview resolves
+/// CSS `font-family` against. Names read out of the font file itself can
+/// differ: `MotoyaLMNyaa` in the file's name table is `MotoyaLMNyaa W3 mono`
+/// to DirectWrite, and only the latter renders.
 fn enumerate() -> Vec<FontFamily> {
-    let mut db = fontdb::Database::new();
-    db.load_system_fonts();
-    let faces: Vec<(String, bool)> = db
-        .faces()
-        .map(|face| {
-            let name = face
-                .families
-                .first()
-                .map(|(name, _)| name.clone())
-                .unwrap_or_default();
-            let japanese = db.with_face_data(face.id, covers_japanese).unwrap_or(false);
-            (name, japanese)
-        })
-        .collect();
+    let fonts = match font_enumeration::Collection::new() {
+        Ok(fonts) => fonts.take(),
+        // An empty list leaves the selects showing only Default; the window
+        // still works, the user just cannot pick a family from it.
+        Err(_) => return Vec::new(),
+    };
+    // One read per file, not per face: a collection holds several faces and
+    // the Japanese system fonts are mostly collections.
+    let mut covered: HashMap<PathBuf, bool> = HashMap::new();
+    let faces = fonts.into_iter().map(|font| {
+        let japanese = *covered.entry(font.path.clone()).or_insert_with(|| {
+            std::fs::read(&font.path)
+                .map(|data| any_face_covers_japanese(&data))
+                .unwrap_or(false)
+        });
+        (font.family_name, japanese)
+    });
     families_by_coverage(faces)
 }
 
@@ -143,5 +162,14 @@ mod tests {
     #[test]
     fn a_file_that_is_not_a_font_covers_nothing() {
         assert!(!covers_japanese(b"not a font", 0));
+    }
+}
+#[cfg(test)]
+mod file_tests {
+    use super::*;
+
+    #[test]
+    fn a_file_that_is_not_a_font_has_no_covering_face() {
+        assert!(!any_face_covers_japanese(b"not a font"));
     }
 }
