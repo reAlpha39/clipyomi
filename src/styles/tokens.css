@@ -50,6 +50,10 @@
      the `var(--text-furigana, 0.58em)` fallback in `global.css` so the settings
      window can read this default back instead of restating it. */
   --text-furigana: 0.58em;
+  /* Space between the furigana and the text it annotates. Padding on the
+     `rt`, so the line grows with it rather than the reading overlapping the
+     line above. Stated here so the settings window can read the default. */
+  --furigana-gap: 0px;
 
   --space-pane: 16px;
   --duration-fast: 120ms;

@@ -129,6 +129,10 @@ pub struct Settings {
     /// Furigana size as a percentage of the sentence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub furigana_scale: Option<u32>,
+    /// Space between the furigana and its text, in px. A size like the three
+    /// above, assigned in `merge_saved` so an emptied box clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub furigana_gap: Option<u32>,
     /// Window background opacity as a percentage (§7.5). `None` leaves
     /// `tokens.css` owning the default. Not clamped here: out-of-range values
     /// from a hand-edited file are pinned at apply time by `clampAlpha`,
@@ -205,6 +209,7 @@ impl Default for Settings {
             font_sentence: None,
             font_gloss: None,
             furigana_scale: None,
+            furigana_gap: None,
             surface_alpha: None,
             colour_kanji: None,
             colour_kana: None,

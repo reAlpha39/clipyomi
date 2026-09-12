@@ -435,6 +435,7 @@ rt {
   color: var(--color-furigana);
   /* Unset, the ruby keeps the sentence font, as it always has. */
   font-family: var(--font-furigana, inherit);
+  padding-bottom: var(--furigana-gap);
   user-select: none;
   line-height: 1;
   text-align: center;

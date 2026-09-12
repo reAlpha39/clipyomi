@@ -73,6 +73,12 @@ export function initSettingsApp(container: HTMLElement) {
                  min="${FONT_LIMITS.furigana.min}" max="${FONT_LIMITS.furigana.max}" step="1" />
           <span class="unit">% of sentence</span>
         </label>
+        <label class="settings-number-row">
+          <span class="label-text">Furigana gap</span>
+          <input type="number" id="setting-furigana-gap"
+                 min="${FONT_LIMITS.gap.min}" max="${FONT_LIMITS.gap.max}" step="1" />
+          <span class="unit">px</span>
+        </label>
       </section>
       ${APPEARANCE_SECTIONS}
 
@@ -141,6 +147,7 @@ export function initSettingsApp(container: HTMLElement) {
   const fontSentence = container.querySelector<HTMLInputElement>('#setting-font-sentence')!;
   const fontGloss = container.querySelector<HTMLInputElement>('#setting-font-gloss')!;
   const furiganaScale = container.querySelector<HTMLInputElement>('#setting-furigana-scale')!;
+  const furiganaGap = container.querySelector<HTMLInputElement>('#setting-furigana-gap')!;
   const furiganaButtons = container.querySelectorAll<HTMLButtonElement>(
     '.segmented-control button[data-mode]',
   );
@@ -312,6 +319,7 @@ export function initSettingsApp(container: HTMLElement) {
       font_sentence: sizeOf(fontSentence, 'sentence'),
       font_gloss: sizeOf(fontGloss, 'gloss'),
       furigana_scale: sizeOf(furiganaScale, 'furigana'),
+      furigana_gap: sizeOf(furiganaGap, 'gap'),
       surface_alpha: clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max,
       ...appearance.snapshot(),
     };
@@ -350,6 +358,7 @@ export function initSettingsApp(container: HTMLElement) {
       fontSentence.value = s.font_sentence === undefined ? '' : String(s.font_sentence);
       fontGloss.value = s.font_gloss === undefined ? '' : String(s.font_gloss);
       furiganaScale.value = s.furigana_scale === undefined ? '' : String(s.furigana_scale);
+      furiganaGap.value = s.furigana_gap === undefined ? '' : String(s.furigana_gap);
     }
     appearance.apply(s, isFullSnapshot);
     if (s.surface_alpha !== undefined) {
@@ -362,6 +371,7 @@ export function initSettingsApp(container: HTMLElement) {
   fontSentence.addEventListener('change', saveAndBroadcast);
   fontGloss.addEventListener('change', saveAndBroadcast);
   furiganaScale.addEventListener('change', saveAndBroadcast);
+  furiganaGap.addEventListener('change', saveAndBroadcast);
 
   hidePos.addEventListener('change', saveAndBroadcast);
   hideXrefs.addEventListener('change', saveAndBroadcast);
@@ -445,6 +455,7 @@ export function initSettingsApp(container: HTMLElement) {
       [fontSentence, 'sentence'],
       [fontGloss, 'gloss'],
       [furiganaScale, 'furigana'],
+      [furiganaGap, 'gap'],
     ];
     for (const [input, kind] of boxes) {
       if (input.value !== '') continue;

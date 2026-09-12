@@ -2,8 +2,11 @@
 
 import type { Settings } from './types';
 
-/** The three sizes the user can move. Furigana is a percentage, the rest px. */
-export type FontKind = 'sentence' | 'gloss' | 'furigana';
+/**
+ * The four sizes the user can move. Furigana is a percentage, the rest px;
+ * `gap` is the space between the furigana and the text it annotates.
+ */
+export type FontKind = 'sentence' | 'gloss' | 'furigana' | 'gap';
 
 /**
  * Bounds for each control.
@@ -16,6 +19,7 @@ export const FONT_LIMITS: Record<FontKind, { min: number; max: number }> = {
   sentence: { min: 12, max: 48 },
   gloss: { min: 10, max: 28 },
   furigana: { min: 30, max: 100 },
+  gap: { min: 0, max: 24 },
 };
 
 /**
@@ -39,6 +43,7 @@ const TOKENS: Record<FontKind, string> = {
   sentence: '--text-sentence',
   gloss: '--text-gloss',
   furigana: '--text-furigana',
+  gap: '--furigana-gap',
 };
 
 /** VALUE pinned into KIND's range, or `null` if it is not a finite number. */
@@ -60,6 +65,7 @@ export function fontVars(settings: Partial<Settings>): Array<[string, string]> {
   const sentence = clampFont('sentence', settings.font_sentence);
   const gloss = clampFont('gloss', settings.font_gloss);
   const furigana = clampFont('furigana', settings.furigana_scale);
+  const gap = clampFont('gap', settings.furigana_gap);
 
   return [
     ['--text-sentence', sentence === null ? '' : `${sentence}px`],
@@ -69,6 +75,7 @@ export function fontVars(settings: Partial<Settings>): Array<[string, string]> {
       '--text-furigana-romaji',
       furigana === null ? '' : `${(furigana * ROMAJI_PER_MILLE) / PER_MILLE}em`,
     ],
+    ['--furigana-gap', gap === null ? '' : `${gap}px`],
   ];
 }
 
