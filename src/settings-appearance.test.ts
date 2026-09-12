@@ -57,7 +57,14 @@ describe('the appearance controls', () => {
   });
 
   /** Boot with a snapshot and an installed-font list, then settle the promises. */
-  async function boot(settings: Partial<Settings>, fonts: unknown = ['Meiryo', 'Yu Gothic']) {
+  /** What `system_fonts` answers: two Japanese-capable families and one Latin-only. */
+  const FONTS = [
+    { name: 'Meiryo', japanese: true },
+    { name: 'Segoe UI', japanese: false },
+    { name: 'Yu Gothic', japanese: true },
+  ];
+
+  async function boot(settings: Partial<Settings>, fonts: unknown = FONTS) {
     invoke.mockImplementation((cmd: string) => {
       if (cmd === 'get_settings') return Promise.resolve(settings);
       if (cmd === 'system_fonts') return Promise.resolve(fonts);
@@ -164,11 +171,33 @@ describe('the appearance controls', () => {
       return [...el<HTMLSelectElement>(selector).options].map((o) => o.textContent ?? '');
     }
 
-    test('lists the installed families after Default', async () => {
+    // A Latin-only family applied to Japanese text falls back glyph by glyph
+    // to the system CJK font, so the pick looks like nothing happened. The
+    // two Japanese selects offer only families that can render the text.
+    test('the sentence and furigana selects list only Japanese-capable families', async () => {
       await boot(FULL);
 
       expect(options('#setting-font-family-sentence')).toEqual(['Default', 'Meiryo', 'Yu Gothic']);
+      expect(options('#setting-font-family-furigana')).toEqual(['Default', 'Meiryo', 'Yu Gothic']);
       expect(el<HTMLSelectElement>('#setting-font-family-sentence').value).toBe('');
+    });
+
+    // Definitions are English, so every installed family is a candidate.
+    test('the definitions select lists every family', async () => {
+      await boot(FULL);
+
+      expect(options('#setting-font-family-gloss')).toEqual([
+        'Default',
+        'Meiryo',
+        'Segoe UI',
+        'Yu Gothic',
+      ]);
+    });
+
+    test('ignores entries that are not family records', async () => {
+      await boot(FULL, ['Meiryo', { name: 'Yu Gothic' }, { name: 'Segoe UI', japanese: false }]);
+
+      expect(options('#setting-font-family-gloss')).toEqual(['Default', 'Segoe UI']);
     });
 
     test('shows the persisted family', async () => {

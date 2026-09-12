@@ -166,11 +166,26 @@ export function initAppearanceControls(
     select.value = name;
   }
 
+  /**
+   * Fill the selects from `system_fonts`. Sentence and furigana offer only
+   * families with Japanese glyphs: a Latin-only family applied to Japanese
+   * text falls back glyph by glyph to the system CJK font, and the pick looks
+   * like nothing happened. Definitions are English, so every family stands.
+   */
   function populateFamilies(list: unknown) {
     if (!Array.isArray(list)) return;
-    const names = list.map(clampFamily).filter((n): n is string => n !== null);
+    const families = list.flatMap((entry: unknown) => {
+      if (typeof entry !== 'object' || entry === null) return [];
+      const { name, japanese } = entry as { name?: unknown; japanese?: unknown };
+      const clean = clampFamily(name);
+      return clean === null || typeof japanese !== 'boolean' ? [] : [{ name: clean, japanese }];
+    });
     for (const kind of FAMILY_KINDS) {
-      selects[kind].replaceChildren(option('Default', ''), ...names.map((n) => option(n, n)));
+      const offered = kind === 'gloss' ? families : families.filter((f) => f.japanese);
+      selects[kind].replaceChildren(
+        option('Default', ''),
+        ...offered.map((f) => option(f.name, f.name)),
+      );
       showFamily(kind);
     }
   }
@@ -186,7 +201,7 @@ export function initAppearanceControls(
 
   // Enumerated once by the backend and cached there; an empty or failed
   // answer leaves each select showing Default and whatever is persisted.
-  void invoke<string[]>('system_fonts').then(populateFamilies).catch(() => {});
+  void invoke<unknown>('system_fonts').then(populateFamilies).catch(() => {});
 
   outline.addEventListener('change', hooks.save);
 

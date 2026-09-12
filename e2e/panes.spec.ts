@@ -398,3 +398,23 @@ test('the outline setting reaches chips and unmatched runs alike', async ({ page
   expect(await shadowOf('.unmatched')).not.toBe('none');
   expect(await shadowOf('.chip')).not.toBe('none');
 });
+
+// The romaji reading used to pin its own monospace family, which outranked
+// the furigana family setting: pick a font for the furigana in romaji mode
+// and nothing moved. The romaji reading now follows the same token as kana.
+test('romaji furigana follows the furigana family setting', async ({ page }) => {
+  const romajiStub = `
+  ${STUB}
+  const realInvoke = window.__TAURI_INTERNALS__.invoke;
+  window.__TAURI_INTERNALS__.invoke = (cmd, args) => {
+    if (cmd === 'get_settings') return Promise.resolve({ chrome_mode: 'header', furigana_mode: 'romaji', font_family_furigana: 'MS Gothic' });
+    return realInvoke(cmd, args);
+  };
+`;
+  await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${romajiStub}`);
+  await page.goto('/');
+  await emitFixtureResult(page);
+
+  const rt = page.locator('rt.romaji').first();
+  expect(await rt.evaluate((el) => getComputedStyle(el).fontFamily)).toBe('"MS Gothic"');
+});
