@@ -199,12 +199,26 @@ prints nothing — no `*.snap.new`, so `parse_sentences.txt` is byte-identical.
 
 The first four "before" figures are Task 1 Step 1's re-take at `deb2994`,
 which is why they differ from the Phase 3a handoff's: five review commits
-landed after `9bf74ef`. Task 1 touched no TypeScript and did not re-take the
-two front-end totals, so **the `npm test` and Playwright "before" figures are
-the Phase 3a handoff's at `9bf74ef`**, not a measurement taken for this phase;
-Task 3's report corroborates the first of them, adding three tests to reach
-305. The workspace total gains four where the `mecab` suite gains six, because
-the workspace run does not enable that feature.
+landed after `9bf74ef`. Task 1 re-took only the three Rust suites (workspace,
+`mecab`, `hints-source`) at that commit and touched no TypeScript, so **the
+`npm test` and Playwright "before" figures are the Phase 3a handoff's at
+`9bf74ef`**, not a measurement taken for this phase; the npm total at
+`deb2994` itself was never measured. Task 3 added one Vitest test
+(`src/kanji-lookup.test.ts`); Task 4 added seven (six in
+`src/render/tooltip-text.test.ts`, one in `src/render/tooltip-colour.test.ts`)
+— eight in the range, reaching the recorded after-total of 312 without an
+own-phase base to count them from.
+
+The `mecab` and workspace "after" figures both check out against a listing
+of the test binaries: `mecab` lists 373 tests, and workspace lists 605
+passed plus 1 ignored as 606 — matching each recorded total. None of the six
+new Rust tests (five in `kanjidic.rs`, one in `index_roundtrip.rs`) is
+feature-gated, and the workspace build already pulls in `mecab` through
+`src-tauri`'s `features = ["mecab"]`, so both suites should have gained six
+from those six tests alone. `mecab` did (367 to 373); the workspace total did
+not (601 to 605, a gain of four) — the recorded `deb2994` "before" of 601 is
+unreconciled by two, and the discrepancy is recorded here rather than
+explained.
 
 Clean, with no output worth quoting: `cargo clippy --workspace --all-targets
 -- -D warnings`, the same with `-p jparser --features mecab` and with
