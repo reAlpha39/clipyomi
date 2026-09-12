@@ -158,8 +158,10 @@ fn begins_xml(source: &Source, head: &[u8], more_follows: bool) -> bool {
                 None => more_follows,
             },
             // A token the peek cut in half is undecidable; a short file that
-            // simply stops, or holds something else, is not.
-            None => more_follows && token.starts_with(rest),
+            // simply stops, or holds something else, is not. `<!--` is in the
+            // list because the peek can also stop after `<!-`, which the
+            // comment loop above could not strip and neither token begins.
+            None => more_follows && (token.starts_with(rest) || b"<!--".starts_with(rest)),
         });
     accepted
 }
@@ -691,17 +693,43 @@ mod tests {
         );
     }
 
-    /// A served error page that happens to arrive gzipped.
+    /// A served error page that happens to arrive gzipped, under either name:
+    /// the design asks for both, and a page saved over `kanjidic2.xml.gz` is
+    /// as likely as one saved over `JMdict_e.gz`.
     #[test]
     fn a_gzipped_html_page_is_rejected() {
-        let dir = scratch("open-gzipped-html");
+        for (i, (source, file_name)) in [(&JMDICT, SOURCE_FILE), (&KANJIDIC, KANJIDIC.file_name)]
+            .iter()
+            .enumerate()
+        {
+            let dir = scratch(&format!("open-gzipped-html-{i}"));
+            let path = dir.join(file_name);
+            std::fs::write(&path, gz(b"<!DOCTYPE html><html><body>404</body></html>"))
+                .expect("write");
+            let err = open_local(source, &path).err().expect("must fail");
+            assert!(
+                matches!(err, SourceError::NotAnArchive { .. }),
+                "got {err:?}"
+            );
+        }
+    }
+
+    /// A gzip stream that stops mid-deflate fails the peek's read rather than
+    /// the sniff: design §4.2 says it surfaces as `SourceError::Io` here,
+    /// earlier and no less clear than inside the parser. The negative half of
+    /// the assertion is what separates the two — `NotAnArchive`'s message is
+    /// the one that says "does not hold".
+    #[test]
+    fn a_gzip_stream_that_will_not_decode_is_an_io_error() {
+        let dir = scratch("open-truncated-gz");
         let path = dir.join(SOURCE_FILE);
-        std::fs::write(&path, gz(b"<!DOCTYPE html><html><body>404</body></html>")).expect("write");
+        let whole = gz(XML);
+        std::fs::write(&path, &whole[..whole.len() / 2]).expect("write");
+
         let err = open_local(&JMDICT, &path).err().expect("must fail");
-        assert!(
-            matches!(err, SourceError::NotAnArchive { .. }),
-            "got {err:?}"
-        );
+        assert!(matches!(err, SourceError::Io(_)), "got {err:?}");
+        let msg = err.to_string();
+        assert!(!msg.contains("does not hold"), "refused as a sniff: {msg}");
     }
 
     /// The root's name must be the whole name: `JMdictionary` is not
@@ -738,6 +766,23 @@ mod tests {
         let mut bytes = b"<?xml version=\"1.0\"?>\n<!-- ".to_vec();
         bytes.resize(bytes.len() + PEEK_BYTES, b'x');
         bytes.extend_from_slice(b" -->\n<JMdict></JMdict>");
+        std::fs::write(&path, &bytes).expect("write");
+        assert_eq!(read_all(open_local(&JMDICT, &path).expect("open")), bytes);
+    }
+
+    /// The narrowest version of the same case: the peek stops three bytes
+    /// into `<!--`, so the comment loop cannot strip it and neither the
+    /// DOCTYPE nor the element token begins with what is left. Undecidable is
+    /// still an accept, and the file reads back whole.
+    #[test]
+    fn a_comment_opener_cut_by_the_peek_is_accepted() {
+        let dir = scratch("open-cut-comment-opener");
+        let path = dir.join(SOURCE_FILE);
+        let mut bytes = b"<?xml version=\"1.0\"?>".to_vec();
+        bytes.resize(PEEK_BYTES - 3, b' ');
+        bytes.extend_from_slice(b"<!-");
+        assert_eq!(bytes.len(), PEEK_BYTES, "the head must end on the opener");
+        bytes.extend_from_slice(b"- x -->\n<JMdict></JMdict>");
         std::fs::write(&path, &bytes).expect("write");
         assert_eq!(read_all(open_local(&JMDICT, &path).expect("open")), bytes);
     }
