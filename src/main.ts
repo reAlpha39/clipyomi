@@ -22,7 +22,7 @@ import { clampAlpha, surfaceAlphaVar } from './surface-alpha';
 import { colourVars, resolveColor } from './text-colours';
 import { clampFamily, familyVars } from './text-fonts';
 import { createHistory } from './history';
-import { closeContextMenu, openContextMenu, type MenuEntry } from './context-menu';
+import { openContextMenu, type MenuEntry } from './context-menu';
 import { createKanjiLookup } from './kanji-lookup';
 import type {
   ChromeMode,
@@ -499,7 +499,8 @@ function chromeMenuEntries(): MenuEntry[] {
  * so the event would never reach a listener bound there. Content mode has no
  * tab stops at all, so this is the only binding that keeps the menu reachable
  * without a pointer. `preventDefault` also suppresses the WebView2 default
- * menu.
+ * menu. The coordinates are viewport-relative CSS px, which is what the
+ * backend's `popup_at` takes relative to this window.
  */
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
@@ -1166,19 +1167,11 @@ document.addEventListener('keydown', (e) => {
   // (`history-step`, Rust-side) and the webview sees that keydown too, so a
   // modifier means this is not a reading step.
   if (e.altKey || e.ctrlKey || e.metaKey) return;
-  // `openContextMenu` moves focus into the menu, so a bracket keypress made
-  // there bubbles up to this same listener: close it here (not inside
-  // `showReading`, which a menu row's own click also calls) so the sentence
-  // never changes under a menu still checking the reading it left behind.
-  // `closeContextMenu` is a no-op when nothing is open.
-  if (e.key === ']') {
-    showReading(readingIndex + 1);
-    closeContextMenu();
-  }
-  if (e.key === '[') {
-    showReading(readingIndex - 1);
-    closeContextMenu();
-  }
+  // A native menu, while open, takes the keyboard for itself, so a bracket
+  // pressed then never reaches this listener; there is no open menu to close
+  // under a changed reading any more.
+  if (e.key === ']') showReading(readingIndex + 1);
+  if (e.key === '[') showReading(readingIndex - 1);
 });
 
 let lastUnfocusedChip: HTMLElement | null = null;

@@ -16,6 +16,7 @@ use tokio::sync::{watch, Notify};
 use crate::settings::{ChromeMode, Settings};
 use crate::state::{SettingsState, SettingsWarning, ShortcutWarning, StartupFailure};
 
+pub mod context_menu;
 pub mod dictionary;
 pub mod fonts;
 pub mod hints;

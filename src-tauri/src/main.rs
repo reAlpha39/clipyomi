@@ -19,7 +19,7 @@ mod test_support;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// The stored startup geometry, clamped onto a monitor that exists now.
 ///
@@ -70,6 +70,17 @@ fn main() {
                 .build(),
         )
         .setup(|app| {
+            // This app has no menu bar, so every menu event is a pick from the
+            // main window's right-click menu. The id goes straight back to the
+            // webview that chose it; see `commands::context_menu`.
+            app.on_menu_event(|app, event| {
+                let _ = app.emit_to(
+                    "main",
+                    commands::context_menu::CONTEXT_MENU_PICK_EVENT,
+                    event.id().0.clone(),
+                );
+            });
+
             let config_dir = app.path().app_config_dir()?;
             let root = state::resolve_dict_root(&config_dir);
 
@@ -272,6 +283,7 @@ fn main() {
             commands::hints::hints_warning,
             commands::hints::hints_dir,
             commands::fonts::system_fonts,
+            commands::context_menu::show_context_menu,
             commands::dictionary::kanji_info,
             popover::place_popover,
             popover::hide_popover

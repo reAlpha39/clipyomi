@@ -563,67 +563,8 @@ rt.romaji {
   .spinner { animation: none; }
 }
 
-/* --- Right-click menu (spec §6.4) ---
-   Content-only mode removes the gear, the history nav and the window buttons,
-   so this is the only reach into the app there. `left` and `top` are set by
-   `clampMenu` at open time, which is why nothing here positions it. */
-.context-menu {
-  position: fixed;
-  z-index: 100;
-  margin: 0;
-  padding: 4px;
-  min-width: 150px;
-  list-style: none;
-  background: var(--color-bg);
-  border: 1px solid var(--color-rule);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
-}
-
-.context-menu button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 4px 8px;
-  font-family: var(--font-ui);
-  font-size: var(--text-tag);
-  text-align: left;
-  color: var(--color-text);
-  background: none;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.context-menu button:hover,
-.context-menu button:focus-visible {
-  background: var(--color-hover);
-  outline: none;
-}
-
-/* The radio marker is generated, so the label stays the button's only text and
-   `textContent` in the tests reads exactly the label. */
-.context-menu button[role='menuitemradio']::before {
-  content: '○';
-  width: 1em;
-}
-
-.context-menu button[aria-checked='true']::before {
-  content: '●';
-}
-
-/* An indent matching the marker's width, so the action labels line up with the
-   radio labels rather than with their markers. */
-.context-menu button[role='menuitem'] {
-  padding-left: calc(8px + 1em + 6px);
-}
-
-.context-menu-separator {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--color-rule);
-}
+/* The right-click menu (spec §6.4) is drawn by the OS since it went native —
+   see `context-menu.ts` — so nothing here styles it. */
 
 /* --- Settings Window Toggle --- */
 #settings-toggle {

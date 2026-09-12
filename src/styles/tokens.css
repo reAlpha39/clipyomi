@@ -26,8 +26,8 @@
   /* The see-through form of the background, derived once so it follows every
      theme branch without being restated in any of them. `color-mix`
      interpolates premultiplied, so this moves the alpha channel and leaves the
-     RGB exactly as authored. `--color-bg` itself stays opaque: `.context-menu`
-     uses it, and that menu is the app's only reach in content mode. */
+     RGB exactly as authored. `--color-bg` itself stays opaque: the settings
+     window and the outline halo read it as a solid colour. */
   --color-bg-surface: color-mix(
     in srgb,
     var(--color-bg) calc(var(--surface-alpha) * 100%),
