@@ -22,12 +22,13 @@ export interface Point {
  * Chooses where to put the tooltip window relative to the word being
  * hovered, given the monitor's usable work area.
  *
- * Below the word is tried first, then above, and only if neither side has
+ * Above the word is tried first, then below, and only if neither side has
  * room does the tooltip get pinned to the bottom of the work area and
- * nudged sideways instead. Below wins the tie because a tooltip that spills
- * off the bottom of the screen still overlaps mostly empty desktop, while
- * one that spills upward covers the line of text the reader is looking at
- * — the same choice the original tooltip made.
+ * nudged sideways instead. Above wins the tie because the app sits over a
+ * game, and the game's own text — what the reader is actually looking at —
+ * is usually below the window; a tooltip that goes up covers the least of
+ * it. The original tooltip went below first, and so did this one until the
+ * user asked for the other order.
  *
  * The horizontal clamp is applied as an upper bound first and a lower
  * bound second, so the lower bound always wins when the two disagree. On
@@ -47,10 +48,10 @@ export function placePopover(
   const below = chip.bottom + GAP;
   const above = chip.top - GAP - size.height;
 
-  if (below + size.height <= work.bottom) {
-    top = below;
-  } else if (above >= work.top) {
+  if (above >= work.top) {
     top = above;
+  } else if (below + size.height <= work.bottom) {
+    top = below;
   } else {
     top = work.bottom - size.height;
 
