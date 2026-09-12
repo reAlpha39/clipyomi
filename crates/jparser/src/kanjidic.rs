@@ -137,7 +137,10 @@ impl Pending {
             }
             Field::Grade => self.grade = self.number(&value),
             // The first count is the accepted one; later ones are common
-            // miscounts (KANJIDIC2 DTD) and are dropped.
+            // miscounts (KANJIDIC2 DTD) and are dropped. A malformed first
+            // count marks the record bad, so a later count that then lands
+            // here is discarded along with the rest of the record; a later
+            // count is never parsed, so it can never mark the record bad.
             Field::Strokes => {
                 if self.strokes.is_none() {
                     self.strokes = self.number(&value);
@@ -343,11 +346,16 @@ mod tests {
     }
 
     /// KANJIDIC2's DTD: the first count is the accepted one, later ones are
-    /// common miscounts. 都's real block lists 11 then 10.
+    /// common miscounts. 都's real block lists 11 then 10. Its `<variant>`
+    /// sits between the two stroke counts and `<freq>`, so this also shows
+    /// `<freq>` and `<jlpt>` still land after an element the reader ignores.
     #[test]
     fn the_first_stroke_count_is_the_accepted_one() {
-        assert_eq!(find('都').strokes, Some(11));
-        assert_eq!(find('都').grade, Some(3));
+        let k = find('都');
+        assert_eq!(
+            (k.grade, k.strokes, k.freq, k.jlpt),
+            (Some(3), Some(11), Some(123), Some(3))
+        );
     }
 
     #[test]
