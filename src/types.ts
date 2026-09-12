@@ -128,6 +128,8 @@ export interface Settings {
   font_family_gloss?: string;
   /** A halo behind the sentence text, for reading it over a see-through window. */
   text_outline?: boolean;
+  /** A drop shadow under the sentence text. */
+  text_shadow?: boolean;
   window_width?: number;
   window_height?: number;
   window_x?: number;

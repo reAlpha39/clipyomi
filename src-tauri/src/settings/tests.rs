@@ -567,6 +567,7 @@ fn appearance_keys_round_trip_through_the_file() {
         font_family_furigana: Some("Meiryo".into()),
         font_family_gloss: Some("Segoe UI".into()),
         text_outline: Some(true),
+        text_shadow: Some(true),
         ..Default::default()
     };
 
@@ -582,7 +583,7 @@ fn unset_appearance_keys_are_left_out_of_the_file() {
     save(&path, &Settings::default()).expect("save");
 
     let raw = std::fs::read_to_string(&path).expect("read back");
-    for key in ["colour_", "font_family_", "text_outline"] {
+    for key in ["colour_", "font_family_", "text_outline", "text_shadow"] {
         assert!(!raw.contains(key), "{key} in {raw}");
     }
 }

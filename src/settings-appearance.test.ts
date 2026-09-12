@@ -289,4 +289,23 @@ describe('the appearance controls', () => {
       expect(emitted.some(([, p]) => (p as Settings).text_outline === true)).toBe(true);
     });
   });
+
+  describe('drop shadow', () => {
+    test('the checkbox reflects the persisted setting', async () => {
+      await boot({ ...FULL, text_shadow: true });
+
+      expect(el<HTMLInputElement>('#setting-text-shadow').checked).toBe(true);
+    });
+
+    test('toggling it persists and broadcasts', async () => {
+      await boot(FULL);
+      const box = el<HTMLInputElement>('#setting-text-shadow');
+
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+
+      expect(saved().text_shadow).toBe(true);
+      expect(emitted.some(([, p]) => (p as Settings).text_shadow === true)).toBe(true);
+    });
+  });
 });

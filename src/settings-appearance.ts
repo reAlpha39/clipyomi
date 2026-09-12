@@ -58,11 +58,15 @@ export const APPEARANCE_SECTIONS = `
         ${COLOUR_KINDS.map(colourRow).join('')}
       </section>`;
 
-/** The outline checkbox, for the Background section beside the opacity slider. */
+/** The outline and drop-shadow checkboxes, for the Background section beside the opacity slider. */
 export const OUTLINE_ROW = `
         <label class="settings-checkbox-row">
           <input type="checkbox" id="setting-text-outline" />
           <span class="label-text">Outline text (helps at low opacity)</span>
+        </label>
+        <label class="settings-checkbox-row">
+          <input type="checkbox" id="setting-text-shadow" />
+          <span class="label-text">Drop shadow</span>
         </label>`;
 
 export interface AppearanceHooks {
@@ -107,6 +111,7 @@ export function initAppearanceControls(
     ]),
   ) as Record<FamilyKind, HTMLSelectElement>;
   const outline = container.querySelector<HTMLInputElement>('#setting-text-outline')!;
+  const shadow = container.querySelector<HTMLInputElement>('#setting-text-shadow')!;
 
   // The colours the user has actually picked. A colour input always holds a
   // value, so the input itself cannot say "unset": while a kind is absent
@@ -223,6 +228,7 @@ export function initAppearanceControls(
   void invoke<unknown>('system_fonts').then(populateFamilies).catch(() => {});
 
   outline.addEventListener('change', hooks.save);
+  shadow.addEventListener('change', hooks.save);
 
   return {
     setFuriganaMode(mode) {
@@ -232,7 +238,10 @@ export function initAppearanceControls(
     },
 
     snapshot() {
-      const out: Partial<Settings> = { text_outline: outline.checked };
+      const out: Partial<Settings> = {
+        text_outline: outline.checked,
+        text_shadow: shadow.checked,
+      };
       for (const kind of COLOUR_KINDS) {
         const hex = customColours.get(kind);
         if (hex !== undefined) out[COLOUR_KEYS[kind]] = hex as never;
@@ -262,6 +271,7 @@ export function initAppearanceControls(
         if (name !== null || isFullSnapshot) showFamily(kind);
       }
       if (settings.text_outline !== undefined) outline.checked = settings.text_outline;
+      if (settings.text_shadow !== undefined) shadow.checked = settings.text_shadow;
     },
   };
 }
