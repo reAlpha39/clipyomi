@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { FONT_LIMITS, clampFont, stylesheetDefault, type FontKind } from './font-sizes';
 import { ALPHA_LIMITS, clampAlpha } from './surface-alpha';
+import { APPEARANCE_SECTIONS, OUTLINE_ROW, initAppearanceControls } from './settings-appearance';
 import type { ChromeMode, FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
@@ -73,6 +74,7 @@ export function initSettingsApp(container: HTMLElement) {
           <span class="unit">% of sentence</span>
         </label>
       </section>
+      ${APPEARANCE_SECTIONS}
 
       <section class="settings-group">
         <h2 class="settings-group-title">Segmentation</h2>
@@ -118,6 +120,7 @@ export function initSettingsApp(container: HTMLElement) {
         <p class="settings-note" id="setting-surface-alpha-note" hidden>
           The native window frame is always fully opaque.
         </p>
+        ${OUTLINE_ROW}
       </section>
 
       <footer class="settings-footer">
@@ -153,6 +156,17 @@ export function initSettingsApp(container: HTMLElement) {
   const mecabStatus = container.querySelector<HTMLElement>('#setting-mecab-hints-status')!;
 
   let currentMode: FuriganaMode = 'none';
+
+  // Wired before the handlers below are declared, which is fine: both hooks
+  // are function declarations in this scope, hoisted, and only ever called
+  // from an event. `preview` targets `main` alone for the reason the
+  // opacity slider's `input` handler gives.
+  const appearance = initAppearanceControls(container, {
+    save: () => saveAndBroadcast(),
+    preview: (payload) => {
+      void emitTo('main', 'settings-changed', payload).catch(() => {});
+    },
+  });
 
   const chromeButtons = container.querySelectorAll<HTMLButtonElement>('[data-chrome-mode]');
 
@@ -298,6 +312,7 @@ export function initSettingsApp(container: HTMLElement) {
       font_gloss: sizeOf(fontGloss, 'gloss'),
       furigana_scale: sizeOf(furiganaScale, 'furigana'),
       surface_alpha: clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max,
+      ...appearance.snapshot(),
     };
   }
 
@@ -335,6 +350,7 @@ export function initSettingsApp(container: HTMLElement) {
       fontGloss.value = s.font_gloss === undefined ? '' : String(s.font_gloss);
       furiganaScale.value = s.furigana_scale === undefined ? '' : String(s.furigana_scale);
     }
+    appearance.apply(s, isFullSnapshot);
     if (s.surface_alpha !== undefined) {
       const value = clampAlpha(s.surface_alpha) ?? ALPHA_LIMITS.max;
       surfaceAlpha.value = String(value);

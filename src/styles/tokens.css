@@ -10,6 +10,9 @@
   --color-kana: oklch(45% 0.08 160);
   --color-particle: oklch(55% 0.10 30);
   --color-counter: oklch(50% 0.10 300);
+  /* Furigana, the same grey in both themes: it was a hardcoded fallback in
+     `global.css` until the colour settings needed a token to move. */
+  --color-furigana: #8e8e93;
   --color-shadow: oklch(0% 0 0 / 0.18);
   /* Window background opacity (§7.5), as a ratio. `main.ts` overrides it on
      the root element; nothing else does, which is what keeps the settings

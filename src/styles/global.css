@@ -429,7 +429,9 @@ ruby {
 
 rt {
   font-size: var(--text-furigana, 0.58em);
-  color: var(--color-text-muted, #8e8e93);
+  color: var(--color-furigana);
+  /* Unset, the ruby keeps the sentence font, as it always has. */
+  font-family: var(--font-furigana, inherit);
   user-select: none;
   line-height: 1;
   text-align: center;
@@ -439,6 +441,24 @@ rt.romaji {
   font-family: var(--font-mono, monospace);
   font-size: var(--text-furigana-romaji, 0.52em);
   letter-spacing: -0.02em;
+}
+
+/* The outline setting: a halo in the surface colour behind the sentence, for
+   reading it over a see-through window. `text-shadow` rather than
+   `-webkit-text-stroke`: a stroke is centred on the glyph edge and eats thin
+   kana at 1px, and the `paint-order` that fixes it is Chromium 123+ only.
+   Four crisp diagonals plus two blurred passes, so both a thin stem and a
+   bold one read. `--color-bg` flips with the theme, and the text colours were
+   chosen against it, so the halo always contrasts the text. Inherited, so one
+   rule covers the chips, the unmatched runs and the ruby. */
+.text-outline .sentence {
+  text-shadow:
+    0 0 2px var(--color-bg),
+    0 0 2px var(--color-bg),
+    1px 1px 0 var(--color-bg),
+    -1px -1px 0 var(--color-bg),
+    1px -1px 0 var(--color-bg),
+    -1px 1px 0 var(--color-bg);
 }
 
 /* :focus-visible (not :focus) so the ring shows for keyboard traversal only,

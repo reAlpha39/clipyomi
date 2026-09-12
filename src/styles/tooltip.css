@@ -25,7 +25,9 @@ body {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--tt-border) transparent;
-  font-family: var(--font-ui);
+  /* `--font-gloss` arrives with the content, as `--text-gloss` does; unset,
+     the UI stack. */
+  font-family: var(--font-gloss, var(--font-ui));
   font-size: var(--text-gloss);
   line-height: 1.35;
 }

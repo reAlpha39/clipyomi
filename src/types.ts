@@ -113,6 +113,21 @@ export interface Settings {
   furigana_scale?: number;
   /** Window background opacity as a percentage, bound to `--surface-alpha`. */
   surface_alpha?: number;
+  // Text appearance. Each absent key leaves `tokens.css` owning the default.
+  /** `#rrggbb`, bound to `--color-kanji`. */
+  colour_kanji?: string;
+  colour_kana?: string;
+  colour_particle?: string;
+  colour_counter?: string;
+  colour_furigana?: string;
+  /** A family name, bound to `--font-cjk`. */
+  font_family_sentence?: string;
+  /** Bound to `--font-furigana`; unset, the ruby inherits the sentence font. */
+  font_family_furigana?: string;
+  /** Rides the popover payload as `gloss_font`, bound to `--font-gloss` there. */
+  font_family_gloss?: string;
+  /** A halo behind the sentence text, for reading it over a see-through window. */
+  text_outline?: boolean;
   window_width?: number;
   window_height?: number;
   window_x?: number;
