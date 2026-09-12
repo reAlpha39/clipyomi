@@ -1178,10 +1178,11 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     // Assigned rather than merged, unlike the toggles above: an absent size
     // means the user cleared that box and wants the stylesheet default back,
     // which a merge could never express. The settings window is the only
-    // caller and always sends all three.
+    // caller and always sends all four.
     current.font_sentence = incoming.font_sentence;
     current.font_gloss = incoming.font_gloss;
     current.furigana_scale = incoming.furigana_scale;
+    current.furigana_gap = incoming.furigana_gap;
 }
 
 #[tauri::command]
@@ -1736,6 +1737,7 @@ mod tests {
                 font_family_sentence: Some("Yu Gothic".into()),
                 text_outline: Some(true),
                 text_shadow: Some(false),
+                furigana_gap: Some(6),
                 ..Default::default()
             },
         ));
@@ -1757,6 +1759,10 @@ mod tests {
         assert_eq!(s.colour_kanji, None);
         assert_eq!(s.colour_kana, Some("#ffffff".into()));
         assert_eq!(s.font_family_sentence, None);
+        assert_eq!(
+            s.furigana_gap, None,
+            "a size is assigned; omission clears it"
+        );
         assert_eq!(s.font_family_gloss, Some("Segoe UI".into()));
         assert_eq!(
             s.text_outline,

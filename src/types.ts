@@ -111,6 +111,8 @@ export interface Settings {
   font_gloss?: number;
   /** Furigana size as a percentage of the sentence, bound to `--text-furigana`. */
   furigana_scale?: number;
+  /** Space between the furigana and its text in px, bound to `--furigana-gap`. */
+  furigana_gap?: number;
   /** Window background opacity as a percentage, bound to `--surface-alpha`. */
   surface_alpha?: number;
   // Text appearance. Each absent key leaves `tokens.css` owning the default.

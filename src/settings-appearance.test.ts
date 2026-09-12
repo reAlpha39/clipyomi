@@ -302,6 +302,34 @@ describe('the appearance controls', () => {
     });
   });
 
+  // The gap box lives in the Text Size section and rides the font-size flow
+  // in `settings.ts`; pinned here because this file is where the appearance
+  // controls are exercised.
+  describe('furigana gap', () => {
+    test('shows the persisted gap and saves a change', async () => {
+      await boot({ ...FULL, furigana_gap: 6 });
+      const box = el<HTMLInputElement>('#setting-furigana-gap');
+      expect(box.value).toBe('6');
+
+      box.value = '10';
+      box.dispatchEvent(new Event('change'));
+
+      expect(saved().furigana_gap).toBe(10);
+    });
+
+    test('an emptied box sends no gap, handing the default back', async () => {
+      await boot({ ...FULL, furigana_gap: 6 });
+      const box = el<HTMLInputElement>('#setting-furigana-gap');
+
+      box.value = '';
+      box.dispatchEvent(new Event('change'));
+
+      // `undefined`, as the other size boxes send an emptied value; the IPC
+      // layer drops the key and `merge_saved` assigns `None`.
+      expect(saved().furigana_gap).toBeUndefined();
+    });
+  });
+
   describe('drop shadow', () => {
     test('the checkbox reflects the persisted setting', async () => {
       await boot({ ...FULL, text_shadow: true });

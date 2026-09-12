@@ -12,7 +12,15 @@ describe('fontVars', () => {
       ['--text-gloss', ''],
       ['--text-furigana', ''],
       ['--text-furigana-romaji', ''],
+      ['--furigana-gap', ''],
     ]);
+  });
+
+  // The gap between the furigana and the text it annotates: a size of its
+  // own, in px, not a ratio, so a large sentence and a small one can share a
+  // hairline.
+  test('maps the furigana gap onto its token in px', () => {
+    expect(fontVars({ furigana_gap: 6 })).toContainEqual(['--furigana-gap', '6px']);
   });
 
   test('maps the sentence size onto its token in px', () => {
@@ -36,22 +44,28 @@ describe('fontVars', () => {
   });
 
   test('emits every persisted size at once', () => {
-    expect(fontVars({ font_sentence: 24, font_gloss: 14, furigana_scale: 50 })).toEqual([
+    expect(
+      fontVars({ font_sentence: 24, font_gloss: 14, furigana_scale: 50, furigana_gap: 4 }),
+    ).toEqual([
       ['--text-sentence', '24px'],
       ['--text-gloss', '14px'],
       ['--text-furigana', '0.5em'],
       ['--text-furigana-romaji', '0.45em'],
+      ['--furigana-gap', '4px'],
     ]);
   });
 
   // The settings file is hand-editable, so the values arriving here are
   // untrusted input, not just whatever the number inputs allowed.
   test('clamps sizes read from a hand-edited settings file', () => {
-    expect(fontVars({ font_sentence: 999, font_gloss: 2, furigana_scale: 5 })).toEqual([
+    expect(
+      fontVars({ font_sentence: 999, font_gloss: 2, furigana_scale: 5, furigana_gap: 99 }),
+    ).toEqual([
       ['--text-sentence', '48px'],
       ['--text-gloss', '10px'],
       ['--text-furigana', '0.3em'],
       ['--text-furigana-romaji', '0.27em'],
+      ['--furigana-gap', '24px'],
     ]);
   });
 

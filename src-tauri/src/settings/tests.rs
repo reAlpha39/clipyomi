@@ -569,6 +569,7 @@ fn appearance_keys_round_trip_through_the_file() {
         font_family_gloss: Some("Segoe UI".into()),
         text_outline: Some(true),
         text_shadow: Some(true),
+        furigana_gap: Some(6),
         ..Default::default()
     };
 

@@ -94,6 +94,12 @@ describe('appearance settings reaching the main window', () => {
     expect(token('--color-kana')).toBe('');
   });
 
+  test('applies the persisted furigana gap on load, in px', async () => {
+    await load({ furigana_gap: 6 });
+
+    expect(token('--furigana-gap')).toBe('6px');
+  });
+
   test('applies the persisted families on load, quoted', async () => {
     await load({ font_family_sentence: 'Yu Gothic', font_family_furigana: 'Meiryo' });
 
