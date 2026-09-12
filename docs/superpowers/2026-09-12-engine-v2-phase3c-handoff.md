@@ -56,11 +56,22 @@ the hints test harness. `main.rs` names the new paths in six
 **1,087 insertions against 1,038 deletions**, nearly all of it the same lines
 arriving at a new address.
 
-Across the phase's code range, `git diff --stat 009b427..1e91ebb` reads
-**nine files, 1,491 insertions against 1,108 deletions**. Measured from the
-design commit instead — `git diff --stat b287236..1e91ebb` — it reads ten
-files and 2,556 insertions, the difference being the plan document's own
-1,065 lines; the code figure is the one above.
+One commit lands after this document's first draft. `95c7ed0` is the final
+whole-phase review's fix wave in `crates/jmdict-source/src/lib.rs`: it
+widens `begins_xml`'s undecidable arm to accept a head the peek stopped
+three bytes into `<!--` (`<!-` is a prefix of neither the DOCTYPE nor the
+element token, so the rule's own accept was being refused), loops
+`a_gzipped_html_page_is_rejected` over both source names as design §4.4
+asks, and adds the corrupt-gzip test §5 had deferred. One file, **54
+insertions against 9 deletions**, and the crate's lib tests go 37 → 39.
+
+Across the three tasks' code range, `git diff --stat 009b427..1e91ebb` reads
+**nine files, 1,491 insertions against 1,108 deletions**, which is the figure
+to quote for the phase as planned; `95c7ed0`'s 54 and 9 sit outside it and
+are counted in the paragraph above. Measured from the design commit instead
+— `git diff --stat b287236..1e91ebb` — it reads ten files and 2,556
+insertions, the difference being the plan document's own 1,065 lines; the
+code figure is the one above.
 
 **`INDEX_FORMAT_VERSION` is still 6** (`crates/jparser/src/index/mod.rs:31`)
 and **no install rebuilds.** Nothing under `crates/jparser/src/engine/` or
@@ -85,9 +96,10 @@ skipped kanji:       0
 
 Vibrato dictionary at `%APPDATA%\dev.jparser.clipyomi\hints\current\system.dic`.
 Release build of `jparser-cli` with `--features mecab`. Every figure below was
-printed in the gate session at `1e91ebb`; none is copied forward from an
-implementer's report except the "before" column of the suite table, which is
-labelled where it appears.
+printed in the gate session at `1e91ebb`, except the suite table's "after"
+column, which was re-taken at `95c7ed0` where the fix wave could move it;
+none is copied forward from an implementer's report except the "before"
+column of the suite table, which is labelled where it appears.
 
 ### Gate 1 — the baseline cells, both hint states
 
@@ -190,27 +202,34 @@ prints nothing — no `*.snap.new`, so `parse_sentences.txt` is byte-identical.
 
 ### Gate 4 — the suites
 
-| suite | before (`009b427`) | after (`1e91ebb`) |
+| suite | before (`009b427`) | after (`95c7ed0`) |
 | --- | --- | --- |
 | `cargo test -p jparser --features mecab` | 373 | 373 |
 | `cargo test -p jparser --features hints-source` | 374 | 374 |
-| `cargo test --workspace` | 605 passed, 1 ignored | 615 passed, 1 ignored |
+| `cargo test --workspace` | 605 passed, 1 ignored | 617 passed, 1 ignored |
 | `src-tauri` (a workspace member, inside that total) | 152 | 152 |
 | `npm test` | 312 | 316 |
 | `npx playwright test` | 45 | 45 |
 
 The "before" column is Task 1 Step 1's re-take at `009b427`, the first
 measurement this phase owns; the "after" column was measured for this
-document at `1e91ebb` rather than carried over from any task report. Every
-delta is accounted for:
+document at `1e91ebb` rather than carried over from any task report, and
+**re-taken after the fix wave at `95c7ed0`** — `cargo test --workspace`
+prints 617 passed and 1 ignored there, with `src-tauri` still 152 inside
+that total. The two `-p jparser` feature rows, `npm test` and Playwright
+were not re-run in the fix wave and stand at their `1e91ebb` figures:
+`95c7ed0` edits one file in `jmdict-source`, which no jparser test, no
+TypeScript module and no pictured screen can reach. Every delta is accounted
+for:
 
 - **`npm test` +4.** Task 1 added three tests to
   `src/render/tooltip-text.test.ts` and one to
   `src/render/tooltip-colour.test.ts`.
-- **workspace +10.** Task 2's net gain in `jmdict-source`'s lib tests, 27 to
-  37 — one prolog test replaced by two opening tests, and nine new ones. The
-  workspace total is the sum over all 22 test binaries, and that lib is one
-  of them.
+- **workspace +12.** All of it `jmdict-source`'s lib tests, 27 to 39. Task 2
+  took them to 37 — one prolog test replaced by two opening tests, and nine
+  new ones — and the fix wave's `95c7ed0` added the last two, the cut
+  comment opener and the corrupt gzip. The workspace total is the sum over
+  all 22 test binaries, and that lib is one of them.
 - **`mecab` and `hints-source` ±0.** Both are `-p jparser`, and no test in
   that crate changed. That those two figures held while the workspace moved
   is the arithmetic working, not a coincidence.
@@ -284,8 +303,11 @@ bind `find('都')` to a local and assert the four `<misc>` fields as one tuple
 instead of two loose assertions. That is one more executable line in the file
 — 247 counted here against 246 there, with the same nine missed — and
 238/247 is 96.36% where 237/246 was 96.34%. No Phase 3c commit touches
-`kanjidic.rs`: `git log e37a408..HEAD -- crates/jparser/src/kanjidic.rs`
-names `d31b4ee` and nothing else.
+`kanjidic.rs`: `git log e37a408..1e91ebb -- crates/jparser/src/kanjidic.rs`
+names `d31b4ee` and nothing else. The range is pinned to a commit rather
+than to `HEAD`, for the reason `5cb6802` pinned §1's: this document lives
+inside the range a `HEAD`-relative citation would name, so its own reading
+would drift every time the branch moved.
 
 ### Gate 5 — Playwright
 
@@ -297,11 +319,15 @@ captures.
 
 ## 3. Where the implementation departs from the design
 
-**Nothing in the implementation contradicts the design.** No field, rule,
-placement or exclusion in §1–§6 was traded away, and the three tasks landed
-the shape the design specified. What follows is the phase's two pre-flight
-rulings, and the three places execution diverged from the plan's own prose,
-each with its reason.
+**One rule in the implementation departs from the design's own prose, and
+the design was amended to the implementation's rule rather than the other
+way round** — ruling 6 below, found by the final whole-phase review and
+carried out in this phase's docs commit. Nothing else contradicts the
+design: no other field, rule, placement or exclusion in §1–§6 was traded
+away, and the three tasks landed the shape the design specified. What
+follows is the phase's two pre-flight rulings, the three places execution
+diverged from the plan's own prose, that amendment, and the one boundary
+case the plan's own code got wrong — each with its reason.
 
 1. **Work proceeded directly on `feat/engine-v2`, with no worktree.** Phases
    0 through 3b all executed on this branch in this checkout, the user asked
@@ -347,6 +373,39 @@ each with its reason.
    callers of `app.listen`. The plan also said the compiler arbitrates the
    final list, and it did. Both are import removals: no visibility widened,
    no body touched.
+6. **The plan refined design §4.1 step 5, and the spec now says so.** The
+   design wrote the undecidable case as a flat rule: "if the head runs out
+   inside step 2, 3 or 4 before a decision is reached, **accept**". The plan
+   refined it — `begins_xml` takes a third parameter, `more_follows`,
+   computed in `sniffed` as `head.len() == PEEK_BYTES`, and returns *that*
+   where the design said `true`: the peek ending the head accepts, the end
+   of the file ending it rejects. `aa535f1` follows the plan, and two of its
+   tests pin the refinement rather than the design's sentence —
+   `a_short_file_that_ends_inside_its_preamble_is_rejected` and
+   `a_bare_declaration_is_rejected`, both of which a flat accept would have
+   had to let through. The departure went unrecorded through the plan, the
+   task report and the task review; the final whole-phase review found it,
+   and the controller ruled that the spec is amended to the code's rule
+   rather than the code loosened to the spec's — a file that simply stops
+   holds no dictionary, and accepting one buys nothing the "long leading
+   comment" case needs. The docs commit in this fix wave rewrites §4.1
+   step 5, the §1.1 row that summarises it, and the §4.4 and §7 sentences
+   that read off it. **The cost if that ruling is wrong is small and
+   local:** `more_follows` becomes a literal `true` at its three return
+   sites and the two tests above are deleted — one boolean and two tests,
+   with no caller, no format and no message affected.
+7. **The plan's own code refused a comment opener the peek cut short**, and
+   `95c7ed0` fixes it. `begins_xml`'s undecidable arm read
+   `more_follows && token.starts_with(rest)`. When the peek stops three
+   bytes into `<!--`, the comment loop above cannot strip `<!-` and neither
+   `<!DOCTYPE {root}` nor `<{root}` begins with it, so a file step 5 says to
+   accept was rejected. The arm now also accepts a `rest` that is a prefix
+   of the comment opener, and `a_comment_opener_cut_by_the_peek_is_accepted`
+   builds exactly that head — `PEEK_BYTES` bytes ending on `<!-`, with the
+   rest of the comment and a root element behind it. This is a defect in the
+   plan's verbatim function body, which the implementer transcribed and the
+   task reviewer read as given; only the final whole-phase review, reading
+   the rule and the code against each other, reached it.
 
 Two claims this plan made about its own effects were checked rather than
 assumed, since both could have gone the other way:
@@ -523,14 +582,18 @@ Surfaced by this phase:
   This one is too — the same session's hints-off cell moved from 1.00x to
   1.02x — and the band remains the right way to read both.
 
-Deferred minors, each raised and accepted during review:
+Deferred minors, each raised and accepted during review — one of them since
+closed by the fix wave, struck through below rather than deleted:
 
 - Task 1 has no test for a reading hyphenated at both ends, or made only of
   hyphens. The regex handles both; no such reading exists in the real file,
   which is why the case was declined rather than written.
-- Task 2 has no test for a gzip stream that fails to decode at the peek. The
-  spec says it surfaces as `SourceError::Io`; a truncated `gz(XML)` asserting
-  `Io` would pin it.
+- ~~Task 2 has no test for a gzip stream that fails to decode at the peek.~~
+  **Closed by `95c7ed0`.** `a_gzip_stream_that_will_not_decode_is_an_io_error`
+  writes `gz(XML)` truncated to half its length, asserts `SourceError::Io`,
+  and asserts the message does *not* say "does not hold" — so the refusal is
+  the Io path design §4.2 describes and not `NotAnArchive`. It passed on the
+  first run, which is the evidence §4.2's sentence was owed.
 - `begins_xml`'s `accepted` binding could go if the array were iterated with
   `.iter()` rather than `.into_iter()`, since `slice::Iter` has no drop glue.
   That variant was not compiled during review, so the working form stays,
