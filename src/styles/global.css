@@ -407,9 +407,12 @@ body {
   cursor: pointer;
   transition: transform var(--duration-fast) var(--ease-out);
   /* Chips are <button>s now (keyboard activation); undo the browser's own
-     button chrome so they still read as inline text, not form controls. */
+     button chrome so they still read as inline text, not form controls.
+     `text-shadow` is in that chrome too: the UA sheet resets it to `none` on
+     buttons, which is what kept the outline setting's halo off every chip. */
   font: inherit;
   color: inherit;
+  text-shadow: inherit;
   background: none;
   border: none;
   appearance: none;
