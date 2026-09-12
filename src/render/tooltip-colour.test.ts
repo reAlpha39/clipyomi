@@ -108,4 +108,16 @@ describe('colourLine', () => {
   test('a supplementary-plane ideograph counts as kanji', () => {
     expect(colourLine('\u{20000}')).toEqual([{ text: '\u{20000}', kind: 'kanji' }]);
   });
+
+  // Phase 3b: the misc aside on a kanji line is a `(…)` span, so it takes the
+  // paren colour with no rule of its own; the katakana middle dot (U+30FB)
+  // sits in the katakana block and rides in the kana run.
+  test('a kanji line with its misc aside ends in one paren run', () => {
+    const line = '東  トウ・ひがし  east  (grade 2, 8 strokes, freq 37, old JLPT 4)';
+    expect(kinds(line)).toEqual(['kanji', 'text', 'kana', 'text', 'paren']);
+    expect(colourLine(line).at(-1)).toEqual({
+      text: '(grade 2, 8 strokes, freq 37, old JLPT 4)',
+      kind: 'paren',
+    });
+  });
 });
