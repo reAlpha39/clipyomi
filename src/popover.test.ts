@@ -102,4 +102,30 @@ describe('the popover window', () => {
 
     expect(document.querySelectorAll('.tt-line')).toHaveLength(2);
   });
+
+  // The family travels with the content for the reason the size does: this
+  // webview has its own `:root`, and it has to be applied before the render
+  // whose measurement sizes the window.
+  test('applies the gloss family the payload carries, quoted', () => {
+    send({ entries, gloss_font: 'Segoe UI' });
+
+    expect(token('--font-gloss')).toBe('"Segoe UI"');
+  });
+
+  test('refuses a gloss family that fails the guard', () => {
+    send({ entries, gloss_font: 'x; color: red' });
+
+    expect(token('--font-gloss')).toBe('');
+  });
+
+  // This window is persistent: a token set by one payload has to be removed by
+  // the next one that carries no value, or Default in the settings window
+  // would take effect only on the next launch.
+  test('removes the gloss family and size when a later payload carries none', () => {
+    send({ entries, gloss: 18, gloss_font: 'Segoe UI' });
+    send({ entries });
+
+    expect(token('--font-gloss')).toBe('');
+    expect(token('--text-gloss')).toBe('');
+  });
 });

@@ -117,57 +117,10 @@ test('native mode reserves the row', async ({ page }) => {
   await expect(page.locator('#settings-toggle')).toHaveCSS('opacity', '1');
 });
 
-// The stub is a CSS harness, not a platform simulator: it happily answers
-// `chrome_mode: 'native'` on Windows, which the real backend would refuse.
-// What this test can check is the frontend's own half -- the menu never
-// offers the option -- not the resolution of an invalid stored mode, which is
-// a Rust-side concern already covered by cargo test.
-test('Windows offers no native mode', async ({ page }) => {
-  await page.addInitScript(stubFor('native', 'windows'));
-  await page.goto('/');
-
-  await expect(page.locator('#app')).toHaveAttribute('data-chrome', 'native');
-
-  await page.mouse.click(100, 100, { button: 'right' });
-  const menu = page.locator('.context-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu).not.toContainText('Native frame');
-});
-
-test('the menu opens inside the viewport from the bottom-right corner', async ({ page }) => {
-  const width = 320;
-  const height = 480;
-  await page.setViewportSize({ width, height });
-  await page.addInitScript(stubFor('content', 'macos'));
-  await page.goto('/');
-
-  await page.mouse.click(width - 2, height - 2, { button: 'right' });
-  const box = await page.locator('.context-menu').boundingBox();
-  expect(box).not.toBeNull();
-  if (box !== null) {
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(width);
-    expect(box.y + box.height).toBeLessThanOrEqual(height);
-  }
-});
-
-test('the menu closes on Escape and on an outside click', async ({ page }) => {
-  await page.addInitScript(stubFor('content', 'macos'));
-  await page.goto('/');
-
-  const menu = page.locator('.context-menu');
-
-  await page.mouse.click(100, 100, { button: 'right' });
-  await expect(menu).toHaveCount(1);
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-
-  await page.mouse.click(100, 100, { button: 'right' });
-  await expect(menu).toHaveCount(1);
-  await page.mouse.click(900, 600, { button: 'left' });
-  await expect(menu).toHaveCount(0);
-});
+// The right-click menu is drawn by the OS now (see `context-menu.ts`), so
+// Playwright cannot see it: what it offers, where it opens and how it closes
+// are pinned in `main.test.ts` on the wire shape, and in `cargo test` on the
+// menu the backend builds from it.
 
 // Pixels at 768 in both themes for each mode. 320 and 1024 are covered below
 // by assertions on the band's measured height and the controls' resolved
@@ -241,25 +194,6 @@ test('the opacity setting reaches the window background', async ({ page }) => {
 
   const clear = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(clear).not.toBe(opaque);
-});
-
-// 0% is a real, reachable setting (spec §4.3). It stays escapable because the
-// menu never fades: content mode already removes the gear, the history nav and
-// the window buttons, so at 0% this menu is the only reach into the app.
-test('the right-click menu stays opaque at zero opacity', async ({ page }) => {
-  await page.addInitScript(stubFor('content', 'macos', 0));
-  await page.goto('/');
-  await expect(page.locator('#app')).toHaveAttribute('data-chrome', 'content');
-
-  const menu = page.locator('.context-menu');
-  await page.mouse.click(100, 100, { button: 'right' });
-  await expect(menu).toHaveCount(1);
-
-  const [menuBg, bodyBg] = await page.evaluate(() => [
-    getComputedStyle(document.querySelector('.context-menu')!).backgroundColor,
-    getComputedStyle(document.body).backgroundColor,
-  ]);
-  expect(menuBg).not.toBe(bodyBg);
 });
 
 // The clamp, from the outside: a stored 0 renders fully opaque under the

@@ -2,6 +2,7 @@
 
 import { emit, listen } from '@tauri-apps/api/event';
 import { clampFont } from './font-sizes';
+import { clampFamily, quoteFamily } from './text-fonts';
 import { renderTooltip } from './render/tooltip';
 import type { Entry, GlossFilters, KanjiInfo } from './types';
 import './styles/tooltip.css';
@@ -23,7 +24,24 @@ const VERTICAL_PADDING = 6;
 
 type PopoverPayload =
   | Entry[]
-  | { entries: Entry[]; filters?: GlossFilters; gloss?: number; kanji?: KanjiInfo[] };
+  | {
+      entries: Entry[];
+      filters?: GlossFilters;
+      gloss?: number;
+      gloss_font?: string;
+      kanji?: KanjiInfo[];
+    };
+
+/**
+ * Write or remove one custom property on this window's root. Removed, not
+ * left: this window is persistent, so a value one payload set has to go when
+ * the next carries none, or Default in the settings window would take effect
+ * only on the next launch.
+ */
+function setRootToken(token: string, value: string): void {
+  if (value === '') document.documentElement.style.removeProperty(token);
+  else document.documentElement.style.setProperty(token, value);
+}
 
 void listen<PopoverPayload>('popover-content', (e) => {
   const payload = e.payload;
@@ -38,7 +56,9 @@ void listen<PopoverPayload>('popover-content', (e) => {
   // sizes the window — a size arriving afterwards would size it to the old
   // text. An absent size leaves `tooltip.css` owning the default.
   const gloss = Array.isArray(payload) ? null : clampFont('gloss', payload.gloss);
-  if (gloss !== null) document.documentElement.style.setProperty('--text-gloss', `${gloss}px`);
+  setRootToken('--text-gloss', gloss === null ? '' : `${gloss}px`);
+  const family = Array.isArray(payload) ? null : clampFamily(payload.gloss_font);
+  setRootToken('--font-gloss', family === null ? '' : quoteFamily(family));
 
   const content = renderTooltip(entries, filters, kanji);
   tooltip.replaceChildren(content);

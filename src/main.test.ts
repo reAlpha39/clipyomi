@@ -69,6 +69,34 @@ function emit(event: string, payload: unknown): void {
   handler({ payload });
 }
 
+/** One row as `context-menu.ts` sends it to the native menu. */
+interface MenuRow {
+  kind: string;
+  id?: string;
+  label?: string;
+  checked?: boolean;
+}
+
+/**
+ * The rows of the menu the last right-click asked the backend to show,
+ * separators dropped. The menu is native, so this wire shape is all the DOM
+ * ever sees of it.
+ */
+function shownMenu(): MenuRow[] {
+  const call = [...invoke.mock.calls]
+    .reverse()
+    .find(([cmd]: unknown[]) => cmd === 'show_context_menu');
+  if (call === undefined) throw new Error('show_context_menu was not invoked');
+  return (call[1] as { items: MenuRow[] }).items.filter((row) => row.kind !== 'separator');
+}
+
+/** Pick the row labelled LABEL from the menu last shown, as the OS would. */
+function pickMenu(label: string): void {
+  const row = shownMenu().find((r) => r.label === label);
+  if (row === undefined) throw new Error(`no menu row ${label}`);
+  emit('context-menu-pick', row.id);
+}
+
 describe('the event-driven render path', () => {
   beforeEach(async () => {
     document.body.innerHTML = '<main id="app"></main>';
@@ -206,9 +234,15 @@ describe('the event-driven render path', () => {
   });
   /** Every rendered segment in order, chip or unmatched run. */
   const rendered = () => [...document.querySelectorAll('.sentence > *')].map((el) => el.textContent);
-  const menuLabels = () => {
+  /** Right-click, then read the rows the native menu was asked to show. */
+  const menuItems = () => {
     document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    return [...document.querySelectorAll('.context-menu button')].map((b) => b.textContent);
+    return shownMenu();
+  };
+  const menuLabels = () => menuItems().map((row) => row.label);
+  const pick = (label: string) => {
+    menuItems();
+    pickMenu(label);
   };
   const press = (key: string, init: KeyboardEventInit = {}) =>
     document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
@@ -226,17 +260,14 @@ describe('the event-driven render path', () => {
     expect(rendered()).toEqual(['東京都']);
 
     expect(menuLabels().slice(0, 3)).toEqual(['Reading 1 of 3', 'Reading 2 of 3', 'Reading 3 of 3']);
-    [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')]
-      .find((b) => b.textContent === 'Reading 3 of 3')!
-      .click();
+    pick('Reading 3 of 3');
 
     expect(rendered()).toEqual(['東', '京都']);
     expect(document.querySelector('.unmatched')?.textContent).toBe('東');
     // Reopened, the menu marks the reading now on screen.
-    document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    const checked = [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')]
-      .filter((b) => b.getAttribute('aria-checked') === 'true')
-      .map((b) => b.textContent);
+    const checked = menuItems()
+      .filter((row) => row.checked === true)
+      .map((row) => row.label);
     expect(checked).toContain('Reading 3 of 3');
   });
 
@@ -357,16 +388,6 @@ describe('the event-driven render path', () => {
     expect(document.activeElement).toBe(outside);
   });
 
-  test('cycling readings from the keyboard closes an open context menu', () => {
-    // `openContextMenu` moves focus into the menu, and a bracket keypress
-    // there bubbles to `document` — without a close, the menu would keep
-    // checking the reading the step just left behind.
-    emit('parse-result', tokyo());
-    menuLabels();
-    expect(document.querySelector('.context-menu')).not.toBeNull();
-    press(']');
-    expect(document.querySelector('.context-menu')).toBeNull();
-  });
 });
 
 // Residual 2 (re-review, final wave): the original fix wrapped the whole
@@ -1200,21 +1221,17 @@ describe('the titlebar band', () => {
     document.body.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
 
-    const labels = [...document.querySelectorAll('.context-menu button')].map(
-      (b) => b.textContent,
-    );
-    expect(labels).toEqual([
+    const rows = shownMenu();
+    expect(rows.map((row) => row.label)).toEqual([
       'Native frame',
       'Header + resize edges',
       'Content only',
       'Settings…',
       'Quit',
     ]);
-    expect(
-      document
-        .querySelector('.context-menu button[aria-checked="true"]')!
-        .textContent,
-    ).toBe('Content only');
+    expect(rows.filter((row) => row.checked === true).map((row) => row.label)).toEqual([
+      'Content only',
+    ]);
   });
 
   test('the menu omits the native mode on Windows', async () => {
@@ -1224,9 +1241,7 @@ describe('the titlebar band', () => {
     );
 
     document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    const labels = [...document.querySelectorAll('.context-menu button')].map(
-      (b) => b.textContent,
-    );
+    const labels = shownMenu().map((row) => row.label);
     expect(labels).not.toContain('Native frame');
     expect(labels).toContain('Header + resize edges');
   });
@@ -1238,10 +1253,7 @@ describe('the titlebar band', () => {
     await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('native'));
 
     document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    const item = [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')].find(
-      (b) => b.textContent === 'Content only',
-    )!;
-    item.click();
+    pickMenu('Content only');
 
     // Applied locally as well as broadcast: the emit round-trip is async, and
     // the mode should change on the frame the user clicked.
@@ -1258,9 +1270,7 @@ describe('the titlebar band', () => {
       document.body.dispatchEvent(
         new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
       );
-      [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')]
-        .find((b) => b.textContent === label)!
-        .click();
+      pickMenu(label);
     };
 
     open('Settings…');

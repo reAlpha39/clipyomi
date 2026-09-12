@@ -407,9 +407,12 @@ body {
   cursor: pointer;
   transition: transform var(--duration-fast) var(--ease-out);
   /* Chips are <button>s now (keyboard activation); undo the browser's own
-     button chrome so they still read as inline text, not form controls. */
+     button chrome so they still read as inline text, not form controls.
+     `text-shadow` is in that chrome too: the UA sheet resets it to `none` on
+     buttons, which is what kept the outline setting's halo off every chip. */
   font: inherit;
   color: inherit;
+  text-shadow: inherit;
   background: none;
   border: none;
   appearance: none;
@@ -420,7 +423,7 @@ body {
 .chip.kana { color: var(--color-kana); }
 .chip.particle { color: var(--color-particle); }
 .chip.counter { color: var(--color-counter); }
-.unmatched { color: var(--color-muted); }
+.unmatched { color: var(--color-unmatched); }
 
 /* --- Furigana Ruby Typography --- */
 ruby {
@@ -429,16 +432,45 @@ ruby {
 
 rt {
   font-size: var(--text-furigana, 0.58em);
-  color: var(--color-text-muted, #8e8e93);
+  color: var(--color-furigana);
+  /* Unset, the ruby keeps the sentence font, as it always has. */
+  font-family: var(--font-furigana, inherit);
+  padding-bottom: var(--furigana-gap);
   user-select: none;
   line-height: 1;
   text-align: center;
 }
 
+/* No family of its own: the romaji reading follows `rt`'s token like kana,
+   so the furigana family setting reaches it. It used to pin `--font-mono`,
+   which outranked the setting and read as a picker that did nothing. */
 rt.romaji {
-  font-family: var(--font-mono, monospace);
   font-size: var(--text-furigana-romaji, 0.52em);
   letter-spacing: -0.02em;
+}
+
+/* The outline setting: a stroke in the background colour around the sentence,
+   for reading it over a see-through window. A stroke is centred on the glyph
+   edge, so half of it falls inside and eats thin kana — `paint-order` puts
+   the fill back on top, which is what makes a stroke usable on text at all.
+   Chromium 123+ and WebKit, both older than any webview this ships against.
+   `--color-bg` follows the theme and the background picker, and the text
+   colours were chosen against it, so the stroke always contrasts the text.
+   Inherited, so one rule covers the chips, the unmatched runs and the ruby. */
+.text-outline .sentence {
+  -webkit-text-stroke: var(--text-stroke-width) var(--color-bg);
+  paint-order: stroke fill;
+}
+
+/* The drop-shadow setting: one soft shadow down and to the right, dark in
+   both themes — a shadow is a shadow whatever the text colour. Offset and
+   blur are derived from the one size the user sets, holding the proportions
+   of the `1px 2px 3px` this rule was authored with. A stroke and a shadow are
+   separate properties, so both settings apply together with no third rule. */
+.text-shadow .sentence {
+  text-shadow:
+    calc(var(--text-shadow-size) / 2) var(--text-shadow-size)
+    calc(var(--text-shadow-size) * 1.5) oklch(0% 0 0 / 0.55);
 }
 
 /* :focus-visible (not :focus) so the ring shows for keyboard traversal only,
@@ -518,67 +550,8 @@ rt.romaji {
   .spinner { animation: none; }
 }
 
-/* --- Right-click menu (spec §6.4) ---
-   Content-only mode removes the gear, the history nav and the window buttons,
-   so this is the only reach into the app there. `left` and `top` are set by
-   `clampMenu` at open time, which is why nothing here positions it. */
-.context-menu {
-  position: fixed;
-  z-index: 100;
-  margin: 0;
-  padding: 4px;
-  min-width: 150px;
-  list-style: none;
-  background: var(--color-bg);
-  border: 1px solid var(--color-rule);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
-}
-
-.context-menu button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 4px 8px;
-  font-family: var(--font-ui);
-  font-size: var(--text-tag);
-  text-align: left;
-  color: var(--color-text);
-  background: none;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.context-menu button:hover,
-.context-menu button:focus-visible {
-  background: var(--color-hover);
-  outline: none;
-}
-
-/* The radio marker is generated, so the label stays the button's only text and
-   `textContent` in the tests reads exactly the label. */
-.context-menu button[role='menuitemradio']::before {
-  content: '○';
-  width: 1em;
-}
-
-.context-menu button[aria-checked='true']::before {
-  content: '●';
-}
-
-/* An indent matching the marker's width, so the action labels line up with the
-   radio labels rather than with their markers. */
-.context-menu button[role='menuitem'] {
-  padding-left: calc(8px + 1em + 6px);
-}
-
-.context-menu-separator {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--color-rule);
-}
+/* The right-click menu (spec §6.4) is drawn by the OS since it went native —
+   see `context-menu.ts` — so nothing here styles it. */
 
 /* --- Settings Window Toggle --- */
 #settings-toggle {
