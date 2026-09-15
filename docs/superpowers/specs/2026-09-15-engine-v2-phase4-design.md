@@ -389,3 +389,151 @@ narrowings suggest themselves and none is measured:
 the failure here is an argument for a *sharper* condition on when the veto
 lifts, not for softening the veto everywhere.
 
+
+---
+
+## 9. Measured 2026-09-16: the narrowing, and what it costs
+
+§8.4 asked for a condition that keeps `本当は`, `気持ち良かったし` and
+`どっぴゅんさせてあげるから` working while leaving `品川`, `1969` and
+`ニュルンベルク` alone. **The condition is one hiragana character.**
+
+```text
+opens(T)  ≡  unmatchable(T)  ∧  T contains a hiragana character
+```
+
+Everything else in §2 is unchanged: coverage is still judged under the strict
+rule, the escape still marks positions rather than spans, and a token that
+passes still opens its whole interior.
+
+### 9.1 Why hiragana
+
+Japanese writes its inflection and its particles in hiragana. A hiragana
+character inside a token is therefore the only evidence the engine has that
+the token is a **concatenation** — a content word glued to something else —
+rather than one word, and concatenation is the entire case §1 describes:
+
+| token | what the hiragana is |
+| --- | --- |
+| `本当は` | the particle `は` |
+| `気持ち良かっ` | okurigana, then a conjugated adjective |
+| `ぴゅんさせてあげるから` | three ordinary words after an unknown one |
+
+A token with no hiragana in it is a run of kanji, katakana or digits that
+IPADIC declined to cut, and that is a single lexical unit by construction.
+Reopening one buys nothing, because JMdict has no entry for the unit either —
+it only lets the one-character entries inside it win a span each, which is
+§8.2's whole failure.
+
+This is a **narrowing of the veto's exception**, in §6's sense: the veto still
+holds everywhere it held before, and the set of positions where it lifts is
+smaller than §2's, never larger.
+
+### 9.2 What the corpus says, per token
+
+The decomposition §8 used, re-cut by hint token rather than by gold span.
+Every unmatchable token the unconditional escape reopened over the 150 gold
+sentences, hints on, classified by the scripts it contains, against the
+gold spans that gained or lost a strict hit inside it:
+
+| token script | tokens | gold spans gained | gold spans lost |
+| --- | --- | --- | --- |
+| hiragana only | 40 | 29 | 3 |
+| hiragana + kanji | 6 | 0 | 0 |
+| hiragana + katakana | 1 | 0 | 0 |
+| **hiragana-bearing** | **47** | **29** | **3** |
+| kanji only | 68 | 5 | 42 |
+| katakana only | 36 | 3 | 25 |
+| digits only | 25 | 0 | 21 |
+| Latin, punctuation | 13 | 0 | 0 |
+| **no hiragana** | **142** | **8** | **88** |
+
+The separation is not marginal and it is not a threshold: the two halves have
+opposite signs. Read the losing side by name and it is a gazetteer —
+`品川`, `岡本`, `松久`, `浦和`, `新大阪`, `大阪環状線`, `百合子`, `仁兵衛`,
+`ディオニス`, `マルヴィナ`, `ルクセイン`, `サフィレーヌ`, `2014`, `1969`,
+`9518` — and the four exceptions on it are real multi-word compounds IPADIC
+glued: `東京厚生年金会館`, `クライシスマッピングパーティー`, `田町駅`.
+Those four are what the narrowing gives up.
+
+### 9.3 The other three candidates, measured
+
+§8.4 named three and measured none. All three were implemented behind a
+switch and run against the same gates, so the choice is between measurements
+rather than between arguments. Hints on, gold corpus, 2,163 spans:
+
+| narrowing | strict | matched | unmatched-but-exact | 18 sentences |
+| --- | --- | --- | --- | --- |
+| *(before Phase 4)* | 1768 | 1332 | 436 | 426 / 630 |
+| §2 unconditional (§8) | 1713 | 1369 | 344 | 486 |
+| §8.4.1, min length 3 on doubly-relaxed spans | 1713 | 1369 | 344 | 478 |
+| §8.4.1, min length 2 | 1714 | 1370 | 344 | 483 |
+| §8.4.2, script-run: no all-digit or all-katakana token | 1753 | 1366 | 387 | 475 |
+| **§9, hiragana-bearing token** | **1792** | **1361** | **431** | **475** |
+
+Three findings in that table, none of them predictable from §8.4's prose:
+
+- **A minimum length is inert on the gold corpus.** At 3 it reproduces the
+  unconditional version's cells *exactly*. The reason is that blocking a
+  relaxed span does not restore the gold span: `UNMATCHED` is 30 a character
+  against `COVER`'s 1, so the DP takes any remaining shorter match and pads
+  the rest with a fallback run — `羽田空港` becomes `羽田`(unmatched) + `空港`
+  rather than going back to being one unmatched span. Every partial
+  decomposition destroys the exact hit just as thoroughly as a full one.
+  §8.4.1 was right that `は` breaks a flat minimum and wrong that the
+  doubly-relaxed form would help.
+- **Script-run awareness recovers about half of what it should.** It reaches
+  the katakana and digit tokens by construction and leaves all 68 all-kanji
+  ones open, which is where 42 of the 88 losses are. It ends up 15 spans
+  *below* the pre-phase baseline, so it fails Gate 1 too.
+- **The hiragana condition dominates both on gold and ties the better of
+  them on the reported sentences.** It is also the only one of the four that
+  takes strict span accuracy *above* where Phase 4 found it.
+
+§8.4.3, the part-of-speech condition, was not implemented. The measurement
+above removes its motivation: it was proposed to separate a grammatical tail
+from a lexical unit, and the script test does that with information the engine
+already has at hand, without a second inventory to consult or a conjugation
+case to special-case. It is recorded as not-needed rather than as untried.
+
+### 9.4 What the narrowing costs, stated plainly
+
+- **Four real compounds stay glued.** They are the whole +8: `東京厚生年金会館`
+  (3 spans), `クライシスマッピングパーティー` (3), `田町駅` (1), `冶爺` (1).
+  A kanji or katakana token that genuinely is several words is now
+  unreachable, and the escape cannot tell one from `羽田空港` without
+  information it does not have.
+- **Eleven characters on the eighteen reported sentences**, all of them one
+  sentence: `w7`, 「お、『ロイヤルネイビーガール』の新刊出てたんだな」, whose
+  katakana title now comes back whole and unglossed rather than as
+  `ロイヤル` + `ネイビー` + `ガール`. On this register that shattering would
+  arguably have helped a reader; on the gold corpus the identical shape is
+  `ニュルンベルク` → six pieces. The registers disagree and the gold corpus is
+  the gate.
+- **Three hiragana runs that are themselves one unit** — `ぱたぱたぱたぱた`,
+  `ぇぇぇ`, `ぁぁぁ` — still shatter, because they are indistinguishable from
+  `ぱひゅぱひゅぱひゅと`, which is the same shape with a particle on the end
+  and is 26 of the 29 gains. This is a ceiling of the condition, not an
+  oversight.
+
+### 9.5 The gates
+
+Run 2026-09-16 at the same gold index (5,402 entries, 9,930 keys, 13,898
+records) and the same Vibrato dictionary.
+
+| gate | required | measured |
+| --- | --- | --- |
+| 1, hints off | identical to the digit | **identical**, all eleven cells and every secondary line |
+| 1, hints on, strict | ≥ 0.8174 (1768) | **0.8285 (1792)**, +24 |
+| 1, hints on, tolerant | recorded | 0.8645 (1870), was 0.8525 (1844) |
+| 1, hints on, entry top-1 | recorded | 0.9125, was 0.9092 |
+| 2, compounds hints on | recorded | **0.6129 (114 / 186), unchanged**, every class line identical |
+| 3, spurious merges | 26 of 26 | **26 of 26** |
+| 4, snapshot | byte-identical | byte-identical |
+| 5, bench scaling | off 0.98–1.07x, on 1.07–1.12x | off **1.01x**, on **1.07x** then 1.02x on a second reading |
+| 6, eighteen sentences | recorded | **475 of 630** against hints-off's 487, from 426 |
+| 7, suite | green, 0 ignored | 47 in `engine_v2`, 0 ignored; `fmt` and `clippy --all-targets` clean |
+
+Gate 1 hints-on is the one §8 failed, and it does not merely recover: strict
+span accuracy ends 24 spans above where Phase 4 found it, with the matched
+half up 29 and the unmatched-but-exact half down only 5.
