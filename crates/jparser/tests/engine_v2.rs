@@ -271,6 +271,12 @@ const HINT_TOKEN_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <entry><ent_seq>2000130</ent_seq>
 <r_ele><reb>は</reb></r_ele>
 <sense><pos>&prt;</pos><gloss>topic marker</gloss></sense></entry>
+<entry><ent_seq>2000140</ent_seq>
+<k_ele><keb>品</keb></k_ele><r_ele><reb>しな</reb></r_ele>
+<sense><pos>&n;</pos><gloss>goods</gloss></sense></entry>
+<entry><ent_seq>2000150</ent_seq>
+<k_ele><keb>川</keb></k_ele><r_ele><reb>かわ</reb></r_ele>
+<sense><pos>&n;</pos><gloss>river</gloss></sense></entry>
 </JMdict>
 "#;
 
@@ -282,14 +288,14 @@ fn build_hint_token_fixture(name: &str) -> PathBuf {
     dir
 }
 
-/// A known defect, pinned as it behaves rather than as it should behave.
+/// Phase 4's first case, now fixed: **hints on and hints off agree.**
 ///
 /// Reported 2026-09-15 from 「よ、良かったわよ......思ったよりも気持ち良かったし......」,
-/// reduced here to the phrase that carries it. **Hints on, every span is
-/// unmatched; hints off, the same index parses it correctly** — so the hint
-/// source, whose job is to supply boundary evidence to the DP, is destroying a
-/// cover the DP had without it. That inversion is the whole finding, and it is
-/// why both halves are asserted in one test: either alone is unremarkable.
+/// reduced here to the phrase that carries it. Before the escape, hints on
+/// returned no matched span at all while hints off parsed it correctly — the
+/// hint source, whose job is to supply boundary evidence to the DP, was
+/// destroying a cover the DP had without it. Both halves are still asserted
+/// in one test, because their agreeing is the property worth holding.
 ///
 /// The mechanism, measured against the real index and dictionary:
 ///
@@ -298,24 +304,15 @@ fn build_hint_token_fixture(name: &str) -> PathBuf {
 /// longest key at 0: 気持ち                       3 chars
 /// ```
 ///
-/// IPADIC holds 気持ち良かっ as one token, because 気持ち良い is one word to it.
-/// `cost::is_allowed` forbids a span that starts or ends inside a Vibrato
-/// token, so 気持ち (ends at 3) and 良かった (starts at 3) are both illegal —
-/// and no key in the index is long enough to cover the token itself. Nothing
-/// can fill the region, so all of it falls to unmatched. The constraint is
-/// doing exactly what it was written to do; what is missing is an escape for
-/// the case where it leaves a token uncoverable.
-///
-/// **The correct parse is 気持ち + 良かった + し**, which is what the hints-off
-/// assertion below already pins. Fixing it means relaxing `cost::is_allowed`
-/// when no allowed candidate covers a hint token, which changes segmentation
-/// wherever a hint token outruns the dictionary — so it moves §5.2's eight
-/// baseline cells, the compound metric and the spurious-merge gate, and wants
-/// a phase with its own measurements rather than a patch. When that lands,
-/// this test fails, which is the intended signal to re-measure and rewrite it.
+/// IPADIC holds 気持ち良かっ as one token, because 気持ち良い is one word to it,
+/// and no key in the index is long enough to cover that token. So the token is
+/// unmatchable, [`jparser::engine::relax::Relaxed`] reopens its interior, and
+/// 気持ち may end at 3 while 良かった starts there and ends on the real
+/// boundary after た — one endpoint relaxed, one strict, which is why the
+/// escape marks positions rather than spans.
 #[cfg(feature = "mecab")]
 #[test]
-fn a_hint_token_longer_than_any_key_leaves_its_region_unmatched() {
+fn a_hint_token_longer_than_any_key_no_longer_hides_its_words() {
     const TEXT: &str = "気持ち良かったし";
     let dir = build_hint_token_fixture("hint-token-shatter");
 
@@ -335,25 +332,19 @@ fn a_hint_token_longer_than_any_key_leaves_its_region_unmatched() {
         "hints off, this index covers the phrase"
     );
 
-    // Hints on: the defect. Not one matched span survives.
+    // Hints on: the same answer, which is the whole point.
     let bounds = boundaries_over(TEXT);
     let on = parse_v2_with_bounds(&dir, TEXT, Some(&bounds));
-    assert!(
-        on.segments.iter().all(|s| !s.matched),
-        "known defect: every span should be unmatched here, got {:?}",
-        on.segments
-            .iter()
-            .map(|s| (s.surface.as_str(), s.matched))
-            .collect::<Vec<_>>()
+    let on_spans: Vec<(&str, bool)> = on
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        on_spans, off_spans,
+        "hints must not take away a cover the engine has without them"
     );
-    // And specifically: neither word the index holds is reachable, even
-    // though the boundaries the hints supply are not themselves wrong.
-    assert!(
-        !on.segments
-            .iter()
-            .any(|s| s.matched && (s.surface == "気持ち" || s.surface == "良かった")),
-        "known defect: the hint token forbids both words"
-    );
+    assert_eq!(on.segments[1].reading.as_deref(), Some("よかった"));
 }
 
 /// The same defect as above, at the severity that makes it matter, and with
@@ -369,9 +360,11 @@ fn a_hint_token_longer_than_any_key_leaves_its_region_unmatched() {
 /// holding させて, あげる and から, none of which can now be reached.
 ///
 /// Hints off, the same index finds all three and leaves only the unknown word
-/// unmatched, which is the right answer. **Hints on, the whole thirteen
-/// characters come back as one unmatched span** — the two runs merge, so not
-/// one word survives.
+/// unmatched, which is the right answer. Before the escape, hints on returned
+/// the whole thirteen characters as one unmatched span — the two runs merged
+/// and not one word survived. **Now the two hint states agree**, and the
+/// unknown word is unmatched in both, which is what it should be: it is in no
+/// dictionary.
 ///
 /// Measured on the seven sentences this came from, against the real
 /// 218k-entry index: hints match **194 of 299 characters, hints off 230**.
@@ -382,17 +375,16 @@ fn a_hint_token_longer_than_any_key_leaves_its_region_unmatched() {
 /// not. It is worth stating plainly, because §4.3 treats the hint source as
 /// evidence and on this register it is closer to a veto.
 ///
-/// The fix is the one the test above names — an escape in `cost::is_allowed`
-/// when no allowed candidate covers a hint token. Nothing here is a second
-/// defect; it is the first one's blast radius.
+/// The fix is the escape the test above names, and this was never a second
+/// defect — it was the first one's blast radius.
 ///
 /// An unknown word is the loudest trigger, not the only one, and reading this
 /// test alone would narrow it too far: see
-/// [`a_hint_token_that_is_not_a_key_unmatches_two_common_words`], where the
+/// [`a_hint_token_that_is_not_a_key_no_longer_unmatches_its_words`], where the
 /// token is three characters IPADIC knows perfectly well.
 #[cfg(feature = "mecab")]
 #[test]
-fn an_unknown_word_run_swallows_every_word_after_it() {
+fn an_unknown_word_run_no_longer_swallows_the_words_after_it() {
     const TEXT: &str = "どっぴゅんさせてあげるから";
     let dir = build_hint_token_fixture("unknown-word-run");
 
@@ -415,36 +407,35 @@ fn an_unknown_word_run_swallows_every_word_after_it() {
         "hints off, only the unknown word is unmatched"
     );
 
-    // Hints on: one span, the whole input, nothing matched.
+    // Hints on: the same answer. The unknown word keeps its own span and
+    // takes nothing with it.
     let bounds = boundaries_over(TEXT);
     let on = parse_v2_with_bounds(&dir, TEXT, Some(&bounds));
+    let on_spans: Vec<(&str, bool)> = on
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
     assert_eq!(
-        on.segments.len(),
-        1,
-        "known defect: the unknown token swallows the rest, got {:?}",
-        on.segments
-            .iter()
-            .map(|s| (s.surface.as_str(), s.matched))
-            .collect::<Vec<_>>()
+        on_spans, off_spans,
+        "an unknown token must not reach past itself"
     );
-    assert_eq!(on.segments[0].surface, TEXT);
-    assert!(!on.segments[0].matched);
 }
 
-/// The smallest form of the same defect, and the one that says how often it
-/// can fire: **three characters, two of the commonest words in the language,
-/// and a hint token IPADIC knows perfectly well.**
+/// The smallest form of the same defect, and the one that said how often it
+/// could fire: **three characters, two of the commonest words in the
+/// language, and a hint token IPADIC knows perfectly well.**
 ///
 /// From 2026-09-15's fourth report, `......本当はちょっとしたいけど。`. IPADIC
-/// holds 本当は as a single entry; JMdict does not hold it as a key. So the
-/// token is 本当は, `本当` ends inside it, `は` starts inside it, and both are
-/// forbidden — while nothing in the index is long enough to cover the token.
-/// Hints off, the same index returns 本当 (ほんとう) and は, both matched.
-///
-/// **The boundaries stay right and only the matching dies.** That is what
-/// makes this case worth its own test rather than a line in the one above:
-/// the parse still cuts 本当 | は, so nothing downstream looks wrong, and the
-/// reader simply gets a phrase with no definitions under it.
+/// holds 本当は as a single entry; JMdict does not hold it as a key, so the
+/// token is 本当は and nothing in the index is long enough to cover it. Before
+/// the escape, `本当` ended inside the token and `は` started inside it, both
+/// were forbidden, and **the boundaries stayed right while only the matching
+/// died** — the parse still cut 本当 | は, so nothing downstream looked wrong
+/// and the reader simply got a phrase with no definitions under it. That is
+/// what made this case worth its own test rather than a line in the one
+/// above, and it is why the assertion below is on the pair rather than on the
+/// cut.
 ///
 /// It also corrects the shape of the problem. The unknown-word case reads as
 /// a tokenizer failing on strange input; this one is two well-formed
@@ -461,11 +452,12 @@ fn an_unknown_word_run_swallows_every_word_after_it() {
 /// hint tokens but may not start or end inside one.
 ///
 /// Measured across the eighteen sentences reported on 2026-09-15 against the
-/// real index: hints match **426 characters of 630, hints off 487**. Nine of
-/// the eighteen lose ground with hints on and not one gains.
+/// real index, before the escape: hints matched **426 characters of 630,
+/// hints off 487**. Nine of the eighteen lost ground with hints on and not
+/// one gained. The Phase 4 handoff records the figure after.
 #[cfg(feature = "mecab")]
 #[test]
-fn a_hint_token_that_is_not_a_key_unmatches_two_common_words() {
+fn a_hint_token_that_is_not_a_key_no_longer_unmatches_its_words() {
     const TEXT: &str = "本当は";
     let dir = build_hint_token_fixture("hint-token-common-words");
 
@@ -491,29 +483,94 @@ fn a_hint_token_that_is_not_a_key_unmatches_two_common_words() {
         .collect();
     assert_eq!(
         on_spans,
-        [("本当", false), ("は", false)],
-        "known defect: the boundaries survive and both matches die"
+        [("本当", true), ("は", true)],
+        "the boundaries were always right; now the matches survive too"
+    );
+    assert_eq!(on.segments[0].reading.as_deref(), Some("ほんとう"));
+}
+
+/// The other half of the escape, and the one that decides its shape: **a hint
+/// token with no hiragana in it stays shut, and here the two hint states must
+/// *disagree*.**
+///
+/// `品川` is the test case because the escape's first implementation failed
+/// its gate on it. IPADIC holds the place as one token; JMdict does not hold
+/// it as a key at all, so it is unmatchable by exactly the same test `本当は`
+/// is, and its interior is full of one-character entries waiting to match.
+/// Relaxed unconditionally, a reader who hovered 品川 got "goods" and
+/// "river" — and across the gold corpus that shape cost 88 gold spans
+/// (42 all-kanji tokens, 25 all-katakana, 21 all-digit) against 8 gained,
+/// taking hints-on strict span accuracy from 1768 to 1713.
+///
+/// So the escape asks for one hiragana character anywhere in the token, which
+/// is the only evidence the engine has that the token glues a content word to
+/// something else rather than being one word. Hints off, nothing constrains
+/// the DP and it takes the two single-character entries, because `UNMATCHED`
+/// is 30 a character against `COVER`'s 1; hints on, the veto holds and the
+/// place comes back whole and unglossed. **That asymmetry is the correct
+/// answer, not a residual defect** — the tokenizer knows something here that
+/// the dictionary does not, which is the same fact that makes hints worth
+/// having.
+#[cfg(feature = "mecab")]
+#[test]
+fn a_hint_token_with_no_hiragana_keeps_its_veto() {
+    const TEXT: &str = "品川";
+    let dir = build_hint_token_fixture("hint-token-proper-noun");
+
+    // Hints off: the constraint does not exist, so both entries win a span.
+    let off = parse_v2_over(&dir, TEXT);
+    let off_spans: Vec<(&str, bool)> = off
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        off_spans,
+        [("品", true), ("川", true)],
+        "hints off, nothing forbids the two one-character matches"
+    );
+
+    // Hints on: one token, no hiragana, no escape.
+    let bounds = boundaries_over(TEXT);
+    let on = parse_v2_with_bounds(&dir, TEXT, Some(&bounds));
+    let on_spans: Vec<(&str, bool)> = on
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        on_spans,
+        [("品川", false)],
+        "the place stays whole and unglossed rather than shattering"
     );
 }
 
-/// The contrast case, and not an engine defect at all.
+/// The contrast case — and the one place Phase 4's design guessed wrong.
 ///
 /// Reported in the same breath as the sentence above, from
-/// 「このくらいどうていうことないだろう」. Here the hints are followed exactly
-/// and every boundary is right; one span is unmatched because ていう is not a
-/// key in the index, which holds っていう and て and てい but not this reading.
-/// (The source text is itself most likely どうっていうこと with the small つ
-/// lost, so the reading may never be worth an entry — but that is a data
-/// judgment, and this test's job is only to record that no segmentation change
-/// can reach this span.)
+/// 「このくらいどうていうことないだろう」. The hints are followed exactly and
+/// every boundary is right; `ていう` is not a key in the index, which holds
+/// `っていう`, `て` and `てい` but not this reading. The source text is most
+/// likely どうっていうこと with the small つ lost, so the reading may never be
+/// worth an entry of its own.
 ///
-/// Kept beside the defect above because the two look alike in the app — an
-/// unmatched run in the middle of a sentence — and are not alike at all. If a
-/// fix to `cost::is_allowed` ever appears to close this one too, the fix is
-/// doing something it was not meant to.
+/// The Phase 4 design listed this test under "expected not to move", on the
+/// reasoning that a missing key is a data gap no segmentation change can
+/// reach. **That was wrong, and the escape improved this case too.** `ていう`
+/// is a token nothing covers, so its interior reopens, and inside it sits
+/// `いう` — a real entry, and the right reading of this text, since the
+/// underlying phrase is と + いう. What is left unmatched is `て`, the half
+/// that lost its small つ. So the parse went from three characters with no
+/// gloss to one, and the reader now gets a definition for the verb.
+///
+/// The lesson is narrow and worth keeping: a span can be unmatchable for want
+/// of a key *and* be inside a token that hides a shorter key, and "the
+/// dictionary is missing this" does not imply "nothing in the engine can
+/// help". The design's §4.2 is corrected rather than deleted, because the
+/// reasoning that produced the wrong prediction is the interesting part.
 #[cfg(feature = "mecab")]
 #[test]
-fn a_reading_the_index_lacks_is_unmatched_between_correct_boundaries() {
+fn a_reading_the_index_lacks_still_yields_the_word_inside_it() {
     const TEXT: &str = "このくらいどうていうことないだろう";
     let dir = build_hint_token_fixture("hint-token-gap");
 
@@ -530,12 +587,13 @@ fn a_reading_the_index_lacks_is_unmatched_between_correct_boundaries() {
             ("この", true),
             ("くらい", true),
             ("どう", true),
-            ("ていう", false),
+            ("て", false),
+            ("いう", true),
             ("こと", true),
             ("ない", true),
             ("だろう", true),
         ],
-        "every boundary right, one span unmatched for want of an entry"
+        "the escape reaches the verb inside the token the index cannot cover"
     );
 }
 

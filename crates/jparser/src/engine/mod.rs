@@ -22,6 +22,7 @@ pub mod kana;
 pub mod label;
 pub mod lattice;
 pub mod lex;
+pub mod relax;
 pub mod romaji;
 pub mod table;
 mod table_data;
@@ -40,6 +41,19 @@ pub type FormId = u16;
 /// cuts, not whether a position is interior to a token.
 pub trait Boundaries {
     fn is_boundary(&self, pos: usize) -> bool;
+
+    /// Whether a span may start or end at `pos` — `cost::is_allowed`'s
+    /// question, which is not quite `is_boundary`'s.
+    ///
+    /// They differ only under [`relax::Relaxed`], which also permits a
+    /// position strictly inside a token no candidate can cover (Phase 4
+    /// design §2). The default is `is_boundary`, so a tokenizer's own
+    /// boundary set keeps exactly today's behaviour, and `cost::cost` goes on
+    /// asking `is_boundary` for its crossing count — widening *that* would
+    /// reprice every PRONOUNCE-only match through `PRONOUNCE_CROSS`.
+    fn is_usable_endpoint(&self, pos: usize) -> bool {
+        self.is_boundary(pos)
+    }
 }
 
 /// One step of a deinflection chain: which conjugation class was applied, in
@@ -85,6 +99,12 @@ pub fn parse(
 ) -> Result<ParseResult, ParseError> {
     let chars: Vec<char> = text.chars().collect();
     let by_start = lex::candidates(index, table, &chars)?;
+    // Phase 4: a token no candidate can cover forbids every span touching it,
+    // which leaves its characters unmatchable rather than merely expensive.
+    // `Relaxed` reopens those positions and no others; `None` stays `None`,
+    // so the no-tokenizer path is untouched by construction.
+    let relaxed = bounds.map(|b| relax::Relaxed::over(&chars, &by_start, b));
+    let bounds = relaxed.as_ref().map(|r| r as &dyn Boundaries).or(bounds);
     let mut paths = lattice::k_best(&chars, &by_start, bounds, opts.readings);
     let assemble = |path: &[lattice::Step]| -> Result<Vec<crate::Segment>, IndexError> {
         path.iter()

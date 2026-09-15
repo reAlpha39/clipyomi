@@ -245,10 +245,17 @@ const INEXACT: i32 = 8;
 /// Whether a tokenizer allows `cand`'s span to exist at all.
 ///
 /// A span may not *start or end* inside a token: `bounds` must call both
-/// `cand.start` and `cand.start + cand.len` boundaries. Nothing forbids a
-/// span from *crossing* boundaries in between — that is `cost`'s job, not
+/// `cand.start` and `cand.start + cand.len` usable endpoints. Nothing forbids
+/// a span from *crossing* boundaries in between — that is `cost`'s job, not
 /// this one — which is the asymmetry that lets `東京都` survive a tokenizer
 /// that cuts it as `東京|都`.
+///
+/// The question is [`Boundaries::is_usable_endpoint`] and not `is_boundary`,
+/// and the two differ in exactly one place: a token no candidate can cover
+/// has no legal span at all under the strict reading, so
+/// [`crate::engine::relax::Relaxed`] reopens its interior (Phase 4 design
+/// §2). Everywhere the tokenizer and the dictionary agree about where words
+/// are, the two questions have the same answer.
 ///
 /// With `bounds == None` every constraint lifts: the engine must still work
 /// with no tokenizer at all.
@@ -256,7 +263,7 @@ pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
     let Some(bounds) = bounds else {
         return true;
     };
-    bounds.is_boundary(cand.start) && bounds.is_boundary(cand.start + cand.len)
+    bounds.is_usable_endpoint(cand.start) && bounds.is_usable_endpoint(cand.start + cand.len)
 }
 
 /// The price of matching `cand`, given where a tokenizer put its boundaries.
