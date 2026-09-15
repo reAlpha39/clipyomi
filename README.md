@@ -12,7 +12,7 @@ It is a modern cross-platform (Rust + Tauri v2 + TypeScript) rewrite of the clas
 - **Built-in JMDict Integration:** Automatically downloads and compiles an optimized, memory-mapped local index of the JMDict multilingual Japanese dictionary.
 - **Interactive Floating Popovers:**
   - Full grammatical breakdown with conjugated forms (e.g. *Past*, *Causative-Passive*, *Polite Negative*).
-  - Furigana readings, pitch/romaji support, and part-of-speech tags.
+  - Furigana readings, romaji support, and part-of-speech tags.
   - Rich definitions, glosses, and cross-references.
 - **Immersion HUD & Desktop Overlay:**
   - **Always on Top** pinning for overlaying games or readers.
@@ -29,7 +29,8 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 ```text
 ├── crates/
 │   ├── jparser/         # Pure, reusable Japanese segmentation & conjugation parser
-│   └── jmdict-source/   # JMDict download, staging, and indexing pipeline
+│   ├── jmdict-source/   # JMDict download, staging, and indexing pipeline
+│   └── vibrato-source/  # Pinned IPADIC download for the optional boundary hints
 ├── src-tauri/           # Tauri v2 desktop shell, clipboard monitoring, & window management
 └── src/                 # TypeScript + Vite UI (popover positioning, DOM rendering, styling)
 ```

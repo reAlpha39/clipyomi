@@ -10,6 +10,38 @@ name: CI
 # fix wave formatted `vibrato-source` too. Added 2026-09-09, once a
 # workspace-wide check had been clean by hand through several phases.
 
+# ## The boundary-hint dictionary
+#
+# Eight of `engine_v2`'s 47 tests pin behaviour against genuine IPADIC
+# tokenization rather than a stand-in — `kurumadehakou_parses_as_four_words`,
+# `the_particle_absorbing_merges_are_gone`,
+# `the_dictionary_form_itself_loses_to_its_parts_without_hints`, and the five
+# hint-token characterization tests — and the helper they share falls back to
+# a `%APPDATA%` location when `TA_HINTS_DICT` is unset. There is no APPDATA on
+# these runners, so every job that runs them first caches and publishes the
+# pinned dictionary and exports `TA_HINTS_DICT`; without those steps the eight
+# panic on a missing environment variable before asserting anything, and the
+# job fails on the environment rather than on the engine.
+#
+# Measured locally rather than assumed, 2026-09-16: with both variables unset,
+# 8 of the 47 `engine_v2` tests fail; with `TA_HINTS_DICT` pointing at a
+# `fetch-hints` output and APPDATA still unset, 47 of 47 pass. The figures
+# before Phase 4 were 2 of 39 and 39 of 39 — the list grew with the
+# characterization tests of 2026-09-15 and Phase 4's own, so re-measure it
+# rather than trusting this paragraph after adding a test that takes
+# boundaries.
+#
+# ## Whether this file has run
+#
+# Earlier revisions of these comments asserted, four times over, that it never
+# had "because the repository has no remote". **That premise is false.** There
+# is an `origin` (github.com/reAlpha39/clipyomi), this file is on
+# `origin/main` and `origin/develop`, and the `push: [main]` trigger has
+# therefore had every opportunity to fire. What is still true is that nobody
+# has read the run history back: treat "green in CI" as unverified from a
+# developer machine, not as never-attempted, and do not write the stronger
+# claim into a comment again without checking `origin` first.
+
 on:
   push:
     branches: [master, main]
@@ -47,19 +79,9 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
 
-      # Two tests pin master plan success criterion 3 against genuine IPADIC
-      # tokenization rather than a stand-in dictionary —
-      # `kurumadehakou_parses_as_four_words` and
-      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
-      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
-      # There is no APPDATA on this runner, so without these two steps both
-      # tests panic before asserting anything and this job fails on a missing
-      # environment variable rather than on the engine.
-      #
-      # Measured locally rather than assumed, since this file has never run
-      # (the repository has no remote): with APPDATA unset, 2 of the 39
-      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
-      # output and APPDATA still unset, 39 of 39 pass.
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
       - name: Cache the pinned IPADIC dictionary
         uses: actions/cache@v4
         with:
@@ -202,19 +224,9 @@ jobs:
       # `clippy -p jparser --features mecab --all-targets` isolates
       # mecab-specific lints to a scope a workspace-wide clippy run does not
       # guarantee.
-      # Two tests pin master plan success criterion 3 against genuine IPADIC
-      # tokenization rather than a stand-in dictionary —
-      # `kurumadehakou_parses_as_four_words` and
-      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
-      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
-      # There is no APPDATA on this runner, so without these two steps both
-      # tests panic before asserting anything and this job fails on a missing
-      # environment variable rather than on the engine.
-      #
-      # Measured locally rather than assumed, since this file has never run
-      # (the repository has no remote): with APPDATA unset, 2 of the 39
-      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
-      # output and APPDATA still unset, 39 of 39 pass.
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
       - name: Cache the pinned IPADIC dictionary
         uses: actions/cache@v4
         with:
@@ -250,19 +262,9 @@ jobs:
       # "hints-source")]`) is type-checked anywhere in CI. Design spec §9.5
       # lists this gate; it did not reach this file until the Phase 5A fix wave.
       # Mirrors the `mecab` job above deliberately.
-      # Two tests pin master plan success criterion 3 against genuine IPADIC
-      # tokenization rather than a stand-in dictionary —
-      # `kurumadehakou_parses_as_four_words` and
-      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
-      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
-      # There is no APPDATA on this runner, so without these two steps both
-      # tests panic before asserting anything and this job fails on a missing
-      # environment variable rather than on the engine.
-      #
-      # Measured locally rather than assumed, since this file has never run
-      # (the repository has no remote): with APPDATA unset, 2 of the 39
-      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
-      # output and APPDATA still unset, 39 of 39 pass.
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
       - name: Cache the pinned IPADIC dictionary
         uses: actions/cache@v4
         with:
@@ -293,19 +295,9 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
 
-      # Two tests pin master plan success criterion 3 against genuine IPADIC
-      # tokenization rather than a stand-in dictionary —
-      # `kurumadehakou_parses_as_four_words` and
-      # `the_particle_absorbing_merges_are_gone` — and `dictionary_path()`
-      # falls back to a `%APPDATA%` location when `TA_HINTS_DICT` is unset.
-      # There is no APPDATA on this runner, so without these two steps both
-      # tests panic before asserting anything and this job fails on a missing
-      # environment variable rather than on the engine.
-      #
-      # Measured locally rather than assumed, since this file has never run
-      # (the repository has no remote): with APPDATA unset, 2 of the 39
-      # `engine_v2` tests fail; with TA_HINTS_DICT pointing at a `fetch-hints`
-      # output and APPDATA still unset, 39 of 39 pass.
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
       - name: Cache the pinned IPADIC dictionary
         uses: actions/cache@v4
         with:
@@ -343,9 +335,10 @@ jobs:
       # e2e/panes.spec.ts-snapshots/ were written and eyeballed on macOS, and
       # this runner is ubuntu-latest — different font rendering means those
       # baselines would mismatch on every run here regardless of whether the
-      # app is actually correct. There is no git remote on this repository, so
-      # there is no way to run a real Linux job and capture Linux baselines to
-      # commit instead. GitHub Actions sets `CI=true` automatically, so this
+      # app is actually correct. Capturing Linux baselines from a real run of
+      # this job and committing them instead is possible — there is a remote,
+      # see the header — and simply has not been done. GitHub Actions sets
+      # `CI=true` automatically, so this
       # job runs every DOM assertion in panes.spec.ts on every run and skips
       # only the pixel comparison; the full visual comparison still runs
       # wherever the baselines are valid (this developer's machine).
