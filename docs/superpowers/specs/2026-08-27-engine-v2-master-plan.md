@@ -1216,8 +1216,10 @@ to the cell. Design: `specs/2026-09-12-engine-v2-phase3c-design.md`; record:
 by this phase; the two research items it leaves — the long-unit token
 inventory and a pitch-accent source hunt — are spikes, not phases.
 **The first ran on 2026-09-15 and closed the route**
-(`docs/superpowers/2026-09-15-long-unit-separation-spike.md`); the
-pitch-accent hunt is still open.
+(`docs/superpowers/2026-09-15-long-unit-separation-spike.md`) and the second
+ran the same day (`docs/superpowers/2026-09-15-pitch-accent-source-hunt.md`),
+leaving UniDic as the one surviving accent source and a coverage measurement
+as what stands between it and a phase.
 
 ### Phase 3 — Extra linguistic layers
 
@@ -1229,7 +1231,7 @@ own licensing gate, adopted only if its data source is permissive:
 | Frequency rank | corpus-derived | **Moot** — the layer is ruled out on measurement, so no licence needs establishing |
 | JLPT level | KANJIDIC2 `<jlpt>`, kanji only, former four-level scale | **Kanji half shipped, Phase 3b (2026-09-11)**, labelled as the former scale. Word-level JLPT declined: no official N1–N5 list exists, so no source can meet the written-provenance gate |
 | Kanji readings | KANJIDIC2 (EDRDG) | **Shipped, Phase 3a (2026-09-11).** CC BY-SA 4.0, same publisher and licence as JMdict; attribution in the settings footer. Phase 3b added grade, stroke count, frequency rank and former JLPT level to the same line |
-| Pitch accent | — | **Highest risk.** NHK's dictionary is not free, and community accent datasets have murky provenance — precisely the trap this plan exists to escape |
+| Pitch accent | UniDic (NINJAL) `aType`, under the modified-BSD leg | **Source hunt done 2026-09-15** (`docs/superpowers/2026-09-15-pitch-accent-source-hunt.md`). UniDic passes — the triple licence is real, the BSD leg is selectable, and the accent columns are columns of the same lexicon §3.3 already chose. **Wadoku fails and its CC BY-SA 3.0 premise was wrong**: both licences in force restrict commercial use behind written permission. `kanjium` declares CC BY-SA 4.0 over undeclared provenance and is refused under §3.4. Gated on an unmeasured coverage figure before any phase opens |
 
 No layer ships without its licence established in writing first.
 
