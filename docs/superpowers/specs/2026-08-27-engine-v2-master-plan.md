@@ -1215,6 +1215,9 @@ to the cell. Design: `specs/2026-09-12-engine-v2-phase3c-design.md`; record:
 `2026-09-12-engine-v2-phase3c-handoff.md`. The Phase 3 table is not changed
 by this phase; the two research items it leaves — the long-unit token
 inventory and a pitch-accent source hunt — are spikes, not phases.
+**The first ran on 2026-09-15 and closed the route**
+(`docs/superpowers/2026-09-15-long-unit-separation-spike.md`); the
+pitch-accent hunt is still open.
 
 ### Phase 3 — Extra linguistic layers
 
@@ -1272,9 +1275,18 @@ frequency does not measure**, and under a short-unit inventory only 5 of the 87
 should-merge types are a token at all. So the third candidate — the `vn_data`
 capture pool, whose licence turns on a judgment only the copyright holder could
 make — is settled too, without anyone making that judgment. The route the
-measurements leave open is a **long-unit** token inventory rather than another
-corpus, which is a segmenter question with its own gates and is untested; see
-doc §12.5, and do not read it as reopening the dictionary hunt §8 closed.
+measurements leave open was a **long-unit** token inventory rather than another
+corpus — **and that was tested on 2026-09-15 and closed too**
+(`docs/superpowers/2026-09-15-long-unit-separation-spike.md`). SudachiDict
+Mode C, the concrete long-unit article, never emits a `transparent` or a
+`false-match` span as a token (0 / 42 and 0 / 32) but emits only 9 of 112
+`lexical` windows as one, so every reading's best threshold is the blanket
+itself at AUC 0.546. The nine are noun-noun compounds; the other 103 are
+constructions, and no word inventory holds a construction at any unit length.
+**Phase 3's data thread is finished in every direction**: not the corpus, not
+the dictionary, not the unit. What is left of compound preservation is a
+lattice-and-cost question inside the engine, which is a different premise and
+is not scoped here.
 
 ---
 
