@@ -198,6 +198,189 @@ fn kurumadehakou_parses_as_four_words() {
     assert_eq!(cuts, ["くる", "まで", "は", "こう"]);
 }
 
+// Two sentences reported from real use on 2026-09-15, both parsing badly with
+// hints on. They fail for different reasons and the pair is kept together so
+// that a fix to one cannot be credited for the other: the first is the
+// engine's, the second is the dictionary's.
+//
+// A private fixture, for the reason `KURU_FIXTURE` gives — `jmdict_subset.xml`
+// is extractor-generated and would drop hand-added entries on regeneration —
+// and because the point of the second test is an entry that is *absent*, which
+// a shared fixture could acquire at any time. Eight entries, hand-written
+// rather than extracted, with glosses written here rather than copied.
+//
+// 良い is `adj-i` and not the `adj-ix` JMdict gives it. That is deliberate and
+// it is a fixture simplification, not a claim: `adj-ix` maps to 形容詞・イイ,
+// whose stem handling does not reach 良かった from the kanji stem, so an
+// `adj-ix` fixture would make the hints-off control below fail for a reason
+// that has nothing to do with hints. The real index carries an entry that does
+// deinflect (measured: `良かった matched reading=よかった`), so `adj-i` is what
+// reproduces the real index's behaviour here, and the defect under test is
+// about spans the hint boundaries forbid rather than about which class found
+// them.
+#[cfg(feature = "mecab")]
+const HINT_TOKEN_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+<!ENTITY adj-i "adjective (keiyoushi)">
+<!ENTITY adj-pn "pre-noun adjectival (rentaishi)">
+<!ENTITY adv "adverb (fukushi)">
+<!ENTITY exp "expressions (phrases, clauses, etc.)">
+<!ENTITY suf "suffix">
+]>
+<JMdict>
+<entry><ent_seq>2000010</ent_seq>
+<k_ele><keb>気持ち</keb></k_ele><r_ele><reb>きもち</reb></r_ele>
+<sense><pos>&n;</pos><gloss>feeling</gloss></sense></entry>
+<entry><ent_seq>2000020</ent_seq>
+<k_ele><keb>良い</keb></k_ele><r_ele><reb>よい</reb></r_ele><r_ele><reb>いい</reb></r_ele>
+<sense><pos>&adj-i;</pos><gloss>good</gloss></sense></entry>
+<entry><ent_seq>2000030</ent_seq>
+<r_ele><reb>この</reb></r_ele>
+<sense><pos>&adj-pn;</pos><gloss>this</gloss></sense></entry>
+<entry><ent_seq>2000040</ent_seq>
+<r_ele><reb>くらい</reb></r_ele>
+<sense><pos>&suf;</pos><gloss>about</gloss></sense></entry>
+<entry><ent_seq>2000050</ent_seq>
+<r_ele><reb>どう</reb></r_ele>
+<sense><pos>&adv;</pos><gloss>how</gloss></sense></entry>
+<entry><ent_seq>2000060</ent_seq>
+<k_ele><keb>事</keb></k_ele><r_ele><reb>こと</reb></r_ele>
+<sense><pos>&n;</pos><gloss>thing</gloss></sense></entry>
+<entry><ent_seq>2000070</ent_seq>
+<r_ele><reb>ない</reb></r_ele>
+<sense><pos>&adj-i;</pos><gloss>nonexistent</gloss></sense></entry>
+<entry><ent_seq>2000080</ent_seq>
+<r_ele><reb>だろう</reb></r_ele>
+<sense><pos>&exp;</pos><gloss>I guess</gloss></sense></entry>
+</JMdict>
+"#;
+
+#[cfg(feature = "mecab")]
+fn build_hint_token_fixture(name: &str) -> PathBuf {
+    let dir = scratch(name);
+    jparser::engine::build::build_from_reader(BufReader::new(HINT_TOKEN_FIXTURE.as_bytes()), &dir)
+        .expect("hint-token fixture build");
+    dir
+}
+
+/// A known defect, pinned as it behaves rather than as it should behave.
+///
+/// Reported 2026-09-15 from 「よ、良かったわよ......思ったよりも気持ち良かったし......」,
+/// reduced here to the phrase that carries it. **Hints on, every span is
+/// unmatched; hints off, the same index parses it correctly** — so the hint
+/// source, whose job is to supply boundary evidence to the DP, is destroying a
+/// cover the DP had without it. That inversion is the whole finding, and it is
+/// why both halves are asserted in one test: either alone is unremarkable.
+///
+/// The mechanism, measured against the real index and dictionary:
+///
+/// ```text
+/// vibrato tokens:  気持ち良かっ | た | し        boundaries 0, 6, 7, 8
+/// longest key at 0: 気持ち                       3 chars
+/// ```
+///
+/// IPADIC holds 気持ち良かっ as one token, because 気持ち良い is one word to it.
+/// `cost::is_allowed` forbids a span that starts or ends inside a Vibrato
+/// token, so 気持ち (ends at 3) and 良かった (starts at 3) are both illegal —
+/// and no key in the index is long enough to cover the token itself. Nothing
+/// can fill the region, so all of it falls to unmatched. The constraint is
+/// doing exactly what it was written to do; what is missing is an escape for
+/// the case where it leaves a token uncoverable.
+///
+/// **The correct parse is 気持ち + 良かった + し**, which is what the hints-off
+/// assertion below already pins. Fixing it means relaxing `cost::is_allowed`
+/// when no allowed candidate covers a hint token, which changes segmentation
+/// wherever a hint token outruns the dictionary — so it moves §5.2's eight
+/// baseline cells, the compound metric and the spurious-merge gate, and wants
+/// a phase with its own measurements rather than a patch. When that lands,
+/// this test fails, which is the intended signal to re-measure and rewrite it.
+#[cfg(feature = "mecab")]
+#[test]
+fn a_hint_token_longer_than_any_key_leaves_its_region_unmatched() {
+    const TEXT: &str = "気持ち良かったし";
+    let dir = build_hint_token_fixture("hint-token-shatter");
+
+    // Hints off: the cover the index really holds, and the answer a reader
+    // wants. Asserted first so that a fixture that stopped reaching 良かった
+    // fails here, naming its own cause, rather than making the defect below
+    // look fixed.
+    let off = parse_v2_over(&dir, TEXT);
+    let off_spans: Vec<(&str, bool)> = off
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        off_spans,
+        [("気持ち", true), ("良かった", true), ("し", false)],
+        "hints off, this index covers the phrase"
+    );
+
+    // Hints on: the defect. Not one matched span survives.
+    let bounds = boundaries_over(TEXT);
+    let on = parse_v2_with_bounds(&dir, TEXT, Some(&bounds));
+    assert!(
+        on.segments.iter().all(|s| !s.matched),
+        "known defect: every span should be unmatched here, got {:?}",
+        on.segments
+            .iter()
+            .map(|s| (s.surface.as_str(), s.matched))
+            .collect::<Vec<_>>()
+    );
+    // And specifically: neither word the index holds is reachable, even
+    // though the boundaries the hints supply are not themselves wrong.
+    assert!(
+        !on.segments
+            .iter()
+            .any(|s| s.matched && (s.surface == "気持ち" || s.surface == "良かった")),
+        "known defect: the hint token forbids both words"
+    );
+}
+
+/// The contrast case, and not an engine defect at all.
+///
+/// Reported in the same breath as the sentence above, from
+/// 「このくらいどうていうことないだろう」. Here the hints are followed exactly
+/// and every boundary is right; one span is unmatched because ていう is not a
+/// key in the index, which holds っていう and て and てい but not this reading.
+/// (The source text is itself most likely どうっていうこと with the small つ
+/// lost, so the reading may never be worth an entry — but that is a data
+/// judgment, and this test's job is only to record that no segmentation change
+/// can reach this span.)
+///
+/// Kept beside the defect above because the two look alike in the app — an
+/// unmatched run in the middle of a sentence — and are not alike at all. If a
+/// fix to `cost::is_allowed` ever appears to close this one too, the fix is
+/// doing something it was not meant to.
+#[cfg(feature = "mecab")]
+#[test]
+fn a_reading_the_index_lacks_is_unmatched_between_correct_boundaries() {
+    const TEXT: &str = "このくらいどうていうことないだろう";
+    let dir = build_hint_token_fixture("hint-token-gap");
+
+    let bounds = boundaries_over(TEXT);
+    let r = parse_v2_with_bounds(&dir, TEXT, Some(&bounds));
+    let spans: Vec<(&str, bool)> = r
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        spans,
+        [
+            ("この", true),
+            ("くらい", true),
+            ("どう", true),
+            ("ていう", false),
+            ("こと", true),
+            ("ない", true),
+            ("だろう", true),
+        ],
+        "every boundary right, one span unmatched for want of an entry"
+    );
+}
+
 /// The cut offsets a `ParseResult`'s own segments imply: every `start`, plus
 /// the final segment's `start + len`. The intermediate ends need no entry of
 /// their own -- a `ParseResult` is a contiguous cover, so every segment's end
