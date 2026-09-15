@@ -84,6 +84,11 @@ pub fn is_kana(c: char) -> bool {
     )
 }
 
+/// Hiragana (U+3041..=U+3096), the hiragana leg of [`is_kana`] on its own.
+pub fn is_hiragana(c: char) -> bool {
+    matches!(c, '\u{3041}'..='\u{3096}')
+}
+
 /// ASCII digit or fullwidth digit (U+FF10..=U+FF19).
 pub fn is_digit(c: char) -> bool {
     c.is_ascii_digit() || matches!(c, '\u{FF10}'..='\u{FF19}')
