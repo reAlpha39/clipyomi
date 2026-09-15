@@ -598,6 +598,23 @@ gates — and it is **untested here**. It is recorded as the only route the
 measurements leave open, not as a recommendation, and not as licence to resume
 the dictionary hunt §8 closed.
 
+**Tested 2026-09-15, and closed:
+[`2026-09-15-long-unit-separation-spike.md`](2026-09-15-long-unit-separation-spike.md).**
+The bound was measured rather than the claim — a count over an inventory can
+only separate two classes if the inventory does — by handing the 139
+adjudicated types to SudachiDict Mode C, the concrete long-unit article this
+section describes. **The prediction holds on its negative half and fails on
+its positive one.** Mode C never emits a `transparent` or a `false-match` span
+as a token (0 / 42 and 0 / 32, cleaner than any scalar §12 tested), and emits
+only **9 of 112 `lexical` windows** as one. Every reading's best threshold is
+therefore the blanket itself, at AUC 0.546. The nine are noun-noun compounds;
+the other 103 are constructions — `音がする`, `ことになっている`, `となった` —
+and no inventory holds a construction at any unit length, because the property
+this metric rewards is **constructionhood** and wordhood does not measure it.
+So the missing piece was not the corpus, and not the unit either. The seven of
+the nine the engine splits today would buy +7 compound windows for −14 strict
+spans and 207 MiB of dictionary, which is the sign of trade §10.3 declined.
+
 ### 12.6 The `transparent` ruling, settled
 
 §11.1 flagged the `transparent` class (`には`, `にも`, `での`, `との`, `のか`,
@@ -851,4 +868,8 @@ cannot, and it rules out the whole family of "look at what the parts are"
 rules rather than this one member. **No further POS-shaped candidate should be
 tried**; the routes left are the long-unit inventory of §12.5 and whatever
 evidence a corpus adjudicated at *long*-unit granularity would supply, neither
-of which this project has.
+of which this project has. **The first of those was tested on 2026-09-15 and
+closed too** — see §12.5's own note and
+[the spike](2026-09-15-long-unit-separation-spike.md). What remains is not a
+data route at all: the 103 unreached windows are constructions, so anything
+that reaches them models the construction inside the engine.
