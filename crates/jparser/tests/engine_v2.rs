@@ -198,10 +198,11 @@ fn kurumadehakou_parses_as_four_words() {
     assert_eq!(cuts, ["くる", "まで", "は", "こう"]);
 }
 
-// Two sentences reported from real use on 2026-09-15, both parsing badly with
-// hints on. They fail for different reasons and the pair is kept together so
-// that a fix to one cannot be credited for the other: the first is the
-// engine's, the second is the dictionary's.
+// Sentences reported from real use on 2026-09-15, all parsing badly with
+// hints on. They fail for different reasons and are kept together so that a
+// fix to one cannot be credited for another: the first is the engine's, the
+// second is the dictionary's, and the third is the first again at a severity
+// the first does not convey.
 //
 // A private fixture, for the reason `KURU_FIXTURE` gives — `jmdict_subset.xml`
 // is extractor-generated and would drop hand-added entries on regeneration —
@@ -227,6 +228,8 @@ const HINT_TOKEN_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <!ENTITY adv "adverb (fukushi)">
 <!ENTITY exp "expressions (phrases, clauses, etc.)">
 <!ENTITY suf "suffix">
+<!ENTITY v1 "Ichidan verb">
+<!ENTITY prt "particle">
 ]>
 <JMdict>
 <entry><ent_seq>2000010</ent_seq>
@@ -253,6 +256,15 @@ const HINT_TOKEN_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <entry><ent_seq>2000080</ent_seq>
 <r_ele><reb>だろう</reb></r_ele>
 <sense><pos>&exp;</pos><gloss>I guess</gloss></sense></entry>
+<entry><ent_seq>2000090</ent_seq>
+<r_ele><reb>させる</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to make (someone) do</gloss></sense></entry>
+<entry><ent_seq>2000100</ent_seq>
+<r_ele><reb>あげる</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to give</gloss></sense></entry>
+<entry><ent_seq>2000110</ent_seq>
+<r_ele><reb>から</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>because</gloss></sense></entry>
 </JMdict>
 "#;
 
@@ -336,6 +348,76 @@ fn a_hint_token_longer_than_any_key_leaves_its_region_unmatched() {
             .any(|s| s.matched && (s.surface == "気持ち" || s.surface == "良かった")),
         "known defect: the hint token forbids both words"
     );
+}
+
+/// The same defect as above, at the severity that makes it matter, and with
+/// the trigger that makes it common: **an unknown word.**
+///
+/// The test above needs a hint token that happens to outrun the dictionary,
+/// which reads like a corner case. This one does not. IPADIC groups a run it
+/// does not recognise into a single unknown token, so one invented or
+/// colloquial word — the app's whole input register is full of them — glues
+/// itself to every ordinary word after it and takes them all down.
+/// `どっぴゅん` is in no dictionary, and IPADIC answers
+/// `どっ | ぴゅんさせてあげるから`: eleven characters in one unknown token,
+/// holding させて, あげる and から, none of which can now be reached.
+///
+/// Hints off, the same index finds all three and leaves only the unknown word
+/// unmatched, which is the right answer. **Hints on, the whole thirteen
+/// characters come back as one unmatched span** — the two runs merge, so not
+/// one word survives.
+///
+/// Measured on the seven sentences this came from, against the real
+/// 218k-entry index: hints match **194 of 299 characters, hints off 230**.
+/// Four of the seven lose ground with hints on (−14, −11, −7, −4 characters)
+/// and not one gains. That is the opposite sign to the gold corpus, where
+/// hints take strict span accuracy 0.7342 → 0.8174, and the difference is
+/// register: news and literature are in IPADIC, a visual novel's dialogue is
+/// not. It is worth stating plainly, because §4.3 treats the hint source as
+/// evidence and on this register it is closer to a veto.
+///
+/// The fix is the one the test above names — an escape in `cost::is_allowed`
+/// when no allowed candidate covers a hint token. Nothing here is a second
+/// defect; it is the first one's blast radius.
+#[cfg(feature = "mecab")]
+#[test]
+fn an_unknown_word_run_swallows_every_word_after_it() {
+    const TEXT: &str = "どっぴゅんさせてあげるから";
+    let dir = build_hint_token_fixture("unknown-word-run");
+
+    // Hints off: the unknown word is unmatched, as it must be, and every word
+    // behind it is found.
+    let off = parse_v2_over(&dir, TEXT);
+    let off_spans: Vec<(&str, bool)> = off
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        off_spans,
+        [
+            ("どっぴゅん", false),
+            ("させて", true),
+            ("あげる", true),
+            ("から", true),
+        ],
+        "hints off, only the unknown word is unmatched"
+    );
+
+    // Hints on: one span, the whole input, nothing matched.
+    let bounds = boundaries_over(TEXT);
+    let on = parse_v2_with_bounds(&dir, TEXT, Some(&bounds));
+    assert_eq!(
+        on.segments.len(),
+        1,
+        "known defect: the unknown token swallows the rest, got {:?}",
+        on.segments
+            .iter()
+            .map(|s| (s.surface.as_str(), s.matched))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(on.segments[0].surface, TEXT);
+    assert!(!on.segments[0].matched);
 }
 
 /// The contrast case, and not an engine defect at all.
