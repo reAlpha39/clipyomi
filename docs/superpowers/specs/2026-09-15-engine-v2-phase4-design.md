@@ -292,3 +292,100 @@ sweep.
   one day, from one register, chosen by what looked wrong rather than sampled.
   Gate 6 records a figure over them; it does not license quoting that figure
   as the engine's accuracy on anything.
+
+---
+
+## 8. Measured 2026-09-15: the first implementation, and why it does not ship
+
+The escape above was built as specified and measured the same day. It is on
+`spike/phase4-escape` (`cbd68f9`), not on this branch, because **it fails
+Gate 1.** What follows is the result, kept here because the design's
+reasoning is what produced the failure and both halves are worth reading
+together.
+
+### 8.1 What held
+
+| gate | result |
+| --- | --- |
+| 1, hints off | **identical to the digit** — 0.7342 (1588) / 0.7924 (1714) / 0.9093 / compounds 0.5860 (109), every class line unchanged |
+| 2, compounds hints on | **unchanged**: 0.6129 (114 / 186), `lexical` 42 / 112, `false-match` 30 / 32, `transparent` 42 / 42 |
+| 3, spurious merges | **26 of 26.** §4.3 named this as the gate that could genuinely fail and it did not |
+| 4, snapshot | byte-identical |
+| 6, eighteen sentences | **426 → 486 matched characters of 630**, against 487 with hints off. The gap this phase exists to close went from 61 characters to 1 |
+| 7, suite | 46 in `engine_v2`, 0 ignored; `fmt` and `clippy --all-targets` clean |
+
+### 8.2 What failed
+
+Hints-on strict span accuracy **fell 1768 → 1713**, and §5.1 says it must not
+fall. Decomposed span by span over all 150 sentences against a before-binary:
+
+```
+BEFORE  strict 1768  =  1332 matched  +  436 unmatched-but-exact
+AFTER   strict 1713  =  1369 matched  +  344 unmatched-but-exact
+                         +37             −92
+```
+
+`score`'s `fit` counts a segment sitting exactly on a gold span **whether or
+not it matched anything** (`score.rs`'s `strict`, which looks only at
+`start`/`len`). So part of that −55 is the metric withdrawing credit it was
+giving to fragments that showed the reader nothing, and the figure that
+tracks what a reader gets — gold spans resolving to a dictionary entry —
+went **up** by 37.
+
+**Only part, though, and the rest is a real defect in the escape.** Of the 92
+spans that lost an unmatched-but-exact hit, **90 are now covered by a matched
+span, and the matches are junk:**
+
+```
+品川        →  品 + 川
+羽田空港     →  羽 + 田 + 空港
+1969        →  19 + 6 + 9
+ニュルンベルク →  ニ + ュ + ル + ン + ベル + ク
+```
+
+By script: 42 kanji, 25 katakana, 21 digits, 3 hiragana. These are proper
+nouns and numbers that IPADIC holds as single tokens and JMdict does not hold
+at all — so they are unmatchable by §2's definition, the escape fires on them
+exactly as written, and their interiors are full of one-character entries
+waiting to match. A reader who hovers 品川 now gets "goods" and "river".
+
+**§7's first open item anticipated the mechanism and misjudged it.** It said
+a token nothing covers would be relaxed harmlessly, "no candidate exists
+there either way". Candidates do exist there, and they are the worst kind.
+
+### 8.3 §4.2 was wrong about one test, in the useful direction
+
+`a_reading_the_index_lacks_is_unmatched_between_correct_boundaries` was
+listed as "expected not to move", on the reasoning that a missing key is a
+data gap no segmentation change can reach. It moved, and improved: `ていう`
+is a token nothing covers, so its interior reopens and `いう` matches — the
+right reading, since the phrase is と + いう — leaving only the `て` that lost
+its small つ. "The dictionary is missing this" does not imply "nothing in the
+engine can help".
+
+### 8.4 Where a narrowing has to bite
+
+The failure is not that the escape fires too often but that it licenses
+**one-character matches inside a token that is a single lexical unit**. Three
+narrowings suggest themselves and none is measured:
+
+1. **A minimum length on relaxed spans.** Kills 品 + 川 and 19 + 6 + 9
+   directly. But `本当は` needs `は`, one character, so a flat minimum breaks
+   the case this phase exists for; it would have to apply only to spans with
+   *two* relaxed endpoints, and `させて` in `どっぴゅんさせてあげるから` has two.
+2. **Script-run awareness.** Do not relax inside a token that is a single
+   homogeneous run of digits or katakana. Principled — such a token has no
+   interior word boundary — and it reaches 46 of the 92. It does nothing for
+   the 42 kanji ones.
+3. **A part-of-speech condition on the tail.** The mismatch that hurts is
+   IPADIC gluing a grammatical suffix to a content word (`本当は`); the
+   mismatch that does not is IPADIC holding a lexical unit (`品川`). The
+   engine already knows `PARTICLE`, and `FUNCTION_STACK` already reasons
+   about partitions this way. But `気持ち良かっ` is a conjugated adjective
+   rather than a particle stack, so this narrowing has to admit conjugation
+   too, and then it is no longer obviously narrow.
+
+§6 still holds: turning the constraint into a price is not the answer, and
+the failure here is an argument for a *sharper* condition on when the veto
+lifts, not for softening the veto everywhere.
+
