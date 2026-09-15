@@ -381,6 +381,136 @@ fn a_reading_the_index_lacks_is_unmatched_between_correct_boundaries() {
     );
 }
 
+/// The control for the two tests below, and the reason they can name a cause.
+///
+/// One entry, nothing to compete with it. If `ミスった` comes out whole here —
+/// and it does — then deinflecting a katakana-stemmed godan verb works, the
+/// conjugation trie reaches った, and whatever goes wrong against the real
+/// index is about ranking rather than about reach.
+const LONE_VERB_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY v5r "Godan verb with 'ru' ending">
+]>
+<JMdict>
+<entry><ent_seq>3000010</ent_seq><r_ele><reb>ミスる</reb></r_ele>
+<sense><pos>&v5r;</pos><gloss>to make a mistake</gloss></sense></entry>
+</JMdict>
+"#;
+
+/// A second known defect, from 2026-09-15's third reported sentence:
+/// 「(場所選択ミスったかもな......普通に空き教室にすれば良かった)」. Every
+/// other word in it parses correctly in both hint states; `ミスった` does not.
+///
+/// **This is not the katakana gap.** `katakana_conjugation_is_not_deinflected_yet`
+/// below documents a deliberate one — the conjugation trie is hiragana-keyed,
+/// so a wholly katakana surface like ハイタ cannot reach a suffix match — and
+/// it is easy to assume this is that. It is not: the suffix here is った,
+/// which is hiragana, and the control below proves the deinflection succeeds
+/// when nothing competes with it. What fails is the ranking.
+///
+/// Against the curated subset the engine prefers **ミス + った**, two short
+/// matches, over the one conjugated match that explains the same four
+/// characters. `ミス` is a common noun and `った` reaches ったい, so the pair
+/// is cheap; `ミスる` in its 連用形-促音便 past is one candidate and loses.
+/// The correct parse is one span, `ミスる` Past.
+///
+/// Measured against the real 218k-entry index too, where it is the same
+/// answer with different debris: hints off `ミス` + `った`, hints on `ミスっ`
+/// + `た`. So this is not an artefact of the subset's size.
+///
+/// A fix belongs with the cost model rather than with `lex`, and like the
+/// hint-token defect above it moves §5.2's cells, so it wants a phase. When
+/// one lands this test fails, which is the signal to re-measure.
+#[test]
+fn a_conjugated_katakana_verb_loses_to_its_shorter_parts() {
+    // Control first: with nothing to compete, the deinflection is found.
+    let lone = scratch("lone-verb");
+    jparser::engine::build::build_from_reader(BufReader::new(LONE_VERB_FIXTURE.as_bytes()), &lone)
+        .expect("lone-verb build");
+    let whole = parse_v2_over(&lone, "ミスった");
+    assert_eq!(whole.segments.len(), 1, "control: {:?}", whole.segments);
+    assert!(whole.segments[0].matched);
+    assert_eq!(whole.segments[0].surface, "ミスった");
+    assert_eq!(whole.segments[0].entries[0].headword, "ミスる");
+    assert_eq!(
+        whole.segments[0].entries[0].conjugation.as_deref(),
+        Some("Past"),
+        "control: the past form is reached through a real conjugation step"
+    );
+
+    // The defect: the same word, the same entry present, against a fixture
+    // that also holds ミス and ったい.
+    let dir = scratch("katakana-verb-split");
+    build_v2(&dir);
+    let parsed = parse_v2_over(&dir, "ミスった");
+    let split: Vec<(&str, bool)> = parsed
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        split,
+        [("ミス", true), ("った", true)],
+        "known defect: two short matches beat the one conjugated match"
+    );
+}
+
+/// The sharper half of the defect above, and the one that is hard to argue is
+/// anything but wrong: **the engine declines an exact dictionary-form match.**
+///
+/// `ミスる` is an entry. Parsed on its own against the curated subset with no
+/// hints, it comes back as `ミス` + `る` — a common noun plus a verb-forming
+/// suffix — rather than as the single headword the index holds verbatim. No
+/// conjugation, no deinflection, no ambiguity about where the word ends: the
+/// ranking simply prefers the pair.
+///
+/// With hints it is correct, and that is worth pinning too, because it says
+/// where the missing evidence is rather than only that some is missing:
+/// IPADIC holds ミスる as one token, `cost::is_allowed` then forbids a span
+/// ending inside it, and the split becomes illegal rather than merely
+/// expensive. The engine is relying on the hint source to rule out a
+/// segmentation its own cost model ranks above the right one.
+#[cfg(feature = "mecab")]
+#[test]
+fn the_dictionary_form_itself_loses_to_its_parts_without_hints() {
+    let dir = scratch("dictionary-form-split");
+    build_v2(&dir);
+
+    let bare = parse_v2_over(&dir, "ミスる");
+    let off: Vec<(&str, bool)> = bare
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        off,
+        [("ミス", true), ("る", true)],
+        "known defect: an exact headword loses to noun + suffix"
+    );
+
+    let bounds = boundaries_over("ミスる");
+    let on = parse_v2_with_bounds(&dir, "ミスる", Some(&bounds));
+    assert_eq!(on.segments.len(), 1, "hints on: {:?}", on.segments);
+    assert_eq!(on.segments[0].surface, "ミスる");
+    assert!(on.segments[0].matched);
+
+    // And the past form is *not* rescued the same way -- the hints move it
+    // from one wrong answer to another, which is why the two cases are
+    // pinned apart.
+    let past_bounds = boundaries_over("ミスった");
+    let past_result = parse_v2_with_bounds(&dir, "ミスった", Some(&past_bounds));
+    let past: Vec<&str> = past_result
+        .segments
+        .iter()
+        .map(|s| s.surface.as_str())
+        .collect();
+    assert_eq!(
+        past,
+        ["ミスっ", "た"],
+        "known defect: hints on, the stem and its tail stay apart"
+    );
+}
+
 /// The cut offsets a `ParseResult`'s own segments imply: every `start`, plus
 /// the final segment's `start + len`. The intermediate ends need no entry of
 /// their own -- a `ParseResult` is a contiguous cover, so every segment's end
