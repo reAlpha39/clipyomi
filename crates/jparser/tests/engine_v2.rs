@@ -265,6 +265,12 @@ const HINT_TOKEN_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <entry><ent_seq>2000110</ent_seq>
 <r_ele><reb>から</reb></r_ele>
 <sense><pos>&prt;</pos><gloss>because</gloss></sense></entry>
+<entry><ent_seq>2000120</ent_seq>
+<k_ele><keb>本当</keb></k_ele><r_ele><reb>ほんとう</reb></r_ele>
+<sense><pos>&n;</pos><gloss>truth</gloss></sense></entry>
+<entry><ent_seq>2000130</ent_seq>
+<r_ele><reb>は</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>topic marker</gloss></sense></entry>
 </JMdict>
 "#;
 
@@ -379,6 +385,11 @@ fn a_hint_token_longer_than_any_key_leaves_its_region_unmatched() {
 /// The fix is the one the test above names — an escape in `cost::is_allowed`
 /// when no allowed candidate covers a hint token. Nothing here is a second
 /// defect; it is the first one's blast radius.
+///
+/// An unknown word is the loudest trigger, not the only one, and reading this
+/// test alone would narrow it too far: see
+/// [`a_hint_token_that_is_not_a_key_unmatches_two_common_words`], where the
+/// token is three characters IPADIC knows perfectly well.
 #[cfg(feature = "mecab")]
 #[test]
 fn an_unknown_word_run_swallows_every_word_after_it() {
@@ -418,6 +429,71 @@ fn an_unknown_word_run_swallows_every_word_after_it() {
     );
     assert_eq!(on.segments[0].surface, TEXT);
     assert!(!on.segments[0].matched);
+}
+
+/// The smallest form of the same defect, and the one that says how often it
+/// can fire: **three characters, two of the commonest words in the language,
+/// and a hint token IPADIC knows perfectly well.**
+///
+/// From 2026-09-15's fourth report, `......本当はちょっとしたいけど。`. IPADIC
+/// holds 本当は as a single entry; JMdict does not hold it as a key. So the
+/// token is 本当は, `本当` ends inside it, `は` starts inside it, and both are
+/// forbidden — while nothing in the index is long enough to cover the token.
+/// Hints off, the same index returns 本当 (ほんとう) and は, both matched.
+///
+/// **The boundaries stay right and only the matching dies.** That is what
+/// makes this case worth its own test rather than a line in the one above:
+/// the parse still cuts 本当 | は, so nothing downstream looks wrong, and the
+/// reader simply gets a phrase with no definitions under it.
+///
+/// It also corrects the shape of the problem. The unknown-word case reads as
+/// a tokenizer failing on strange input; this one is two well-formed
+/// dictionaries disagreeing about what a word is, which happens wherever
+/// IPADIC's inventory holds a unit JMdict lacks — 本当は, 狙える,
+/// ロイヤルネイビーガール and 気持ち良かっ are four from these reports alone.
+/// The trigger is the vocabulary mismatch, and the unknown word is only its
+/// loudest case.
+///
+/// The mismatch runs both ways, and only one way hurts. Where JMdict has the
+/// longer unit — ということは, になって, both in these sentences — hints merely
+/// split what the engine would have joined, and the words still match. It is
+/// the other direction that unmatches them, because a span may swallow whole
+/// hint tokens but may not start or end inside one.
+///
+/// Measured across the eighteen sentences reported on 2026-09-15 against the
+/// real index: hints match **426 characters of 630, hints off 487**. Nine of
+/// the eighteen lose ground with hints on and not one gains.
+#[cfg(feature = "mecab")]
+#[test]
+fn a_hint_token_that_is_not_a_key_unmatches_two_common_words() {
+    const TEXT: &str = "本当は";
+    let dir = build_hint_token_fixture("hint-token-common-words");
+
+    let off = parse_v2_over(&dir, TEXT);
+    let off_spans: Vec<(&str, bool)> = off
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        off_spans,
+        [("本当", true), ("は", true)],
+        "hints off, both words are found"
+    );
+    assert_eq!(off.segments[0].reading.as_deref(), Some("ほんとう"));
+
+    let bounds = boundaries_over(TEXT);
+    let on = parse_v2_with_bounds(&dir, TEXT, Some(&bounds));
+    let on_spans: Vec<(&str, bool)> = on
+        .segments
+        .iter()
+        .map(|s| (s.surface.as_str(), s.matched))
+        .collect();
+    assert_eq!(
+        on_spans,
+        [("本当", false), ("は", false)],
+        "known defect: the boundaries survive and both matches die"
+    );
 }
 
 /// The contrast case, and not an engine defect at all.
