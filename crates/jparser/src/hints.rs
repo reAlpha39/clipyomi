@@ -44,26 +44,34 @@ impl VibratoTokenizer {
         })?;
         let dict = vibrato::Dictionary::read(std::io::BufReader::new(file))
             .map_err(|e| HintsError::Dictionary(e.to_string()))?;
-        // SPIKE ONLY: a MeCab-format user lexicon, for measuring whether the
-        // words JMdict has and IPADIC cuts apart are worth adding as tokens.
-        let dict = match std::env::var_os("TA_HINTS_USER_DICT") {
-            Some(p) => {
-                let f = std::fs::File::open(&p).map_err(|source| HintsError::Io {
-                    path: std::path::PathBuf::from(&p),
+        // **A rejected lexicon is not an error.** Its connection ids are
+        // IPADIC's, and Vibrato verifies them against whatever dictionary was
+        // actually loaded, so someone pointing `TA_HINTS_DICT` at a different
+        // one would otherwise lose boundary hints altogether — far worse than
+        // losing eighty words. The re-read is the price of that fallback and
+        // is paid only on the failing path.
+        let dict = match with_user_lexicon(dict) {
+            Ok(d) => d,
+            Err(()) => {
+                let file = std::fs::File::open(path).map_err(|source| HintsError::Io {
+                    path: path.to_path_buf(),
                     source,
                 })?;
-                dict.reset_user_lexicon_from_reader(Some(std::io::BufReader::new(f)))
+                vibrato::Dictionary::read(std::io::BufReader::new(file))
                     .map_err(|e| HintsError::Dictionary(e.to_string()))?
             }
-            None => dict,
         };
         Ok(Self {
             tokenizer: vibrato::Tokenizer::new(dict),
         })
     }
 
-    /// SPIKE ONLY: the connection ids IPADIC gives `probe`, for generating a
-    /// user lexicon whose ids the connection matrix will accept.
+    /// The connection ids the loaded dictionary gives `probe`, when it
+    /// tokenizes it as exactly one token.
+    ///
+    /// Only `examples/shatter_sweep.rs` uses this, to generate
+    /// [`USER_LEXICON`] with ids the connection matrix will accept rather than
+    /// ids invented by hand.
     pub fn ids_of(&self, probe: &str) -> Option<(u16, u16)> {
         let mut w = self.tokenizer.new_worker();
         w.reset_sentence(probe);
@@ -109,6 +117,41 @@ pub enum HintsError {
     /// `ureq` type.
     #[error("the vibrato dictionary could not be loaded: {0}")]
     Dictionary(String),
+}
+
+/// Words JMdict holds that IPADIC does not, so the tokenizer cuts inside them
+/// and the cost model then prefers a tiling of `COMMON` fragments —
+/// `いちゃいちゃ` came back as `い` + `ちゃい` + `ちゃ`. The constraint in
+/// `cost::is_allowed` already protects any word the tokenizer holds whole,
+/// which is why `美少女` survives hints-on and shatters hints-off; these
+/// entries give the tokenizer the rest.
+///
+/// See `docs/superpowers/2026-09-16-user-lexicon-spike.md` for why no
+/// cost-model term can do this instead, and why the list is capped at 81.
+const USER_LEXICON: &str = include_str!("../assets/hint_user_lexicon.csv");
+
+/// [`USER_LEXICON`] with its comment lines removed — Vibrato's CSV reader has
+/// no comment syntax, so the provenance lives in the file and is stripped
+/// here.
+fn user_lexicon_body() -> String {
+    USER_LEXICON
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        )
+}
+
+/// Apply [`USER_LEXICON`] to `dict`.
+///
+/// `Err` gives nothing back, because `reset_user_lexicon_from_reader` takes
+/// the dictionary by value and drops it on failure — hence [`load`] re-reads
+/// the file rather than trying to recover one here.
+fn with_user_lexicon(dict: vibrato::Dictionary) -> Result<vibrato::Dictionary, ()> {
+    dict.reset_user_lexicon_from_reader(Some(user_lexicon_body().as_bytes()))
+        .map_err(|_| ())
 }
 
 /// A compiled two-entry IPADIC-shaped dictionary, built in memory.
@@ -160,6 +203,40 @@ pub fn write_test_dictionary(path: &Path) -> Result<(), HintsError> {
 
 #[cfg(test)]
 mod tests {
+    /// The asset is data, so its shape is worth pinning: Vibrato's CSV reader
+    /// has no comment syntax and would take a `#` line as a surface.
+    #[test]
+    fn the_user_lexicon_strips_comments_and_keeps_well_formed_rows() {
+        let body = user_lexicon_body();
+        assert!(!body.is_empty(), "the bundled lexicon is not empty");
+        assert!(
+            !body.lines().any(|l| l.trim_start().starts_with('#')),
+            "no comment survives into what Vibrato parses"
+        );
+        for line in body.lines() {
+            let f: Vec<&str> = line.split(',').collect();
+            assert!(f.len() >= 5, "surface,left,right,cost,feature...: {line}");
+            assert!(!f[0].is_empty(), "a surface is present: {line}");
+            f[1].parse::<u16>().expect("left id");
+            f[2].parse::<u16>().expect("right id");
+            f[3].parse::<i16>().expect("word cost");
+        }
+    }
+
+    /// The cap is measured, not stylistic. At 81 entries every gold cell is
+    /// identical to the digit; at 121 the corpus loses 2 spans, because
+    /// Vibrato's Viterbi is global and a bigger user lexicon moves boundaries
+    /// in regions where none of its entries appear. If this fails, re-run the
+    /// gates in `docs/superpowers/2026-09-16-user-lexicon-spike.md` rather
+    /// than raising the number.
+    #[test]
+    fn the_user_lexicon_stays_within_its_measured_cap() {
+        assert!(
+            user_lexicon_body().lines().count() <= 81,
+            "81 is the largest list measured to leave every gold cell alone"
+        );
+    }
+
     use super::*;
 
     #[test]

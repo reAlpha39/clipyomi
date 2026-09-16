@@ -51,7 +51,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // word itself. Those are the ones the cost model cannot defend, because a
     // kana word's pieces are overwhelmingly COMMON particles and stems.
     let mut words: BTreeSet<String> = BTreeSet::new();
-    let mut pos_of: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut pos_of: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
     for entry in jparser::jmdict::parse_entries(BufReader::new(File::open(&a[2])?)) {
         let entry = entry?;
         if !entry.kanji.is_empty() {
@@ -72,9 +73,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             let w = &r.text;
             if w.chars().count() >= min_len && w.chars().all(is_kana) {
                 words.insert(w.clone());
-                pos_of.entry(w.clone()).or_default().extend(
-                    entry.senses.iter().flat_map(|sn| sn.pos.iter().cloned()),
-                );
+                pos_of
+                    .entry(w.clone())
+                    .or_default()
+                    .extend(entry.senses.iter().flat_map(|sn| sn.pos.iter().cloned()));
             }
         }
     }
@@ -148,7 +150,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (w, _, got, mp, _, _) in bad.iter().take(45) {
         println!("  {w}  (min {mp}) -> {got}");
     }
-    if let Some(out) = a.iter().position(|x| x == "--emit").map(|i| a[i + 1].clone()) {
+    if let Some(out) = a
+        .iter()
+        .position(|x| x == "--emit")
+        .map(|i| a[i + 1].clone())
+    {
         use std::io::Write;
         let mut f = std::io::BufWriter::new(File::create(&out)?);
         // `--all` emits every shattered word, not just the damaged tail, so
@@ -166,8 +172,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             // floors it. Low enough that the long word wins Vibrato's lattice,
             // not so low that it swallows its neighbours.
             let cost = (-400.0 * n.powf(1.5)).max(-36000.0) as i32;
-            let (l, r) = if *is_adv { (adv_l, adv_r) } else { (noun_l, noun_r) };
-            let pos = if *is_adv { "副詞,一般" } else { "名詞,一般" };
+            let (l, r) = if *is_adv {
+                (adv_l, adv_r)
+            } else {
+                (noun_l, noun_r)
+            };
+            let pos = if *is_adv {
+                "副詞,一般"
+            } else {
+                "名詞,一般"
+            };
             writeln!(f, "{w},{l},{r},{cost},{pos},*,*,*,*,{w},{w}")?;
         }
         // Companion list so a caller can filter by how badly the word broke:
