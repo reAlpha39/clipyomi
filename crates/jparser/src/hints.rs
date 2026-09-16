@@ -229,11 +229,15 @@ mod tests {
     /// in regions where none of its entries appear. If this fails, re-run the
     /// gates in `docs/superpowers/2026-09-16-user-lexicon-spike.md` rather
     /// than raising the number.
+    ///
+    /// 83 -> 84 on 2026-09-16 for `なのに`, the third `exp`-filter exception
+    /// after `ある日`/`その日` and the same shape as both. Gates re-run,
+    /// every cell in both hint states identical to the digit.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 83,
-            "83 is the largest list measured to leave every gold cell alone"
+            user_lexicon_body().lines().count() <= 84,
+            "84 is the largest list measured to leave every gold cell alone"
         );
     }
 
