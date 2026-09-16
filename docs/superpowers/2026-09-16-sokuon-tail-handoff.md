@@ -172,14 +172,23 @@ its own COMMON parts by the arithmetic in §2 of the previous handoff. A row
 each is a patch. The list went 83 → 87 in one session and there is no reason
 to think the next screenshot is different.
 
-**The structural candidate has never actually been measured.** `cost.rs`
-records `MATCH = 6` as what `ある日` needs unaided, refused because
-`transparent` collapses 42 → 30 and `false-match` 30 → 27. It also records a
-`PARTICLE_CROSS` term, built and measured as "needed at M >= 6 and a wash at
-2", and then not kept — it is not in the tree. The two have never been run
-*together*, and `PARTICLE_CROSS` is aimed at exactly the class `MATCH = 6`
-over-merges. That pair is the experiment. If it holds, most of this file's
-last six rows stop being necessary.
+**The structural candidate was measured, and it is worse than its own
+record.** `cost.rs` names `MATCH = 6` as what `ある日` needs unaided and
+refuses it on `transparent` 42 → 30. Re-measured on today's engine, hints
+on, with `BOUND_FORMS` and the 87-entry lexicon in place:
+
+| M | strict | compounds | lexical | false-match | transparent |
+| --- | --- | --- | --- | --- | --- |
+| **2** | **1826** | **118** | **46 / 112** | **30 / 32** | **42 / 42** |
+| 3 | 1823 | 118 | 46 / 112 | 30 / 32 | 42 / 42 |
+| 4 | 1749 | 106 | 54 / 112 | 28 / 32 | 24 / 42 |
+| 6 | 1698 | 124 | 76 / 112 | 27 / 32 | **21 / 42** |
+
+`物思いにふける` needs M >= 4, which already costs 77 strict spans and half
+the `transparent` class. `PARTICLE_CROSS` is a per-crossing surcharge on
+**PARTICLE-flagged matches**, and almost none of that damage is a particle
+match — it cannot buy back 21 windows and 128 spans. The pair is not the
+experiment it looked like one section ago, and this table is why.
 
 **Bench note, so the numbers in this document are read correctly.** The
 machine drifted over the session: the same binary read 522 ms at 10,040
@@ -188,6 +197,34 @@ Only interleaved A/B is meaningful. Interleaved, three rounds each, 83
 entries against 87: 577 / 541 / 549 ms against 586 / 572 / 541 — the spreads
 overlap, so four lexicon rows cost nothing measurable. Every absolute
 millisecond figure above is a reading from the moment it was taken.
+
+## 3d. The fifth screenshot, and where the lexicon stops
+
+`やることのなくなった俺は、再度物思いにふける。` — TA keeps `物思いにふける`
+whole, a JMdict headword at 7 characters, `[primary]` with no `common`. Same
+arithmetic as the other four: +9 whole against `物思い`(+5) + `に`(+1) +
+`ふける`(−1) = +5, so it loses by 4, and the engine ranks it **second**.
+
+**No row was added, and the reason is not the arithmetic.**
+
+1. **A forced token is form-specific.** The lexicon pins one surface. The
+   engine already reaches `物思いにふけった` and `物思いにふけって` as whole
+   candidates at rank 2 through its own deinflection — a row for the citation
+   form would fix one form of three and make the other two inconsistent
+   with it.
+2. **It absorbs a particle.** Success criterion 3 and the 26-row
+   `spurious_merges.txt` gate exist to stop the engine swallowing `に` into
+   the word before it. Forcing this merge is that shape, deliberately.
+3. **Nothing is mis-read.** `唐揚げ` earned its row because the split
+   rendered `とう` + `あげ` for `からあげ`. Here the reading is the sum of
+   its parts, and the user sees `物思い`, `に` and `ふける` each glossed
+   correctly. The only thing lost is the *idiom's own gloss*.
+
+Which points at a display fix rather than a segmentation one: a span that is
+a prefix of a longer dictionary entry the parse declined could say so in the
+popover, without moving a boundary. Not built, not scoped here — named
+because it is the shape of the answer for every idiom in this class, and
+there are many.
 
 ## 4. Not done
 
@@ -200,8 +237,11 @@ millisecond figure above is a reading from the moment it was taken.
   screenshot pair, and not a defect this branch can fix: JMdict_e has no
   name readings, that is JMnedict, which this project does not ship. The
   previous handoff's §4 already lists it.
-- **`MATCH = 6` with `PARTICLE_CROSS`.** §3c. The one experiment that could
-  close the class the user lexicon is currently absorbing one row at a time.
+- **A term for this class that is not `MATCH`.** §3c's table closes the
+  `MATCH` route. What the class actually needs is something that can tell a
+  `[primary]` headword the tokenizer shattered from a COMMON function-word
+  tiling, and `MATCH` cannot see the difference — it rewards *every* longer
+  span. Unspecified; it is the open problem, not a queued task.
 - **The other bound forms.** `未然形`, `ガル接続` (the `たい` row's comment has
   wanted this since Phase 1a) and the rest of the `接続` family are the same
   one-line change. Each deletes candidates of its own and wants its own
