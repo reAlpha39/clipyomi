@@ -230,6 +230,7 @@ mod tests {
             steps: Vec::new(),
             exact: true,
             function_stack: false,
+            digit_counter: false,
             headword: String::new(),
         }
     }
