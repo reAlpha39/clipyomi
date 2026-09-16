@@ -57,24 +57,34 @@ fn has(c: &Candidate, f: WordFlags) -> bool {
 pub struct Ctx {
     /// The character immediately before the span is a digit. `1969|年`.
     prev_is_digit: bool,
+    /// How many senses JMdict records for this candidate's entry. Editorial
+    /// content of the dictionary, not a corpus count -- 行く has 12 and 炒る
+    /// has 1, which is the separation `entry_id` cannot make.
+    senses: usize,
 }
 
 /// The orderings under test. Variant 0 is what ships.
-type Key = (bool, bool, bool, bool, bool, usize, u32);
+type Key = (bool, bool, bool, bool, bool, usize, usize, u32);
 type Variant = (&'static str, fn(&Candidate, Ctx) -> Key);
 const VARIANTS: &[Variant] = &[
-    ("0 shipped: exact, COMMON, PRONOUNCE, steps, id", |c, _x| {
-        (
-            !c.exact,
-            !has(c, WordFlags::COMMON),
-            has(c, WordFlags::PRONOUNCE),
-            false,
-            false,
-            c.steps.len(),
-            c.entry_id,
-        )
-    }),
-    ("1 + COMMON_LINE after COMMON", |c, _x| {
+    (
+        "0 pre-Phase-4 key: exact, COMMON, PRONOUNCE, steps, id",
+        |c, x| {
+            let _ = &x;
+            (
+                !c.exact,
+                !has(c, WordFlags::COMMON),
+                has(c, WordFlags::PRONOUNCE),
+                false,
+                false,
+                c.steps.len(),
+                0,
+                c.entry_id,
+            )
+        },
+    ),
+    ("1 + COMMON_LINE after COMMON", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
@@ -82,10 +92,12 @@ const VARIANTS: &[Variant] = &[
             has(c, WordFlags::PRONOUNCE),
             false,
             c.steps.len(),
+            0,
             c.entry_id,
         )
     }),
-    ("2 + COUNTER first among equals", |c, _x| {
+    ("2 + COUNTER ungated", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
@@ -93,10 +105,12 @@ const VARIANTS: &[Variant] = &[
             has(c, WordFlags::PRONOUNCE),
             false,
             c.steps.len(),
+            0,
             c.entry_id,
         )
     }),
-    ("3 + PARTICLE first among equals", |c, _x| {
+    ("3 + PARTICLE among equals", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
@@ -104,10 +118,12 @@ const VARIANTS: &[Variant] = &[
             has(c, WordFlags::PRONOUNCE),
             false,
             c.steps.len(),
+            0,
             c.entry_id,
         )
     }),
-    ("4 steps dropped from the key", |c, _x| {
+    ("4 steps dropped", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
@@ -115,10 +131,12 @@ const VARIANTS: &[Variant] = &[
             false,
             false,
             0,
+            0,
             c.entry_id,
         )
     }),
-    ("5 deeper chain first (steps reversed)", |c, _x| {
+    ("5 deeper chain first", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
@@ -126,21 +144,12 @@ const VARIANTS: &[Variant] = &[
             false,
             false,
             usize::MAX - c.steps.len(),
+            0,
             c.entry_id,
         )
     }),
-    ("6 COUNTER + COMMON_LINE", |c, _x| {
-        (
-            !c.exact,
-            !has(c, WordFlags::COMMON),
-            !has(c, WordFlags::COUNTER),
-            !has(c, WordFlags::COMMON_LINE),
-            has(c, WordFlags::PRONOUNCE),
-            c.steps.len(),
-            c.entry_id,
-        )
-    }),
-    ("7 COUNTER + PARTICLE + COMMON_LINE", |c, _x| {
+    ("7 COUNTER + PARTICLE ungated + COMMON_LINE", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
@@ -148,38 +157,71 @@ const VARIANTS: &[Variant] = &[
             !has(c, WordFlags::COMMON_LINE),
             has(c, WordFlags::PRONOUNCE),
             c.steps.len(),
+            0,
             c.entry_id,
         )
     }),
-    ("8 COUNTER first only after a digit", |c, x| {
+    ("9 SHIPPED: gated COUNTER + PARTICLE", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
             !(x.prev_is_digit && has(c, WordFlags::COUNTER)),
+            !has(c, WordFlags::PARTICLE),
             has(c, WordFlags::PRONOUNCE),
+            c.steps.len(),
+            0,
+            c.entry_id,
+        )
+    }),
+    ("11 = 9 + more senses, just before entry_id", |c, x| {
+        let _ = &x;
+        (
+            !c.exact,
+            !has(c, WordFlags::COMMON),
+            !(x.prev_is_digit && has(c, WordFlags::COUNTER)),
+            !has(c, WordFlags::PARTICLE),
+            has(c, WordFlags::PRONOUNCE),
+            c.steps.len(),
+            usize::MAX - x.senses,
+            c.entry_id,
+        )
+    }),
+    ("12 = 9 + more senses, before chain depth", |c, x| {
+        let _ = &x;
+        (
+            !c.exact,
+            !has(c, WordFlags::COMMON),
+            !(x.prev_is_digit && has(c, WordFlags::COUNTER)),
+            !has(c, WordFlags::PARTICLE),
+            has(c, WordFlags::PRONOUNCE),
+            usize::MAX - x.senses,
+            c.steps.len(),
+            c.entry_id,
+        )
+    }),
+    ("13 = 9 + more senses, before PRONOUNCE", |c, x| {
+        let _ = &x;
+        (
+            !c.exact,
+            !has(c, WordFlags::COMMON),
+            !(x.prev_is_digit && has(c, WordFlags::COUNTER)),
+            !has(c, WordFlags::PARTICLE),
             false,
+            usize::MAX - x.senses,
             c.steps.len(),
             c.entry_id,
         )
     }),
-    ("9 = 8 + PARTICLE first among equals", |c, x| {
+    ("14 = 9 + more senses, before PARTICLE", |c, x| {
+        let _ = &x;
         (
             !c.exact,
             !has(c, WordFlags::COMMON),
             !(x.prev_is_digit && has(c, WordFlags::COUNTER)),
-            !has(c, WordFlags::PARTICLE),
+            false,
             has(c, WordFlags::PRONOUNCE),
-            c.steps.len(),
-            c.entry_id,
-        )
-    }),
-    ("10 = 9 + COMMON_LINE", |c, x| {
-        (
-            !c.exact,
-            !has(c, WordFlags::COMMON) && !has(c, WordFlags::COMMON_LINE),
-            !(x.prev_is_digit && has(c, WordFlags::COUNTER)),
-            !has(c, WordFlags::PARTICLE),
-            has(c, WordFlags::PRONOUNCE),
+            usize::MAX - x.senses,
             c.steps.len(),
             c.entry_id,
         )
@@ -253,14 +295,20 @@ fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
             let surface: String = chars[span.start..span.start + span.len].iter().collect();
-            let ctx = Ctx {
+            let ctx = |c: &Candidate| Ctx {
                 prev_is_digit: span.start > 0
                     && jparser::engine::kana::is_digit(chars[span.start - 1]),
+                senses: index
+                    .entry(c.entry_id)
+                    .ok()
+                    .flatten()
+                    .map(|e| e.senses.len())
+                    .unwrap_or(0),
             };
             let mut base_hit = false;
             for (v, (_, key)) in VARIANTS.iter().enumerate() {
                 let mut g = group.clone();
-                g.sort_by_key(|c| key(c, ctx));
+                g.sort_by_key(|c| key(c, ctx(c)));
                 let hit = g[0].entry_id == want;
                 hits[v] += hit as usize;
                 if v == 0 {
