@@ -232,8 +232,8 @@ mod tests {
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 81,
-            "81 is the largest list measured to leave every gold cell alone"
+            user_lexicon_body().lines().count() <= 83,
+            "83 is the largest list measured to leave every gold cell alone"
         );
     }
 

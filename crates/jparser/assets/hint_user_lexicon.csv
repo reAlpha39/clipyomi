@@ -19,6 +19,15 @@
 # 80 of them are the most frequent; the 81st is いちゃいちゃ, which occurs zero
 # times in the pool and is here because it is the case that prompted the work.
 #
+# The last two, ある日 and その日, are the one deliberate exception to the `exp`
+# filter above. JMdict tags them `exp,n` and the sweep drops phrases on
+# purpose -- but they are `[primary]` without `common`, which is precisely the
+# shape the cost model cannot defend: ある日 costs +3 while ある(-2) + 日(-1)
+# costs -3, so the phrase loses to its own parts. Reported from real use
+# against Translation Aggregator, which keeps both whole. Measured: every gold
+# cell identical, tolerant +6 spans, and the reported sentence goes from
+# ranking its correct cover eighteenth to first.
+#
 # Connection ids are lifted from real IPADIC entries (副詞 83/71, 名詞 1/1) and
 # costs use MeCab's own -400*len^1.5 heuristic. They are IPADIC-specific, which
 # is why `hints.rs` falls back to no user lexicon if the loaded dictionary
@@ -106,3 +115,5 @@
 がっつり,83,71,-3200,副詞,一般,*,*,*,*,がっつり,がっつり
 がましい,1,1,-3200,名詞,一般,*,*,*,*,がましい,がましい
 いちゃいちゃ,83,71,-5878,副詞,一般,*,*,*,*,いちゃいちゃ,いちゃいちゃ
+ある日,1,1,-2078,名詞,一般,*,*,*,*,ある日,ある日
+その日,1,1,-2078,名詞,一般,*,*,*,*,その日,その日
