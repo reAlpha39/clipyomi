@@ -34,10 +34,6 @@ use jparser::engine::table::Table;
 use jparser::index::load::Index;
 use jparser::{parse, ParseOptions};
 
-fn is_kana(c: char) -> bool {
-    matches!(c, '\u{3041}'..='\u{3096}' | '\u{30A1}'..='\u{30FA}' | '\u{30FC}')
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let a: Vec<String> = std::env::args().skip(1).collect();
     let min_len: usize = a.get(3).and_then(|s| s.parse().ok()).unwrap_or(4);
