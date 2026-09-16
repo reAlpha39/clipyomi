@@ -15,6 +15,7 @@ One screenshot pair, ClipYomi against Translation Aggregator, on
 | `3dc632d` | `連用タ接続` is not a word on its own — `優しいっ` was `優し` + `いっ`, a bare 五段 onbin stem beating `優しい` plus an emphatic `っ` |
 | `a286fd3` | `なのに` joins the user lexicon — second screenshot, `見た目はギャルなのになー`, where the right cover ranked second |
 | `a9a6898` | `へへ` and `あたし達` join it — third screenshot; `へへ` was also romanizing as `e e` |
+| `94eceeb` | `唐揚げ` joins it — fourth screenshot; the split read `とう` + `あげ`, not `からあげ` |
 
 The romaji half is the same class of defect as `d29360d`: the frontend
 keeps its own kana table and it had drifted from `crates/jparser`'s
@@ -150,6 +151,44 @@ states, and `東京へ行く`/`学校へ` confirm the directional particle is un
 and `侺達` are others. One row each does not scale; if more turn up the class
 wants a suffix rule.
 
+## 3c. The fourth screenshot, and the thing all four have in common
+
+`「もう、ネタバレは本当に駄目だから、邪知暴虐の極みっ！唐揚げに無断でレモンを掛けるがごとき暴挙！」`
+
+`唐揚げ` is `[primary]`, +5, against `唐`(+1) + `揚げ`(0), both COMMON. The
+reading is what settles that it is lexical and not compositional: `からあげ`,
+where the split rendered `とう` + `あげ`. Kanji-bearing, so the sweep never
+saw it; `唐揚` without the `げ` already merges unaided.
+
+`無断で` is in the same sentence and is the same `[primary]`-without-`common`
+shape, and is deliberately **not** added. It is compositional, so the
+compound adjudication's `transparent` class says split it and the engine
+already does. TA merges it; that is not this project's standard, and the
+distinction is the whole reason §5.2 reports the three classes separately.
+
+**Four screenshots, four instances of one class.** `なのに`, `へへ`, `あたし達`,
+`唐揚げ` — every one a `[primary]` headword with no `common` tag, losing to
+its own COMMON parts by the arithmetic in §2 of the previous handoff. A row
+each is a patch. The list went 83 → 87 in one session and there is no reason
+to think the next screenshot is different.
+
+**The structural candidate has never actually been measured.** `cost.rs`
+records `MATCH = 6` as what `ある日` needs unaided, refused because
+`transparent` collapses 42 → 30 and `false-match` 30 → 27. It also records a
+`PARTICLE_CROSS` term, built and measured as "needed at M >= 6 and a wash at
+2", and then not kept — it is not in the tree. The two have never been run
+*together*, and `PARTICLE_CROSS` is aimed at exactly the class `MATCH = 6`
+over-merges. That pair is the experiment. If it holds, most of this file's
+last six rows stop being necessary.
+
+**Bench note, so the numbers in this document are read correctly.** The
+machine drifted over the session: the same binary read 522 ms at 10,040
+chars early and ~550 ms late, and one reading came back 1.29x on pure noise.
+Only interleaved A/B is meaningful. Interleaved, three rounds each, 83
+entries against 87: 577 / 541 / 549 ms against 586 / 572 / 541 — the spreads
+overlap, so four lexicon rows cost nothing measurable. Every absolute
+millisecond figure above is a reading from the moment it was taken.
+
 ## 4. Not done
 
 - **Gate 6, the eighteen reported sentences, was not run.** The sentence
@@ -161,6 +200,8 @@ wants a suffix rule.
   screenshot pair, and not a defect this branch can fix: JMdict_e has no
   name readings, that is JMnedict, which this project does not ship. The
   previous handoff's §4 already lists it.
+- **`MATCH = 6` with `PARTICLE_CROSS`.** §3c. The one experiment that could
+  close the class the user lexicon is currently absorbing one row at a time.
 - **The other bound forms.** `未然形`, `ガル接続` (the `たい` row's comment has
   wanted this since Phase 1a) and the rest of the `接続` family are the same
   one-line change. Each deletes candidates of its own and wants its own
