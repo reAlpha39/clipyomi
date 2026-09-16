@@ -294,6 +294,33 @@ const COMMON: i32 = -2;
 /// snapshot is byte-identical.
 const FUNCTION_STACK: i32 = 4;
 
+/// Penalty for a span that starts where a counter starts, after a number,
+/// carries no `COUNTER` itself, and loses to a number-plus-counter the
+/// dictionary actually has.
+///
+/// `4人目` is the shape. `人目` is `[primary, common, common-line]` — a noun
+/// meaning "public gaze", `ひとめ` — and it took the span, so a reader was
+/// shown "four public-gaze" where the text says "the fourth person". `人` is a
+/// counter starting in the same place and `4人` is an entry, so there is a
+/// counted number for it to lose to.
+///
+/// **The "actually has" clause is what keeps this honest**, and it was added
+/// after measurement rather than foresight. `1969年度` looks identical —
+/// `年` is a counter, `年度` is not — but `1969年` is no entry, so nothing is
+/// on offer and the compound is left alone. Without that clause the rule split
+/// `年度` into `年` + `度` and `点差` into `点` + `差`, costing 3 gold spans.
+/// With it, every gold cell is identical in both hint states.
+///
+/// It also covers what [`DIGIT_COUNTER`] cannot. That term fires only where
+/// the merged reading differs from its parts, so it fixed `4人目` (`よにん`)
+/// and left `3人目` and `8人目` alone, `さんにん` and `はちにん` being exactly
+/// what the split says. This one is about the *entry* being wrong rather than
+/// the merge being right, so the number does not matter.
+///
+/// 3 is the smallest magnitude that moves the cases; 4 and 6 measured
+/// identically, so only the sign and clearing the gap matter.
+const DIGIT_NONCOUNTER: i32 = 3;
+
 /// Discount for a span that opens with a number and whose reading carries the
 /// sound change that number makes — `1週間` as `いっしゅうかん`.
 ///
@@ -405,6 +432,9 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     if cand.digit_counter {
         total += DIGIT_COUNTER;
     }
+    if cand.after_digit_noncounter {
+        total += DIGIT_NONCOUNTER;
+    }
 
     if let Some(bounds) = bounds {
         // Interior positions of `start..start+len`: every `p` strictly
@@ -508,6 +538,7 @@ mod tests {
             exact,
             function_stack: false,
             digit_counter: false,
+            after_digit_noncounter: false,
             headword: String::new(),
         }
     }
