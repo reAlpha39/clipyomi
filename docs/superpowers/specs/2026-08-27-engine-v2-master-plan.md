@@ -2,7 +2,13 @@
 
 **Date:** 2026-08-27
 **Supersedes (eventually):** [`2026-08-12-jparser-port-design.md`](2026-08-12-jparser-port-design.md)
-**Status:** Design draft, not approved, not implemented
+**Status:** **Implemented and merged.** Phases 0 through 4 shipped between
+2026-08-28 and 2026-09-16; `develop` carries them as `cb7b994`, "Merge Engine
+v2: the JParser rewrite, all four success criteria met". This line read
+"Design draft, not approved, not implemented" until 2026-09-16, through every
+one of those phases — read §2 for the criteria's status and §5.2's current
+baseline block for the figures, and treat any *other* present-tense sentence
+here as written in 2026-08-27's tense unless it carries a dated correction.
 
 ---
 
@@ -29,6 +35,16 @@ costs already visible in the tree:
   under MIT specifically because "Apache-2.0 alone is incompatible with this
   project's GPL-2.0-only". That constraint will keep recurring.
 - Permissively-licensed contribution and any future dual-licensing are closed.
+
+**Every sentence above is the 2026-08-27 position and none of it is true any
+more (corrected 2026-09-16).** `crates/jparser` is the clean-room v2 engine;
+the nine ported files were deleted at Phase 1b-ii. The root `Cargo.toml` and
+`package.json` both declare `MIT OR Apache-2.0`, `LICENSE-MIT` and
+`LICENSE-APACHE` are at the repo root, and `git grep "GPL-2.0-only" --
+':!docs'` returns nothing. The two `src-tauri/Cargo.toml` comments now read
+"MIT OR Apache-2.0, the same pair this project offers" — the quoted string
+appears in no tracked file. Dual licensing is not closed; it is the current
+state. The motive is kept as written because it is why the work was done.
 
 ### 1.2 What this does not buy
 
@@ -121,8 +137,12 @@ Translation Aggregator's README states: *"Source in this repository is available
 under the GPL v2."* No "or later" grant appears there, and the source files
 carry no per-file licence headers (`exe/util/Dictionary.cpp` begins directly at
 `#include`). Absent an explicit "or later" statement, GPL version 2 **only** is
-the correct conservative reading, and it is what this repository's own headers
-already assert.
+the correct conservative reading. **The clause that used to follow — "and it
+is what this repository's own headers already assert" — was true in 2026-08-27
+and is false now (corrected 2026-09-16):** every source header in the tree
+asserts `SPDX-License-Identifier: MIT OR Apache-2.0`. The paragraph is about
+*Translation Aggregator's* licence, which is unchanged; only the claim about
+this repository's headers had to go.
 
 Relicensing ta-old-derived code would require permission from Translation
 Aggregator's copyright holders — multiple contributors across many years.
@@ -146,7 +166,7 @@ it: tokenizer output stops being an advisory "hint" and becomes a DP constraint
 (§4.3), so that function has no successor. **Dissolved at Phase 1b-ii: deleted
 with `BoundaryFlags`, no successor.**
 | **Clean** | `crates/jmdict-source`, `crates/vibrato-source` | — | Zero `ta-old` references, verified by grep — but that grep tested the wrong string; see the correction below |
-| **Clean** | `src/**.ts`, `src/**.css`, `src-tauri/src/**` | — | 25 references, all behavioural: *"ta-old's rule"*, *"the same shape"*. Describes conventions, not copied expression |
+| **Clean** | `src/**.ts`, `src/**.css`, `src-tauri/src/**` | — | 25 references, all behavioural: *"ta-old's rule"*, *"the same shape"*. Describes conventions, not copied expression. **Now zero** — `git grep "ta-old" -- src src-tauri` is empty (2026-09-16); the "Discharged at Phase 1b-ii" note below covers only the header strings, not these |
 
 The clean tiers are roughly half the repository and carry forward untouched.
 
@@ -300,7 +320,10 @@ pub(crate) mod lattice;   // crate-private
 ```
 
 `Worker`'s public surface is `reset_sentence`, `tokenize`, `num_tokens`,
-`token(i)` — one path only. No `nbest` symbol exists anywhere in the crate.
+`token(i)` — one path only. (The enumeration is incomplete: `token_iter`,
+`init_connid_counter`, `update_connid_counts` and `compute_connid_probs` are
+public too. None is an N-best path, so the conclusion stands and only the list
+was short.) No `nbest` symbol exists anywhere in the crate.
 
 Consequence: **k-best readings cannot come from Vibrato as it ships.** Three
 routes exist, and the choice is deferred to Phase 2 (§9.5):
@@ -326,7 +349,9 @@ shape — swap the single winner for a bounded list — and that is what landed
 
 ### 4.2 The DP is already most of a k-best solver
 
-`segment.rs` is a min-cost path over a `best[]` array. K-shortest-path is a
+`segment.rs` is a min-cost path over a `best[]` array. **(v1's file, deleted
+at Phase 1b-ii; `engine::lattice` plus `engine::cost` are its successors.
+Unlike §3.2 and §4.3 this sentence carried no marker until 2026-09-16.)** K-shortest-path is a
 known, contained extension of exactly that structure. The rewrite is not
 "add k-best to a Viterbi tokenizer"; it is "write a fresh DP, shaped so k
 follows".
@@ -401,6 +426,22 @@ So the engine keeps two objectives. The arbitration rule between them:
   and no path may use them — and k-best over the constrained lattice reaches
   none of them. Phase 2 kept alternates on the constrained lattice and
   recorded the 63 as the constraint's price (Phase 2 design §2.3).
+
+  **Phase 4 changed this and both paragraphs above are now too strong
+  (2026-09-16).** `engine::relax::Relaxed` reopens the positions strictly
+  inside a hint token that no candidate can cover *and* that carries a
+  hiragana character, and `engine::parse` wires it in whenever `bounds` is
+  `Some` — so where the tokenizer and the dictionary disagree about whether a
+  unit exists at all, the DP now *can* recover. It gained 29 gold spans
+  hints-on against 5 lost. The paragraph's own escape route, "the constraint
+  softens to a large-but-finite penalty", is explicitly **not** what shipped:
+  Phase 4 design §6 records why a price cannot express structural absence, and
+  the veto still holds everywhere it held before.
+
+  **The 63-span figure has not been re-measured since Phase 2 and should not
+  be quoted as current.** Phase 4 neither restated it nor invalidated it on
+  purpose; whatever the constraint now suppresses, 63 is a 2026-09-02 number
+  about a rule that has since gained an escape.
 
 If Phase 0 shows tokenizer-wrong cases are common enough to hurt span accuracy,
 the constraint softens to a large-but-finite penalty and the tuning happens
@@ -618,12 +659,25 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7342 (1588) | 0.7924 (1714) | 0.9093 | 0.5860 (109 / 186) | 126 spans in 62 merges |
-| hints on | **0.8174 (1768)** | **0.8525 (1844)** | **0.9092** | **0.6129 (114 / 186)** | 76 spans in 38 merges |
+| hints off | 0.7342 (1588) | 0.7924 (1714) | 0.9215 | 0.5860 (109 / 186) | 126 spans in 62 merges |
+| hints on | **0.8285 (1792)** | **0.8645 (1870)** | **0.9236** | **0.6129 (114 / 186)** | 78 spans in 39 merges |
 
 Compounds by class, hints on: `lexical` 42 / 112, `false-match` 30 / 32,
 `transparent` 42 / 42, 8 `ambiguous` excluded. Latency at the app's ceiling
-(`jparser-cli bench`, gold index, k = 3): scaling 1.10x hints on, 1.05x off.
+(`jparser-cli bench`, gold index, k = 3): scaling 1.06x hints on, 1.04x off.
+
+**Set 2026-09-16 by Phase 4's escape (`77cb1c1`) and `assemble::order`'s two
+new clauses (`5e27c1c`).** Re-measured at `cb7b994`.
+
+**This block was stale for two phases and the staleness had a cost.** It read
+`0.8174 / 0.8525 / 0.9092` hints on and `0.9093` entry top-1 hints off until
+2026-09-16 — figures Phase 4 superseded and today's ranking change superseded
+again — while telling every reader it was "the authoritative current figure".
+That is the direct mechanism behind §2 criterion 2 going unmet for eight
+phases without anyone noticing: the one block a reader is told to trust was
+not being updated, so nothing ever compared itself to the v1 baseline. **A
+phase that moves any cell here must rewrite this table in the same commit**,
+and the audit of 2026-09-16 exists because that rule was not written down.
 
 **Set 2026-09-09 by `cost.rs`'s `FUNCTION_STACK`, the first deliberate
 cost-model change since Task 16b.** It replaces the eight cells every earlier
@@ -810,7 +864,7 @@ proposes a boundary Vibrato does not, *Bj* \ *Bv* ≠ ∅. Phase 0 sharpened thi
 from plain boundary disagreement, which selects nearly the whole pool for the
 same reason §5.2 rejects boundary F1: jparser merging a Vibrato token pair into
 one JMdict entry is compound preservation working, and sampling on it fills the
-corpus with sentences where jparser is right. Measured over 67k captured lines,
+corpus with sentences where jparser is right. Measured over 66k captured lines,
 the sharpened predicate selects 36% where equality selects almost everything,
 and the 36% is where the real conflicts are.
 
@@ -836,7 +890,15 @@ Phase 2  k-best readings + UI                  ← the quality win
          2   instrument only, gate failed at +40 spans
          2b  reading identity, gate cleared at +65 on-engine, UI shipped
 Phase 3  Extra linguistic layers               ← independent, per-layer licensing
+Phase 4  The hint constraint's escape          ← added 2026-09-15, not in the original order
 ```
+
+**Phase 4 was added after this block was written** and took a slot the plan
+had held open for compound preservation, once the long-unit spike closed that
+route (`docs/superpowers/2026-09-15-long-unit-separation-spike.md`). It is the
+only phase here that changes §4.3's core mechanism rather than adding a layer,
+which is why §4.3 and §5.2 both carry 2026-09-16 corrections. See
+`specs/2026-09-15-engine-v2-phase4-design.md` and the 2026-09-16 handoff.
 
 Phase 0 is first because it is the only thing that can distinguish "different"
 from "better", and every later phase produces a different-by-construction
@@ -932,6 +994,15 @@ Phase 1a: 24 files under `crates/jparser/`, 1 under `xtask/`, 4 under
 (`extract_jmdict_subset.py`) — 47 files total.
 
 **Relicence clause met** (Phase 1b-ii): both strings grep to zero tree-wide.
+**Scope correction (2026-09-16): not tree-wide — outside `docs/`.**
+`git grep -l "ta-old"` still returns about forty tracked files and
+`"ported from Translation Aggregator"` fourteen, this document among them,
+because the phase records name the strings they removed. The measurement that
+matters is
+`git grep -l -e "ta-old" -e "ported from Translation Aggregator" -- ':!docs'`,
+which is empty. The done-when insisted the scope was deliberately not a
+directory list; that was the wrong call and the wording claimed more than it
+measured.
 **Metric clause superseded**, not met: the tolerant gap is the structural
 JMdict-priority ceiling §7 Phase 3 already assigns to the frequency layer, and
 no Phase 1 tool reaches it. In the shipped configuration (hints on) v2 is
@@ -1321,6 +1392,29 @@ is not scoped here.
 
 ---
 
+### Phase 4 — The hint constraint's escape — **COMPLETE**
+
+Added 2026-09-15, outside the original phase order (§6). `cost::is_allowed`
+forbids a span from starting or ending strictly inside a tokenizer token,
+which is what saves `東京都`; it had no escape for the case where it forbids
+*everything*, so wherever IPADIC held a unit JMdict lacks, the characters fell
+to unmatched with the boundaries still correct — a phrase with no definitions
+under it. `engine::relax::Relaxed` reopens the interior of such a token **when
+the token carries a hiragana character**; without that condition the same rule
+shatters `品川` into 品 + 川 and cost 88 gold spans against 8 gained, which is
+why the first implementation (`spike/phase4-escape`) did not ship.
+
+Hints-on strict 0.8174 → 0.8285, tolerant 0.8525 → 0.8645, compounds
+unchanged, spurious merges 26 of 26, hints-off identical to the digit. On the
+eighteen sentences reported from real use, matched characters went 426 → 475
+of 630 against hints-off's 487.
+
+A follow-on the same week took `assemble::order` two clauses further — a
+`COUNTER` promoted only after a digit and a `PARTICLE` promoted among equals —
+which is what finally put §2's criterion 2 above the v1 baseline.
+
+---
+
 ## 8. Non-goals
 
 - Matching ta-old's output. §5.1 — it is excluded by the licence goal.
@@ -1403,9 +1497,20 @@ is not scoped here.
    `src/render/*` and `src/styles/tooltip.css`, files this phase relabelled
    without ever having fenced or reassessed them — the clean-room rebuild
    covered the parsing engine only. See the 1b-ii handoff §1.
-3. **`jmdict.rs` and `index/*` disposition (§3.2 soft tier).** Rewriting is
-   cleanly safe; scrubbing the citations is cheaper. This plan assumes
-   scrubbing. If a reviewer disagrees, Phase 1 grows by ~1,300 lines.
+
+   **Resolved 2026-09-09, and the count was wrong (corrected 2026-09-16).**
+   There were **seven** sites, not ten —
+   `docs/superpowers/2026-09-09-frontend-provenance-inventory.md` §2 enumerates
+   them §2.1 to §2.7 — and its §9 records them settled as attribution rather
+   than derivation: one reauthored clean-room (`b8035a3`), six restated, 93 of
+   93 files stamped. `grep -rn "MyToolTip\|DictionaryUtil\|MyDrawText\|Dictionary.cpp" src/`
+   now returns nothing, so none of them "survive".
+3. ~~**`jmdict.rs` and `index/*` disposition (§3.2 soft tier).**~~ **ANSWERED
+   — scrubbed, at Phase 1b-ii.** Rewriting was cleanly safe; scrubbing the
+   citations was cheaper and is what happened. Both carry
+   `SPDX-License-Identifier: MIT OR Apache-2.0` headers and no ta-old
+   citations, and Phase 1 did not grow by 1,300 lines. Left unstruck until
+   2026-09-16 while every other answered item here was struck.
 4. ~~**Does k-best justify its UI?**~~ **ANSWERED — no; the gate was not met.**
    oracle@3 tolerant span accuracy, hints on, reached 1,883 of 2,163, +40
    spans over top-1's 1,843, against the 55 required. No interface was built
@@ -1447,6 +1552,17 @@ is not scoped here.
    `hints.rs` now resolves the column at load time with a
    `TA_HINTS_READING_FIELD` override, and carries a test pinning that a column
    the dictionary lacks derives no flags at all rather than partial ones.
+
+   **None of that sentence is true of the tree (corrected 2026-09-16).**
+   `hints.rs` reads no feature column at all: `VibratoTokenizer::boundaries`
+   uses `worker.token(i).range_char()` and returns a `BoundarySet`, nothing
+   more. There is no reading field, no override and no flag derivation, and
+   `TA_HINTS_READING_FIELD` appears nowhere outside this document and the
+   Phase 0 handoff. The concern was dissolved rather than guarded — Phase
+   1b-ii replaced the advisory flag pair with the boundary set — so the
+   question is closed, but not by the mechanism described here. §10's decision
+   row "Treat the tokenizer's reading column as a per-dictionary property"
+   describes the same non-existent guard.
 7. ~~**Does sudachi.rs change the answer to question 6?**~~ **ANSWERED — no.
    Stay on Vibrato for Phase 1.** Measured out-of-tree at the Phase 0/1
    boundary against the 150-sentence corpus.
