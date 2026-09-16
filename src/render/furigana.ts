@@ -66,7 +66,7 @@ const ROMAJI_TABLE: [string, string][] = [
   ['バ', 'ba'], ['ビ', 'bi'], ['ブ', 'bu'], ['ベ', 'be'], ['ボ', 'bo'],
   ['パ', 'pa'], ['ピ', 'pi'], ['プ', 'pu'], ['ペ', 'pe'], ['ポ', 'po'],
   ['ァ', 'a'], ['ィ', 'i'], ['ゥ', 'u'], ['ェ', 'e'], ['ォ', 'o'],
-  ['ャ', 'ya'], ['ュ', 'yu'], ['ョ', 'yo'], ['ッ', 'tsu'],
+  ['ャ', 'ya'], ['ュ', 'yu'], ['ョ', 'yo'],
   ['ヮ', 'wa'], ['ヰ', 'wi'], ['ヱ', 'we'],
   ['ー', '-'], ['・', ' '],
 ];
@@ -87,24 +87,25 @@ export function toRomaji(text: string, isParticle = false): string {
   while (i < kata.length) {
     const ch = kata[i];
 
-    // Sokuon (っ / ッ)
+    // Sokuon (っ / ッ): doubles the *next* syllable's first letter
+    // (`tt` before a `ch-`, so いっち is `itchi`). Before a vowel, before
+    // ン, before another ッ or ー, or with nothing after it, there is no
+    // consonant to double — real sokuon never precedes those — so it
+    // contributes nothing. It used to fall through to `tsu`, which made a
+    // sentence-final っ read as a mora of its own: 「ええっ」 romanised as
+    // `eetsu`. `crates/jparser`'s romanizer has always dropped it, and
+    // these are the outputs matched against it.
     if (ch === 'ッ') {
-      if (i + 1 < kata.length) {
+      const next = kata[i + 1];
+      if (next && next !== 'ッ' && next !== 'ー' && next !== 'ン') {
         const nextSub = kata.slice(i + 1);
-        let nextRomaji = '';
         for (const [k, r] of ROMAJI_TABLE) {
           if (nextSub.startsWith(k)) {
-            nextRomaji = r;
+            if (!'aeiou'.includes(r[0])) res += r[0] === 'c' ? 't' : r[0];
             break;
           }
         }
-        if (nextRomaji.length > 0) {
-          res += nextRomaji[0] === 'c' ? 't' : nextRomaji[0];
-          i++;
-          continue;
-        }
       }
-      res += 'tsu';
       i++;
       continue;
     }
