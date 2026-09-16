@@ -41,8 +41,6 @@
 書か	五段・カ行イ音便:未然形	-
 書こ	五段・カ行イ音便:未然ウ接続	-
 書き	五段・カ行イ音便:連用形	-
-書い	五段・カ行イ音便:連用タ接続	-
-行っ	五段・カ行促音便:連用タ接続	-
 取ん	五段・ラ行:未然特殊	-
 食べれ	一段:仮定形	Conditional
 食べりゃ	一段:仮定縮約１	Conditional
@@ -90,7 +88,6 @@
 高かろ	形容詞・アウオ段:未然ウ接続	-
 高から	形容詞・アウオ段:未然ヌ接続	-
 高う	形容詞・アウオ段:連用ゴザイ接続	-
-高かっ	形容詞・アウオ段:連用タ接続	-
 いい	形容詞・イイ:基本形	-
 いいっ	形容詞・イイ:基本形-促音便	-
 
@@ -281,3 +278,48 @@
 書かせさせる	五段・カ行イ音便:未然形 せる:未然形 させる:基本形	Causative
 書かれられる	五段・カ行イ音便:未然形 れる:未然形 られる:基本形	Passive/Potential
 食べたです	一段:連用形 た:基本形 です:基本形	Past Polite
+
+# 書い, 行っ and 高かっ — the three bare 連用タ接続 stems — had a row each
+# here until table.rs's BOUND_FORMS stopped the table generating them as
+# whole words. They are still generated under た/て/だ/で/ちゃう, which is the
+# only place they occur: 書いた and 高かった below still have their rows.
+#
+# ちゃう/じゃう and the ちまう/じまう they contract from are the てしまう
+# auxiliary: the action is carried through, often with regret. "Completive" is
+# the one word below that the Wikipedia terminology list above does not carry
+# — that article names the construction but not a one-word English gloss for
+# it. The word is the standard grammatical term for the aspect (Wikipedia,
+# "Grammatical aspect", read 2026-09), chosen over "Regrettably" because the
+# regret reading is the secondary one and the parser cannot tell them apart,
+# the same reason れる/られる are labelled "Passive/Potential".
+# 未然ウ接続 and 未然形 rows are stems, not free words, listed for the same
+# reason 書いたろ is: the walk reaches them and every reachable tuple needs a
+# row.
+買っちゃえ	五段・ワ行促音便:連用タ接続 ちゃう:仮定形	Completive Conditional
+買っちゃえ	五段・ワ行促音便:連用タ接続 ちゃう:命令ｅ	Completive Imperative
+買っちゃう	五段・ワ行促音便:連用タ接続 ちゃう:基本形	Completive
+買っちゃお	五段・ワ行促音便:連用タ接続 ちゃう:未然ウ接続	Completive
+買っちゃわ	五段・ワ行促音便:連用タ接続 ちゃう:未然形	Completive
+買っちゃっ	五段・ワ行促音便:連用タ接続 ちゃう:連用タ接続	Completive
+買っちゃい	五段・ワ行促音便:連用タ接続 ちゃう:連用形	Completive
+読んじゃえ	五段・マ行:連用タ接続 じゃう:仮定形	Completive Conditional
+読んじゃえ	五段・マ行:連用タ接続 じゃう:命令ｅ	Completive Imperative
+読んじゃう	五段・マ行:連用タ接続 じゃう:基本形	Completive
+読んじゃお	五段・マ行:連用タ接続 じゃう:未然ウ接続	Completive
+読んじゃわ	五段・マ行:連用タ接続 じゃう:未然形	Completive
+読んじゃっ	五段・マ行:連用タ接続 じゃう:連用タ接続	Completive
+読んじゃい	五段・マ行:連用タ接続 じゃう:連用形	Completive
+買っちまえ	五段・ワ行促音便:連用タ接続 ちまう:仮定形	Completive Conditional
+買っちまえ	五段・ワ行促音便:連用タ接続 ちまう:命令ｅ	Completive Imperative
+買っちまう	五段・ワ行促音便:連用タ接続 ちまう:基本形	Completive
+買っちまお	五段・ワ行促音便:連用タ接続 ちまう:未然ウ接続	Completive
+買っちまわ	五段・ワ行促音便:連用タ接続 ちまう:未然形	Completive
+買っちまっ	五段・ワ行促音便:連用タ接続 ちまう:連用タ接続	Completive
+買っちまい	五段・ワ行促音便:連用タ接続 ちまう:連用形	Completive
+読んじまえ	五段・マ行:連用タ接続 じまう:仮定形	Completive Conditional
+読んじまえ	五段・マ行:連用タ接続 じまう:命令ｅ	Completive Imperative
+読んじまう	五段・マ行:連用タ接続 じまう:基本形	Completive
+読んじまお	五段・マ行:連用タ接続 じまう:未然ウ接続	Completive
+読んじまわ	五段・マ行:連用タ接続 じまう:未然形	Completive
+読んじまっ	五段・マ行:連用タ接続 じまう:連用タ接続	Completive
+読んじまい	五段・マ行:連用タ接続 じまう:連用形	Completive

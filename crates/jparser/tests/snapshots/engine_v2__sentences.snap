@@ -176,9 +176,9 @@ start=8 len=2 ない matched reading=-
     ない (-) [-] not
     ない (-) [-] nonexistent
     ない (-) [-] within ...
-    なく (-) [-] to cry
-    なく (-) [-] to make sound (of an animal)
-    ... 9 more
+    ない (-) [-] emphatic suffix
+    なう (-) [-] to do ...
+    ... 3 more
 start=10 len=1 。 unmatched
 
 === 昨日は宿題をしました。
@@ -551,8 +551,13 @@ start=4 len=1 の matched reading=-
     ... 1 more
 start=5 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
-start=6 len=2 待っ matched reading=まっ
-    待つ (-) [まっ] to wait
-start=8 len=3 ていた matched reading=-
-    ていたい (-) [-] severe
+start=6 len=3 待って matched reading=まって
+    待つ (Te-form) [まって] to wait
+start=9 len=2 いた matched reading=-
+    いた (-) [-] board
+    いたる (-) [-] to arrive at (e.g. a decision)
+    いたい (-) [-] painful
+    いる (Past) [-] to be (of animate objects)
+    いる (Past) [-] to shoot (arrow, bolt, dart)
+    ... 5 more
 start=11 len=1 。 unmatched
