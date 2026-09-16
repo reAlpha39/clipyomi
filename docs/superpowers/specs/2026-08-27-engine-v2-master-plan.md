@@ -48,6 +48,35 @@ The plan succeeds when all four hold:
    discretion.
 2. **Span accuracy** and **entry top-1** (§5.2) on the Phase 0 gold corpus are
    each no lower than the current engine's, measured by the same harness.
+
+   **Met 2026-09-16, and it was not met before that day.** Span accuracy had
+   cleared the v1 baseline since Phase 1b; **entry top-1 had been sitting
+   below it in both hint states for eight phases and no document said so.**
+   Against v1 (Phase 1a handoff §2), same corpus, same 2,163 spans, same
+   harness:
+
+   | | v1 | v2 before | v2 now |
+   | --- | --- | --- | --- |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7342 (1588) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8285 (1792) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9215** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9236** ✓ |
+
+   The gap was pure ranking, not coverage: of 118 hints-on misses, 116 had the
+   gold entry in the list and merely out-ranked, 61 of them at rank 2, and
+   `entry_id` — a tiebreak §5.2 itself says carries no quality judgement — was
+   deciding them. `assemble::order` gained two clauses, a `COUNTER` promoted
+   only when the character before the span is a digit and a `PARTICLE`
+   promoted among equals; both are facts JMdict or the text supplies, and
+   neither costs a single span in either hint state. `examples/order_sweep.rs`
+   is the measurement, and `order` runs after the DP, so nothing else moved.
+
+   **Read "span accuracy" as §5.2 defines it — strict.** `span tolerant` is a
+   later diagnostic and *is* below v1 (0.8465 → 0.7924 hints off), because v1
+   earned it with 167 dictionary merges against v2's 62 and tolerant credits
+   exactly the particle-absorbing merges criterion 3's fixture exists to kill.
+   §5.2 already records that metric as over-forgiving by about 1.3 points for
+   this reason. It is not this criterion's metric and is not a regression.
 3. `くるまではこう` and the wider class of kana-heavy ambiguity it represents
    parse correctly — the case that motivated this work (§4.3).
 
