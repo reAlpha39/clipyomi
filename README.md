@@ -41,7 +41,7 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 
 ### Prerequisites
 
-1. **Rust:** Latest stable Rust (1.88+ recommended, 1.85+ for `jparser` crate).
+1. **Rust:** Latest stable Rust. The workspace floor is **1.89** — that is `vibrato-source`'s `rust-version`, and `cargo test --workspace` below is refused by cargo under it. Individually: `jparser` and `jmdict-source` 1.85, `src-tauri` 1.88, `vibrato-source` 1.89.
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
@@ -53,7 +53,7 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/clipyomi.git
+   git clone https://github.com/reAlpha39/clipyomi.git
    cd clipyomi
    ```
 

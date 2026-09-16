@@ -40,7 +40,9 @@ use crate::engine::{kana, Boundaries};
 ///
 /// `is_boundary` is the inner set verbatim — `cost::cost` counts crossings
 /// through it and must not see the widening. `is_usable_endpoint` is the
-/// widened one, and `cost::is_allowed` is its only caller.
+/// widened one, and `cost::is_allowed` is its only caller in the engine;
+/// `examples/span_dump.rs` also asks it directly, to report which positions
+/// were reopened.
 pub struct Relaxed<'a> {
     inner: &'a dyn Boundaries,
     /// Indexed by position in `0..=n`. True where a span may start or end.

@@ -26,10 +26,13 @@ name: CI
 # Measured locally rather than assumed, 2026-09-16: with both variables unset,
 # 8 of the 47 `engine_v2` tests fail; with `TA_HINTS_DICT` pointing at a
 # `fetch-hints` output and APPDATA still unset, 47 of 47 pass. The figures
-# before Phase 4 were 2 of 39 and 39 of 39 — the list grew with the
-# characterization tests of 2026-09-15 and Phase 4's own, so re-measure it
-# rather than trusting this paragraph after adding a test that takes
-# boundaries.
+# this paragraph used to carry, 2 of 39 and 39 of 39, were measured on
+# 2026-09-09 at `bfa929b` and were never restated: by `dce356b`, the commit
+# before Phase 4 landed, the file held 46 tests of which 7 took boundaries,
+# and Phase 4 added the eighth. **Re-measure rather than trusting this
+# paragraph** after adding any test that takes boundaries — `env -u APPDATA
+# -u TA_HINTS_DICT cargo test -p jparser --features mecab --test engine_v2`
+# is the whole check.
 #
 # ## Whether this file has run
 #
@@ -224,6 +227,7 @@ jobs:
       # `clippy -p jparser --features mecab --all-targets` isolates
       # mecab-specific lints to a scope a workspace-wide clippy run does not
       # guarantee.
+      #
       # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
       # boundary-hint dictionary" at the top of this file for why these two
       # steps exist and what was measured.
@@ -262,6 +266,7 @@ jobs:
       # "hints-source")]`) is type-checked anywhere in CI. Design spec §9.5
       # lists this gate; it did not reach this file until the Phase 5A fix wave.
       # Mirrors the `mecab` job above deliberately.
+      #
       # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
       # boundary-hint dictionary" at the top of this file for why these two
       # steps exist and what was measured.
@@ -330,12 +335,14 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx vitest run
       - run: npx playwright install --with-deps chromium
-      # `e2e/panes.spec.ts` guards its own `toHaveScreenshot` calls with
-      # `if (!process.env.CI)`: the committed baselines under
-      # e2e/panes.spec.ts-snapshots/ were written and eyeballed on macOS, and
-      # this runner is ubuntu-latest — different font rendering means those
-      # baselines would mismatch on every run here regardless of whether the
-      # app is actually correct. Capturing Linux baselines from a real run of
+      # `panes.spec.ts` and `chrome.spec.ts` guard all five of their
+      # `toHaveScreenshot` calls with `if (!process.env.CI)`, and every
+      # committed baseline was written and eyeballed on a developer machine:
+      # `panes.spec.ts-snapshots/` holds 10 `-darwin` and 10 `-win32` PNGs,
+      # `chrome.spec.ts-snapshots/` holds 6 `-win32` and no darwin ones at
+      # all. This runner is ubuntu-latest — different font rendering means
+      # none of them would match here regardless of whether the app is
+      # actually correct. Capturing Linux baselines from a real run of
       # this job and committing them instead is possible — there is a remote,
       # see the header — and simply has not been done. GitHub Actions sets
       # `CI=true` automatically, so this
