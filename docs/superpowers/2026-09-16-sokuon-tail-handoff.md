@@ -14,6 +14,7 @@ One screenshot pair, ClipYomi against Translation Aggregator, on
 | `0a0c104` | a sokuon with nothing to double no longer romanizes as `tsu` — `ええっ` was `eetsu`, and `っあ`/`っん` doubled the vowel and the `n` |
 | `3dc632d` | `連用タ接続` is not a word on its own — `優しいっ` was `優し` + `いっ`, a bare 五段 onbin stem beating `優しい` plus an emphatic `っ` |
 | `a286fd3` | `なのに` joins the user lexicon — second screenshot, `見た目はギャルなのになー`, where the right cover ranked second |
+| `a9a6898` | `へへ` and `あたし達` join it — third screenshot; `へへ` was also romanizing as `e e` |
 
 The romaji half is the same class of defect as `d29360d`: the frontend
 keeps its own kana table and it had drifted from `crates/jparser`'s
@@ -118,6 +119,36 @@ both hint states, so 83 became 84.
 **What it costs:** a forced token also wins where `なの` + `に` is right —
 `「原因なのに気づいた」` now reads `なのに`. The engine did not reach `なの`|`に`
 before either (it read `な`|`の`|`に`), and the gold corpus has neither shape.
+
+## 3b. The third screenshot
+
+`「お、忍くん食いついた。へへ、意外とキャラの好み似てるんだねあたし達！」`. Two more of the
+same shape, and one already-known non-defect:
+
+| | JMdict | cost |
+| --- | --- | --- |
+| `へへ` | `[primary]` "heh-heh" | +4, +4 more from FUNCTION_STACK, against `へ`(+1) + `へ`(+1) |
+| `あたし達` | `[primary]` "we; us" | +6 against `あたし`(−1) + `達`(+1) |
+| `忍` → `shinobi` | — | JMnedict, not shipped; §4 |
+
+`へへ` split was also a **romaji** defect, not only a segmentation one: a
+lone `へ` takes the particle entry, and `furiganaFor` reads `e` off that
+flag, so the laugh rendered `e e`. Merged, it is `hehe` from the laugh's own
+entry — one fix for both.
+
+`FUNCTION_STACK` charging `へへ` is worth naming: the laugh is tileable by a
+COMMON particle, which is the term's trigger, and it is the one place that
+term prices a word it should not. It did not have to be touched here, because
+the forced token settles the span before cost sees it.
+
+Neither entry was reachable by `shatter_sweep.rs` as it stands — `あたし達`
+has a kanji and the sweep is kana-only; `へへ` it did see, below the cutoff.
+Gates re-run at 86 entries, every cell identical to the digit in both hint
+states, and `東京へ行く`/`学校へ` confirm the directional particle is untouched.
+
+**The `[noun]達` class is open.** `私達` is its own JMdict headword, `君達`
+and `侺達` are others. One row each does not scale; if more turn up the class
+wants a suffix rule.
 
 ## 4. Not done
 
