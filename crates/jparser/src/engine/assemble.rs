@@ -316,6 +316,7 @@ mod tests {
             exact: true,
             function_stack: false,
             digit_counter: false,
+            after_digit_noncounter: false,
             headword: String::new(),
         }
     }
@@ -528,6 +529,7 @@ mod tests {
             exact,
             function_stack: false,
             digit_counter: false,
+            after_digit_noncounter: false,
             headword: String::new(),
         }
     }
