@@ -763,9 +763,14 @@ fn the_dictionary_form_itself_loses_to_its_parts_without_hints() {
     assert_eq!(on.segments[0].surface, "ミスる");
     assert!(on.segments[0].matched);
 
-    // And the past form is *not* rescued the same way -- the hints move it
-    // from one wrong answer to another, which is why the two cases are
-    // pinned apart.
+    // The past form used to come back as `ミスっ` + `た` -- one wrong answer
+    // swapped for another, which is why it was pinned separately from the
+    // dictionary form above. **Fixed by the per-match term**: with a cost
+    // charged once per match, the four-character headword stops losing to a
+    // stem plus its tail, and this assertion now pins the fix rather than the
+    // defect. The Phase 4 design put this case out of scope as a ranking
+    // defect its own change would not reach, and said that if it moved the
+    // movement was a finding to explain -- this is the explanation.
     let past_bounds = boundaries_over("ミスった");
     let past_result = parse_v2_with_bounds(&dir, "ミスった", Some(&past_bounds));
     let past: Vec<&str> = past_result
@@ -773,11 +778,7 @@ fn the_dictionary_form_itself_loses_to_its_parts_without_hints() {
         .iter()
         .map(|s| s.surface.as_str())
         .collect();
-    assert_eq!(
-        past,
-        ["ミスっ", "た"],
-        "known defect: hints on, the stem and its tail stay apart"
-    );
+    assert_eq!(past, ["ミスった"], "the headword wins its whole span");
 }
 
 /// The cut offsets a `ParseResult`'s own segments imply: every `start`, plus

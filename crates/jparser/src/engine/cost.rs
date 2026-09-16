@@ -29,6 +29,54 @@ use crate::engine::kana;
 use crate::engine::lex::Candidate;
 use crate::engine::Boundaries;
 
+/// Cost of using a match at all, charged once per span regardless of length.
+///
+/// **Master plan §4.3 removed a constant of this shape and this reintroduces
+/// it, at a magnitude the guards it lacked can hold.** The original made
+/// `はこう` (one match) beat `は` + `こう` (two), because a per-match price
+/// always favours fewer, longer spans. Since then the engine gained
+/// `PRONOUNCE_CROSS`, `is_allowed`'s boundary constraint, `FUNCTION_STACK`,
+/// and `spurious_merges.txt` as a live 26-row gate — so the question was
+/// worth re-asking with a measurement rather than assuming the old answer.
+///
+/// **Why it is needed.** Every other term is per character, and `COMMON` is
+/// -2 against `COVER`'s +1, so a COMMON span costs -1 a character and a
+/// non-COMMON one +1: *a tiling of COMMON fragments beats a longer
+/// non-COMMON dictionary word at every magnitude*. Nothing per-character can
+/// fix that, and the effect is not occasional — it is the dominant ordering.
+/// On `ある日起きたら、英国海軍第一卿になって...` the engine ranked the cover
+/// that keeps all four of `ある日`, `起きたら`, `第一` and `なって` whole
+/// **eighteenth**, behind every cover that refuses at least one of them.
+///
+/// **Why 2.** Swept against the gold corpus, hints on, with the compound
+/// metric's class lines read rather than its headline:
+///
+/// | M | strict | compounds | lexical | false-match | transparent | merge gate |
+/// | --- | --- | --- | --- | --- | --- | --- |
+/// | 0 | 1825 | 114 | 42 | 30 / 32 | 42 / 42 | 26 / 26 |
+/// | **2** | **1823** | **118** | **46** | **30 / 32** | **42 / 42** | **26 / 26** |
+/// | 4 | 1744 | 106 | — | — | — | 26 / 26 |
+/// | 6 | 1694 | 123 | 75 | 27 / 32 | 30 / 42 | 25 / 26 |
+///
+/// 6 is where `ある日` is finally kept whole, and it is refused: its compound
+/// headline rises on the `lexical` class while `transparent` collapses 42 to
+/// 30 and `false-match` 30 to 27 — it merges twelve compounds that *should*
+/// split. §5.2 reports those classes separately for exactly this reason, and
+/// the headline alone would have hidden it. 2 gains 4 compounds and breaks
+/// neither split class.
+///
+/// **What it costs and buys.** Hints on, 2 spans (1825 -> 1823); hints off,
+/// it *gains* 11 (1588 -> 1599). Compounds 114 -> 118 and 109 -> 112. Entry
+/// top-1 up in both states. And it fixes `ミスった`, which the Phase 4 design
+/// scoped out as a ranking defect its own change could not reach.
+///
+/// A symmetric `PARTICLE_CROSS` was built and measured alongside this — a
+/// per-crossing surcharge for a PARTICLE match, the one shape neither
+/// `PRONOUNCE_CROSS` nor `FUNCTION_STACK` catches (`それを` as "even so").
+/// It is needed at M >= 6 and **not** at 2, where it reads -2 strict for +1
+/// compound, so it is not here.
+const MATCH: i32 = 2;
+
 /// Cost of one covered character in a matched span.
 ///
 /// Per character, not per match. A per-match constant is what makes `はこう`
@@ -299,7 +347,7 @@ pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
 /// `bounds == None` there is nothing to cross, so only the per-character and
 /// per-match terms apply.
 pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
-    let mut total = COVER * cand.len as i32;
+    let mut total = COVER * cand.len as i32 + MATCH;
 
     if !cand.exact {
         total += INEXACT;
@@ -452,13 +500,43 @@ mod tests {
         );
     }
 
+    /// `MATCH` is charged once per span, whatever its length — that is the
+    /// whole point, and it is what makes a four-character headword able to
+    /// beat a stem plus its tail. The companion below pins the *other* half:
+    /// per-character coverage must stay neutral, so the two terms together
+    /// prefer the longer match without ever rewarding a merge that covers
+    /// more ground than its parts.
+    #[test]
+    fn the_match_cost_is_flat_and_the_longer_span_wins_on_it() {
+        let one = cost(&cand(0, 4, WordFlags::PRIMARY, true), None);
+        let two = cost(&cand(0, 2, WordFlags::PRIMARY, true), None)
+            + cost(&cand(2, 2, WordFlags::PRIMARY, true), None);
+        assert_eq!(
+            two - one,
+            MATCH,
+            "two matches pay it twice, one pays it once"
+        );
+        assert!(one < two, "so the whole span is preferred to the split");
+    }
+
     #[test]
     fn coverage_cost_does_not_reward_using_fewer_matches() {
-        // The §4.3 fix, as an equality. Without it `はこう` wins by arithmetic.
+        // §4.3's fix, which used to be a plain equality: `whole == split`,
+        // because a per-match price is what made `はこう` beat `は` + `こう`.
+        // `MATCH` reintroduced that price deliberately and at a measured
+        // magnitude, so the equality now holds **once the per-match term is
+        // taken out** -- which is the property §4.3 actually needed. `COVER`
+        // still contributes nothing to the preference between a span and its
+        // parts; only `MATCH` does, and only by its own size.
         let whole = cost(&cand(4, 3, WordFlags::PRIMARY, true), None);
         let split = cost(&cand(4, 1, WordFlags::PRIMARY, true), None)
             + cost(&cand(5, 2, WordFlags::PRIMARY, true), None);
-        assert_eq!(whole, split);
+        assert_eq!(
+            whole - MATCH,
+            split - 2 * MATCH,
+            "per-character cost is flat"
+        );
+        assert_eq!(split - whole, MATCH, "and the only difference is one match");
     }
 
     #[test]
