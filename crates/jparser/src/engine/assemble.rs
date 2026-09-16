@@ -81,12 +81,18 @@ pub fn to_segment(
     // `1969|年`: the one piece of context the ordering uses. Computed here
     // because this is where the span's neighbours are in hand.
     let prev_is_digit = start > 0 && kana::is_digit(chars[start - 1]);
-    order(&mut group, prev_is_digit);
 
-    let mut entries = Vec::with_capacity(group.len());
-    for c in &group {
-        entries.push(build_entry(index, chars, c)?);
+    // Entries are resolved *before* ordering, because the last clause of the
+    // key is the entry's own sense count and every candidate in the group was
+    // going to be resolved anyway -- so this costs nothing it did not already
+    // pay.
+    let mut built: Vec<(Candidate, Entry)> = Vec::with_capacity(group.len());
+    for c in group {
+        let entry = build_entry(index, chars, &c)?;
+        built.push((c, entry));
     }
+    order(&mut built, prev_is_digit);
+    let entries: Vec<Entry> = built.into_iter().map(|(_, e)| e).collect();
 
     let reading = entries[0].reading.clone();
     Ok(Segment {
@@ -153,8 +159,8 @@ pub fn to_segment(
 /// candidates with the same entry but *different* chains -- and therefore
 /// different `Entry::conjugation` labels -- could tie on every key above and
 /// still be visibly different in the output.
-pub fn order(cands: &mut [Candidate], prev_is_digit: bool) {
-    cands.sort_unstable_by_key(|c| {
+pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool) {
+    built.sort_unstable_by_key(|(c, e)| {
         (
             !c.exact,
             !c.flags.contains(WordFlags::COMMON),
@@ -162,6 +168,10 @@ pub fn order(cands: &mut [Candidate], prev_is_digit: bool) {
             !c.flags.contains(WordFlags::PARTICLE),
             c.flags.contains(WordFlags::PRONOUNCE),
             c.steps.len(),
+            // More senses first. JMdict's own editorial content, not a corpus
+            // count -- and placed last, where `entry_id` was about to decide
+            // arbitrarily, so it never overrules a clause that means anything.
+            std::cmp::Reverse(e.senses.len()),
             c.entry_id,
         )
     });
@@ -454,7 +464,47 @@ mod tests {
     // a "trap" where a *lower*-priority signal (often `entry_id` itself)
     // favors the wrong candidate, so the test only passes if the clause
     // under test is actually what `order` is applying.
+    /// One sense, so every trap below still isolates the clause it names --
+    /// the sense-count clause cannot break a tie it is not part of.
     fn order_candidate(
+        entry_id: u32,
+        exact: bool,
+        flags: WordFlags,
+        step_count: usize,
+    ) -> (Candidate, Entry) {
+        with_senses(entry_id, exact, flags, step_count, 1)
+    }
+
+    fn with_senses(
+        entry_id: u32,
+        exact: bool,
+        flags: WordFlags,
+        step_count: usize,
+        senses: usize,
+    ) -> (Candidate, Entry) {
+        let entry = Entry {
+            headword: String::new(),
+            reading: None,
+            conjugation: None,
+            pos: Vec::new(),
+            senses: vec![
+                crate::Sense {
+                    pos: Vec::new(),
+                    glosses: Vec::new(),
+                    xrefs: Vec::new(),
+                    misc: Vec::new(),
+                    info: Vec::new(),
+                };
+                senses
+            ],
+            flags,
+            entry_id,
+            steps: Vec::new(),
+        };
+        (candidate_only(entry_id, exact, flags, step_count), entry)
+    }
+
+    fn candidate_only(
         entry_id: u32,
         exact: bool,
         flags: WordFlags,
@@ -491,7 +541,7 @@ mod tests {
         ];
         order(&mut cands, false);
         assert_eq!(
-            cands[0].entry_id, 2,
+            cands[0].0.entry_id, 2,
             "the exact match sorts first despite the higher entry_id"
         );
     }
@@ -515,7 +565,7 @@ mod tests {
         let mut after_digit = build();
         order(&mut after_digit, true);
         assert_eq!(
-            after_digit[0].entry_id, 2,
+            after_digit[0].0.entry_id, 2,
             "after a digit the counter sorts first"
         );
 
@@ -523,7 +573,7 @@ mod tests {
         let mut elsewhere = build();
         order(&mut elsewhere, false);
         assert_eq!(
-            elsewhere[0].entry_id, 1,
+            elsewhere[0].0.entry_id, 1,
             "without the digit the counter has no claim and entry_id decides"
         );
     }
@@ -541,7 +591,7 @@ mod tests {
         ];
         order(&mut cands, false);
         assert_eq!(
-            cands[0].entry_id, 2,
+            cands[0].0.entry_id, 2,
             "the particle sorts first despite the higher entry_id"
         );
     }
@@ -561,8 +611,49 @@ mod tests {
         ];
         order(&mut cands, true);
         assert_eq!(
-            cands[0].entry_id, 1,
+            cands[0].0.entry_id, 1,
             "a COMMON headword outranks a counter even after a digit"
+        );
+    }
+
+    /// The sense-count clause, and why it sits last.
+    ///
+    /// `いった` is five candidates that tie on every clause above this one --
+    /// all exact, all COMMON, all PRONOUNCE, all two-step chains -- so
+    /// `entry_id` ascending was picking 炒る "to roast" (1391500) over 行く
+    /// "to go" (1578850) purely because its number is smaller. JMdict records
+    /// 12 senses for 行く and 1 for 炒る, which is the dictionary's own
+    /// editorial content rather than a corpus count this project does not
+    /// have (master plan §5.2's bar). Measured over the gold corpus with
+    /// `examples/order_sweep.rs`, hints on: **+41 entry top-1 hits**, and the
+    /// two earlier placements are both worse -- ahead of the chain depth it is
+    /// +30 with 31 losses, ahead of PRONOUNCE +27 with 43.
+    #[test]
+    fn order_prefers_more_senses_only_where_entry_id_would_have_decided() {
+        // The trap: the *fewer*-sense entry carries the smaller id, so this
+        // passes only if the clause fires.
+        let mut cands = vec![
+            with_senses(1391500, true, WordFlags::PRONOUNCE, 2, 1),
+            with_senses(1578850, true, WordFlags::PRONOUNCE, 2, 12),
+        ];
+        order(&mut cands, false);
+        assert_eq!(
+            cands[0].0.entry_id, 1578850,
+            "the 12-sense entry sorts first despite the higher entry_id"
+        );
+
+        // And it must not outrank a clause that means something: a COMMON
+        // single-sense entry still beats a rarer twelve-sense one.
+        let mut common = WordFlags::PRONOUNCE;
+        common.insert(WordFlags::COMMON);
+        let mut mixed = vec![
+            with_senses(2, true, WordFlags::PRONOUNCE, 0, 12),
+            with_senses(1, true, common, 0, 1),
+        ];
+        order(&mut mixed, false);
+        assert_eq!(
+            mixed[0].0.entry_id, 1,
+            "COMMON still outranks the sense count"
         );
     }
 
@@ -576,7 +667,7 @@ mod tests {
         ];
         order(&mut cands, false);
         assert_eq!(
-            cands[0].entry_id, 2,
+            cands[0].0.entry_id, 2,
             "the COMMON match sorts first despite the higher entry_id"
         );
     }
@@ -589,7 +680,7 @@ mod tests {
         ];
         order(&mut cands, false);
         assert_eq!(
-            cands[0].entry_id, 2,
+            cands[0].0.entry_id, 2,
             "the PRIMARY match sorts first despite the higher entry_id"
         );
     }
@@ -602,7 +693,7 @@ mod tests {
         ];
         order(&mut cands, false);
         assert_eq!(
-            cands[0].entry_id, 2,
+            cands[0].0.entry_id, 2,
             "the shallower chain sorts first despite the higher entry_id"
         );
     }
@@ -618,7 +709,7 @@ mod tests {
             order_candidate(20, true, WordFlags::PRIMARY, 0),
         ];
         order(&mut cands, false);
-        let ids: Vec<u32> = cands.iter().map(|c| c.entry_id).collect();
+        let ids: Vec<u32> = cands.iter().map(|(c, _)| c.entry_id).collect();
         assert_eq!(ids, vec![10, 20, 30]);
     }
 }
