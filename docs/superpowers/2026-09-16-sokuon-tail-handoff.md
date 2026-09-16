@@ -13,6 +13,7 @@ One screenshot pair, ClipYomi against Translation Aggregator, on
 | --- | --- |
 | `0a0c104` | a sokuon with nothing to double no longer romanizes as `tsu` — `ええっ` was `eetsu`, and `っあ`/`っん` doubled the vowel and the `n` |
 | `3dc632d` | `連用タ接続` is not a word on its own — `優しいっ` was `優し` + `いっ`, a bare 五段 onbin stem beating `優しい` plus an emphatic `っ` |
+| `a286fd3` | `なのに` joins the user lexicon — second screenshot, `見た目はギャルなのになー`, where the right cover ranked second |
 
 The romaji half is the same class of defect as `d29360d`: the frontend
 keeps its own kana table and it had drifted from `crates/jparser`'s
@@ -90,6 +91,33 @@ The snapshot moved twice and both are corrections:
   candidate, so the pair the test protects would have been a single
   candidate and the assertion vacuous. `食べ` is `連用形` — a form that does
   end words — so it is still two.
+
+## 3a. The second screenshot
+
+Same pair, `「(ほんと、見た目はギャルなのになー。こうして話してると、中身は完全にオタクなんだな)」`.
+Three differences, and `lookup` settles which are ours:
+
+| | JMdict | verdict |
+| --- | --- | --- |
+| `完全に` | no headword (`[完]`, `[完全]` only) | TA merges what we cannot; correct as split |
+| `話してる` | no headword (`[話]`, `[話し]` only) | same |
+| `なのに` | **`[primary,particle]`, 3 chars** | ours — the right cover ranked *second* |
+
+`なー` romanizing as `naa` against TA's `nā` is house style, pinned both
+sides (`ラーメン` → `raamen`), not a defect.
+
+`なのに` is the `ある日` shape exactly: `[primary]` with no `common`, so it
+costs +5 against `な`(+1) + `のに`(0) and loses by 4. `FUNCTION_STACK` is
+charged to whichever side takes the span and cancels out. The only cost term
+that reaches it is `MATCH`, which would have to be 6, and 6 is refused on the
+compound class lines. The user lexicon is where the spike document already
+put this class, and the cap's own comment asks for the gates rather than a
+raised number — they were re-run and every cell is identical to the digit in
+both hint states, so 83 became 84.
+
+**What it costs:** a forced token also wins where `なの` + `に` is right —
+`「原因なのに気づいた」` now reads `なのに`. The engine did not reach `なの`|`に`
+before either (it read `な`|`の`|`に`), and the gold corpus has neither shape.
 
 ## 4. Not done
 
