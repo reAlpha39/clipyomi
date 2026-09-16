@@ -227,6 +227,9 @@ pub fn candidates(
     // has been walked. Computed into a side vector first because the answer
     // for one candidate reads the same structure another candidate is stored
     // in.
+    // A read-only copy for the reading comparison below, which asks about the
+    // *parts* of a span while the originals are being written through.
+    let out_ro = out.clone();
     let stacks: Vec<Vec<bool>> = (0..len)
         .map(|start| {
             out[start]
@@ -239,7 +242,7 @@ pub fn candidates(
         for (cand, stack) in out[start].iter_mut().zip(flags) {
             cand.function_stack = stack;
             cand.digit_counter = opens_with_a_number(chars, cand.start, cand.len)
-                && reading_has_a_sokuon(index, cand.entry_id);
+                && reading_is_not_its_parts(index, &out_ro, chars, cand);
         }
     }
 
@@ -259,30 +262,73 @@ pub fn candidates(
 /// clipboard length was the entire subject of Phase 2c; this is bounded by
 /// the span width, which the FST walk's own dead end already bounds.
 /// `jparser-cli bench`'s scaling cell is the check.
-/// Whether the entry's reading carries a small `っ`.
+/// Whether the span's own reading differs from its parts read separately.
 ///
-/// **This is the euphonic change, and it is what makes the merge worth
-/// preferring.** `一週間` reads `いっしゅうかん`, which `いち` + `しゅうかん`
-/// cannot produce, so splitting mispronounces it. `三回` reads `さんかい` and
-/// `三人` `さんにん` — the split says exactly the same thing, so merging buys
-/// nothing there and costs something: measured over 2,743 lines of real text,
-/// an ungated discount re-cut `３|回目` as `３回|目` and `４|人目` as `４人|目`
-/// **49 times**, breaking the ordinal suffix to fix readings that were never
-/// wrong. Gating on the sokuon keeps `週間` and `ヶ月` and drops that whole
-/// class.
+/// **This is the euphonic change, and it is the whole reason to prefer the
+/// merge.** `一週間` reads `いっしゅうかん`, which `いち` + `しゅうかん` cannot
+/// produce, and `四人` reads `よにん`, which `よん` + `にん` cannot — so the
+/// split mispronounces both. `三回` reads `さんかい` and `二番` `にばん`, which
+/// is exactly what `さん` + `かい` and `に` + `ばん` say, so merging buys
+/// nothing there.
 ///
-/// An index read per digit-initial candidate, which is a rare shape; the
-/// second pass is already walking every candidate.
-fn reading_has_a_sokuon(index: &Index, entry_id: u32) -> bool {
+/// That distinction is load-bearing in both directions. `回目` and `番目` are
+/// JMdict counters and `3 | 回目`, `2 | 番目` are the right cuts; `人目` is a
+/// different word entirely (`ひとめ`, "public gaze"), so `4 | 人目` reads
+/// "four public-gaze" and `4人 | 目` is the right cut. A sokuon test gets the
+/// first two right and the third wrong, because `よにん` has no sokuon.
+///
+/// Reads the first reading of each part, which is the entry's own primary
+/// form. Only digit-initial candidates reach here, so the index traffic is
+/// bounded by a rare shape.
+fn reading_is_not_its_parts(
+    index: &Index,
+    by_start: &[Vec<Candidate>],
+    chars: &[char],
+    cand: &Candidate,
+) -> bool {
+    let whole = match first_reading(index, cand.entry_id) {
+        Some(r) => r,
+        None => return false,
+    };
+    // Only the split at the end of the number, which is the analysis actually
+    // competing with the merge. Any-split was too permissive: `1週間` was
+    // ruled a non-change because `1週`(いっしゅう) + `間`(かん) reconstructs
+    // `いっしゅうかん`, which is true and irrelevant -- nothing was proposing
+    // that cut.
+    let dlen = chars[cand.start..cand.start + cand.len]
+        .iter()
+        .take_while(|c| kana::is_digit(**c))
+        .count();
+    let digits = by_start
+        .get(cand.start)
+        .into_iter()
+        .flatten()
+        .filter(|c| c.len == dlen)
+        .filter_map(|c| first_reading(index, c.entry_id).map(|r| (c.len, r)));
+    for (dlen, head) in digits {
+        let tail_start = cand.start + dlen;
+        let tail_len = cand.len - dlen;
+        let Some(tails) = by_start.get(tail_start) else {
+            continue;
+        };
+        for t in tails.iter().filter(|c| c.len == tail_len) {
+            if let Some(tail) = first_reading(index, t.entry_id) {
+                if format!("{head}{tail}") == whole {
+                    return false; // the split says the same thing
+                }
+            }
+        }
+    }
+    true
+}
+
+/// The entry's primary reading, or `None` when it stores none.
+fn first_reading(index: &Index, entry_id: u32) -> Option<String> {
     index
         .entry(entry_id)
         .ok()
         .flatten()
         .and_then(|e| e.readings.first().cloned())
-        // The *first* reading only. `四人` carries よったり as a secondary
-        // form, which has a sokuon and would otherwise let `4人` through --
-        // and `4人目` then breaks the same way `3回目` did.
-        .is_some_and(|r| r.contains('っ') || r.contains('ッ'))
 }
 
 /// Whether `[start, start + len)` opens with a digit run and continues past
