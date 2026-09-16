@@ -19,10 +19,13 @@
 # 80 of them are the most frequent; the 81st is いちゃいちゃ, which occurs zero
 # times in the pool and is here because it is the case that prompted the work.
 #
-# The last three are deliberate exceptions to the `exp` filter above, all of
-# one shape: `[primary]` without `common`, which is precisely what the cost
-# model cannot defend. A COMMON span costs -1 a character and a non-COMMON one
-# +1, so such a headword always loses to its own COMMON parts.
+# The last five are deliberate additions the sweep did not make, all of one
+# shape: `[primary]` without `common`, which is precisely what the cost model
+# cannot defend. A COMMON span costs -1 a character and a non-COMMON one +1,
+# so such a headword always loses to its own COMMON parts. Every one of them
+# was reported from real use against Translation Aggregator, and each was
+# measured on its own: at 86 entries every gold cell is still identical to the
+# digit in both hint states.
 #
 # ある日 and その日: JMdict tags them `exp,n` and the sweep drops phrases on
 # purpose. ある日 costs +3 while ある(-2) + 日(-1) costs -3. Reported from real
@@ -44,6 +47,19 @@
 # The engine did not reach that cut before either -- it read な|の|に -- so
 # this trades three particles for one wrong word, on a shape far rarer than
 # the concessive. The gold corpus contains neither.
+#
+# へへ: `[primary]`, "heh-heh". Costs +4 against へ(+1) + へ(+1), and
+# FUNCTION_STACK adds 4 more because へ is a COMMON particle and the laugh is
+# therefore tileable by particles -- the one place that term charges a word it
+# should not. The split also romanized as `e e`, not `hehe`: a lone へ takes
+# the particle entry, and `furiganaFor` reads `wa`/`e` off that flag. Kana-only,
+# so the sweep did see it; it ranked below the 81-word cutoff.
+#
+# あたし達: `[primary]`, "we; us". Costs +6 against あたし(-1) + 達(+1). The
+# sweep is kana-only by construction and this has a kanji, so it was never a
+# candidate. The `[noun]達` class is open (私達 is already one JMdict
+# headword, 君達 and 侺達 are others); this is the one that was reported, and
+# the class wants a suffix rule rather than a row each if more turn up.
 #
 # Connection ids are lifted from real IPADIC entries (副詞 83/71, 名詞 1/1) and
 # costs use MeCab's own -400*len^1.5 heuristic. They are IPADIC-specific, which
@@ -135,3 +151,5 @@
 ある日,1,1,-2078,名詞,一般,*,*,*,*,ある日,ある日
 その日,1,1,-2078,名詞,一般,*,*,*,*,その日,その日
 なのに,1,1,-3200,名詞,一般,*,*,*,*,なのに,なのに
+へへ,1,1,-1131,名詞,一般,*,*,*,*,へへ,へへ
+あたし達,1,1,-3200,名詞,一般,*,*,*,*,あたし達,あたしたち
