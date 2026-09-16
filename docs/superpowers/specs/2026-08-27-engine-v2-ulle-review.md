@@ -1,6 +1,6 @@
 > **Received external review, reproduced as delivered.** Filed here because
 > [`2026-08-27-engine-v2-master-plan.md`](2026-08-27-engine-v2-master-plan.md)
-> §10 records four decisions taken in response to it, and those entries need a
+> §10 records three decisions that name this review (a fourth, staying on Vibrato rather than sudachi.rs, is credited to it in the note below but not in the §10 row itself), and those entries need a
 > referent.
 >
 > **Its load-bearing technical claims were checked against the installed IPADIC
