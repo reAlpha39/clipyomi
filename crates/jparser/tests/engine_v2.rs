@@ -1292,29 +1292,33 @@ fn no_two_entries_in_a_segment_share_an_entry_id() {
 }
 
 // The dedup above keys on `(len, entry_id)`, not `(start, entry_id)` alone,
-// precisely so this still holds: 書いた's onbin fragment 書い (len 2) and
-// the full chain 書いた (len 3) both reconstruct headword 書く (the same
+// precisely so this still holds: 食べた's 連用形 fragment 食べ (len 2) and
+// the full chain 食べた (len 3) both reconstruct headword 食べる (the same
 // entry_id) from the same start, and both must survive as distinct
 // candidates -- collapsing the key down to `(start, entry_id)` would drop
 // one of them silently.
+//
+// 書いた was the vehicle until `table.rs`'s BOUND_FORMS landed: 書い is
+// 連用タ接続, which is no longer a candidate on its own, so the pair this
+// test exists to protect would be a single candidate and the assertion
+// vacuous. 食べ is 連用形 -- a form that does end words -- so it is still two.
 #[test]
 fn the_same_headword_at_two_different_lengths_is_not_deduplicated_away() {
     let dir = scratch("lex-keeps-both-lengths");
     build_v2(&dir);
-    let c = cands(&dir, "書いた");
+    let c = cands(&dir, "食べた");
     let lens: Vec<usize> = c[0]
         .iter()
-        .filter(|x| x.headword == "書く")
+        .filter(|x| x.headword == "食べる")
         .map(|x| x.len)
         .collect();
-    // Asserted on the emitted order, not just membership: both 書いた's full
-    // chain (len 3) and its 書い fragment (len 2) must survive the dedup,
+    // Asserted on the emitted order, not just membership: both 食べた's full
+    // chain (len 3) and its 食べ fragment (len 2) must survive the dedup,
     // longest span first.
     assert_eq!(
         lens,
         vec![3, 2],
-        "both 書いた's full chain (len 3) and its 書い fragment (len 2) must \
-         survive the dedup in longest-first order, got lens {lens:?}"
+        "both 食べた's full chain (len 3) and its 食べ fragment (len 2) must          survive the dedup in longest-first order, got lens {lens:?}"
     );
 }
 

@@ -73,10 +73,10 @@ The plan succeeds when all four hold:
 
    | | v1 | v2 before | v2 now |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7393 (1599) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8428 (1823) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9374** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9347** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7448 (1611) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8442 (1826) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9347** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9341** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**,
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
@@ -665,17 +665,21 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7393 (1599) | 0.8003 (1731) | 0.9374 | 0.6129 (114 / 186) | 132 spans in 65 merges |
-| hints on | **0.8428 (1823)** | **0.8826 (1909)** | **0.9347** | **0.6344 (118 / 186)** | 86 spans in 43 merges |
+| hints off | 0.7448 (1611) | 0.8086 (1749) | 0.9347 | 0.6075 (113 / 186) | 138 spans in 68 merges |
+| hints on | **0.8442 (1826)** | **0.8840 (1912)** | **0.9341** | **0.6344 (118 / 186)** | 86 spans in 43 merges |
 
 Compounds by class, hints on: `lexical` 46 / 112, `false-match` 30 / 32,
-`transparent` 42 / 42, 8 `ambiguous` excluded. Latency at the app's ceiling
-(`jparser-cli bench`, gold index, k = 3): scaling 1.05x hints on, 1.01x off.
+`transparent` 42 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 51 / 112,
+`false-match` 23 / 32, `transparent` 39 / 42. Latency at the app's ceiling
+(`jparser-cli bench`, gold index, k = 3): scaling 1.00x hints on, 1.01x off.
 
-**Set 2026-09-16, last by the inflection-interior gate on `PRONOUNCE_CROSS`
-and `order`'s sense-count tiebreak.** Both hint states' entry top-1 and the
-hints-on span metrics moved that day; the compound metric and hints-off span
-accuracy have not moved since Phase 3.
+**Set 2026-09-16, last by `table.rs`'s `BOUND_FORMS`** — 連用タ接続 stopped
+being a word on its own, so 優しいっ parses as 優しい + っ rather than 優し + いっ.
+Every span and tolerant cell rose; hints-off entry top-1 fell 0.0027 while its
+*count* rose 6 (1168 / 1246 to 1174 / 1256 — more spans matched, so more spans
+were scored), and hints-off compounds lost one net: `lexical` +1, `false-match`
+−2, the two being になって and いたから merging where the adjudication splits them.
+Hints on, the class lines did not move at all.
 
 **This block was stale for two phases and the staleness had a cost.** It read
 `0.8174 / 0.8525 / 0.9092` hints on and `0.9093` entry top-1 hints off until

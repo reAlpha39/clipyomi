@@ -220,6 +220,23 @@ pub fn classes_for_pos(pos: &str) -> impl Iterator<Item = ClassId> + '_ {
         .map(|i| i as ClassId)
 }
 
+/// Forms that are never a word on their own — they exist only as the
+/// attachment site some [`ATTACHES_TO`] auxiliary demands, so a chain that
+/// *ends* at one has found a bare stem, not a headword.
+///
+/// 連用タ接続 is the 五段 onbin stem before た/て/だ/で (行っ, 取っ). Left
+/// terminal it matched a sentence-final っ as a whole word: 優しいっ parsed
+/// as 優し + いっ (a bare stem of 行く/入る/言う) rather than 優しい plus an
+/// emphatic っ, which is what the っ is in dialogue. The chain that reaches
+/// it through た/て passes `required = Some("連用タ接続")` and is unaffected,
+/// so 行った still deinflects.
+///
+/// Every other bound form (未然形, ガル接続 — see the たい row below — and
+/// the rest of the 接続 family) is the same shape and the same one-line
+/// change, but each deletes candidates of its own and wants its own score
+/// run. One at a time, cheapest defect first.
+const BOUND_FORMS: &[&str] = &["連用タ接続"];
+
 /// Which 活用形 of the preceding word each auxiliary attaches to, and which
 /// class generates the auxiliary's own conjugated surfaces.
 ///
@@ -291,6 +308,19 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     // The principled fix, making ガル接続 non-terminal, deletes candidates and
     // is a measured Phase 1a follow-up.
     ("たい", "特殊・タイ", "連用形"),
+    // ちゃう/じゃう (and the ちまう/じまう they contract from) are the other
+    // consumers of 連用タ接続, and the only ones と接続 needs — without these
+    // rows 買っちゃった has no chain through 買っ at all once BOUND_FORMS stops
+    // it standing alone. All four are 五段・ワ行促音便, IPADIC's own class for
+    // them.
+    ("ちゃう", "五段・ワ行促音便", "連用タ接続"),
+    ("じゃう", "五段・ワ行促音便", "連用タ接続"),
+    ("ちまう", "五段・ワ行促音便", "連用タ接続"),
+    ("じまう", "五段・ワ行促音便", "連用タ接続"),
+    ("ちゃう", "五段・ワ行促音便", "連用形"),
+    ("じゃう", "五段・ワ行促音便", "連用形"),
+    ("ちまう", "五段・ワ行促音便", "連用形"),
+    ("じまう", "五段・ワ行促音便", "連用形"),
     ("だ", "特殊・ダ", "連用タ接続"),
     ("て", "不変化型", "連用タ接続"),
     ("て", "不変化型", "連用形"),
@@ -306,8 +336,12 @@ enum TrieHit {
     /// Some class's form ends here. The characters before it are the stem
     /// of a headword in that class — this can end a chain, because the
     /// innermost step is the main word's own inflection and it can be any
-    /// class.
-    Terminal { class: ClassId, form: FormId },
+    /// class. Unless `bound`: see [`BOUND_FORMS`].
+    Terminal {
+        class: ClassId,
+        form: FormId,
+        bound: bool,
+    },
     /// One specific auxiliary's own conjugated surface ends here (built
     /// from an `ATTACHES_TO` row, not from `CLASSES` directly). The chain
     /// can continue only if the text immediately before it ends in
@@ -396,6 +430,7 @@ impl Table {
                     TrieHit::Terminal {
                         class: class_id as ClassId,
                         form: form_id as FormId,
+                        bound: BOUND_FORMS.contains(&form.name),
                     },
                 );
             }
@@ -486,8 +521,11 @@ impl Table {
         loop {
             for hit in &self.nodes[node].hits {
                 match *hit {
-                    TrieHit::Terminal { class, form } => {
-                        if form_named(required, class, form) {
+                    TrieHit::Terminal { class, form, bound } => {
+                        // A bound form is only a word when something is
+                        // attached to its right: `required` is `Some` exactly
+                        // when an auxiliary asked for it.
+                        if (required.is_some() || !bound) && form_named(required, class, form) {
                             out.push(ChainHit {
                                 consumed: len,
                                 steps: vec![ConjStep {
@@ -803,7 +841,15 @@ mod tests {
                 chains += 1;
                 depth0_chains += 1;
                 check_fmt(std::slice::from_ref(&s0));
-                if !depth0.contains(&(c.is_adjective, form0.name.to_string())) {
+                // A BOUND_FORMS form is never a chain on its own, so the
+                // fixture has no row for it to have: `search` only ever emits
+                // it under the auxiliary that required it, which is a depth-1
+                // row. The walk still counts it and still runs `check_fmt` on
+                // it — `fmt` is called with whatever chain `search` returns,
+                // and the inner step of every one of those is this step.
+                if !BOUND_FORMS.contains(&form0.name)
+                    && !depth0.contains(&(c.is_adjective, form0.name.to_string()))
+                {
                     missing.push(format!("depth 0: {class_name}:{}", form0.name));
                 }
                 for &(lemma1, ac1, _req1) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form0.name)
@@ -838,11 +884,15 @@ mod tests {
             "reachable tuples with no fixture row:\n{}",
             missing.join("\n")
         );
+        // 22,783 before the ちゃう family joined ATTACHES_TO. Those four lemmas
+        // attach at both 連用タ接続 and 連用形, and their own seven
+        // 五段・ワ行促音便 forms become attachment sites in turn, which is where
+        // the depth-2 term more than doubles.
         assert_eq!(
-            chains, 22_783,
-            "the walk reached {chains} chains, not 22,783 -- the conjugation table's \
+            chains, 50_419,
+            "the walk reached {chains} chains, not 50,419 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 22,783 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 50,419 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
              maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
              constant, rather than loosening the assertion"
