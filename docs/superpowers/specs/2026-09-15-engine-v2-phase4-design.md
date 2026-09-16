@@ -453,8 +453,9 @@ opposite signs. Read the losing side by name and it is a gazetteer —
 `品川`, `岡本`, `松久`, `浦和`, `新大阪`, `大阪環状線`, `百合子`, `仁兵衛`,
 `ディオニス`, `マルヴィナ`, `ルクセイン`, `サフィレーヌ`, `2014`, `1969`,
 `9518` — and the four exceptions on it are real multi-word compounds IPADIC
-glued: `東京厚生年金会館`, `クライシスマッピングパーティー`, `田町駅`.
-Those four are what the narrowing gives up.
+glued: `東京厚生年金会館` (3 spans), `クライシスマッピングパーティー` (3),
+`田町駅` (1) and `冶爺` (1), which is the whole +8. Those four are what the
+narrowing gives up, and §9.4 lists them again with the same figures.
 
 ### 9.3 The other three candidates, measured
 
@@ -474,7 +475,8 @@ rather than between arguments. Hints on, gold corpus, 2,163 spans:
 Three findings in that table, none of them predictable from §8.4's prose:
 
 - **A minimum length is inert on the gold corpus.** At 3 it reproduces the
-  unconditional version's cells *exactly*. The reason is that blocking a
+  unconditional version's three *gold* cells exactly — 1713 / 1369 / 344 — and
+  moves only the eighteen sentences, 486 down to 478. The reason is that blocking a
   relaxed span does not restore the gold span: `UNMATCHED` is 30 a character
   against `COVER`'s 1, so the DP takes any remaining shorter match and pads
   the rest with a fallback run — `羽田空港` becomes `羽田`(unmatched) + `空港`
@@ -486,9 +488,14 @@ Three findings in that table, none of them predictable from §8.4's prose:
   the katakana and digit tokens by construction and leaves all 68 all-kanji
   ones open, which is where 42 of the 88 losses are. It ends up 15 spans
   *below* the pre-phase baseline, so it fails Gate 1 too.
-- **The hiragana condition dominates both on gold and ties the better of
-  them on the reported sentences.** It is also the only one of the four that
-  takes strict span accuracy *above* where Phase 4 found it.
+- **The hiragana condition wins on gold and loses on the reported
+  sentences.** At 475 it is the *lowest* row of the five in that column —
+  tied with script-run awareness, below the other three, 11 below the
+  unconditional escape. It is also the only one of the four that takes strict
+  span accuracy *above* where Phase 4 found it. Gate 1 is a gate and Gate 6 is
+  recorded, so that is the trade the phase takes; §9.4 names the eleven
+  characters and the one sentence they are in. Reading this row as a win on
+  both columns would invert the table.
 
 §8.4.3, the part-of-speech condition, was not implemented. The measurement
 above removes its motivation: it was proposed to separate a grammatical tail
@@ -523,7 +530,7 @@ records) and the same Vibrato dictionary.
 
 | gate | required | measured |
 | --- | --- | --- |
-| 1, hints off | identical to the digit | **identical**, all eleven cells and every secondary line |
+| 1, hints off | identical to the digit | **identical**, every printed line — the four headline metrics, the coarsening counts and every compound class line |
 | 1, hints on, strict | ≥ 0.8174 (1768) | **0.8285 (1792)**, +24 |
 | 1, hints on, tolerant | recorded | 0.8645 (1870), was 0.8525 (1844) |
 | 1, hints on, entry top-1 | recorded | 0.9125, was 0.9092 |
@@ -537,3 +544,24 @@ records) and the same Vibrato dictionary.
 Gate 1 hints-on is the one §8 failed, and it does not merely recover: strict
 span accuracy ends 24 spans above where Phase 4 found it, with the matched
 half up 29 and the unmatched-but-exact half down only 5.
+
+### 9.6 What §3 no longer describes
+
+§9 said "everything else in §2 is unchanged", which is true of §2 and leaves
+§3 stale. Recorded rather than rewritten, because §3 is what the phase was
+planned against:
+
+- **§3.2 and §3.3 give `Relaxed::over(n: usize, ...)`.** The shipped signature
+  is `over(chars: &[char], ...)`: the hiragana test needs the characters of
+  the token, not just how many there are. `parse` already had `chars` in hand,
+  so §3.3's three lines are still three lines.
+- **§2.1's last-but-one row promises less than it looks like.** Its column is
+  "what the escape permits", and that is exactly right — measured on the real
+  index, `気持ち良かったし` relaxes positions 1–5 and 7 is a real boundary, so
+  `良かった` at `[3, 7)` *is* permitted. **§4.1 is the one that states an
+  outcome**, "→ `気持ち` + `良かった` + `し`", and that outcome is the synthetic
+  fixture's: it holds only `気持ち` and `良い`. Against the real 218,449-entry
+  index the parse is `気持ち` + `良かっ` + `たし`, **identically with hints on
+  and hints off**, so the phase's own claim holds and the split is the ranking
+  class §1 puts out of scope. A reader taking §4.1 for a statement about the
+  real index would be misled.

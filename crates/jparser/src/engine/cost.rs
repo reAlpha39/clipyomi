@@ -251,11 +251,13 @@ const INEXACT: i32 = 8;
 /// that cuts it as `東京|都`.
 ///
 /// The question is [`Boundaries::is_usable_endpoint`] and not `is_boundary`,
-/// and the two differ in exactly one place: a token no candidate can cover
-/// has no legal span at all under the strict reading, so
-/// [`crate::engine::relax::Relaxed`] reopens its interior (Phase 4 design
-/// §2). Everywhere the tokenizer and the dictionary agree about where words
-/// are, the two questions have the same answer.
+/// and the two differ in exactly one place: a token that no candidate can
+/// cover *and* that carries a hiragana character has no legal span at all
+/// under the strict reading, so [`crate::engine::relax::Relaxed`] reopens its
+/// interior (Phase 4 design §2 and §9). Both halves are load-bearing — an
+/// all-kanji, all-katakana or all-digit token nothing covers is a proper noun
+/// or a number, and stays shut. Everywhere the tokenizer and the dictionary
+/// agree about where words are, the two questions have the same answer.
 ///
 /// With `bounds == None` every constraint lifts: the engine must still work
 /// with no tokenizer at all.

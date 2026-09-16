@@ -46,8 +46,10 @@ pub trait Boundaries {
     /// question, which is not quite `is_boundary`'s.
     ///
     /// They differ only under [`relax::Relaxed`], which also permits a
-    /// position strictly inside a token no candidate can cover (Phase 4
-    /// design §2). The default is `is_boundary`, so a tokenizer's own
+    /// position strictly inside a token that no candidate can cover and that
+    /// carries a hiragana character (Phase 4 design §2 and §9 — without the
+    /// second condition the escape shatters `品川` and `1969`). The default
+    /// is `is_boundary`, so a tokenizer's own
     /// boundary set keeps exactly today's behaviour, and `cost::cost` goes on
     /// asking `is_boundary` for its crossing count — widening *that* would
     /// reprice every PRONOUNCE-only match through `PRONOUNCE_CROSS`.

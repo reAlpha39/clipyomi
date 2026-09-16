@@ -27,8 +27,10 @@ hint token that no candidate can cover **and that carries at least one
 hiragana character**; `Boundaries` gains a defaulted `is_usable_endpoint` that
 `cost::is_allowed` asks instead of `is_boundary`; `engine::parse` wires the
 two together in three lines. `kana` gains `is_hiragana`, the hiragana leg of
-`is_kana` on its own. Nothing outside `crates/jparser/src/engine/` changes, no
-index format moves, and no install rebuilds.
+`is_kana` on its own. No product code outside `crates/jparser/src/engine/`
+changes — `crates/jparser/tests/engine_v2.rs` does, by 234 lines, which is
+§2's Gate 7 and §1's own next paragraph — no index format moves, and no
+install rebuilds.
 
 `bc3e607` is design §9 — the narrowing, the three §8.4 candidates measured
 against it, and what it costs.
@@ -118,8 +120,17 @@ AFTER   strict 1792  =  1361 matched  +  431 unmatched-but-exact
 ```
 
 29 gold spans gained a strict hit and every one of them is a *matched* hit;
-5 lost one, 3 of those having been unmatched-but-exact. Both halves move the
-right way, which is what §8's failure did not do.
+5 lost one, 3 of those having been unmatched-but-exact. Two more spans stayed
+exactly placed and went from unmatched to matched, which is what closes the
+arithmetic: matched `+29 +2 −2 = +29`, unmatched-but-exact `−3 −2 = −5`.
+
+**That 5 and §3's per-token −3 are the same five spans counted two ways**, and
+nothing else below reconciles them, so: three of the losses sit *inside* a
+reopened token — `ぇぇぇ`, `ぁぁぁ`, `ぱたぱたぱたぱた`, each shattered by the
+escape firing on it — and two sit *beside* one, swallowed by a span the escape
+made legal next door. `いや` was absorbed into `いやぁ` and `見` into `見なく`,
+and both had been matched. The per-token table can only attribute the three;
+the decomposition counts all five, and **five is the honest cost.**
 
 ### Gate 2 — the compound metric
 
@@ -129,6 +140,16 @@ to the digit**, every class line included, as it was under the unconditional
 escape. The compounds this metric adjudicates live inside tokens the
 tokenizer and the dictionary already agree about, so the escape never reaches
 them.
+
+### Gate 2a — why the compound metric could not move
+
+Recorded because the handoff first asserted this as a reason and only then
+measured it. Of the 194 adjudicated compound windows, **zero contain a relaxed
+position strictly inside them** — under the narrowed escape *and* under the
+unconditional one. The adjudicated compounds all sit inside tokens the
+tokenizer and the dictionary already agree about, so the escape has nothing to
+reach there, and that is why the metric came back byte-identical in all five
+narrowings §9.3 measured rather than merely close.
 
 ### Gate 3 — the spurious-merge gate
 
@@ -183,8 +204,9 @@ it is the right side of the trade.
 
 ### Gate 7 — the suites
 
-`cargo test -p jparser --features mecab`: **388 passed across thirteen
-binaries, 0 failed, 0 ignored.** `engine_v2` is 47, up from 46 before the
+`cargo test -p jparser --features mecab`: **388 passed across twelve test
+binaries, 0 failed, 0 ignored** — a thirteenth `test result:` line is
+`Doc-tests jparser`, which runs 0 tests and contributes none of the 388. `engine_v2` is 47, up from 46 before the
 phase — the four rewritten characterization tests keep their slots and
 `a_hint_token_with_no_hiragana_keeps_its_veto` is the new one. `cargo fmt
 --all` and `cargo clippy --all-targets --features mecab` are clean.
@@ -264,6 +286,30 @@ Stated here rather than buried, because all three are real.
   and accounts for 26 of the 29 gains. A ceiling of the condition, not an
   oversight, and not worth a second rule for −3.
 
+## 4a. What it looks like in the app
+
+The gold corpus says the narrowing avoids a regression. The real 218,449-entry
+index says something stronger — on proper nouns **hints-on is now better than
+no hints at all**, which no gate measures:
+
+```text
+品川駅から羽田空港まで
+
+hints ON   品川(unmatched)  駅  から  羽田空港(unmatched)  まで
+hints OFF  品  川  駅  から  羽  田  空港  まで
+```
+
+Hints off, a reader hovering that sentence is told "goods", "river",
+"feather" and "rice paddy". Hints on, the two place names come back whole and
+unglossed and `駅`, `から` and `まで` are glossed correctly. The tokenizer knows
+something here that the dictionary does not, and before this phase the engine
+could only act on that knowledge by throwing the whole sentence away.
+
+The same check on `気持ち良かったし` returns `気持ち` + `良かっ` + `たし`
+**identically in both hint states** — see design §9.6, which corrects §4.1 for
+reading as a claim about the real index when its `良かった` + `し` is the
+synthetic fixture's answer.
+
 ## 5. Two things the design got wrong, both usefully
 
 **§4.2 listed `a_reading_the_index_lacks_is_unmatched_between_correct_boundaries`
@@ -300,6 +346,13 @@ urgency.
   than assuming.
 - **The darwin e2e baselines are still owed from Phases 3a and 3b.** Untouched
   by this phase and still outstanding.
-- **CI has still never run.** There is no git remote, so a green local run
-  remains the only real gate, and the four jobs that want the IPADIC
-  dictionary are still dead on arrival.
+- **Whether CI has run is unverified — and §1 of this document was written
+  before that was checked.** There *is* a remote,
+  `origin https://github.com/reAlpha39/clipyomi.git`, and `ci.yml` is on
+  `origin/main`, which is one of the workflow's own `push:` triggers. The
+  four-times-repeated claim that the file had never run "because the
+  repository has no remote" was false on its premise and is corrected in
+  `.github/workflows/ci.yml`. What remains true is that nobody has read the
+  run history back — `gh` is not installed on this machine — so a green local
+  run is still the only gate anyone here can quote, and "CI is green" must not
+  be asserted from the working tree.
