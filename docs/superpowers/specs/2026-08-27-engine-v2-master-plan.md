@@ -75,8 +75,8 @@ The plan succeeds when all four hold:
    | --- | --- | --- | --- |
    | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7342 (1588) |
    | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8285 (1792) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9368** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9334** ✓ |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9377** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9341** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**,
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
@@ -665,8 +665,8 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7342 (1588) | 0.7924 (1714) | 0.9368 | 0.5860 (109 / 186) | 126 spans in 62 merges |
-| hints on | **0.8437 (1825)** | **0.8798 (1903)** | **0.9334** | **0.6129 (114 / 186)** | 78 spans in 39 merges |
+| hints off | 0.7342 (1588) | 0.7924 (1714) | 0.9377 | 0.5860 (109 / 186) | 126 spans in 62 merges |
+| hints on | **0.8437 (1825)** | **0.8798 (1903)** | **0.9341** | **0.6129 (114 / 186)** | 78 spans in 39 merges |
 
 Compounds by class, hints on: `lexical` 42 / 112, `false-match` 30 / 32,
 `transparent` 42 / 42, 8 `ambiguous` excluded. Latency at the app's ceiling
