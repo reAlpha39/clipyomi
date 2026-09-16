@@ -230,14 +230,17 @@ mod tests {
     /// gates in `docs/superpowers/2026-09-16-user-lexicon-spike.md` rather
     /// than raising the number.
     ///
-    /// 83 -> 86 on 2026-09-16 for `なのに`, `へへ` and `あたし達`, all the same
-    /// shape as `ある日`/`その日`. Gates re-run at each step, every cell in
-    /// both hint states identical to the digit.
+    /// 83 -> 87 on 2026-09-16 for `なのに`, `へへ`, `あたし達` and `唐揚げ`, all
+    /// the same shape as `ある日`/`その日`. Gates re-run at each step, every cell
+    /// in both hint states identical to the digit. Four screenshots produced
+    /// four instances of one defect class in one day, so the number will keep
+    /// climbing until something structural closes it -- see the CSV's last
+    /// block for what that would be.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 86,
-            "86 is the largest list measured to leave every gold cell alone"
+            user_lexicon_body().lines().count() <= 87,
+            "87 is the largest list measured to leave every gold cell alone"
         );
     }
 

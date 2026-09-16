@@ -19,7 +19,7 @@
 # 80 of them are the most frequent; the 81st is いちゃいちゃ, which occurs zero
 # times in the pool and is here because it is the case that prompted the work.
 #
-# The last five are deliberate additions the sweep did not make, all of one
+# The last six are deliberate additions the sweep did not make, all of one
 # shape: `[primary]` without `common`, which is precisely what the cost model
 # cannot defend. A COMMON span costs -1 a character and a non-COMMON one +1,
 # so such a headword always loses to its own COMMON parts. Every one of them
@@ -60,6 +60,27 @@
 # candidate. The `[noun]達` class is open (私達 is already one JMdict
 # headword, 君達 and 侺達 are others); this is the one that was reported, and
 # the class wants a suffix rule rather than a row each if more turn up.
+#
+# 唐揚げ: `[primary]`, "deep-fried food". Costs +5 against 唐(+1) + 揚げ(0),
+# both COMMON. The reading is the proof it is lexical rather than
+# compositional: からあげ, not とう + あげ, which is what the split rendered.
+# Kanji-bearing, so the sweep never saw it. 唐揚 (no げ) already merges
+# unaided and needs no row.
+#
+# 無断で is in the same sentence, is also `[primary]` without `common`, and is
+# deliberately **not** here. It is compositional -- 無断 + で, and the reading
+# is the sum of its parts -- so the compound adjudication's `transparent`
+# class says split it, and the engine already does. Translation Aggregator
+# merges it; that is not a standard this project follows.
+#
+# **This list is not converging.** Four reported screenshots on 2026-09-16
+# produced four instances of one defect class: a `[primary]` headword with no
+# `common` tag losing to its own COMMON parts, by exactly the arithmetic at
+# the top of this block. A row each is a patch, not a fix. The structural
+# candidate is `MATCH = 6` -- which `cost.rs` records as what ある日 needs
+# unaided -- paired with the `PARTICLE_CROSS` term that was built, measured as
+# "needed at M >= 6 and a wash at 2", and then not kept. Neither has been
+# measured with the other. That pair, not this file, is where the class ends.
 #
 # Connection ids are lifted from real IPADIC entries (副詞 83/71, 名詞 1/1) and
 # costs use MeCab's own -400*len^1.5 heuristic. They are IPADIC-specific, which
@@ -153,3 +174,4 @@
 なのに,1,1,-3200,名詞,一般,*,*,*,*,なのに,なのに
 へへ,1,1,-1131,名詞,一般,*,*,*,*,へへ,へへ
 あたし達,1,1,-3200,名詞,一般,*,*,*,*,あたし達,あたしたち
+唐揚げ,1,1,-2078,名詞,一般,*,*,*,*,唐揚げ,からあげ
