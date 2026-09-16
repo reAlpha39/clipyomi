@@ -304,22 +304,31 @@ const FUNCTION_STACK: i32 = 4;
 /// the split wins by 2. The reader is then shown `ichi shuukan` for a word
 /// pronounced `isshuukan`: a mispronunciation, not merely a different cut.
 ///
-/// **Why it is gated on the sokuon**, in [`lex::Candidate::digit_counter`]:
-/// that is exactly where the merge earns its keep. `一週間` reads
-/// `いっしゅうかん`, which `いち` + `しゅうかん` cannot produce. `三回` reads
-/// `さんかい` and `三人` `さんにん` — the split says the same thing, so merging
-/// buys nothing and costs something. Measured over 2,743 lines of real text,
-/// an **ungated** discount re-cut `３|回目` as `３回|目` and `４|人目` as
-/// `４人|目` **49 times**, breaking the ordinal suffix to fix readings that
-/// were never wrong. Gated, that class disappears: 89 spans change and 86 are
-/// euphonic merges (`１週間` 62, `1週間` 15, `1ヶ月` 4, `1回` 3, `1箇所` 2).
+/// **Why it is gated on the reading actually changing**, in
+/// [`lex::Candidate::digit_counter`]: that is exactly where the merge earns
+/// its keep. `一週間` reads `いっしゅうかん` and `四人` `よにん`, which
+/// `いち` + `しゅうかん` and `よん` + `にん` cannot produce, so splitting
+/// mispronounces them. `三回` reads `さんかい` and `二番` `にばん`, which is
+/// what the split already says. Measured over 2,743 lines of real text, an
+/// **ungated** discount re-cut `３|回目` as `３回|目` **49 times**, breaking a
+/// genuine counter suffix to fix readings that were never wrong. Gated, 129
+/// spans change and they are euphonic merges — `１週間` 62, `２人` 16 (`ふたり`,
+/// not `に` + `にん`), `1週間` 15, `1ヶ月` 4.
 ///
 /// **Magnitude.** −3 is the smallest that flips the 2-point gap above; −5 and
 /// −8 measured identically on every cell, so only the sign and clearing the
 /// gap matter. Gold is untouched in both hint states — every cell and every
-/// compound class line identical hints on, and hints off the compound metric
-/// *gains* 2 (112 → 114). `1969年` is unaffected: an all-digit span fails the
-/// "continues past it" half of the test, which is what keeps years out.
+/// compound class line identical. `1969年` is unaffected: an all-digit span
+/// fails the "continues past it" half of the shape test, which is what keeps
+/// years out.
+///
+/// **What it does not reach.** `8人目` stays `8 | 人目`, because `はちにん` is
+/// exactly `はち` + `にん` and the gate correctly declines — so the same
+/// construction is fixed at 4 and not at 8. The underlying fault there is
+/// that `人目` is a different word (`ひとめ`, "public gaze") winning after a
+/// digit, which is an entry-selection problem rather than a merge one, and
+/// JMdict's `COUNTER` flag cannot separate it: `週間`, `時間` and `匹` are
+/// counters and carry no flag.
 const DIGIT_COUNTER: i32 = -3;
 
 /// Penalty for a match whose source characters differ from the stored surface
