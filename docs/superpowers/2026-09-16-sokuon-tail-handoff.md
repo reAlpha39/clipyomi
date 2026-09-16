@@ -214,9 +214,44 @@ so the merge is defensible in the abstract — and the gate exists precisely
 because "JMdict carries it" is not the standard this engine is held to. On
 top of that: −93 strict spans, `transparent` 42 → 34, `false-match` 30 → 27.
 
-The route is closed with numbers now, not with an argument. `cost.rs` is
-back at `MATCH = 2`, `FUNCTION_STACK = 4`, no `PARTICLE_CROSS`, and the
-baseline cells reproduce exactly.
+**Then: can the strict loss be avoided?** The −93 is not damage — coarsening
+rises 86 spans in 43 merges → 194 in 87, against 93 strict lost, and tolerant
+*rises* 15. Strict is scored against a short-unit gold corpus, so every
+compound kept whole costs its own gold spans; §5.2 prices that at about 16.5
+points. The loss is the merging, one for one.
+
+So the question became whether a sharper *suppressor* could merge the
+reported class while merging less of everything else. `FUNCTION_STACK`'s
+trigger is "tileable by pieces that are COMMON **and** PARTICLE", and two
+looser readings were tried, both at M=6 FS=8 PC=12:
+
+| suppressor tiling | strict | coarsening | compounds | transparent | `物思いにふける` | gates |
+| --- | --- | --- | --- | --- | --- | --- |
+| baseline M=2 FS=4 | **1826** | 86 / 43 | 118 | **42 / 42** | splits | **all green** |
+| COMMON + PARTICLE (today's) | 1733 | 194 / 87 | **137** | 34 / 42 | merges | particle gate 25 / 26 |
+| COMMON only | 1776 | 135 / 60 | 125 | 40 / 42 | merges | gate fails, **plus two §4.3 shattering regressions** |
+| all-COMMON, ≥ 1 PARTICLE | 1787 | 141 / 63 | 128 | 40 / 42 | **splits again** | gate fails, plus two others |
+
+Each sharpening does cut the strict loss — −93, −50, −39 — and each one also
+starts protecting the word we are trying to merge, because the features that
+decide whether `ことになっている` is suppressible are the same features that decide
+it for `物思いにふける`. The COMMON-only reading re-opens §4.3's shattering
+class outright (`聴聞会` → `聴聞` + `会`), which is the defect the whole v2
+rewrite exists to remove. The third reading is sharp enough to keep §4.3
+intact and then no longer fixes the case.
+
+**The route is closed with numbers, across four `MATCH` values, four
+`FUNCTION_STACK` values, three `PARTICLE_CROSS` values and three tiling
+definitions.** No configuration in this family both merges the reported class
+and keeps the gates. `cost.rs` and `lex.rs` are back at `MATCH = 2`,
+`FUNCTION_STACK = 4`, no `PARTICLE_CROSS`, COMMON+PARTICLE tiling, and the
+baseline cells reproduce exactly: strict 1826, compounds 118, 46 / 30 / 42,
+coarsening 86 in 43, 0 test failures.
+
+**Why the user lexicon costs nothing where this costs 39 to 93 spans.** Not
+because it is better — because it is *targeted*. The gold corpus contains
+none of `なのに`, `へへ`, `あたし達`, `唐揚げ`, so forcing those four tokens
+moves no cell. Any change to the cost model moves every sentence.
 
 **Bench note, so the numbers in this document are read correctly.** The
 machine drifted over the session: the same binary read 522 ms at 10,040
