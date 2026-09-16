@@ -100,9 +100,30 @@ used here are the likeliest cause.
   which words are on it, so a list of five or ten — the words a reader
   actually hits — may behave differently. That is a different experiment.
 
-## 6. Standing conclusion
+## 6. Resolved the same day: the size was the problem, not the route
 
-`いちゃいちゃ` remains shattered. The cost model cannot fix it
-([`2026-09-16-per-match-cost-spike.md`](2026-09-16-per-match-cost-spike.md)),
-and the tokenizer route works but cannot currently be shown to pay. Both
-answers are negative and both are now measured rather than assumed.
+§5's last bullet guessed that the perturbation scales with list size rather
+than with which words are on it. **It does**, and the threshold is sharp:
+
+| entries | gold strict | compounds | occurrences covered |
+| --- | --- | --- | --- |
+| 2, 6, 11, 26, 41, 61 | 1825 | 114 | up to 1,240 |
+| **81** | **1825** | **114** | **1,294 of 1,393** |
+| 121 | 1823 | 115 | 1,349 |
+| 165 | 1823 | 115 | 1,393 |
+
+At 81 entries **every gold cell is identical to the digit** — span accuracy,
+entry top-1, tolerant, the coarsening counts and every compound class line, in
+both hint states — the eighteen sentences do not move, the spurious-merge gate
+is 26 of 26, the snapshot is unchanged and bench reads 1.03x. And
+`いちゃいちゃする` parses as `いちゃいちゃ | する`.
+
+So the route ships, capped where the measurement caps it:
+`crates/jparser/assets/hint_user_lexicon.csv`, applied in `hints.rs` and
+falling back to no user lexicon if the loaded dictionary rejects the
+connection ids. §4's warning stands and is why the cap exists rather than a
+round number.
+
+The two negative results above are unchanged and still worth having: the
+dictionary-derived list really is worthless, and the cost model really cannot
+do this.
