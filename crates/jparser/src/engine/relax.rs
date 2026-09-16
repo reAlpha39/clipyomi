@@ -83,7 +83,7 @@ impl<'a> Relaxed<'a> {
             }
             // Close the token that ended here, if its start is not this
             // position. `pos == 0` opens the first one and closes nothing.
-            if pos > token_start && reach < pos && opens_to_a_span(&chars[token_start..pos]) {
+            if pos > token_start && reach < pos && opens(chars, by_start, token_start, pos) {
                 // Nothing covers [token_start, pos) and it is not one word:
                 // reopen its interior.
                 for p in usable.iter_mut().take(pos).skip(token_start + 1) {
@@ -136,6 +136,66 @@ impl<'a> Relaxed<'a> {
 /// which is the same shape with a particle on the end.
 fn opens_to_a_span(token: &[char]) -> bool {
     token.iter().copied().any(kana::is_hiragana)
+}
+
+/// Shortest piece a decomposition may use, for [`opens`]'s second clause.
+///
+/// **Swept against the gold corpus and the eighteen reported sentences, hints
+/// on, 2026-09-16.** 3 is the only value that gains on both registers at once:
+///
+/// | min | strict | tolerant | eighteen sentences |
+/// | --- | --- | --- | --- |
+/// | off | 1822 | 0.8784 | 475 / 630 |
+/// | 2 | 1817 | 0.8761 | 486 |
+/// | **3** | **1825** | **0.8798** | **486** |
+/// | 4 | 1825 | 0.8798 | 475 |
+/// | 5 | 1825 | 0.8798 | 475 |
+///
+/// 2 is too permissive and costs 5 gold spans. 4 keeps the corpus gain and
+/// loses the reported one, for a reason worth keeping: the case that pays for
+/// this clause is `ロイヤル` + `ネイビー` + `ガール`, and `ガール` is exactly
+/// three characters.
+const MIN_PIECE: usize = 3;
+
+/// Whether the token `[a, b)` may be reopened at all.
+///
+/// Two ways in. [`opens_to_a_span`] is the first: the token carries hiragana,
+/// so it is a concatenation rather than one word.
+///
+/// The second is for a token with no hiragana in it — a run of kanji,
+/// katakana or digits, which is a single lexical unit *usually*, but not when
+/// it is several words the tokenizer glued. The test is whether the token can
+/// be tiled end to end by candidates that are each at least [`MIN_PIECE`]
+/// characters: **"it decomposes into real words", not "it is katakana"**.
+/// `ロイヤルネイビーガール` tiles as 4 + 4 + 3 and opens;
+/// `ニュルンベルク` only tiles as ニ+ュ+ル+ン+ベル+ク and stays shut, which is
+/// the whole distinction the script test could not make.
+///
+/// Measured over the 150-sentence corpus this reaches **exactly one** token,
+/// `クライシスマッピングパーティー` — three gold spans, one of the four real
+/// compounds the hiragana rule alone had to give up — and reopens none of the
+/// gazetteer that rule exists to keep shut.
+///
+/// `O(token length × candidates in it)`, over tokens that are a few characters
+/// long, and only for tokens already known to be unmatchable.
+fn opens(chars: &[char], by_start: &[Vec<Candidate>], a: usize, b: usize) -> bool {
+    if opens_to_a_span(&chars[a..b]) {
+        return true;
+    }
+    let mut reach = vec![false; b - a + 1];
+    reach[0] = true;
+    for p in a..b {
+        if !reach[p - a] {
+            continue;
+        }
+        for c in by_start.get(p).map(Vec::as_slice).unwrap_or(&[]) {
+            let end = c.start + c.len;
+            if c.len >= MIN_PIECE && end <= b {
+                reach[end - a] = true;
+            }
+        }
+    }
+    reach[b - a]
 }
 
 impl Boundaries for Relaxed<'_> {
@@ -288,6 +348,59 @@ mod tests {
         // character is the whole difference.
         let phrase = Relaxed::over(&chars("本は"), &cands, &b);
         assert!(phrase.is_usable_endpoint(1));
+    }
+
+    /// The decomposability clause, as the pair it exists to separate.
+    ///
+    /// Both tokens are all-katakana, unmatchable, and identical to the
+    /// hiragana test. The only difference is what the candidate set can do
+    /// inside them: one tiles into three real words, the other only into
+    /// fragments. Reported from the app — a reader hovering
+    /// `ロイヤルネイビーガール` got nothing at all, while Translation
+    /// Aggregator offered three words.
+    #[test]
+    fn a_katakana_token_opens_only_when_it_tiles_into_real_words() {
+        let b = At(&[0, 11]);
+        // ロイヤル(4) + ネイビー(4) + ガール(3), every piece at MIN_PIECE or
+        // longer.
+        let title = by_start(11, vec![cand(0, 4), cand(4, 4), cand(8, 3)]);
+        let r = Relaxed::over(&chars("ロイヤルネイビーガール"), &title, &b);
+        assert!(r.is_usable_endpoint(4), "ロイヤル | ネイビー");
+        assert!(r.is_usable_endpoint(8), "ネイビー | ガール");
+
+        // The same shape, tiled only by fragments: ニ+ュ+ル+ン+ベル+ク. No
+        // piece reaches MIN_PIECE, so nothing opens and the name stays whole.
+        let b2 = At(&[0, 7]);
+        let name = by_start(
+            7,
+            vec![
+                cand(0, 1),
+                cand(1, 1),
+                cand(2, 1),
+                cand(3, 1),
+                cand(4, 2),
+                cand(6, 1),
+            ],
+        );
+        let r2 = Relaxed::over(&chars("ニュルンベルク"), &name, &b2);
+        for p in 1..7 {
+            assert!(!r2.is_usable_endpoint(p), "position {p} must stay shut");
+        }
+    }
+
+    /// A partial tiling is not a tiling: the clause asks whether the token can
+    /// be covered *end to end*, not whether it contains a long word. Without
+    /// that, `羽田空港` would open on `空港` alone and come back as
+    /// 羽田(unmatched) + 空港.
+    #[test]
+    fn a_token_that_only_partly_tiles_stays_shut() {
+        let b = At(&[0, 4]);
+        // Only 空港 at [2,4) is long enough; [0,2) has nothing.
+        let partial = by_start(4, vec![cand(2, 2)]);
+        let r = Relaxed::over(&chars("羽田空港"), &partial, &b);
+        for p in 1..4 {
+            assert!(!r.is_usable_endpoint(p), "position {p} must stay shut");
+        }
     }
 
     /// The hiragana need not be at the end, or be a particle.
