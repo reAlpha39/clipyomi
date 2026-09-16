@@ -55,9 +55,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         std::collections::HashMap::new();
     for entry in jparser::jmdict::parse_entries(BufReader::new(File::open(&a[2])?)) {
         let entry = entry?;
-        if !entry.kanji.is_empty() {
-            continue;
-        }
+        // Kanji forms are considered too. The first run of this sweep took
+        // kana-only headwords, which silently excluded every word like
+        // `ある日` -- the same defect with the same arithmetic (`ある日` costs
+        // +3 as a non-COMMON headword, `ある` + `日` costs -3 as COMMON
+        // pieces) and a far commoner shape.
         // JMdict tags a phrase `exp`. Splitting one into its component words
         // is what a reader wants -- ああでもないこうでもない is six words and
         // reads better as six -- so an expression is not damage and is not a
@@ -69,9 +71,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         {
             continue;
         }
-        for r in &entry.readings {
-            let w = &r.text;
-            if w.chars().count() >= min_len && w.chars().all(is_kana) {
+        // Kanji forms always; readings **only for kana-only entries**. A
+        // reading of a kanji entry is a pronunciation, not a way the word is
+        // written -- taking `してい` from 指定 or `どうし` from 同士 as a
+        // surface produces exactly handoff §9.5's absurdities, and an earlier
+        // pass of this sweep did precisely that.
+        let surfaces = entry.kanji.iter().map(|k| &k.text).chain(
+            entry
+                .readings
+                .iter()
+                .filter(|_| entry.kanji.is_empty())
+                .map(|r| &r.text),
+        );
+        for w in surfaces {
+            if w.chars().count() >= min_len {
                 words.insert(w.clone());
                 pos_of
                     .entry(w.clone())
