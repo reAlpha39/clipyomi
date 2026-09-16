@@ -73,10 +73,10 @@ The plan succeeds when all four hold:
 
    | | v1 | v2 before | v2 now |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7342 (1588) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8285 (1792) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9377** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9341** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7393 (1599) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8428 (1823) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9374** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9347** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**,
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
@@ -665,10 +665,10 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7342 (1588) | 0.7924 (1714) | 0.9377 | 0.5860 (109 / 186) | 126 spans in 62 merges |
-| hints on | **0.8437 (1825)** | **0.8798 (1903)** | **0.9341** | **0.6129 (114 / 186)** | 78 spans in 39 merges |
+| hints off | 0.7393 (1599) | 0.8003 (1731) | 0.9374 | 0.6022 (112 / 186) | 132 spans in 65 merges |
+| hints on | **0.8428 (1823)** | **0.8798 (1903)** | **0.9347** | **0.6344 (118 / 186)** | 78 spans in 39 merges |
 
-Compounds by class, hints on: `lexical` 42 / 112, `false-match` 30 / 32,
+Compounds by class, hints on: `lexical` 46 / 112, `false-match` 30 / 32,
 `transparent` 42 / 42, 8 `ambiguous` excluded. Latency at the app's ceiling
 (`jparser-cli bench`, gold index, k = 3): scaling 1.05x hints on, 1.01x off.
 
