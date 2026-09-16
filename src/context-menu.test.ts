@@ -1,155 +1,126 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { MENU_MARGIN, clampMenu, closeContextMenu, openContextMenu, type MenuEntry } from './context-menu';
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
-const SIZE = { width: 140, height: 120 };
-const VIEWPORT = { width: 400, height: 300 };
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { closeContextMenu, openContextMenu, type MenuEntry } from './context-menu';
 
-describe('clampMenu', () => {
-  test('opens at the cursor when the menu fits below and right of it', () => {
-    expect(clampMenu(20, 30, SIZE, VIEWPORT)).toEqual({ left: 20, top: 30 });
-  });
+// The menu is drawn by the OS now. What this module owns is the wire shape it
+// sends and the dispatch of the id that comes back, so both IPC boundaries
+// are stubbed the way `main.test.ts` stubs them.
+const { listeners, invoke } = vi.hoisted(() => ({
+  listeners: new Map<string, (e: { payload: unknown }) => void>(),
+  invoke: vi.fn((..._args: unknown[]) => Promise.resolve()),
+}));
 
-  // Flipped, not slid: a menu that slid left would sit under the cursor and
-  // swallow the click that opened it.
-  test('flips left of the cursor when it would overflow the right edge', () => {
-    expect(clampMenu(380, 30, SIZE, VIEWPORT)).toEqual({ left: 380 - SIZE.width, top: 30 });
-  });
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (event: string, handler: (e: { payload: unknown }) => void) => {
+    listeners.set(event, handler);
+    return Promise.resolve(() => listeners.delete(event));
+  },
+}));
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
-  test('flips above the cursor when it would overflow the bottom edge', () => {
-    expect(clampMenu(20, 290, SIZE, VIEWPORT)).toEqual({ left: 20, top: 290 - SIZE.height });
-  });
+function pick(id: string): void {
+  const handler = listeners.get('context-menu-pick');
+  if (handler === undefined) throw new Error('nothing listening for context-menu-pick');
+  handler({ payload: id });
+}
 
-  test('flips on both axes at once', () => {
-    expect(clampMenu(380, 290, SIZE, VIEWPORT)).toEqual({
-      left: 380 - SIZE.width,
-      top: 290 - SIZE.height,
-    });
-  });
+/** The payload of the last `show_context_menu` call. */
+function shown(): { items: unknown[]; x: number; y: number } {
+  const call = [...invoke.mock.calls]
+    .reverse()
+    .find(([cmd]: unknown[]) => cmd === 'show_context_menu');
+  if (call === undefined) throw new Error('show_context_menu was not invoked');
+  return call[1] as { items: unknown[]; x: number; y: number };
+}
 
-  // The flip can itself go off the near edge in a small window, so the margin
-  // clamp is applied last and wins.
-  test('pins to the margin when the flip overshoots the near edge', () => {
-    expect(clampMenu(20, 20, SIZE, { width: 150, height: 130 })).toEqual({
-      left: MENU_MARGIN,
-      top: MENU_MARGIN,
-    });
-  });
-
-  // The case a window at the configured 160x80 minimum hits.
-  test('pins to the margin when the menu is larger than the viewport', () => {
-    expect(clampMenu(10, 10, { width: 400, height: 500 }, { width: 160, height: 80 })).toEqual({
-      left: MENU_MARGIN,
-      top: MENU_MARGIN,
-    });
-  });
-});
-
-describe('openContextMenu', () => {
+describe('the right-click menu', () => {
   const selected: string[] = [];
-
-  function entries(): MenuEntry[] {
-    return [
-      { kind: 'radio', label: 'Native frame', checked: true, onSelect: () => selected.push('native') },
-      { kind: 'radio', label: 'Content only', checked: false, onSelect: () => selected.push('content') },
-      { kind: 'separator' },
-      { kind: 'action', label: 'Quit', onSelect: () => selected.push('quit') },
-    ];
-  }
+  const entries: MenuEntry[] = [
+    { kind: 'radio', label: 'Header', checked: false, onSelect: () => selected.push('header') },
+    { kind: 'radio', label: 'Content', checked: true, onSelect: () => selected.push('content') },
+    { kind: 'separator' },
+    { kind: 'action', label: 'Quit', onSelect: () => selected.push('quit') },
+  ];
 
   beforeEach(() => {
     selected.length = 0;
-    document.body.innerHTML = '';
-  });
-
-  afterEach(closeContextMenu);
-
-  const menu = () => document.querySelector<HTMLElement>('.context-menu');
-
-  test('renders one button per entry, with the separator between them', () => {
-    openContextMenu(entries(), 10, 10);
-    const labels = [...menu()!.querySelectorAll('button')].map((b) => b.textContent);
-    expect(labels).toEqual(['Native frame', 'Content only', 'Quit']);
-    expect(menu()!.querySelectorAll('[role="separator"]')).toHaveLength(1);
-  });
-
-  test('marks the checked radio and leaves the actions unmarked', () => {
-    openContextMenu(entries(), 10, 10);
-    const buttons = [...menu()!.querySelectorAll('button')];
-    expect(buttons[0].getAttribute('aria-checked')).toBe('true');
-    expect(buttons[1].getAttribute('aria-checked')).toBe('false');
-    expect(buttons[2].getAttribute('role')).toBe('menuitem');
-    expect(buttons[2].hasAttribute('aria-checked')).toBe(false);
-  });
-
-  test('a click runs the entry and closes the menu', () => {
-    openContextMenu(entries(), 10, 10);
-    menu()!.querySelectorAll<HTMLButtonElement>('button')[1].click();
-    expect(selected).toEqual(['content']);
-    expect(menu()).toBeNull();
-  });
-
-  test('opening again replaces the open menu rather than stacking one', () => {
-    openContextMenu(entries(), 10, 10);
-    openContextMenu(entries(), 20, 20);
-    expect(document.querySelectorAll('.context-menu')).toHaveLength(1);
-  });
-
-  test('Escape closes it', () => {
-    openContextMenu(entries(), 10, 10);
-    menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    expect(menu()).toBeNull();
-  });
-
-  test('the arrows wrap around the items', () => {
-    openContextMenu(entries(), 10, 10);
-    const buttons = [...menu()!.querySelectorAll<HTMLButtonElement>('button')];
-    expect(document.activeElement).toBe(buttons[0]);
-
-    menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-    expect(document.activeElement).toBe(buttons[2]);
-    menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-    expect(document.activeElement).toBe(buttons[0]);
-  });
-
-  test('a pointerdown outside closes it, one inside does not', () => {
-    openContextMenu(entries(), 10, 10);
-    menu()!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    expect(menu()).not.toBeNull();
-
-    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    expect(menu()).toBeNull();
-  });
-
-  test('losing window focus closes it', () => {
-    openContextMenu(entries(), 10, 10);
-    window.dispatchEvent(new Event('blur'));
-    expect(menu()).toBeNull();
-  });
-
-  // A keyboard user pressing Escape must not land on <body>: the element
-  // that had focus before the menu opened gets it back. Guarded so a trigger
-  // removed from the document meanwhile (or never focusable) cannot throw.
-  test('closing restores focus to whatever opened the menu', () => {
-    const trigger = document.createElement('button');
-    trigger.textContent = 'open menu';
-    document.body.append(trigger);
-    trigger.focus();
-    expect(document.activeElement).toBe(trigger);
-
-    openContextMenu(entries(), 10, 10);
-    expect(document.activeElement).not.toBe(trigger);
-
+    invoke.mockClear();
     closeContextMenu();
-    expect(document.activeElement).toBe(trigger);
+  });
 
-    // A second trigger, removed from the document before the menu closes:
-    // must not throw, and must not leave a detached element active.
-    const goneTrigger = document.createElement('button');
-    document.body.append(goneTrigger);
-    goneTrigger.focus();
-    openContextMenu(entries(), 10, 10);
-    goneTrigger.remove();
-    expect(() => closeContextMenu()).not.toThrow();
-    expect(document.contains(document.activeElement)).toBe(true);
+  // Ids are this module's to choose and the backend's to echo; the labels and
+  // check states are what the OS draws.
+  test('asks the backend to pop the rows at the cursor', () => {
+    openContextMenu(entries, 40, 50);
+
+    const { items, x, y } = shown();
+    expect({ x, y }).toEqual({ x: 40, y: 50 });
+    expect(items.map((item) => ({ ...(item as object), id: undefined }))).toEqual([
+      { kind: 'radio', label: 'Header', checked: false, id: undefined },
+      { kind: 'radio', label: 'Content', checked: true, id: undefined },
+      { kind: 'separator', id: undefined },
+      { kind: 'action', label: 'Quit', id: undefined },
+    ]);
+    const ids = items.map((item) => (item as { id?: string }).id);
+    expect(ids[2]).toBeUndefined();
+    expect(new Set([ids[0], ids[1], ids[3]]).size).toBe(3);
+  });
+
+  test('a pick runs the matching entry once', () => {
+    openContextMenu(entries, 0, 0);
+    const id = (shown().items[3] as { id: string }).id;
+
+    pick(id);
+    pick(id);
+
+    expect(selected).toEqual(['quit']);
+  });
+
+  test('a pick for an id the open menu never offered runs nothing', () => {
+    openContextMenu(entries, 0, 0);
+
+    pick('ctx-never');
+
+    expect(selected).toEqual([]);
+  });
+
+  // A pick travels OS -> backend -> webview while the user may already have
+  // right-clicked again. Ids carry the open they belong to, so a pick from a
+  // menu the OS already replaced runs nothing rather than the new menu's row
+  // at the same position.
+  test('a pick from a menu already replaced runs nothing', () => {
+    openContextMenu(entries, 0, 0);
+    const stale = (shown().items[3] as { id: string }).id;
+    openContextMenu([{ kind: 'action', label: 'Only', onSelect: () => selected.push('only') }], 0, 0);
+    const fresh = (shown().items[0] as { id: string }).id;
+    expect(fresh).not.toBe(stale);
+
+    pick(stale);
+    expect(selected).toEqual([]);
+
+    pick(fresh);
+    expect(selected).toEqual(['only']);
+  });
+
+  test('a menu the backend failed to show forgets its rows', async () => {
+    invoke.mockRejectedValueOnce(new Error('no window'));
+    openContextMenu(entries, 0, 0);
+    const id = (shown().items[3] as { id: string }).id;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    pick(id);
+
+    expect(selected).toEqual([]);
+  });
+
+  test('closing discards the pending rows', () => {
+    openContextMenu(entries, 0, 0);
+    closeContextMenu();
+
+    pick('ctx-3');
+
+    expect(selected).toEqual([]);
   });
 });

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { ALPHA_LIMITS, clampAlpha, surfaceAlphaVar } from './surface-alpha';
 
@@ -21,8 +23,8 @@ describe('clampAlpha', () => {
     expect(clampAlpha(undefined)).toBeNull();
   });
 
-  // ta-old clamped uniform alpha at 20/255 because zero took the text with it.
-  // Per-pixel alpha does not, so the floor moves to zero (spec §4.3).
+  // The original clamped uniform alpha at 20/255 because zero took the text
+  // with it. Per-pixel alpha does not, so the floor moves to zero (spec §4.3).
   test('the floor is zero', () => {
     expect(ALPHA_LIMITS.min).toBe(0);
     expect(clampAlpha(0)).toBe(0);

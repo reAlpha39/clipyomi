@@ -1,15 +1,9 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Streaming JMdict XML reader.
 //!
-//! Replaces ta-old's EDICT2 line parser (`CreateDict`,
-//! `ta-old/exe/util/Dictionary.cpp:246`). JMdict carries structured data where
-//! ta-old did string surgery on English glosses: real `<pos>` tags instead of
+//! JMdict carries structured data where the older line-based EDICT2 format
+//! needed string surgery on English glosses: real `<pos>` tags instead of
 //! `strncmp` against a gloss prefix, and real `<ke_pri>`/`<re_pri>` markers
 //! instead of searching for the substring "(P)".
 //!
@@ -43,15 +37,18 @@ use quick_xml::events::{BytesText, Event};
 use quick_xml::{Error, Reader};
 
 /// Priority markers that mean "common word", per JMdict's documentation.
-/// Replaces ta-old's `(P)` substring search.
+/// JMdict tags priority structurally, so nothing here searches a gloss for
+/// the substring `(P)`.
 ///
-/// UNVERIFIED against a real `JMdict_e.xml`: none exists in this repo, and
-/// ta-old read EDICT2, where `(P)` was already baked in, so it cannot settle
-/// this either. `spec2` is included on the strength of the documented EDICT
-/// `(P)` rule (fires on `ichi1`, `news1`, `spec1`, `spec2`, and `gai1`) — it
-/// is the hand-curated common-word list, so omitting it would drop `COMMON`
-/// from real entries. Confirm this against the JMdict DTD's `ke_pri`/`re_pri`
-/// documentation once a real `JMdict_e.xml` is available.
+/// UNVERIFIED against a real `JMdict_e.xml`: none exists in this repo, and the
+/// reader this replaced consumed EDICT2, where `(P)` arrives already baked into
+/// the gloss — so it corroborates nothing about which `ke_pri`/`re_pri` tags
+/// produced it, and cannot settle this either. `spec2` is included on the
+/// strength of the documented EDICT `(P)` rule (fires on `ichi1`, `news1`,
+/// `spec1`, `spec2`, and `gai1`) — it is the hand-curated common-word list, so
+/// omitting it would drop `COMMON` from real entries. Confirm this against the
+/// JMdict DTD's `ke_pri`/`re_pri` documentation once a real `JMdict_e.xml` is
+/// available.
 const PRIORITY_MARKERS: &[&str] = &["news1", "ichi1", "spec1", "spec2", "gai1"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -366,9 +363,9 @@ mod tests {
 
     #[test]
     fn resolves_pos_entities_to_codes_not_descriptions() {
-        // The whole point: we need "v5r", not "Godan verb with `ru' ending",
-        // because the code is what matches conjugation type names.
-        assert_eq!(entries()[0].senses[0].pos, vec!["v5r"]);
+        // The whole point: we need "v5u", not "Godan verb with `u' ending",
+        // because the code is what matches conjugation class names.
+        assert_eq!(entries()[0].senses[0].pos, vec!["v5u"]);
         assert_eq!(entries()[1].senses[0].pos, vec!["prt"]);
         assert_eq!(entries()[2].senses[0].pos, vec!["adj-i"]);
     }

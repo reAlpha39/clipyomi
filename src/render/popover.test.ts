@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { placePopover, shouldKeep, type Rect } from './popover';
 
@@ -11,21 +13,21 @@ const SIZE = { width: 200, height: 60 };
 const WORK: Rect = { left: 0, top: 0, right: 1000, bottom: 700 };
 
 describe('placePopover', () => {
-  // Below is preferred, reversing 2G. That reasoning was about what the
-  // popover covered inside the window; a tooltip that leaves the window
-  // mostly covers desktop, and below-first is ta-old's behaviour.
-  test('sits below the chip when there is room, with the 2px gap', () => {
-    expect(placePopover(chip(), SIZE, WORK)).toEqual({ left: 60, top: 130 });
+  // Above is preferred: the app sits over a game, and what the reader is
+  // looking at — the game's own text — is usually below the window, so a
+  // tooltip that goes up covers the least of it.
+  test('sits above the chip when there is room, with the 2px gap', () => {
+    expect(placePopover(chip(), SIZE, WORK)).toEqual({ left: 60, top: 100 - 60 - 2 });
   });
 
-  // A word near the bottom of the screen has no room below, and the tooltip
-  // would otherwise be pushed under the dock.
-  test('flips above when below would overflow the work area', () => {
-    expect(placePopover(chip({ top: 650, bottom: 678 }), SIZE, WORK).top).toBe(650 - 60 - 2);
+  // A word near the top of the screen has no room above, and the tooltip
+  // would otherwise be pushed under the menu bar.
+  test('flips below when above would overflow the work area', () => {
+    expect(placePopover(chip({ top: 20, bottom: 48 }), SIZE, WORK).top).toBe(48 + 2);
   });
 
-  // Neither side fits: pin to the work-area bottom and go right of the word.
-  // This is MyToolTip.cpp:518-523, the case 2G had no answer for.
+  // Neither side fits: pin to the work-area bottom and go right of the word —
+  // the case 2G had no answer for, and the original tooltip's fallback.
   test('pins to the bottom and moves right when neither side fits', () => {
     const tall = { width: 200, height: 690 };
     expect(placePopover(chip({ top: 300, bottom: 328 }), tall, WORK)).toEqual({
@@ -59,7 +61,7 @@ describe('placePopover', () => {
     const work: Rect = { left: 1000, top: 25, right: 2000, bottom: 700 };
     expect(placePopover(chip({ left: 1060, right: 1100 }), SIZE, work)).toEqual({
       left: 1060,
-      top: 130,
+      top: 100 - 60 - 2,
     });
   });
 });
@@ -67,7 +69,7 @@ describe('placePopover', () => {
 describe('shouldKeep', () => {
   const centre = { x: 500, y: 500 };
 
-  // ta-old's rule (MyToolTip.cpp:354): moving toward the tooltip keeps it, so
+  // The original tooltip's rule: moving toward the tooltip keeps it, so
   // the cursor can cross the gap between the word and the tooltip to scroll it.
   test('keeps it when the cursor moves toward the tooltip', () => {
     expect(shouldKeep({ x: 0, y: 0 }, { x: 100, y: 100 }, centre)).toBe(true);

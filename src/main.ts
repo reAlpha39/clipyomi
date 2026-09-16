@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import {
@@ -17,9 +19,21 @@ import {
 } from './render/popover';
 import { clampFont, fontVars } from './font-sizes';
 import { clampAlpha, surfaceAlphaVar } from './surface-alpha';
+import { colourVars, resolveColor } from './text-colours';
+import { clampFamily, familyVars } from './text-fonts';
 import { createHistory } from './history';
 import { openContextMenu, type MenuEntry } from './context-menu';
-import type { ChromeMode, FuriganaMode, GlossFilters, ParseResult, Segment, Settings } from './types';
+import { createKanjiLookup } from './kanji-lookup';
+import type {
+  ChromeMode,
+  Entry,
+  FuriganaMode,
+  GlossFilters,
+  KanjiInfo,
+  ParseResult,
+  Segment,
+  Settings,
+} from './types';
 import './styles/global.css';
 
 /**
@@ -79,7 +93,7 @@ app.innerHTML = `
     </div>
   </header>
   <div id="parse-error"></div>
-  <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output"></div></div>
+  <div class="panes"><div id="dictionary" role="status" tabindex="-1"></div><div id="output" tabindex="-1"></div></div>
 `;
 
 const output = app.querySelector<HTMLElement>('#output')!;
@@ -214,7 +228,7 @@ function renderDictionary(status: string | null): void {
   const message = document.createElement('p');
   message.textContent =
     status === null
-      ? 'No dictionary yet. JMdict is a one-time download of roughly ten megabytes from EDRDG.'
+      ? 'No dictionary yet. JMdict and KANJIDIC2 are a one-time download of roughly twelve megabytes from EDRDG.'
       : status;
 
   const button = document.createElement('button');
@@ -265,7 +279,11 @@ const currentFilters: GlossFilters = {
   hide_pos: false,
   hide_xrefs: false,
   hide_usage: false,
+  hide_kanji: false,
 };
+
+/** The popover's kanji block, asked once per character for the page's life. */
+const lookupKanji = createKanjiLookup((chars) => invoke('kanji_info', { chars }));
 
 const settingsToggle = app.querySelector<HTMLButtonElement>('#settings-toggle');
 const windowMinimize = app.querySelector<HTMLButtonElement>('#window-minimize');
@@ -481,11 +499,12 @@ function chromeMenuEntries(): MenuEntry[] {
  * so the event would never reach a listener bound there. Content mode has no
  * tab stops at all, so this is the only binding that keeps the menu reachable
  * without a pointer. `preventDefault` also suppresses the WebView2 default
- * menu.
+ * menu. The coordinates are viewport-relative CSS px, which is what the
+ * backend's `popup_at` takes relative to this window.
  */
 document.addEventListener('contextmenu', (event) => {
   event.preventDefault();
-  openContextMenu(chromeMenuEntries(), event.clientX, event.clientY);
+  openContextMenu([...readingMenuEntries(), ...chromeMenuEntries()], event.clientX, event.clientY);
 });
 
 // The cursor anywhere inside the window reveals the bar; only leaving the
@@ -543,41 +562,6 @@ function reportBackground(): void {
   }).catch(() => {});
 }
 
-/**
- * A CSS colour as an sRGB triple, whatever syntax it arrives in.
- *
- * Painted onto a 1x1 canvas and read back rather than parsed: Chromium
- * serializes a computed colour in the space it was authored in, so the
- * `oklch()` tokens come back as `oklch(0.18 0 0)` and string parsing silently
- * gave up on every one of them — the erase kept a colour guessed from the
- * system theme, and a peek showed a strip of the wrong theme.
- *
- * The regex is the fallback for environments with no canvas backend, which
- * includes the test DOM.
- *
- * That fallback can no longer match a real computed background now that the
- * alpha token is in play: with `--color-bg-surface` derived through
- * `color-mix()`, Chromium serializes the computed value as
- * `color(srgb r g b / a)`, not `rgba(...)` — the pattern this regex expects.
- * If `getContext('2d')` ever returned null (headless environments without a
- * canvas backend, mainly), the fallback would silently fail to parse and
- * `reportBackground` would give up (`rgb === null`) rather than merely
- * reporting a stale colour, letting the CSS token and `BACKGROUND_OPAQUE`
- * diverge with no error. Worth knowing; not worth code, since every
- * environment this app actually runs in has a canvas backend.
- */
-function resolveColor(css: string): [number, number, number] | null {
-  const ctx = document.createElement('canvas').getContext('2d');
-  if (ctx !== null) {
-    ctx.fillStyle = css;
-    ctx.fillRect(0, 0, 1, 1);
-    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-    return [r, g, b];
-  }
-  const rgb = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(css);
-  return rgb === null ? null : [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
-}
-
 // The token flips with the OS theme, and the erase colour has to flip with it.
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', reportBackground);
 
@@ -594,6 +578,42 @@ function applyFontSizes(settings: Partial<Settings>): void {
     else document.documentElement.style.setProperty(token, value);
   }
   currentGloss = clampFont('gloss', settings.font_gloss);
+}
+
+/** Write or remove one custom property on the root element. */
+function setRootToken(token: string, value: string): void {
+  if (value === '') document.documentElement.style.removeProperty(token);
+  else document.documentElement.style.setProperty(token, value);
+}
+
+/**
+ * Push the appearance tokens SETTINGS carries onto the root element: the six
+ * text colours, the window background, the two font families, and the
+ * outline and drop-shadow classes.
+ *
+ * FULL says whether an absent key means "cleared" — a full snapshot, where
+ * Reset or Default emptied it — or "not mentioned", as in the colour picker's
+ * per-frame `{ colour_kana }` preview, which must not wipe the other four.
+ * The gloss family has no token here: it rides the popover payload.
+ */
+function applyAppearance(settings: Partial<Settings>, full: boolean): void {
+  for (const [token, value] of [...colourVars(settings), ...familyVars(settings)]) {
+    if (full || value !== '') setRootToken(token, value);
+  }
+  if (full || settings.font_family_gloss !== undefined) {
+    currentGlossFont = clampFamily(settings.font_family_gloss);
+  }
+  if (settings.text_outline !== undefined) {
+    document.documentElement.classList.toggle('text-outline', settings.text_outline);
+  }
+  if (settings.text_shadow !== undefined) {
+    document.documentElement.classList.toggle('text-shadow', settings.text_shadow);
+  }
+  // The erase fill Windows paints over newly exposed pixels is whatever this
+  // page last reported, so a picked background has to re-report or a peek
+  // shows a strip of the old colour. A drag previews one payload per frame
+  // and each is a colour change like any other.
+  if (full || settings.colour_bg !== undefined) reportBackground();
 }
 
 /**
@@ -621,6 +641,9 @@ function applySurfaceAlpha(): void {
  */
 let currentGloss: number | null = null;
 
+/** The gloss family to send with popover content, or `null` while unset. */
+let currentGlossFont: string | null = null;
+
 async function applySettings(): Promise<void> {
   currentPlatform = await invoke<string>('platform').catch(async () => {
     const isMac = await invoke<boolean>('is_macos').catch(() => false);
@@ -646,7 +669,11 @@ async function applySettings(): Promise<void> {
   if (settings.hide_usage !== undefined) {
     currentFilters.hide_usage = settings.hide_usage;
   }
+  if (settings.hide_kanji !== undefined) {
+    currentFilters.hide_kanji = settings.hide_kanji;
+  }
   applyFontSizes(settings);
+  applyAppearance(settings, true);
   // Unconditional: a settings file with no `chrome_mode` never reaches
   // `applyChromeMode`, and the token still has to be written.
   applySurfaceAlpha();
@@ -662,6 +689,7 @@ void listen<Partial<Settings>>('settings-changed', (e) => {
   if (settings.hide_pos !== undefined) currentFilters.hide_pos = settings.hide_pos;
   if (settings.hide_xrefs !== undefined) currentFilters.hide_xrefs = settings.hide_xrefs;
   if (settings.hide_usage !== undefined) currentFilters.hide_usage = settings.hide_usage;
+  if (settings.hide_kanji !== undefined) currentFilters.hide_kanji = settings.hide_kanji;
   // `applyFontSizes` reads an absent size as "clear it", which is right for a
   // full snapshot — the user emptied that box — and wrong for a partial
   // payload. `{ chrome_mode }` from the right-click menu and
@@ -671,6 +699,7 @@ void listen<Partial<Settings>>('settings-changed', (e) => {
   const isFullSnapshot =
     settings.always_on_top !== undefined && settings.clipboard_monitoring !== undefined;
   if (isFullSnapshot) applyFontSizes(settings);
+  applyAppearance(settings, isFullSnapshot);
   if (settings.surface_alpha !== undefined) {
     currentAlpha = clampAlpha(settings.surface_alpha);
     applySurfaceAlpha();
@@ -681,7 +710,7 @@ void listen<Partial<Settings>>('settings-changed', (e) => {
     // `display` is the single writer of `lastResult` (§6.2) and already does
     // exactly what this used to duplicate by hand: `closePopover()`, then
     // `renderSentence` into `#output`. Routing through it here means this
-    // path gets every future change to `display` — the scroll reset above
+    // path gets every future change to `display` — the scroll guard above
     // included — for free, instead of silently missing it. `display(null)`
     // is already a no-op, so no `lastResult !== null` guard is needed here.
     display(lastResult);
@@ -697,12 +726,62 @@ const DWELL_MS = 350;
  */
 let lastResult: ParseResult | null = null;
 
+/**
+ * Which of `lastResult`'s readings is on screen: 0 is `segments`, n ≥ 1 is
+ * `alternatives[n - 1]` (Phase 2 design §6). `display` resets it whenever a
+ * different result arrives; a re-render of the same result — a furigana
+ * change, a reading switch — keeps it.
+ */
+let readingIndex = 0;
+
+/** Every reading of `result`, top-1 first. */
+function readings(result: ParseResult): Segment[][] {
+  return [result.segments, ...result.alternatives];
+}
+
+/** The reading currently rendered, or `[]` before the first parse. */
+function displayedSegments(): Segment[] {
+  if (lastResult === null) return [];
+  return readings(lastResult)[readingIndex] ?? lastResult.segments;
+}
+
+/** Show reading `index` of the current result, wrapping at either end. */
+function showReading(index: number): void {
+  if (lastResult === null) return;
+  const count = readings(lastResult).length;
+  if (count < 2) return;
+  readingIndex = ((index % count) + count) % count;
+  display(lastResult);
+}
+
+/**
+ * `Reading n of k` radio rows for the right-click menu, then a separator —
+ * or nothing at all when the parse has one reading, so the menu is exactly
+ * what it was before Phase 2.
+ */
+function readingMenuEntries(): MenuEntry[] {
+  if (lastResult === null) return [];
+  const count = readings(lastResult).length;
+  if (count < 2) return [];
+  const entries: MenuEntry[] = [];
+  for (let i = 0; i < count; i += 1) {
+    entries.push({
+      kind: 'radio',
+      label: `Reading ${i + 1} of ${count}`,
+      checked: i === readingIndex,
+      onSelect: () => showReading(i),
+    });
+  }
+  entries.push({ kind: 'separator' });
+  return entries;
+}
+
 /** Pending dwell timer, or `undefined` when none is armed. */
 let dwell: number | undefined;
 
 function segmentAt(start: string | undefined): Segment | undefined {
   if (start === undefined || lastResult === null) return undefined;
-  return lastResult.segments.find((segment) => String(segment.start) === start);
+  return displayedSegments().find((segment) => String(segment.start) === start);
 }
 
 /**
@@ -779,13 +858,12 @@ let keepPoll: number | undefined;
  *
  * Spec §3.3's first row is a conjunction — "cursor leaves the chip **and** the
  * keep rule fails" — so the keep rule must not judge anything while the cursor
- * is still on the word. ta-old holds the same shape: `KeepToolTip` is only a
- * flag, and the word window consumes it on mouse-leave
- * (`MyToolTip.cpp:333-360`), so its mouse hook never hides a tooltip whose word
- * is still under the cursor. Set by the chip's `mouseout`, which also means a
- * tooltip opened by FOCUS never arms the poll at all — there is no cursor
- * gesture to judge, and unrelated mouse movement elsewhere on screen must not
- * dismiss a tooltip the keyboard opened.
+ * is still on the word. The original tooltip held the same shape: its keep
+ * flag was consumed by the word window on mouse-leave, so its mouse hook never
+ * hid a tooltip whose word was still under the cursor. Set by the chip's
+ * `mouseout`, which also means a tooltip opened by FOCUS never arms the poll at
+ * all — there is no cursor gesture to judge, and unrelated mouse movement
+ * elsewhere on screen must not dismiss a tooltip the keyboard opened.
  */
 let keepArmed = false;
 /** The chip awaiting a measurement, so the reply knows what to anchor to. */
@@ -875,12 +953,23 @@ function startKeepPoll(): void {
   }, KEEP_POLL_MS);
 }
 
+/** What `popover-content` carries. `kanji` is present only when there is a block to show. */
+interface PopoverPayload {
+  entries: Entry[];
+  filters: GlossFilters;
+  gloss?: number;
+  /** The definitions font family, a bare name; `popover.ts` quotes it. */
+  gloss_font?: string;
+  kanji?: KanjiInfo[];
+}
+
 /** Ask the popup to render CHIP's entries, if the last parse still knows that span. */
 function openFor(chip: HTMLElement): void {
-  const entries = segmentAt(chip.dataset.start)?.entries;
+  const segment = segmentAt(chip.dataset.start);
+  const entries = segment?.entries;
   // No entries means a stale chip from a superseded parse, or an unmatched
   // run — neither is an error worth surfacing.
-  if (entries === undefined || entries.length === 0) return;
+  if (segment === undefined || entries === undefined || entries.length === 0) return;
   // Bumped here, not only in `closePopover`: focus moving straight from chip
   // A to chip B (no `closePopover` in between — see the `focusin` listener
   // below) must still invalidate a `placeFor` already in flight for A, or
@@ -891,17 +980,40 @@ function openFor(chip: HTMLElement): void {
   // cursor never left), and the focus path must not inherit a `true` left by
   // an earlier hover that never opened anything.
   keepArmed = false;
-  pendingChip = chip;
-  // Fire-and-forget: a failed emit just leaves the tooltip unshown, no worse
-  // than the user never having hovered at all.
-  // The size rides along with the content because the popover is a second
-  // webview with its own `:root`, and it must be applied before that render:
-  // the window sizes itself off what the render measures.
-  const payload =
-    currentGloss === null
-      ? { entries, filters: currentFilters }
-      : { entries, filters: currentFilters, gloss: currentGloss };
-  void emit('popover-content', payload).catch(() => {});
+  // Captured before the one await below and re-checked after it, exactly as
+  // `placeFor` does: a dismissal, or the next chip's own open, that lands
+  // while the kanji lookup is in flight must not emit content for a popover
+  // nothing will place.
+  const generation = openId;
+  // The kanji of the SURFACE, not the headword (design §1.1): a PRONOUNCE
+  // match shows the reader kana, and a block for 履 would explain a
+  // character they are not looking at. Under `hide_kanji` there is nothing
+  // to ask for, so no round trip is paid.
+  const kanji = currentFilters.hide_kanji
+    ? Promise.resolve<KanjiInfo[]>([])
+    : lookupKanji(segment.surface);
+  void kanji
+    .then((records) => {
+      if (openId !== generation) return;
+      // Set only now, once content is actually about to be emitted — not
+      // before the lookup — so a chip left behind by a fast mouse move
+      // during the round trip finds `pendingChip` null (or already the next
+      // chip) when its own stale reply lands, and `closePopover`'s null
+      // stands: the reply is dropped instead of placed at the wrong chip.
+      pendingChip = chip;
+      // Fire-and-forget: a failed emit just leaves the tooltip unshown, no
+      // worse than the user never having hovered at all.
+      // The size rides along with the content because the popover is a second
+      // webview with its own `:root`, and it must be applied before that
+      // render: the window sizes itself off what the render measures. The
+      // kanji ride along for the same reason — one render, one measurement.
+      const payload: PopoverPayload = { entries, filters: currentFilters };
+      if (currentGloss !== null) payload.gloss = currentGloss;
+      if (currentGlossFont !== null) payload.gloss_font = currentGlossFont;
+      if (records.length > 0) payload.kanji = records;
+      return emit('popover-content', payload);
+    })
+    .catch(() => {});
 }
 
 /**
@@ -971,8 +1083,8 @@ async function placeFor(chip: HTMLElement, size: { width: number; height: number
     bottom: (monitor.workArea.position.y + monitor.workArea.size.height) / scale,
   };
 
-  // Never taller than the work area allows: past that it scrolls, as ta-old
-  // does, rather than being placed off-screen.
+  // Never taller than the work area allows: past that it scrolls, the way
+  // the original tooltip did, rather than being placed off-screen.
   const height = Math.min(size.height, work.bottom - work.top - 2 * MARGIN);
   const placed = placePopover(rect, { width: size.width, height }, work);
   // Physical px, matching `cursorPosition()` — see `tooltipRect`'s own
@@ -1055,6 +1167,17 @@ document.addEventListener('keydown', (e) => {
   // Focus is deliberately not moved: the user is mid-sentence, and Escape
   // dismissing a tooltip should not cost them their place in the tab order.
   if (e.key === 'Escape') closePopover();
+  // `]` / `[` step through the current parse's readings (Phase 2 design §6).
+  // Bare keys: this window has no text input, both exist on JIS and US
+  // layouts, and neither scrolls `.panes`. The Alt-modified pair is history
+  // (`history-step`, Rust-side) and the webview sees that keydown too, so a
+  // modifier means this is not a reading step.
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  // A native menu, while open, takes the keyboard for itself, so a bracket
+  // pressed then never reaches this listener; there is no open menu to close
+  // under a changed reading any more.
+  if (e.key === ']') showReading(readingIndex + 1);
+  if (e.key === '[') showReading(readingIndex - 1);
 });
 
 let lastUnfocusedChip: HTMLElement | null = null;
@@ -1196,17 +1319,75 @@ function display(result: ParseResult | null): void {
   // Before anything is replaced: a popover left open would be anchored to a
   // chip from the previous sentence that is about to leave the document.
   closePopover();
+  // The same result re-rendered — a reading switch, a furigana change — keeps
+  // the reading on screen and the reader's place in the pane: both happen
+  // while reading one word, and losing the scroll position would make a
+  // reading switch useless on exactly the long sentences it is for (Phase 2b
+  // design §6). A different result is a new sentence: reading 1, top of the
+  // pane.
+  const same = result === lastResult;
+  if (!same) readingIndex = 0;
+  const scrollTop = same ? panes.scrollTop : 0;
+  // Read before the mutation below, for exactly the reason `renderDictionary`
+  // reads its own: `replaceChildren` on a parent holding focus drops focus to
+  // `<body>` the instant the focused child leaves the document. The scroll
+  // guard above was written without this half, and a reading switch is a
+  // *keyboard* gesture (`]`/`[`) — so cycling readings threw away the
+  // keyboard position of the reader who made the gesture, on every press.
+  // Gated on focus having been inside, so a background parse arriving while
+  // the user is elsewhere never steals it.
+  const hadFocus = output.contains(document.activeElement);
+  const focusedStart = hadFocus
+    ? Number((document.activeElement as HTMLElement).dataset.start ?? Number.NaN)
+    : Number.NaN;
   lastResult = result;
 
-  const sentence = renderSentence(result, currentFuriganaMode);
+  const sentence = renderSentence(
+    { segments: displayedSegments(), alternatives: [] },
+    currentFuriganaMode,
+  );
   output.replaceChildren(sentence);
   // `.panes` is the scroll container (up to 10,000 clipboard characters can
   // far exceed a viewport), and replacing `#output`'s children never touches
-  // it on its own — every render therefore lands the reader at the top of
-  // whatever it just rendered, rather than wherever a previous, longer parse
-  // happened to leave the scroll position.
-  panes.scrollTop = 0;
+  // it on its own — so it is set explicitly: back to where it was for a
+  // re-render, to the top for a new result rather than wherever a previous,
+  // longer parse happened to leave it.
+  panes.scrollTop = scrollTop;
+  if (hadFocus) {
+    // By character offset, not by chip ordinal: a different reading segments
+    // the same sentence differently, so chip *i* is a different word while
+    // character *i* is the same character the reader was looking at. Only for
+    // a re-render — a new sentence is new text, and putting focus back on
+    // "the word at offset 12" of something the reader has not read yet would
+    // be a guess, so that case lands on the pane.
+    const chip = same ? chipCovering(focusedStart) : null;
+    // `#output` carries `tabindex="-1"` for the same reason `#dictionary`
+    // does: somewhere to land when there is no focusable chip to return to —
+    // a new sentence, or an offset that now falls inside an unmatched run,
+    // which is a `<span>` and deliberately not in the tab order.
+    (chip ?? output).focus();
+  }
   syncHistoryButtons();
+}
+
+/**
+ * The chip whose segment contains character `offset`, or `null` when that is
+ * an unmatched run or no chip covers it.
+ *
+ * Chips carry only their `start`, so the covering one is the last whose start
+ * is at or before `offset` — which relies on `renderSentence` emitting them in
+ * ascending order, as a segment cover is by construction. An unmatched run
+ * returns `null` rather than itself: `focus()` on a `<span>` with no tabindex
+ * is silently a no-op, and a caller needs to know to land somewhere else.
+ */
+function chipCovering(offset: number): HTMLElement | null {
+  if (!Number.isFinite(offset)) return null;
+  let covering: HTMLElement | null = null;
+  for (const el of output.querySelectorAll<HTMLElement>('[data-start]')) {
+    if (Number(el.dataset.start) > offset) break;
+    covering = el;
+  }
+  return covering instanceof HTMLButtonElement ? covering : null;
 }
 
 function show(result: ParseResult): void {

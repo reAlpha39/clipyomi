@@ -1,16 +1,11 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! `jparser-cli` generation subcommands, end to end through a real process.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use jmdict_source::SOURCE_FILE;
+use jmdict_source::{KANJIDIC, SOURCE_FILE};
 
 const XML: &str = concat!(
     r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -249,6 +244,42 @@ fn ensure_dictionary_rejects_both_sources_at_once() {
     );
 }
 
+/// `--kanjidic` names a file beside a positional XML (design §4); with
+/// `--source-dir` there is no positional to be beside, and the flag was
+/// silently ignored rather than rejected. `conflicts_with` on the arg is what
+/// turns that into a clap error naming both flags.
+#[test]
+fn ensure_dictionary_rejects_kanjidic_with_source_dir() {
+    let dir = scratch("cli-kanjidic-with-sourcedir");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_jparser-cli"))
+        .args([
+            "ensure-dictionary",
+            "dict",
+            "--source-dir",
+            "src",
+            "--kanjidic",
+            "kanjidic2.xml",
+        ])
+        .current_dir(&dir)
+        .output()
+        .expect("run jparser-cli");
+
+    assert!(
+        !out.status.success(),
+        "kanjidic with source-dir must be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "expected a conflicts_with error, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("--kanjidic") && stderr.contains("--source-dir"),
+        "the conflict must name both --kanjidic and --source-dir, got: {stderr}"
+    );
+}
+
 /// Same reasoning as the test above: the pre-wiring binary already rejected
 /// this (missing required `xml` positional), so only the message proves the
 /// `ArgGroup`, not just the old positional, is what is enforcing it now.
@@ -292,10 +323,66 @@ fn ensure_dictionary_builds_through_the_source_dir_route() {
     let source_dir = dir.join("src");
     std::fs::create_dir_all(&source_dir).expect("mkdir");
     std::fs::write(source_dir.join(SOURCE_FILE), XML).expect("write archive");
+    // Without this the route would resolve KANJIDIC2 from the real network.
+    std::fs::write(
+        source_dir.join(KANJIDIC.file_name),
+        "<kanjidic2></kanjidic2>",
+    )
+    .expect("write kanjidic");
 
     let out = cli(&["ensure-dictionary", "dict", "--source-dir", "src"], &dir);
 
     assert!(out.contains("generation: gen-1"), "got: {out}");
+}
+
+const KANJIDIC_XML: &str = "<kanjidic2><character><literal>本</literal>\
+    <reading_meaning><rmgroup><reading r_type=\"ja_on\">ホン</reading>\
+    <meaning>book</meaning></rmgroup></reading_meaning></character></kanjidic2>";
+
+#[test]
+fn build_index_accepts_a_kanjidic_file() {
+    let dir = scratch("cli-build-kanjidic");
+    std::fs::write(dir.join("mini.xml"), XML).expect("write xml");
+    std::fs::write(dir.join("kanji.xml"), KANJIDIC_XML).expect("write kanjidic");
+
+    let out = cli(
+        &["build-index", "mini.xml", "idx", "--kanjidic", "kanji.xml"],
+        &dir,
+    );
+
+    assert!(out.contains("kanji:               1"), "got: {out}");
+    assert!(out.contains("skipped kanji:       0"), "got: {out}");
+}
+
+#[test]
+fn build_index_without_kanjidic_reports_zero_kanji() {
+    let dir = scratch("cli-build-no-kanjidic");
+    std::fs::write(dir.join("mini.xml"), XML).expect("write xml");
+
+    let out = cli(&["build-index", "mini.xml", "idx"], &dir);
+
+    assert!(out.contains("kanji:               0"), "got: {out}");
+}
+
+#[test]
+fn ensure_dictionary_accepts_a_kanjidic_beside_the_positional_xml() {
+    let dir = scratch("cli-ensure-kanjidic");
+    std::fs::write(dir.join("mini.xml"), XML).expect("write xml");
+    std::fs::write(dir.join("kanji.xml"), KANJIDIC_XML).expect("write kanjidic");
+
+    let out = cli(
+        &[
+            "ensure-dictionary",
+            "dict",
+            "mini.xml",
+            "--kanjidic",
+            "kanji.xml",
+        ],
+        &dir,
+    );
+
+    assert!(out.contains("generation: gen-1"), "got: {out}");
+    assert!(out.contains("kanji:      1"), "got: {out}");
 }
 
 /// The flag must be rejected when the dictionary is missing, rather than

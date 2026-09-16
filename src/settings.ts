@@ -1,7 +1,15 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { invoke } from '@tauri-apps/api/core';
 import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { FONT_LIMITS, clampFont, stylesheetDefault, type FontKind } from './font-sizes';
 import { ALPHA_LIMITS, clampAlpha } from './surface-alpha';
+import {
+  APPEARANCE_SECTIONS,
+  BG_COLOUR_ROW,
+  OUTLINE_ROW,
+  initAppearanceControls,
+} from './settings-appearance';
 import type { ChromeMode, FuriganaMode, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
@@ -33,6 +41,10 @@ export function initSettingsApp(container: HTMLElement) {
         <label class="settings-checkbox-row">
           <input type="checkbox" id="setting-hide-usage" />
           <span class="label-text">Hide usage notes &amp; misc</span>
+        </label>
+        <label class="settings-checkbox-row">
+          <input type="checkbox" id="setting-hide-kanji" />
+          <span class="label-text">Hide kanji readings &amp; meanings</span>
         </label>
       </section>
 
@@ -66,7 +78,14 @@ export function initSettingsApp(container: HTMLElement) {
                  min="${FONT_LIMITS.furigana.min}" max="${FONT_LIMITS.furigana.max}" step="1" />
           <span class="unit">% of sentence</span>
         </label>
+        <label class="settings-number-row">
+          <span class="label-text">Furigana gap</span>
+          <input type="number" id="setting-furigana-gap"
+                 min="${FONT_LIMITS.gap.min}" max="${FONT_LIMITS.gap.max}" step="1" />
+          <span class="unit">px</span>
+        </label>
       </section>
+      ${APPEARANCE_SECTIONS}
 
       <section class="settings-group">
         <h2 class="settings-group-title">Segmentation</h2>
@@ -103,6 +122,7 @@ export function initSettingsApp(container: HTMLElement) {
 
       <section class="settings-group">
         <h2 class="settings-group-title">Background</h2>
+        ${BG_COLOUR_ROW}
         <label class="settings-range-row">
           <span class="label-text">Opacity</span>
           <input type="range" id="setting-surface-alpha"
@@ -112,18 +132,30 @@ export function initSettingsApp(container: HTMLElement) {
         <p class="settings-note" id="setting-surface-alpha-note" hidden>
           The native window frame is always fully opaque.
         </p>
+        ${OUTLINE_ROW}
       </section>
+
+      <footer class="settings-footer">
+        <p class="settings-note">
+          Dictionary data: JMdict and KANJIDIC2 &copy; Electronic Dictionary Research and Development Group,
+          CC BY-SA 4.0. Licence: https://www.edrdg.org/edrdg/licence.html
+        </p>
+      </footer>
     </div>
   `;
 
   const hidePos = container.querySelector<HTMLInputElement>('#setting-hide-pos')!;
   const hideXrefs = container.querySelector<HTMLInputElement>('#setting-hide-xrefs')!;
   const hideUsage = container.querySelector<HTMLInputElement>('#setting-hide-usage')!;
+  const hideKanji = container.querySelector<HTMLInputElement>('#setting-hide-kanji')!;
   const alwaysOnTop = container.querySelector<HTMLInputElement>('#setting-always-on-top')!;
   const monitoring = container.querySelector<HTMLInputElement>('#setting-clipboard-monitoring')!;
   const fontSentence = container.querySelector<HTMLInputElement>('#setting-font-sentence')!;
   const fontGloss = container.querySelector<HTMLInputElement>('#setting-font-gloss')!;
   const furiganaScale = container.querySelector<HTMLInputElement>('#setting-furigana-scale')!;
+  const furiganaGap = container.querySelector<HTMLInputElement>('#setting-furigana-gap')!;
+  const outlineWidth = container.querySelector<HTMLInputElement>('#setting-text-outline-width')!;
+  const shadowSize = container.querySelector<HTMLInputElement>('#setting-text-shadow-size')!;
   const furiganaButtons = container.querySelectorAll<HTMLButtonElement>(
     '.segmented-control button[data-mode]',
   );
@@ -139,6 +171,17 @@ export function initSettingsApp(container: HTMLElement) {
   const mecabStatus = container.querySelector<HTMLElement>('#setting-mecab-hints-status')!;
 
   let currentMode: FuriganaMode = 'none';
+
+  // Wired before the handlers below are declared, which is fine: both hooks
+  // are function declarations in this scope, hoisted, and only ever called
+  // from an event. `preview` targets `main` alone for the reason the
+  // opacity slider's `input` handler gives.
+  const appearance = initAppearanceControls(container, {
+    save: () => saveAndBroadcast(),
+    preview: (payload) => {
+      void emitTo('main', 'settings-changed', payload).catch(() => {});
+    },
+  });
 
   const chromeButtons = container.querySelectorAll<HTMLButtonElement>('[data-chrome-mode]');
 
@@ -170,6 +213,7 @@ export function initSettingsApp(container: HTMLElement) {
       const match = btn.getAttribute('data-mode') === mode;
       btn.setAttribute('aria-checked', String(match));
     });
+    appearance.setFuriganaMode(mode);
   }
 
   /**
@@ -279,10 +323,15 @@ export function initSettingsApp(container: HTMLElement) {
       hide_pos: hidePos.checked,
       hide_xrefs: hideXrefs.checked,
       hide_usage: hideUsage.checked,
+      hide_kanji: hideKanji.checked,
       font_sentence: sizeOf(fontSentence, 'sentence'),
       font_gloss: sizeOf(fontGloss, 'gloss'),
       furigana_scale: sizeOf(furiganaScale, 'furigana'),
+      furigana_gap: sizeOf(furiganaGap, 'gap'),
+      text_outline_width: sizeOf(outlineWidth, 'outline'),
+      text_shadow_size: sizeOf(shadowSize, 'shadow'),
       surface_alpha: clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max,
+      ...appearance.snapshot(),
     };
   }
 
@@ -300,6 +349,7 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.hide_pos !== undefined) hidePos.checked = s.hide_pos;
     if (s.hide_xrefs !== undefined) hideXrefs.checked = s.hide_xrefs;
     if (s.hide_usage !== undefined) hideUsage.checked = s.hide_usage;
+    if (s.hide_kanji !== undefined) hideKanji.checked = s.hide_kanji;
     if (s.always_on_top !== undefined) alwaysOnTop.checked = s.always_on_top;
     if (s.clipboard_monitoring !== undefined) monitoring.checked = s.clipboard_monitoring;
     if (s.mecab_hints !== undefined) mecabHints.checked = s.mecab_hints;
@@ -318,7 +368,11 @@ export function initSettingsApp(container: HTMLElement) {
       fontSentence.value = s.font_sentence === undefined ? '' : String(s.font_sentence);
       fontGloss.value = s.font_gloss === undefined ? '' : String(s.font_gloss);
       furiganaScale.value = s.furigana_scale === undefined ? '' : String(s.furigana_scale);
+      furiganaGap.value = s.furigana_gap === undefined ? '' : String(s.furigana_gap);
+      outlineWidth.value = s.text_outline_width === undefined ? '' : String(s.text_outline_width);
+      shadowSize.value = s.text_shadow_size === undefined ? '' : String(s.text_shadow_size);
     }
+    appearance.apply(s, isFullSnapshot);
     if (s.surface_alpha !== undefined) {
       const value = clampAlpha(s.surface_alpha) ?? ALPHA_LIMITS.max;
       surfaceAlpha.value = String(value);
@@ -329,10 +383,14 @@ export function initSettingsApp(container: HTMLElement) {
   fontSentence.addEventListener('change', saveAndBroadcast);
   fontGloss.addEventListener('change', saveAndBroadcast);
   furiganaScale.addEventListener('change', saveAndBroadcast);
+  furiganaGap.addEventListener('change', saveAndBroadcast);
+  outlineWidth.addEventListener('change', saveAndBroadcast);
+  shadowSize.addEventListener('change', saveAndBroadcast);
 
   hidePos.addEventListener('change', saveAndBroadcast);
   hideXrefs.addEventListener('change', saveAndBroadcast);
   hideUsage.addEventListener('change', saveAndBroadcast);
+  hideKanji.addEventListener('change', saveAndBroadcast);
 
   alwaysOnTop.addEventListener('change', () => {
     void invoke('set_always_on_top', { enabled: alwaysOnTop.checked }).catch(() => {});
@@ -411,6 +469,9 @@ export function initSettingsApp(container: HTMLElement) {
       [fontSentence, 'sentence'],
       [fontGloss, 'gloss'],
       [furiganaScale, 'furigana'],
+      [furiganaGap, 'gap'],
+      [outlineWidth, 'outline'],
+      [shadowSize, 'shadow'],
     ];
     for (const [input, kind] of boxes) {
       if (input.value !== '') continue;

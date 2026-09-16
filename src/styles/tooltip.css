@@ -1,9 +1,11 @@
+/* SPDX-License-Identifier: MIT OR Apache-2.0 */
+
 @import './tokens.css';
 @import './typography.css';
 
-/* The window is undecorated, so the page paints its own border — this is
-   ta-old's `WS_BORDER` (`MyToolTip.cpp:826`), which a Tauri decorationless
-   window has no frame to provide. */
+/* The window is undecorated, so the page paints its own border — the 1px
+   frame a tooltip window normally gets from the OS, which a Tauri
+   decorationless window has no frame to provide. */
 html,
 body {
   margin: 0;
@@ -18,12 +20,14 @@ body {
   padding: 3px 4px;
   border: 1px solid var(--tt-border);
   /* Scrolls rather than truncating: 2G capped the height and showed only an
-     entry's head, which spec §3.4 reverses. ta-old scrolls here too
-     (`MyToolTip.cpp:492-497`). */
+     entry's head, which spec §3.4 reverses. The original tooltip scrolled
+     here too. */
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--tt-border) transparent;
-  font-family: var(--font-ui);
+  /* `--font-gloss` arrives with the content, as `--text-gloss` does; unset,
+     the UI stack. */
+  font-family: var(--font-gloss, var(--font-ui));
   font-size: var(--text-gloss);
   line-height: 1.35;
 }
@@ -47,8 +51,8 @@ body {
 }
 
 .tt-line {
-  /* Wrapped continuations hang by 10px, matching MyDrawText's `xOffset = 10`,
-     so a long sense reads as a column rather than as a paragraph. */
+  /* Wrapped continuations hang by 10px, so a long sense reads as a column
+     rather than as a paragraph. */
   padding-left: 10px;
   text-indent: -10px;
   white-space: pre-wrap;

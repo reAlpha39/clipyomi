@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! The archive half: unpacking and publishing, with no socket in sight.
 
@@ -52,7 +47,10 @@ fn an_archive_without_the_dictionary_names_the_missing_member() {
 
     let err = extract::unpack_into(&archive, &dir.join("staging")).expect_err("must fail");
     match err {
-        SourceError::MissingMember { name, archive: named } => {
+        SourceError::MissingMember {
+            name,
+            archive: named,
+        } => {
             assert_eq!(name, "system.dic.zst");
             assert_eq!(named, archive, "the message must say which archive");
         }
@@ -287,7 +285,10 @@ fn dotfiles_and_staging_archives_are_not_hand_placed() {
 #[test]
 fn an_absent_hints_directory_has_no_hand_placed_archive() {
     let dir = scratch("handplaced-absent");
-    assert_eq!(vibrato_source::hand_placed(&dir.join("never-created")), None);
+    assert_eq!(
+        vibrato_source::hand_placed(&dir.join("never-created")),
+        None
+    );
 }
 
 /// The whole point of the second entry point: `publish` treats an occupied

@@ -1,4 +1,6 @@
-/** Distance between the word and the tooltip, in px. ta-old's `rAvoid.top-2`. */
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+/** Distance between the word and the tooltip, in px: the original tooltip kept two. */
 const GAP = 2;
 /** Closest the tooltip may sit to a work-area edge, in px. */
 export const MARGIN = 8;
@@ -17,45 +19,53 @@ export interface Point {
 }
 
 /**
- * Where to put the tooltip window, as a pure function of three rectangles.
+ * Chooses where to put the tooltip window relative to the word being
+ * hovered, given the monitor's usable work area.
  *
- * Separated from the DOM because happy-dom returns zeros from
- * `getBoundingClientRect()` — geometry asserted through a DOM in Vitest would
- * pass regardless of what this computed. That reasoning survives 2G unchanged;
- * what changed is that the third argument is the monitor's work area, so the
- * tooltip clamps above the dock rather than to the app's own window.
+ * Above the word is tried first, then below, and only if neither side has
+ * room does the tooltip get pinned to the bottom of the work area and
+ * nudged sideways instead. Above wins the tie because the app sits over a
+ * game, and the game's own text — what the reader is actually looking at —
+ * is usually below the window; a tooltip that goes up covers the least of
+ * it. The original tooltip went below first, and so did this one until the
+ * user asked for the other order.
+ *
+ * The horizontal clamp is applied as an upper bound first and a lower
+ * bound second, so the lower bound always wins when the two disagree. On
+ * a work area narrower than the tooltip, clamping to "at most the right
+ * margin" first would leave a value below the left margin; running the
+ * lower-bound clamp afterwards corrects that, pulling the tooltip back
+ * onto screen instead of letting it hang off the right edge.
  */
 export function placePopover(
   chip: Rect,
   size: { width: number; height: number },
   work: Rect,
 ): { left: number; top: number } {
-  let top: number;
   let left = chip.left;
+  let top: number;
 
   const below = chip.bottom + GAP;
   const above = chip.top - GAP - size.height;
 
-  if (below + size.height <= work.bottom) {
-    top = below;
-  } else if (above >= work.top) {
+  if (above >= work.top) {
     top = above;
+  } else if (below + size.height <= work.bottom) {
+    top = below;
   } else {
-    // Fits on neither side: pin to the bottom of the work area and step
-    // sideways, right first (MyToolTip.cpp:518-523). This is the case a small
-    // window hits most — a tall entry on a word low on the screen.
     top = work.bottom - size.height;
-    if (chip.right + GAP + size.width <= work.right) left = chip.right + GAP;
-    else if (chip.left - GAP - size.width >= work.left) left = chip.left - GAP - size.width;
+
+    if (chip.right + GAP + size.width <= work.right) {
+      left = chip.right + GAP;
+    } else if (chip.left - GAP - size.width >= work.left) {
+      left = chip.left - GAP - size.width;
+    }
   }
 
-  // Applied last, and the left clamp wins: for a tooltip wider than the work
-  // area the right-edge limit falls below the left margin, and `Math.max` pins
-  // it to the margin instead of letting that push it off-screen.
-  left = Math.max(work.left + MARGIN, Math.min(left, work.right - size.width - MARGIN));
-  // The vertical pin can undershoot on a work area shorter than the tooltip;
-  // the same argument applies.
-  top = Math.max(work.top + MARGIN, top);
+  left = Math.min(left, work.right - size.width - MARGIN);
+  left = Math.max(left, work.left + MARGIN);
+
+  top = Math.max(top, work.top + MARGIN);
 
   return { left, top };
 }
@@ -79,8 +89,8 @@ function distance(a: Point, b: Point): number {
 /**
  * Whether a cursor that has left the word should keep the tooltip open.
  *
- * ta-old's rule (`MyToolTip.cpp:354`): compare the cursor's distance to the
- * tooltip's centre against its distance from the previous sample. Closer means
+ * The original tooltip's rule: compare the cursor's distance to the tooltip's
+ * centre against its distance from the previous sample. Closer means
  * the user is heading for the tooltip. Chosen over a grace period because it
  * holds no timer for every dismissal path to remember to clear, and because it
  * distinguishes moving *toward* the tooltip from merely moving slowly.

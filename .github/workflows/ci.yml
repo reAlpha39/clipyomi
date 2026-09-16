@@ -2,11 +2,48 @@ name: CI
 
 # The gates this repo relies on, all of which were previously run by hand.
 #
-# Deliberately NO `cargo fmt --check`. `crates/jparser/src/conjugation.rs` is
-# intentionally not rustfmt-clean, and reformatting it is a defect — the port
-# keeps its table layout readable against the C++ original. Formatting is done
-# per-file with `rustfmt --edition 2021 <file>`, never `cargo fmt`. Please do
-# not "helpfully" add a formatting job here.
+# The `fmt` job below was forbidden until Phase 1b-ii: the workspace held a
+# hand-laid conjugation table whose layout `cargo fmt` would have destroyed, so
+# formatting was done per-file with `rustfmt --edition 2021 <file>` and a
+# wholesale run counted as a defect. That table and its module are deleted,
+# Phase 1b-ii ran `cargo fmt` once over `jparser` and `clipyomi`, and the final
+# fix wave formatted `vibrato-source` too. Added 2026-09-09, once a
+# workspace-wide check had been clean by hand through several phases.
+
+# ## The boundary-hint dictionary
+#
+# Eight of `engine_v2`'s 47 tests pin behaviour against genuine IPADIC
+# tokenization rather than a stand-in — `kurumadehakou_parses_as_four_words`,
+# `the_particle_absorbing_merges_are_gone`,
+# `the_dictionary_form_itself_loses_to_its_parts_without_hints`, and the five
+# hint-token characterization tests — and the helper they share falls back to
+# a `%APPDATA%` location when `TA_HINTS_DICT` is unset. There is no APPDATA on
+# these runners, so every job that runs them first caches and publishes the
+# pinned dictionary and exports `TA_HINTS_DICT`; without those steps the eight
+# panic on a missing environment variable before asserting anything, and the
+# job fails on the environment rather than on the engine.
+#
+# Measured locally rather than assumed, 2026-09-16: with both variables unset,
+# 8 of the 47 `engine_v2` tests fail; with `TA_HINTS_DICT` pointing at a
+# `fetch-hints` output and APPDATA still unset, 47 of 47 pass. The figures
+# this paragraph used to carry, 2 of 39 and 39 of 39, were measured on
+# 2026-09-09 at `bfa929b` and were never restated: by `dce356b`, the commit
+# before Phase 4 landed, the file held 46 tests of which 7 took boundaries,
+# and Phase 4 added the eighth. **Re-measure rather than trusting this
+# paragraph** after adding any test that takes boundaries — `env -u APPDATA
+# -u TA_HINTS_DICT cargo test -p jparser --features mecab --test engine_v2`
+# is the whole check.
+#
+# ## Whether this file has run
+#
+# Earlier revisions of these comments asserted, four times over, that it never
+# had "because the repository has no remote". **That premise is false.** There
+# is an `origin` (github.com/reAlpha39/clipyomi), this file is on
+# `origin/main` and `origin/develop`, and the `push: [main]` trigger has
+# therefore had every opportunity to fire. What is still true is that nobody
+# has read the run history back: treat "green in CI" as unverified from a
+# developer machine, not as never-attempted, and do not write the stronger
+# claim into a comment again without checking `origin` first.
 
 on:
   push:
@@ -45,9 +82,42 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
 
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
+
       - run: cargo test --workspace
 
       - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      # No cache and no system dependencies: rustfmt parses, it does not build,
+      # so this job needs neither webkit2gtk nor a warm target directory and
+      # finishes in seconds.
+      - run: cargo fmt --all --check
 
   msrv:
     name: MSRV ${{ matrix.rust }}
@@ -71,7 +141,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       # Package-scoped, not `--workspace`: the 1.85 floor is a promise about
-      # the library crates (`jparser`, `jmdict-source`, `xtask`), not about
+      # the library crates (`jparser`, `jmdict-source`), not about
       # `src-tauri`. Tauri's own transitive dependency tree (`darling`,
       # `icu_*`, `plist`, `serde_with`, `time`, ...) needs rustc 1.86-1.88,
       # newer than this floor — that's the GUI shell's toolchain to track
@@ -82,7 +152,7 @@ jobs:
       # Library and binary targets only — deliberately not `--all-targets`.
       # MSRV is a promise to whoever compiles this workspace's crates, and
       # dev-dependencies never reach them.
-      - run: cargo check -p jparser -p jmdict-source -p xtask
+      - run: cargo check -p jparser -p jmdict-source
 
       # `mecab` is off by default, so the check above never compiles `vibrato`
       # or its transitive `bincode 2.0.1` — the entire reason the floor moved
@@ -113,29 +183,29 @@ jobs:
             exit 1
           fi
 
-      # GPL v2: OpenSSL is Apache-2.0, which the FSF holds GPLv2-incompatible,
-      # so no dependency may link native-tls/OpenSSL — now or in any later phase.
+      # TLS stays pure Rust: OpenSSL links a system C library, so no dependency
+      # may pull in native-tls/OpenSSL — now or in any later phase. A C
+      # toolchain in the build is the cost, and every platform's release build
+      # would have to carry it.
       #
-      # `ring` ("Apache-2.0 AND ISC") and `aws-lc-sys` (which carries its own
-      # "AND Apache-2.0" term) are refused for the same reason: an AND offers no
-      # compatible option to take. Phase 5A's HTTPS therefore runs on `rustls`
-      # with `rustls-graviola` (ISC) injected as the provider — if a build
+      # `ring` (C and assembly) and `aws-lc-sys` (a BoringSSL fork) are refused
+      # for the same reason. Phase 5A's HTTPS therefore runs on `rustls` with
+      # `rustls-graviola` (pure Rust, ISC) injected as the provider — if a build
       # error here tempts you to enable ureq's default features, that silently
       # takes `ring` back, and this grep is the only thing that would notice.
       #
       # The pattern is anchored, and deliberately not `-i`: a bare `openssl`
       # also matches `openssl-probe`, which `rustls-native-certs` pulls in on
       # Linux via `rustls-platform-verifier`. That crate links nothing — it only
-      # locates the system trust store — and is MIT OR Apache-2.0, so it is
-      # compatible and not what this gate is for. Since this job only ever runs
-      # on ubuntu-latest, the unanchored pattern matched `openssl-probe v0.2.1`
-      # and failed the job on every run. Do not re-broaden it back to a bare
-      # `openssl`: a real OpenSSL link appears as `openssl v` or `openssl-sys`,
-      # and both are still caught.
-      - name: no GPL-incompatible TLS backend
+      # locates the system trust store — so it is not what this gate is for.
+      # Since this job only ever runs on ubuntu-latest, the unanchored pattern
+      # matched `openssl-probe v0.2.1` and failed the job on every run. Do not
+      # re-broaden it back to a bare `openssl`: a real OpenSSL link appears as
+      # `openssl v` or `openssl-sys`, and both are still caught.
+      - name: no native-code TLS backend
         run: |
           if cargo tree --workspace | grep -E "openssl v|openssl-sys|native-tls|\bring v|aws-lc"; then
-            echo "::error::a GPLv2-incompatible TLS dependency entered the tree"
+            echo "::error::a native-code TLS dependency entered the tree"
             exit 1
           fi
 
@@ -157,6 +227,26 @@ jobs:
       # `clippy -p jparser --features mecab --all-targets` isolates
       # mecab-specific lints to a scope a workspace-wide clippy run does not
       # guarantee.
+      #
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
+
       - run: cargo test -p jparser --features mecab
       - run: cargo clippy -p jparser --features mecab --all-targets -- -D warnings
 
@@ -176,6 +266,26 @@ jobs:
       # "hints-source")]`) is type-checked anywhere in CI. Design spec §9.5
       # lists this gate; it did not reach this file until the Phase 5A fix wave.
       # Mirrors the `mecab` job above deliberately.
+      #
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
+
       - run: cargo test -p jparser --features hints-source
       - run: cargo clippy -p jparser --features hints-source --all-targets -- -D warnings
 
@@ -189,6 +299,25 @@ jobs:
           components: llvm-tools-preview
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
+
+      # Eight `engine_v2` tests need the real IPADIC dictionary; see "The
+      # boundary-hint dictionary" at the top of this file for why these two
+      # steps exist and what was measured.
+      - name: Cache the pinned IPADIC dictionary
+        uses: actions/cache@v4
+        with:
+          path: hints
+          # The pin — `ASSET_URL` and `ASSET_SHA256` — lives in
+          # `vibrato-source`, so hashing that file busts the cache exactly
+          # when the asset is repinned and never otherwise. `fetch-hints` is
+          # idempotent (`vibrato_source::published` returns the existing path
+          # before considering a download), so a cache hit skips the fetch
+          # without needing a conditional here.
+          key: ipadic-${{ hashFiles('crates/vibrato-source/src/lib.rs') }}
+      - name: Publish the boundary-hint dictionary
+        run: |
+          cargo run -q -p jparser --features hints-source --bin jparser-cli -- fetch-hints hints
+          echo "TA_HINTS_DICT=$PWD/hints/current/system.dic" >> "$GITHUB_ENV"
 
       - run: cargo llvm-cov -p jmdict-source --summary-only --fail-under-lines 80
       - run: cargo llvm-cov -p jparser --features mecab --summary-only --fail-under-lines 80
@@ -206,14 +335,17 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx vitest run
       - run: npx playwright install --with-deps chromium
-      # `e2e/panes.spec.ts` guards its own `toHaveScreenshot` calls with
-      # `if (!process.env.CI)`: the committed baselines under
-      # e2e/panes.spec.ts-snapshots/ were written and eyeballed on macOS, and
-      # this runner is ubuntu-latest — different font rendering means those
-      # baselines would mismatch on every run here regardless of whether the
-      # app is actually correct. There is no git remote on this repository, so
-      # there is no way to run a real Linux job and capture Linux baselines to
-      # commit instead. GitHub Actions sets `CI=true` automatically, so this
+      # `panes.spec.ts` and `chrome.spec.ts` guard all five of their
+      # `toHaveScreenshot` calls with `if (!process.env.CI)`, and every
+      # committed baseline was written and eyeballed on a developer machine:
+      # `panes.spec.ts-snapshots/` holds 10 `-darwin` and 10 `-win32` PNGs,
+      # `chrome.spec.ts-snapshots/` holds 6 `-win32` and no darwin ones at
+      # all. This runner is ubuntu-latest — different font rendering means
+      # none of them would match here regardless of whether the app is
+      # actually correct. Capturing Linux baselines from a real run of
+      # this job and committing them instead is possible — there is a remote,
+      # see the header — and simply has not been done. GitHub Actions sets
+      # `CI=true` automatically, so this
       # job runs every DOM assertion in panes.spec.ts on every run and skips
       # only the pixel comparison; the full visual comparison still runs
       # wherever the baselines are valid (this developer's machine).

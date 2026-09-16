@@ -1,0 +1,283 @@
+# Phase 1b-i's class x chain gate: the English label expected for each
+# deinflection chain the v2 table generates.
+# Design: docs/superpowers/specs/2026-09-02-engine-v2-phase1b-i-design.md §3-§4.
+#
+# Columns, tab-separated: surface, chain, expected.
+#   surface  - a complete conjugated word. Table::chains_ending_at does not
+#              consult the dictionary, so the headword only serves the reader.
+#   chain    - space-separated steps, innermost first: class:form for the
+#              first step, lemma:form for each auxiliary after it. Class and
+#              form names are table_data.rs's IPADIC names; lemmas are
+#              table.rs's ATTACHES_TO spellings.
+#   expected - the label, or "-" for None.
+#
+# The English column was written by hand from "Japanese verb conjugation",
+# English Wikipedia (https://en.wikipedia.org/wiki/Japanese_verb_conjugation),
+# read 2026-09, terminology only, in the learner-standard register the design
+# fixes: Causative, Passive/Potential, Negative, Volitional, Polite, Want-to,
+# Past, Te-form, Copula, Conditional, Imperative, Adverbial. It was written
+# before crates/jparser/src/engine/label.rs existed, and is authoritative over
+# it. assets/conjugations.json, src/conjugation.rs and src/matcher/
+# (matcher.rs and matcher/verb.rs) were not opened while this file was
+# written. Those four paths were deleted at Phase 1b-ii and are recoverable
+# from git history; they are named here because naming what was not read is
+# the attestation.
+#
+# Rows marked "table finding" are surfaces that are not natural Japanese but
+# are chains the table generates today. They are labelled by the same rules;
+# the cause is an ATTACHES_TO row (span shape, Phase 1a's territory) and is
+# recorded in the 1b-i handoff, not fixed here.
+#
+# A surface can appear twice with different chains (書け is both 仮定形 and
+# 命令ｅ; 読んで reaches で through two rows). Each chain is its own row.
+
+# --- Part A: depth 0. One row per (adjective?, form) reachable from a class
+# --- JMDICT_POS_CLASS maps. Only Conditional, Imperative and Adverbial name a
+# --- form on its own; every other form is the plain form or a dangling stem.
+書け	五段・カ行イ音便:仮定形	Conditional
+書け	五段・カ行イ音便:命令ｅ	Imperative
+書きゃ	五段・カ行イ音便:仮定縮約１	Conditional
+書く	五段・カ行イ音便:基本形	-
+書か	五段・カ行イ音便:未然形	-
+書こ	五段・カ行イ音便:未然ウ接続	-
+書き	五段・カ行イ音便:連用形	-
+書い	五段・カ行イ音便:連用タ接続	-
+行っ	五段・カ行促音便:連用タ接続	-
+取ん	五段・ラ行:未然特殊	-
+食べれ	一段:仮定形	Conditional
+食べりゃ	一段:仮定縮約１	Conditional
+食べろ	一段:命令ｒｏ	Imperative
+食べよ	一段:命令ｙｏ	Imperative
+食べよ	一段:未然ウ接続	-
+食べる	一段:基本形	-
+食べ	一段:未然形	-
+食べ	一段:連用形	-
+食べん	一段:体言接続特殊	-
+すれ	サ変・スル:仮定形	Conditional
+しろ	サ変・スル:命令ｒｏ	Imperative
+せよ	サ変・スル:命令ｙｏ	Imperative
+せい	サ変・スル:命令ｉ	Imperative
+する	サ変・スル:基本形	-
+す	サ変・スル:文語基本形	-
+す	サ変・スル:体言接続特殊２	-
+し	サ変・スル:未然形	-
+し	サ変・スル:連用形	-
+しよ	サ変・スル:未然ウ接続	-
+せ	サ変・スル:未然ヌ接続	-
+さ	サ変・スル:未然レル接続	-
+愛せ	サ変・−スル:未然レル接続	-
+くれ	カ変・クル:仮定形	Conditional
+こい	カ変・クル:命令ｉ	Imperative
+こよ	カ変・クル:命令ｙｏ	Imperative
+くる	カ変・クル:基本形	-
+こ	カ変・クル:未然形	-
+き	カ変・クル:連用形	-
+くん	カ変・クル:体言接続特殊	-
+く	カ変・クル:体言接続特殊２	-
+あれ	ラ変:仮定形	Conditional
+あれ	ラ変:命令ｅ	Imperative
+あり	ラ変:基本形	-
+ある	ラ変:体言接続	-
+高けれ	形容詞・アウオ段:仮定形	Conditional
+高けりゃ	形容詞・アウオ段:仮定縮約１	Conditional
+高きゃ	形容詞・アウオ段:仮定縮約２	Conditional
+高かれ	形容詞・アウオ段:命令ｅ	Imperative
+高く	形容詞・アウオ段:連用テ接続	Adverbial
+高い	形容詞・アウオ段:基本形	-
+高し	形容詞・アウオ段:文語基本形	-
+高き	形容詞・アウオ段:体言接続	-
+高	形容詞・アウオ段:ガル接続	-
+高かろ	形容詞・アウオ段:未然ウ接続	-
+高から	形容詞・アウオ段:未然ヌ接続	-
+高う	形容詞・アウオ段:連用ゴザイ接続	-
+高かっ	形容詞・アウオ段:連用タ接続	-
+いい	形容詞・イイ:基本形	-
+いいっ	形容詞・イイ:基本形-促音便	-
+
+# --- Part B: depth 1. One row per (auxiliary lemma, auxiliary form) with a
+# --- non-empty surface. せる/れる on a godan 未然形, させる/られる on an ichidan
+# --- one, as they are used; た/て on 書い, だ/で on 読ん.
+書かせれ	五段・カ行イ音便:未然形 せる:仮定形	Causative Conditional
+書かせりゃ	五段・カ行イ音便:未然形 せる:仮定縮約１	Causative Conditional
+書かせん	五段・カ行イ音便:未然形 せる:体言接続特殊	Causative
+書かせろ	五段・カ行イ音便:未然形 せる:命令ｒｏ	Causative Imperative
+書かせよ	五段・カ行イ音便:未然形 せる:命令ｙｏ	Causative Imperative
+書かせよ	五段・カ行イ音便:未然形 せる:未然ウ接続	Causative
+書かせる	五段・カ行イ音便:未然形 せる:基本形	Causative
+書かせ	五段・カ行イ音便:未然形 せる:未然形	Causative
+書かせ	五段・カ行イ音便:未然形 せる:連用形	Causative
+食べさせれ	一段:未然形 させる:仮定形	Causative Conditional
+食べさせりゃ	一段:未然形 させる:仮定縮約１	Causative Conditional
+食べさせん	一段:未然形 させる:体言接続特殊	Causative
+食べさせろ	一段:未然形 させる:命令ｒｏ	Causative Imperative
+食べさせよ	一段:未然形 させる:命令ｙｏ	Causative Imperative
+食べさせよ	一段:未然形 させる:未然ウ接続	Causative
+食べさせる	一段:未然形 させる:基本形	Causative
+食べさせ	一段:未然形 させる:未然形	Causative
+食べさせ	一段:未然形 させる:連用形	Causative
+書かれれ	五段・カ行イ音便:未然形 れる:仮定形	Passive/Potential Conditional
+書かれりゃ	五段・カ行イ音便:未然形 れる:仮定縮約１	Passive/Potential Conditional
+書かれん	五段・カ行イ音便:未然形 れる:体言接続特殊	Passive/Potential
+書かれろ	五段・カ行イ音便:未然形 れる:命令ｒｏ	Passive/Potential Imperative
+書かれよ	五段・カ行イ音便:未然形 れる:命令ｙｏ	Passive/Potential Imperative
+書かれよ	五段・カ行イ音便:未然形 れる:未然ウ接続	Passive/Potential
+書かれる	五段・カ行イ音便:未然形 れる:基本形	Passive/Potential
+書かれ	五段・カ行イ音便:未然形 れる:未然形	Passive/Potential
+書かれ	五段・カ行イ音便:未然形 れる:連用形	Passive/Potential
+食べられれ	一段:未然形 られる:仮定形	Passive/Potential Conditional
+食べられりゃ	一段:未然形 られる:仮定縮約１	Passive/Potential Conditional
+食べられん	一段:未然形 られる:体言接続特殊	Passive/Potential
+食べられろ	一段:未然形 られる:命令ｒｏ	Passive/Potential Imperative
+食べられよ	一段:未然形 られる:命令ｙｏ	Passive/Potential Imperative
+食べられよ	一段:未然形 られる:未然ウ接続	Passive/Potential
+食べられる	一段:未然形 られる:基本形	Passive/Potential
+食べられ	一段:未然形 られる:未然形	Passive/Potential
+食べられ	一段:未然形 られる:連用形	Passive/Potential
+食べな	一段:未然形 ない:ガル接続	Negative
+食べなけれ	一段:未然形 ない:仮定形	Negative Conditional
+食べなけりゃ	一段:未然形 ない:仮定縮約１	Negative Conditional
+食べなきゃ	一段:未然形 ない:仮定縮約２	Negative Conditional
+食べなき	一段:未然形 ない:体言接続	Negative
+食べなかれ	一段:未然形 ない:命令ｅ	Negative Imperative
+食べない	一段:未然形 ない:基本形	Negative
+食べなし	一段:未然形 ない:文語基本形	Negative
+食べなかろ	一段:未然形 ない:未然ウ接続	Negative
+食べなから	一段:未然形 ない:未然ヌ接続	Negative
+食べのう	一段:未然形 ない:連用ゴザイ接続	Negative
+食べなかっ	一段:未然形 ない:連用タ接続	Negative
+食べなく	一段:未然形 ない:連用テ接続	Negative Adverbial
+食べない	一段:未然形 ない:連用デ接続	Negative
+食べねえ	一段:未然形 ない:音便基本形	Negative
+書かね	五段・カ行イ音便:未然形 ぬ:仮定形	Negative Conditional
+書かざる	五段・カ行イ音便:未然形 ぬ:体言接続	Negative
+書かぬ	五段・カ行イ音便:未然形 ぬ:基本形	Negative
+書かず	五段・カ行イ音便:未然形 ぬ:文語基本形	Negative
+書かず	五段・カ行イ音便:未然形 ぬ:連用ニ接続	Negative
+書かざり	五段・カ行イ音便:未然形 ぬ:連用形	Negative
+書かん	五段・カ行イ音便:未然形 ん:基本形	Negative
+書こう	五段・カ行イ音便:未然ウ接続 う:基本形	Volitional
+# table finding: よう requires 未然ウ接続, so the natural 食べよう is only
+# reachable through う (食べよ+う); this is the one chain よう produces.
+食べよよう	一段:未然ウ接続 よう:基本形	Volitional
+食べますれ	一段:連用形 ます:仮定形	Polite Conditional
+食べませ	一段:連用形 ます:命令ｅ	Polite Imperative
+食べまし	一段:連用形 ます:命令ｉ	Polite Imperative
+食べます	一段:連用形 ます:基本形	Polite
+食べましょ	一段:連用形 ます:未然ウ接続	Polite
+食べませ	一段:連用形 ます:未然形	Polite
+食べまし	一段:連用形 ます:連用形	Polite
+食べた	一段:連用形 たい:ガル接続	Want-to
+食べたけれ	一段:連用形 たい:仮定形	Want-to Conditional
+食べたけりゃ	一段:連用形 たい:仮定縮約１	Want-to Conditional
+食べたきゃ	一段:連用形 たい:仮定縮約２	Want-to Conditional
+食べたき	一段:連用形 たい:体言接続	Want-to
+食べたい	一段:連用形 たい:基本形	Want-to
+食べたし	一段:連用形 たい:文語基本形	Want-to
+食べたかろ	一段:連用形 たい:未然ウ接続	Want-to
+食べたから	一段:連用形 たい:未然ヌ接続	Want-to
+食べとう	一段:連用形 たい:連用ゴザイ接続	Want-to
+食べたかっ	一段:連用形 たい:連用タ接続	Want-to
+食べたく	一段:連用形 たい:連用テ接続	Want-to Adverbial
+食べてえ	一段:連用形 たい:音便基本形	Want-to
+書いたら	五段・カ行イ音便:連用タ接続 た:仮定形	Conditional
+書いた	五段・カ行イ音便:連用タ接続 た:基本形	Past
+書いたろ	五段・カ行イ音便:連用タ接続 た:未然形	Past
+# table finding: ATTACHES_TO points the voiced past だ at the copula class
+# 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/だっ/で, so 読んだら is
+# unreachable. Of the rows below, 読んなら, 読んな, 読んなれ and 読んだっ are
+# spurious; 読んだ, 読んだろ and 読んで are real. All labelled by rule.
+読んなら	五段・マ行:連用タ接続 だ:仮定形	Conditional
+読んな	五段・マ行:連用タ接続 だ:体言接続	Past
+読んなれ	五段・マ行:連用タ接続 だ:命令ｅ	Past Imperative
+読んだ	五段・マ行:連用タ接続 だ:基本形	Past
+読んだろ	五段・マ行:連用タ接続 だ:未然形	Past
+読んだっ	五段・マ行:連用タ接続 だ:連用タ接続	Past
+読んで	五段・マ行:連用タ接続 だ:連用形	Te-form
+書いて	五段・カ行イ音便:連用タ接続 て:基本形	Te-form
+読んで	五段・マ行:連用タ接続 で:基本形	Te-form
+# です/じゃ/や attach to 基本形, so their depth-1 surfaces read as nonstandard
+# Japanese (食べるです, 食べるじゃ). They are the chains the table generates for
+# these lemmas; table.rs's ATTACHES_TO doc records that the じゃ/や rows never
+# fire on real text at all.
+食べるです	一段:基本形 です:基本形	Polite
+食べるでしょ	一段:基本形 です:未然形	Polite
+食べるでし	一段:基本形 です:連用形	Polite
+食べるじゃ	一段:基本形 じゃ:基本形	Copula
+食べるじゃろ	一段:基本形 じゃ:未然形	Copula
+食べるじゃっ	一段:基本形 じゃ:連用形	Copula
+食べるや	一段:基本形 や:基本形	Copula
+食べるやろ	一段:基本形 や:未然形	Copula
+食べるやっ	一段:基本形 や:連用形	Copula
+
+# --- Part C: curated, depth 2-6. Every override and the Polite dedup, the
+# --- corpus's deepest chain, and one row per remaining mapped class. An
+# --- auxiliary's form here is the one the next auxiliary's ATTACHES_TO row
+# --- requires (られ before ます is 連用形; before ない it is 未然形).
+食べさせられませんでした	一段:未然形 させる:未然形 られる:連用形 ます:未然形 ん:基本形 です:連用形 た:基本形	Causative Passive/Potential Polite Negative Past
+食べさせられませんでしたら	一段:未然形 させる:未然形 られる:連用形 ます:未然形 ん:基本形 です:連用形 た:仮定形	Causative Passive/Potential Polite Negative Conditional
+食べさせられる	一段:未然形 させる:未然形 られる:基本形	Causative Passive/Potential
+食べさせられたい	一段:未然形 させる:未然形 られる:連用形 たい:基本形	Causative Passive/Potential Want-to
+食べさせよう	一段:未然形 させる:未然ウ接続 う:基本形	Causative Volitional
+食べさせません	一段:未然形 させる:連用形 ます:未然形 ん:基本形	Causative Polite Negative
+食べられません	一段:未然形 られる:連用形 ます:未然形 ん:基本形	Passive/Potential Polite Negative
+食べられませんでした	一段:未然形 られる:連用形 ます:未然形 ん:基本形 です:連用形 た:基本形	Passive/Potential Polite Negative Past
+食べられなかった	一段:未然形 られる:未然形 ない:連用タ接続 た:基本形	Passive/Potential Negative Past
+書かせられた	五段・カ行イ音便:未然形 せる:未然形 られる:連用形 た:基本形	Causative Passive/Potential Past
+書かせなかった	五段・カ行イ音便:未然形 せる:未然形 ない:連用タ接続 た:基本形	Causative Negative Past
+書かせん	五段・カ行イ音便:未然形 せる:未然形 ん:基本形	Causative Negative
+書かれました	五段・カ行イ音便:未然形 れる:連用形 ます:連用形 た:基本形	Passive/Potential Polite Past
+書きません	五段・カ行イ音便:連用形 ます:未然形 ん:基本形	Polite Negative
+食べました	一段:連用形 ます:連用形 た:基本形	Polite Past
+食べましたら	一段:連用形 ます:連用形 た:仮定形	Polite Conditional
+食べませんでした	一段:連用形 ます:未然形 ん:基本形 です:連用形 た:基本形	Polite Negative Past
+食べませんでしたら	一段:連用形 ます:未然形 ん:基本形 です:連用形 た:仮定形	Polite Negative Conditional
+食べましょう	一段:連用形 ます:未然ウ接続 う:基本形	Polite Volitional
+食べなかった	一段:未然形 ない:連用タ接続 た:基本形	Negative Past
+食べなかったら	一段:未然形 ない:連用タ接続 た:仮定形	Negative Conditional
+食べたかった	一段:連用形 たい:連用タ接続 た:基本形	Want-to Past
+食べたかったら	一段:連用形 たい:連用タ接続 た:仮定形	Want-to Conditional
+食べたら	一段:連用形 た:仮定形	Conditional
+食べた	一段:連用形 た:基本形	Past
+食べて	一段:連用形 て:基本形	Te-form
+# nonstandard surface, but the chain です:連用形 -> た generates it
+食べるでした	一段:基本形 です:連用形 た:基本形	Polite Past
+しよう	サ変・スル:未然ウ接続 う:基本形	Volitional
+こよう	カ変・クル:未然ウ接続 う:基本形	Volitional
+しなかった	サ変・スル:未然形 ない:連用タ接続 た:基本形	Negative Past
+こなかった	カ変・クル:未然形 ない:連用タ接続 た:基本形	Negative Past
+きました	カ変・クル:連用形 ます:連用形 た:基本形	Polite Past
+されました	サ変・スル:未然レル接続 れる:連用形 ます:連用形 た:基本形	Passive/Potential Polite Past
+させます	サ変・スル:未然レル接続 せる:連用形 ます:基本形	Causative Polite
+愛されない	サ変・スル:未然レル接続 れる:未然形 ない:基本形	Passive/Potential Negative
+愛させられた	サ変・スル:未然レル接続 せる:未然形 られる:連用形 た:基本形	Causative Passive/Potential Past
+高かった	形容詞・アウオ段:連用タ接続 た:基本形	Past
+高かったら	形容詞・アウオ段:連用タ接続 た:仮定形	Conditional
+よかった	形容詞・アウオ段:連用タ接続 た:基本形	Past
+いらっしゃいませ	五段・ラ行特殊:連用形 ます:命令ｅ	Polite Imperative
+いらっしゃった	五段・ラ行特殊:連用タ接続 た:基本形	Past
+ありません	五段・ラ行アル:連用形 ます:未然形 ん:基本形	Polite Negative
+あります	五段・ラ行アル:連用形 ます:基本形	Polite
+話した	五段・サ行:連用形 た:基本形	Past
+話しましょう	五段・サ行:連用形 ます:未然ウ接続 う:基本形	Polite Volitional
+泳いだ	五段・ガ行:連用タ接続 だ:基本形	Past
+泳ぎたい	五段・ガ行:連用形 たい:基本形	Want-to
+死んで	五段・ナ行:連用タ接続 で:基本形	Te-form
+死なせた	五段・ナ行:未然形 せる:連用形 た:基本形	Causative Past
+遊ばれた	五段・バ行:未然形 れる:連用形 た:基本形	Passive/Potential Past
+待って	五段・タ行:連用タ接続 て:基本形	Te-form
+待ちません	五段・タ行:連用形 ます:未然形 ん:基本形	Polite Negative
+買った	五段・ワ行促音便:連用タ接続 た:基本形	Past
+買わなかった	五段・ワ行促音便:未然形 ない:連用タ接続 た:基本形	Negative Past
+問うた	五段・ワ行ウ音便:連用タ接続 た:基本形	Past
+取られました	五段・ラ行:未然形 れる:連用形 ます:連用形 た:基本形	Passive/Potential Polite Past
+行った	五段・カ行促音便:連用タ接続 た:基本形	Past
+読みたかった	五段・マ行:連用形 たい:連用タ接続 た:基本形	Want-to Past
+# The dedup and step-order rules, pinned on chains that are not ます+です.
+# A formatter that special-cased "です after ます says Polite once" instead of
+# deduplicating generically would pass every row above and still double a word
+# on the two causative/passive stacks below. 食べたです is the only row where a
+# word-contributing auxiliary is followed by another, so it is what pins
+# "auxiliary words in step order" rather than "Past comes last".
+書かせさせる	五段・カ行イ音便:未然形 せる:未然形 させる:基本形	Causative
+書かれられる	五段・カ行イ音便:未然形 れる:未然形 られる:基本形	Passive/Potential
+食べたです	一段:連用形 た:基本形 です:基本形	Past Polite

@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! The download path, driven against a real socket.
 //!
@@ -15,7 +10,7 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use jmdict_source::{SourceError, PARTIAL_SUFFIX, SOURCE_FILE};
+use jmdict_source::{SourceError, JMDICT, PARTIAL_SUFFIX, SOURCE_FILE};
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("jmdict-source-test-{name}"));
@@ -104,7 +99,7 @@ fn a_good_download_lands_at_the_resolved_name() {
     let dir = scratch("dl-ok");
     let (url, server) = serve(vec![http("200 OK", &gz(XML))]);
 
-    let path = jmdict_source::fetch::fetch_from(&url, &dir).expect("fetch");
+    let path = jmdict_source::fetch::fetch_from(&JMDICT, &url, &dir).expect("fetch");
 
     assert_eq!(path, dir.join(SOURCE_FILE));
     assert!(path.exists(), "archive missing");
@@ -124,7 +119,7 @@ fn a_404_fails_and_leaves_nothing_behind() {
     let dir = scratch("dl-404");
     let (url, server) = serve(vec![http("404 Not Found", b"nope")]);
 
-    let err = jmdict_source::fetch::fetch_from(&url, &dir).expect_err("must fail");
+    let err = jmdict_source::fetch::fetch_from(&JMDICT, &url, &dir).expect_err("must fail");
 
     assert!(
         matches!(err, SourceError::Http { status: 404, .. }),
@@ -163,7 +158,7 @@ fn an_html_200_never_reaches_the_resolved_name() {
     let body = b"<html><body>Login required</body></html>";
     let (url, server) = serve(vec![http("200 OK", body)]);
 
-    let err = jmdict_source::fetch::fetch_from(&url, &dir).expect_err("must fail");
+    let err = jmdict_source::fetch::fetch_from(&JMDICT, &url, &dir).expect_err("must fail");
 
     assert!(!matches!(err, SourceError::Http { .. }), "got {err:?}");
     assert!(
@@ -183,7 +178,7 @@ fn a_truncated_archive_never_reaches_the_resolved_name() {
     let full = gz(&XML.repeat(50));
     let (url, server) = serve(vec![http("200 OK", &full[..full.len() / 2])]);
 
-    jmdict_source::fetch::fetch_from(&url, &dir).expect_err("must fail");
+    jmdict_source::fetch::fetch_from(&JMDICT, &url, &dir).expect_err("must fail");
 
     assert!(!dir.join(SOURCE_FILE).exists());
     assert!(
@@ -198,7 +193,7 @@ fn a_dropped_connection_is_a_transport_error() {
     let dir = scratch("dl-reset");
     let (url, server) = serve_reset();
 
-    let err = jmdict_source::fetch::fetch_from(&url, &dir).expect_err("must fail");
+    let err = jmdict_source::fetch::fetch_from(&JMDICT, &url, &dir).expect_err("must fail");
 
     assert!(matches!(err, SourceError::Transport(_)), "got {err:?}");
     assert!(!dir.join(SOURCE_FILE).exists());
@@ -211,7 +206,7 @@ fn the_source_directory_is_created_if_absent() {
     let nested = dir.join("does").join("not").join("exist");
     let (url, server) = serve(vec![http("200 OK", &gz(XML))]);
 
-    let path = jmdict_source::fetch::fetch_from(&url, &nested).expect("fetch");
+    let path = jmdict_source::fetch::fetch_from(&JMDICT, &url, &nested).expect("fetch");
 
     assert!(path.exists());
     assert_eq!(server.join().expect("join"), 1);
@@ -245,7 +240,7 @@ fn a_stray_staging_file_from_another_pid_is_never_touched() {
     std::fs::write(&foreign, b"leftover from a different process").expect("write");
 
     let (url, server) = serve(vec![http("200 OK", &gz(XML))]);
-    let path = jmdict_source::fetch::fetch_from(&url, &dir).expect("fetch");
+    let path = jmdict_source::fetch::fetch_from(&JMDICT, &url, &dir).expect("fetch");
 
     assert_eq!(path, dir.join(SOURCE_FILE));
     assert!(
@@ -267,7 +262,8 @@ fn a_transient_failure_is_retried_and_can_succeed() {
         http("200 OK", &gz(XML)),
     ]);
 
-    let path = jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect("fetch");
+    let path =
+        jmdict_source::fetch::fetch_with_retry(&JMDICT, &url, &dir, Duration::ZERO).expect("fetch");
 
     assert!(path.exists());
     assert_eq!(server.join().expect("join"), 2, "the 503 was not retried");
@@ -283,8 +279,8 @@ fn a_404_is_not_retried() {
         http("200 OK", &gz(XML)),
     ]);
 
-    let err =
-        jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect_err("must fail");
+    let err = jmdict_source::fetch::fetch_with_retry(&JMDICT, &url, &dir, Duration::ZERO)
+        .expect_err("must fail");
 
     assert!(
         matches!(err, SourceError::Http { status: 404, .. }),
@@ -305,8 +301,8 @@ fn exhausting_the_attempts_reports_the_last_failure_and_the_escape_hatch() {
         .collect();
     let (url, server) = serve(responses);
 
-    let err =
-        jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect_err("must fail");
+    let err = jmdict_source::fetch::fetch_with_retry(&JMDICT, &url, &dir, Duration::ZERO)
+        .expect_err("must fail");
 
     let rendered = err.to_string();
     match err {
@@ -314,7 +310,9 @@ fn exhausting_the_attempts_reports_the_last_failure_and_the_escape_hatch() {
             attempts,
             source_dir,
             last,
+            file,
         } => {
+            assert_eq!(file, SOURCE_FILE);
             assert_eq!(attempts, jmdict_source::DOWNLOAD_ATTEMPTS);
             assert_eq!(source_dir, dir);
             assert!(!last.is_empty(), "the last failure was not recorded");
@@ -356,7 +354,8 @@ fn a_corrupt_archive_is_retried() {
         http("200 OK", &gz(XML)),
     ]);
 
-    let path = jmdict_source::fetch::fetch_with_retry(&url, &dir, Duration::ZERO).expect("fetch");
+    let path =
+        jmdict_source::fetch::fetch_with_retry(&JMDICT, &url, &dir, Duration::ZERO).expect("fetch");
 
     assert!(path.exists());
     assert_eq!(
@@ -388,7 +387,7 @@ fn a_partial_alone_does_not_satisfy_resolve() {
     // `expect_err` needs `Box<dyn BufRead>: Debug`, which it is not — go
     // through `Option` instead, as `lib.rs`'s own tests do for the same
     // reason.
-    let err = jmdict_source::resolve_from(&url, &dir, Duration::ZERO)
+    let err = jmdict_source::resolve_from(&JMDICT, &url, &dir, Duration::ZERO)
         .err()
         .expect("a .partial must not resolve");
     assert!(
@@ -403,7 +402,7 @@ fn the_typed_error_survives_the_io_wrapper() {
     let dir = scratch("resolve-typed");
     let (url, server) = serve(vec![http("404 Not Found", b"nope")]);
 
-    let err = jmdict_source::resolve_from(&url, &dir, Duration::ZERO)
+    let err = jmdict_source::resolve_from(&JMDICT, &url, &dir, Duration::ZERO)
         .err()
         .expect("no local file and a failing download");
     let inner = err.get_ref().and_then(|e| e.downcast_ref::<SourceError>());
@@ -418,7 +417,8 @@ fn a_missing_archive_is_downloaded_and_then_opened() {
     let dir = scratch("resolve-fetch");
     let (url, server) = serve(vec![http("200 OK", &gz(XML))]);
 
-    let mut reader = jmdict_source::resolve_from(&url, &dir, Duration::ZERO).expect("resolve");
+    let mut reader =
+        jmdict_source::resolve_from(&JMDICT, &url, &dir, Duration::ZERO).expect("resolve");
     let mut got = Vec::new();
     reader.read_to_end(&mut got).expect("read");
 

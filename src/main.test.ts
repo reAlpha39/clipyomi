@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ChromeMode } from './types';
 
@@ -25,6 +27,15 @@ const invoke = vi.fn();
 /** The startup reveal — `main.ts` shows the window itself, see its comment. */
 const show = vi.fn(() => Promise.resolve());
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+
+/**
+ * Flush `openFor`'s one await — the `kanji_info` round trip — and the
+ * `.then` that emits. Four ticks is more than the chain needs; the exact
+ * count is not the property under test.
+ */
+async function flushLookup(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) await Promise.resolve();
+}
 
 const startResizeDragging = vi.fn((_dir: string) => Promise.resolve());
 
@@ -56,6 +67,34 @@ function emit(event: string, payload: unknown): void {
   const handler = listeners.get(event);
   if (handler === undefined) throw new Error(`nothing listening for ${event}`);
   handler({ payload });
+}
+
+/** One row as `context-menu.ts` sends it to the native menu. */
+interface MenuRow {
+  kind: string;
+  id?: string;
+  label?: string;
+  checked?: boolean;
+}
+
+/**
+ * The rows of the menu the last right-click asked the backend to show,
+ * separators dropped. The menu is native, so this wire shape is all the DOM
+ * ever sees of it.
+ */
+function shownMenu(): MenuRow[] {
+  const call = [...invoke.mock.calls]
+    .reverse()
+    .find(([cmd]: unknown[]) => cmd === 'show_context_menu');
+  if (call === undefined) throw new Error('show_context_menu was not invoked');
+  return (call[1] as { items: MenuRow[] }).items.filter((row) => row.kind !== 'separator');
+}
+
+/** Pick the row labelled LABEL from the menu last shown, as the OS would. */
+function pickMenu(label: string): void {
+  const row = shownMenu().find((r) => r.label === label);
+  if (row === undefined) throw new Error(`no menu row ${label}`);
+  emit('context-menu-pick', row.id);
 }
 
 describe('the event-driven render path', () => {
@@ -94,6 +133,7 @@ describe('the event-driven render path', () => {
           }],
         },
       ],
+      alternatives: [],
     });
     expect(document.querySelector('.chip')?.textContent).toBe('東京');
     expect(document.querySelector('.sentence')).not.toBeNull();
@@ -128,10 +168,10 @@ describe('the event-driven render path', () => {
     const chips = () =>
       [...document.querySelectorAll('.chip')].map((c) => c.textContent);
 
-    emit('parse-result', { segments: [seg(0, '東京'), seg(2, '都')] });
+    emit('parse-result', { segments: [seg(0, '東京'), seg(2, '都')], alternatives: [] });
     expect(chips()).toEqual(['東京', '都']);
 
-    emit('parse-result', { segments: [seg(0, '東京都')] });
+    emit('parse-result', { segments: [seg(0, '東京都')], alternatives: [] });
 
     expect(chips()).toEqual(['東京都']);
   });
@@ -162,6 +202,7 @@ describe('the event-driven render path', () => {
       segments: [
         { start: 0, len: 1, surface: '本', reading: 'ほん', matched: true, entries: [] },
       ],
+      alternatives: [],
     });
     emit('parse-error', 'the parser panicked on an input of 4096 characters');
     emit('parse-error', 'a second failure');
@@ -169,6 +210,184 @@ describe('the event-driven render path', () => {
     expect(document.querySelectorAll('.startup-error')).toHaveLength(1);
     expect(document.querySelector('.sentence')).not.toBeNull();
   });
+
+  // Phase 2 design §6, landed by Phase 2b: readings 2..k ride on the same
+  // event as `alternatives`, in the order Phase 2b's `demote` gives them.
+  const readingSeg = (start: number, surface: string, matched = true) => ({
+    start,
+    len: surface.length,
+    surface,
+    reading: null,
+    matched,
+    entries: matched
+      ? [
+          {
+            headword: surface,
+            reading: null,
+            conjugation: null,
+            pos: ['n'],
+            senses: [{ pos: ['n'], glosses: [surface], xrefs: [], misc: [], info: [] }],
+            flags: ['primary'],
+          },
+        ]
+      : [],
+  });
+  /** Every rendered segment in order, chip or unmatched run. */
+  const rendered = () => [...document.querySelectorAll('.sentence > *')].map((el) => el.textContent);
+  /** Right-click, then read the rows the native menu was asked to show. */
+  const menuItems = () => {
+    document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    return shownMenu();
+  };
+  const menuLabels = () => menuItems().map((row) => row.label);
+  const pick = (label: string) => {
+    menuItems();
+    pickMenu(label);
+  };
+  const press = (key: string, init: KeyboardEventInit = {}) =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
+  const panes = () => document.querySelector<HTMLElement>('.panes')!;
+  const tokyo = () => ({
+    segments: [readingSeg(0, '東京都')],
+    alternatives: [
+      [readingSeg(0, '東京'), readingSeg(2, '都')],
+      [readingSeg(0, '東', false), readingSeg(1, '京都')],
+    ],
+  });
+
+  test('alternates appear as reading rows and a row switches the sentence', () => {
+    emit('parse-result', tokyo());
+    expect(rendered()).toEqual(['東京都']);
+
+    expect(menuLabels().slice(0, 3)).toEqual(['Reading 1 of 3', 'Reading 2 of 3', 'Reading 3 of 3']);
+    pick('Reading 3 of 3');
+
+    expect(rendered()).toEqual(['東', '京都']);
+    expect(document.querySelector('.unmatched')?.textContent).toBe('東');
+    // Reopened, the menu marks the reading now on screen.
+    const checked = menuItems()
+      .filter((row) => row.checked === true)
+      .map((row) => row.label);
+    expect(checked).toContain('Reading 3 of 3');
+  });
+
+  test('a result with no alternates offers no reading rows', () => {
+    emit('parse-result', { segments: [readingSeg(0, '東京都')], alternatives: [] });
+    expect(menuLabels().some((label) => label?.startsWith('Reading'))).toBe(false);
+  });
+
+  test('] and [ cycle the readings and wrap at both ends', () => {
+    emit('parse-result', tokyo());
+    press(']');
+    expect(rendered()).toEqual(['東京', '都']);
+    press(']');
+    press(']');
+    expect(rendered()).toEqual(['東京都']);
+    press('[');
+    expect(rendered()).toEqual(['東', '京都']);
+  });
+
+  test('a modified bracket is not a reading step', () => {
+    // Alt+] and Alt+[ are history navigation, handled on the Rust side; the
+    // webview still sees the keydown and must not also cycle readings.
+    emit('parse-result', tokyo());
+    press(']', { altKey: true });
+    press('[', { ctrlKey: true });
+    expect(rendered()).toEqual(['東京都']);
+  });
+
+  test('a new result starts at reading 1 again', () => {
+    emit('parse-result', tokyo());
+    press(']');
+    emit('parse-result', {
+      segments: [readingSeg(0, '東京'), readingSeg(2, '都')],
+      alternatives: [[readingSeg(0, '東京都')]],
+    });
+    expect(rendered()).toEqual(['東京', '都']);
+  });
+
+  test('the popover reads the displayed reading, not the top one', async () => {
+    emit('parse-result', tokyo());
+    press(']');
+    document
+      .querySelector<HTMLElement>('.chip[data-start="2"]')
+      ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+
+    const content = emitted.find(([event]) => event === 'popover-content');
+    expect(content).toBeDefined();
+    const payload = content![1] as { entries: { headword: string }[] };
+    expect(payload.entries[0].headword).toBe('都');
+  });
+
+  test('a furigana change re-renders the reading on screen, not reading 1', () => {
+    emit('parse-result', tokyo());
+    press(']');
+    emit('settings-changed', { furigana_mode: 'hiragana' });
+    expect(rendered()).toEqual(['東京', '都']);
+  });
+
+  test('cycling keeps the scroll position; a new result returns to the top', () => {
+    // Phase 2b design §6: a reading switch is made while reading one word,
+    // and must not lose the reader's place. A different result is a new
+    // sentence and starts at the top, as every render did before.
+    emit('parse-result', tokyo());
+    panes().scrollTop = 120;
+    press(']');
+    expect(panes().scrollTop).toBe(120);
+    emit('parse-result', { segments: [readingSeg(0, '東京')], alternatives: [] });
+    expect(panes().scrollTop).toBe(0);
+  });
+
+  test('a furigana change keeps the scroll position too', () => {
+    emit('parse-result', tokyo());
+    panes().scrollTop = 120;
+    emit('settings-changed', { furigana_mode: 'hiragana' });
+    expect(panes().scrollTop).toBe(120);
+  });
+
+  test('cycling keeps the keyboard position, by character and not by chip', () => {
+    // The other half of the scroll guard above, and the more direct defect of
+    // the two: `]`/`[` is a keyboard gesture, so replacing `#output`'s
+    // children under a focused chip threw away the position of the very
+    // reader who pressed the key. Reading 2 splits 東京都 into 東京 + 都, so
+    // focus must land on the chip covering character 2 — 都, the second chip —
+    // rather than on chip index 0 where it started.
+    emit('parse-result', tokyo());
+    document.querySelector<HTMLButtonElement>('[data-start="0"]')!.focus();
+    press(']');
+    expect(rendered()).toEqual(['東京', '都']);
+    expect((document.activeElement as HTMLElement).dataset.start).toBe('0');
+
+    document.querySelector<HTMLButtonElement>('[data-start="2"]')!.focus();
+    press('[');
+    expect(rendered()).toEqual(['東京都']);
+    expect((document.activeElement as HTMLElement).dataset.start).toBe('0');
+  });
+
+  test('cycling onto an unmatched run lands on the pane, never on the body', () => {
+    // Reading 3 is 東 (unmatched) + 京都, and an unmatched run is a <span>
+    // with no tabindex on purpose — so there is no chip to return to. The
+    // point of `#output`'s own `tabindex="-1"` is that focus stays in the
+    // sentence pane instead of falling all the way to <body>, which is where
+    // it went for every switch before this.
+    emit('parse-result', tokyo());
+    document.querySelector<HTMLButtonElement>('[data-start="0"]')!.focus();
+    press('[');
+    expect(rendered()).toEqual(['東', '京都']);
+    expect(document.activeElement).toBe(document.querySelector('#output'));
+  });
+
+  test('a render nobody was focused on does not steal focus', () => {
+    // The gate `renderDictionary` already applies: a parse arriving while the
+    // reader is somewhere else entirely must not pull them into the pane.
+    emit('parse-result', tokyo());
+    const outside = document.querySelector<HTMLButtonElement>('#window-close')!;
+    outside.focus();
+    press(']');
+    expect(document.activeElement).toBe(outside);
+  });
+
 });
 
 // Residual 2 (re-review, final wave): the original fix wrapped the whole
@@ -209,6 +428,7 @@ describe('the frontend_ready call', () => {
       segments: [
         { start: 0, len: 1, surface: '本', reading: 'ほん', matched: true, entries: [] },
       ],
+      alternatives: [],
     });
     expect(document.querySelector('.sentence')).not.toBeNull();
   });
@@ -1001,21 +1221,17 @@ describe('the titlebar band', () => {
     document.body.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
 
-    const labels = [...document.querySelectorAll('.context-menu button')].map(
-      (b) => b.textContent,
-    );
-    expect(labels).toEqual([
+    const rows = shownMenu();
+    expect(rows.map((row) => row.label)).toEqual([
       'Native frame',
       'Header + resize edges',
       'Content only',
       'Settings…',
       'Quit',
     ]);
-    expect(
-      document
-        .querySelector('.context-menu button[aria-checked="true"]')!
-        .textContent,
-    ).toBe('Content only');
+    expect(rows.filter((row) => row.checked === true).map((row) => row.label)).toEqual([
+      'Content only',
+    ]);
   });
 
   test('the menu omits the native mode on Windows', async () => {
@@ -1025,9 +1241,7 @@ describe('the titlebar band', () => {
     );
 
     document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    const labels = [...document.querySelectorAll('.context-menu button')].map(
-      (b) => b.textContent,
-    );
+    const labels = shownMenu().map((row) => row.label);
     expect(labels).not.toContain('Native frame');
     expect(labels).toContain('Header + resize edges');
   });
@@ -1039,10 +1253,7 @@ describe('the titlebar band', () => {
     await vi.waitFor(() => expect(appEl.getAttribute('data-chrome')).toBe('native'));
 
     document.body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    const item = [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')].find(
-      (b) => b.textContent === 'Content only',
-    )!;
-    item.click();
+    pickMenu('Content only');
 
     // Applied locally as well as broadcast: the emit round-trip is async, and
     // the mode should change on the frame the user clicked.
@@ -1059,9 +1270,7 @@ describe('the titlebar band', () => {
       document.body.dispatchEvent(
         new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
       );
-      [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')]
-        .find((b) => b.textContent === label)!
-        .click();
+      pickMenu(label);
     };
 
     open('Settings…');
@@ -1329,6 +1538,7 @@ describe('furigana mode reaching the render', () => {
           ],
         },
       ],
+      alternatives: [],
     });
 
     expect(document.querySelector('.chip ruby')).toBeNull();
@@ -1371,6 +1581,7 @@ describe('furigana mode reaching the render', () => {
           entries: [],
         },
       ],
+      alternatives: [],
     });
 
     expect(document.querySelector('.chip ruby rt')?.textContent).toBe('トウキョウ');
@@ -1447,6 +1658,7 @@ describe('settings window and gloss filters', () => {
       segments: [
         { start: 0, len: 2, surface: '東京', reading: 'とうきょう', matched: true, entries },
       ],
+      alternatives: [],
     });
 
     // The filters are not observable directly; the popover payload is what
@@ -1454,10 +1666,11 @@ describe('settings window and gloss filters', () => {
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',
-      { entries, filters: { hide_pos: true, hide_xrefs: true, hide_usage: false } },
+      { entries, filters: { hide_pos: true, hide_xrefs: true, hide_usage: false, hide_kanji: false } },
     ]);
   });
 
@@ -1502,10 +1715,12 @@ describe('settings window and gloss filters', () => {
           entries: sampleEntries,
         },
       ],
+      alternatives: [],
     });
 
     const chip = document.querySelector<HTMLElement>('.chip');
     chip?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',
@@ -1515,6 +1730,7 @@ describe('settings window and gloss filters', () => {
           hide_pos: true,
           hide_xrefs: false,
           hide_usage: true,
+          hide_kanji: false,
         },
       },
     ]);
@@ -1699,6 +1915,7 @@ describe('font sizes reaching the root element', () => {
           entries: [],
         },
       ],
+      alternatives: [],
     });
     expect(document.querySelector('.chip ruby')).toBeNull();
 
@@ -1769,10 +1986,12 @@ describe('the gloss size reaching the popover window', () => {
           entries: sampleEntries,
         },
       ],
+      alternatives: [],
     });
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
   }
 
   // The popover is a second webview with its own `:root`, so the size has to
@@ -1810,10 +2029,14 @@ describe('the gloss size reaching the popover window', () => {
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',
-      { entries: sampleEntries, filters: { hide_pos: false, hide_xrefs: false, hide_usage: false } },
+      {
+        entries: sampleEntries,
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false, hide_kanji: false },
+      },
     ]);
   });
 
@@ -1824,7 +2047,7 @@ describe('the gloss size reaching the popover window', () => {
       'popover-content',
       {
         entries: sampleEntries,
-        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false },
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false, hide_kanji: false },
       },
     ]);
   });
@@ -1847,6 +2070,7 @@ describe('the header history buttons', () => {
           entries: opts.entries ?? [],
         },
       ],
+      alternatives: [],
     };
   }
 
@@ -1919,7 +2143,7 @@ describe('the header history buttons', () => {
   // segmentAt resolves a hover against `lastResult`, which `display` — not
   // `show` — writes. If a nav step failed to update it, this would find the
   // newest parse's entries instead of the one actually on screen.
-  test('a hover after navigating emits popover-content for the displayed parse entries', () => {
+  test('a hover after navigating emits popover-content for the displayed parse entries', async () => {
     const catEntries = [
       { headword: '猫', reading: 'ねこ', conjugation: null, pos: ['n'], senses: [], flags: [] },
     ];
@@ -1933,6 +2157,7 @@ describe('the header history buttons', () => {
     document
       .querySelector<HTMLElement>('.chip')
       ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
 
     expect(emitted).toContainEqual([
       'popover-content',

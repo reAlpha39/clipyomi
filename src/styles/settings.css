@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT OR Apache-2.0 */
+
 .settings-page {
   display: flex;
   flex-direction: column;
@@ -53,6 +55,31 @@
   color: var(--color-text);
   cursor: pointer;
   padding: 2px 0;
+}
+
+/* A row whose checkbox carries a size box: the label holds the checkbox and
+   its text, and the box sits at the end where the number rows keep theirs. */
+.settings-checkbox-row .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.settings-checkbox-row input[type='number'] {
+  width: 64px;
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+}
+
+.settings-checkbox-row .unit {
+  color: var(--color-muted);
+  font-size: var(--text-tag, 11px);
 }
 
 .settings-checkbox-row input[type='checkbox'] {
@@ -134,9 +161,76 @@
   min-width: 76px;
 }
 
+/* One row per colour: label, swatch, Reset. Same skeleton as the number rows
+   so the controls line up as a column. */
+.settings-colour-row,
+.settings-select-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--color-text);
+  padding: 2px 0;
+}
+
+.settings-colour-row .label-text,
+.settings-select-row .label-text {
+  flex: 1;
+}
+
+.settings-colour-row input[type='color'] {
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.settings-colour-row .settings-reset {
+  font: inherit;
+  font-size: var(--text-tag, 11px);
+  color: var(--color-muted);
+  background: none;
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.settings-colour-row .settings-reset:hover {
+  color: var(--color-text);
+}
+
+.settings-select-row select {
+  width: 180px;
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+}
+
 .settings-note {
   margin: 0;
   font-family: var(--font-ui);
   font-size: var(--text-tag, 11px);
   color: var(--color-muted);
+}
+
+/* The attribution the EDRDG licence asks for, on the one persistent surface
+   the app has. Selectable, unlike the rest of the page, so the licence URL
+   can be copied — it is text rather than a link because no opener plugin is
+   installed and an anchor would navigate this webview away. */
+.settings-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-rule);
+}
+
+.settings-footer .settings-note {
+  user-select: text;
 }

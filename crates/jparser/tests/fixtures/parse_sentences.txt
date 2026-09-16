@@ -1,12 +1,15 @@
-# Snapshot corpus for tests/parse_snapshots.rs and tools/extract_jmdict_subset.py.
+# Snapshot corpus for tests/engine_v2.rs and tools/extract_jmdict_subset.py.
 # One sentence per line. Blank lines and lines starting with '#' are ignored.
 #
 # Coverage intent, per sentence group:
 #   1-5    plain nouns, particles, i- and na-adjectives
-#   6-10   する and 来る: the two irregulars whose generated stem is the EMPTY
-#          string, so prefixes_of returns a key_chars == 0 hit at every
-#          position. That path broke and was fixed late in Phase 1A and is the
-#          standing regression the addendum §6 asks for.
+#   6-10   する and 来る, the language's two irregular verbs. Under the v1
+#          builder their generated stem was the EMPTY string, so prefixes_of
+#          returned a key_chars == 0 hit at every position; that path broke and
+#          was fixed late in Phase 1A, and these sentences were the standing
+#          regression for it. The v2 builder indexes headwords only and has no
+#          empty key, so what they now guard is the table's irregular classes:
+#          カ変・来ル (added at Phase 1b-ii) and サ変・スル.
 #   11-14  stacked conjugations: passive, causative-passive, potential, -tai
 #   15-16  そうだ (hearsay/appearance) and a plain past, unstacked
 #   17-22  te-form chains, -tai, -teiru, -te + kudasai requests

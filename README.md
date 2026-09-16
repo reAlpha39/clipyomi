@@ -12,7 +12,7 @@ It is a modern cross-platform (Rust + Tauri v2 + TypeScript) rewrite of the clas
 - **Built-in JMDict Integration:** Automatically downloads and compiles an optimized, memory-mapped local index of the JMDict multilingual Japanese dictionary.
 - **Interactive Floating Popovers:**
   - Full grammatical breakdown with conjugated forms (e.g. *Past*, *Causative-Passive*, *Polite Negative*).
-  - Furigana readings, pitch/romaji support, and part-of-speech tags.
+  - Furigana readings, romaji support, and part-of-speech tags.
   - Rich definitions, glosses, and cross-references.
 - **Immersion HUD & Desktop Overlay:**
   - **Always on Top** pinning for overlaying games or readers.
@@ -29,7 +29,8 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 ```text
 ├── crates/
 │   ├── jparser/         # Pure, reusable Japanese segmentation & conjugation parser
-│   └── jmdict-source/   # JMDict download, staging, and indexing pipeline
+│   ├── jmdict-source/   # JMDict download, staging, and indexing pipeline
+│   └── vibrato-source/  # Pinned IPADIC download for the optional boundary hints
 ├── src-tauri/           # Tauri v2 desktop shell, clipboard monitoring, & window management
 └── src/                 # TypeScript + Vite UI (popover positioning, DOM rendering, styling)
 ```
@@ -40,7 +41,7 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 
 ### Prerequisites
 
-1. **Rust:** Latest stable Rust (1.88+ recommended, 1.85+ for `jparser` crate).
+1. **Rust:** Latest stable Rust. The workspace floor is **1.89** — that is `vibrato-source`'s `rust-version`, and `cargo test --workspace` below is refused by cargo under it. Individually: `jparser` and `jmdict-source` 1.85, `src-tauri` 1.88, `vibrato-source` 1.89.
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
@@ -52,7 +53,7 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/clipyomi.git
+   git clone https://github.com/reAlpha39/clipyomi.git
    cd clipyomi
    ```
 
@@ -92,12 +93,12 @@ cargo test --workspace
 - **Backend Language:** [Rust](https://www.rust-lang.org/)
 - **Frontend:** [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
 - **Morphological Tokenizer:** [Vibrato](https://github.com/daac-tools/vibrato) (optional MeCab backend)
-- **Dictionary:** [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html) (EDRDG)
+- **Dictionary:** [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html) and [KANJIDIC2](https://www.edrdg.org/wiki/index.php/KANJIDIC_Project) (EDRDG)
 
 ---
 
 ## License & Acknowledgments
 
-- **ClipYomi** is distributed under the **GPL-2.0** license, following the original Translation Aggregator codebase license.
+- **ClipYomi** is dual-licensed under **MIT OR Apache-2.0** (`LICENSE-MIT`, `LICENSE-APACHE`). The parsing engine is a clean-room implementation; see `docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md` §3.5.
+- Dictionary data from the **EDRDG**'s JMdict and KANJIDIC2 is CC BY-SA 4.0 under its own notice (`crates/jparser/tests/fixtures/README.md`); the **IPADIC** conjugation data carries its notice in `crates/jparser/assets/IPADIC_NOTICE`.
 - Dedicated to the authors and contributors of **Translation Aggregator** (Hongfire / Sinflower / TA contributors) for the original JParser design.
-- Uses dictionary data from the **EDRDG** (Electronic Dictionary Research and Development Group) under the Creative Commons Attribution-ShareAlike Licence.

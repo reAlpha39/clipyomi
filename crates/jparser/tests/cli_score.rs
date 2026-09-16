@@ -1,0 +1,491 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+//
+// Written independently for the Engine v2 measurement harness. Nothing here
+// derives from Translation Aggregator.
+
+//! `jparser-cli score` end to end against the hand-written mini fixture.
+//!
+//! Exact-output assertions: the format is a frozen interface — the recorded
+//! Phase 0 baseline is transcribed from it — so a change must break a test
+//! rather than silently change what a later phase is compared against.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use jparser::engine::build::build_from_reader;
+
+const BIN: &str = env!("CARGO_BIN_EXE_jparser-cli");
+const FIXTURE: &str = include_str!("fixtures/jmdict_mini.xml");
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn index_dir(dir: &Path) -> PathBuf {
+    let index = dir.join("index");
+    std::fs::create_dir_all(&index).unwrap();
+    build_from_reader(std::io::Cursor::new(FIXTURE), &index).expect("the mini fixture must build");
+    index
+}
+
+fn score(index: &Path, gold: &Path) -> String {
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(index)
+        .arg(gold)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(
+        out.status.success(),
+        "exit {:?}, stderr: {}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout).expect("output must be UTF-8")
+}
+
+/// 言う is ent_seq 1000010 and は is 1000020 in the mini fixture, and
+/// `cli_parse.rs` already pins that 言った parses as one span over all three
+/// chars. Both metrics are therefore 1.0 by construction, which is what makes
+/// this a test of the harness rather than of the engine.
+#[test]
+fn a_fully_correct_gold_corpus_scores_one_on_both_metrics() {
+    let dir = scratch("cli-score-perfect");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n\
+         {\"text\":\"は\",\"source\":\"test:2\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        score(&index, &gold),
+        "sentences:      2\n\
+         gold spans:     2\n\
+         superseded:     0\n\
+         span accuracy:  1.0000  (2 / 2)\n\
+         entry top-1:    1.0000  (2 / 2)\n"
+    );
+}
+
+/// A wrong-but-present ent_seq must cost entry top-1 and leave span accuracy
+/// alone. If a future change conflated the two metrics, only this test would
+/// catch it.
+///
+/// 1000030 (高い) is a real entry in the mini fixture — confirmed with
+/// `cargo run -p jparser --bin jparser-cli -- parse <index> は`, which prints
+/// only entry 1000020 for は — so this is a genuine ranking miss, not the
+/// absent-ent_seq hard error (that failure mode has its own test below).
+#[test]
+fn a_wrong_ent_seq_costs_only_entry_top_1() {
+    let dir = scratch("cli-score-wrong-entry");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000030}]}\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        score(&index, &gold),
+        "sentences:      1\n\
+         gold spans:     1\n\
+         superseded:     0\n\
+         span accuracy:  1.0000  (1 / 1)\n\
+         entry top-1:    0.0000  (0 / 1)\n"
+    );
+}
+
+/// Design §12: a gold `ent_seq` absent from the index is a hard error, not a
+/// zero score. Scoring it as a miss would misattribute a stale subset (the
+/// extractor not re-run after the corpus grew) to the engine.
+#[test]
+fn an_ent_seq_absent_from_the_index_is_a_hard_error() {
+    let dir = scratch("cli-score-absent-entry");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":9999999}]}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .output()
+        .expect("runnable");
+
+    assert!(!out.status.success(), "must exit non-zero");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("は"), "names the text: {stderr}");
+    assert!(stderr.contains("9999999"), "names the ent_seq: {stderr}");
+}
+
+/// Critical 1's fix: span accuracy split by the `label` decision that
+/// produced each record, printed after the two headline metrics and only
+/// when at least one record carries a `decision`.
+///
+/// This fixture also happens to be the smallest demonstration of handoff §9's
+/// finding, so it pins the compound-tolerant lines too. Gold splits `高い`
+/// into `高` / `い`; the index carries `高い`, so the parse matches it whole.
+/// Strict span accuracy calls that two misses. The merge starts and ends on
+/// gold boundaries and cut no gold span, so tolerant calls it two hits — and
+/// the two numbers printed together are the point.
+#[test]
+fn score_reports_a_span_accuracy_breakdown_by_decision() {
+    let dir = scratch("cli-score-by-decision");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\
+         \"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}],\"decision\":\"j\"}\n\
+         {\"text\":\"高い\",\"source\":\"test:2\",\
+         \"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":null},\
+         {\"start\":1,\"len\":1,\"ent_seq\":null}],\"decision\":\"v\"}\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        score(&index, &gold),
+        concat!(
+            "sentences:      2\n",
+            "gold spans:     3\n",
+            "superseded:     0\n",
+            "span accuracy:  0.3333  (1 / 3)\n",
+            "entry top-1:    1.0000  (1 / 1)\n",
+            "  by decision:  j 1.0000 (1 / 1)  v 0.0000 (0 / 2)\n",
+            "span tolerant:  1.0000  (3 / 3)\n",
+            "  coarsening:   2 gold spans inside 1 dictionary merge\n",
+        )
+    );
+}
+
+/// A gold file with no `decision` field on any record prints no breakdown
+/// line at all — the split is additive, not a new required line.
+#[test]
+fn score_prints_no_breakdown_line_when_no_record_carries_a_decision() {
+    let dir = scratch("cli-score-no-decision");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+
+    assert!(
+        !score(&index, &gold).contains("by decision"),
+        "no record carries a decision"
+    );
+}
+
+/// A cover violation is a hard error naming the record, not a skipped
+/// sentence: skipping would move span accuracy's denominator silently.
+#[test]
+fn a_gold_span_past_the_end_of_its_text_is_a_hard_error() {
+    let dir = scratch("cli-score-bad-cover");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":4,\"ent_seq\":null}]}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .output()
+        .expect("runnable");
+
+    assert!(!out.status.success(), "must exit non-zero");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("は"), "names the record: {stderr}");
+}
+
+#[test]
+fn the_json_form_carries_the_same_numbers() {
+    let dir = scratch("cli-score-json");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--json")
+        .output()
+        .expect("runnable");
+    assert!(out.status.success());
+
+    // `index_dir` always names its directory `index`, and no `--hints` is
+    // passed here, so `index_generation` and `hints` are pinned values, not
+    // incidental ones.
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap().trim(),
+        "{\"sentences\":1,\"gold_spans\":1,\"superseded\":0,\"span_hits\":1,\"top1_hits\":1,\
+         \"top1_total\":1,\"hints\":false,\"index_generation\":\"index\"}"
+    );
+}
+
+/// Item 8's provenance fields carry the per-decision breakdown into `--json`
+/// too — the same data the text form prints, structured instead of rendered.
+#[test]
+fn the_json_form_carries_the_decision_breakdown() {
+    let dir = scratch("cli-score-json-by-decision");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\
+         \"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}],\"decision\":\"j\"}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--json")
+        .output()
+        .expect("runnable");
+    assert!(out.status.success());
+
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        stdout.contains(r#""by_decision":[{"decision":"j","hits":1,"total":1}]"#),
+        "got {stdout}"
+    );
+}
+
+/// Phase 2 design §5: `--readings 3` adds the oracle@3 lines after
+/// everything the default prints. 言った is one gold span top-1 already gets,
+/// so every oracle ratio is 1.0 by construction -- this pins the format and
+/// the plumbing, not the engine.
+#[test]
+fn readings_above_one_add_the_oracle_lines() {
+    let dir = scratch("cli-score-readings");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--readings")
+        .arg("3")
+        .output()
+        .expect("runnable");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap(),
+        "sentences:      1\n\
+         gold spans:     1\n\
+         superseded:     0\n\
+         span accuracy:  1.0000  (1 / 1)\n\
+         entry top-1:    1.0000  (1 / 1)\n\
+         oracle@3 strict:    1.0000  (1 / 1)\n\
+         oracle@3 tolerant:  1.0000  (1 / 1)\n\
+         oracle@3 sentences: 1.0000  (1 / 1)\n"
+    );
+}
+
+/// The JSON form nests the oracle numbers under one key, present only when
+/// asked -- `the_json_form_carries_the_same_numbers` above pins that the
+/// default output has no such key.
+#[test]
+fn the_json_form_nests_the_oracle_block_only_when_asked() {
+    let dir = scratch("cli-score-readings-json");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--readings")
+        .arg("3")
+        .arg("--json")
+        .output()
+        .expect("runnable");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        stdout.contains(
+            r#""oracle":{"readings":3,"span_hits":1,"tolerant_hits":1,"sentence_hits":1}"#
+        ),
+        "got {stdout}"
+    );
+}
+
+/// The compound metric is additive: absent `--compounds`, `score`'s output is
+/// byte-for-byte what it was before the metric existed. Every recorded
+/// baseline is transcribed from that output, so this is the test that keeps
+/// them comparable.
+#[test]
+fn the_compound_metric_is_absent_without_its_file() {
+    let dir = scratch("cli-score-compounds-absent");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n",
+    )
+    .unwrap();
+
+    assert!(!score(&index, &gold).contains("compounds"));
+}
+
+/// `言った` parses as one span over all three characters (`cli_parse.rs` pins
+/// that), so a `merge` expectation on 0..3 is a hit and a `split` expectation
+/// on the same window is a miss. One of each, so neither direction can pass by
+/// always answering the same way — and the `skip` record must move the
+/// ambiguous counter without entering the ratio.
+#[test]
+fn the_compound_metric_scores_both_directions_and_excludes_the_ambiguous() {
+    let dir = scratch("cli-score-compounds");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}]}\n\
+         {\"text\":\"は\",\"source\":\"test:2\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+    let compounds = dir.join("compounds.jsonl");
+    std::fs::write(
+        &compounds,
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"start\":0,\"len\":3,\"surface\":\"言った\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"lexical\",\"expect\":\"merge\"}\n\
+         {\"text\":\"言った\",\"source\":\"test:1\",\"start\":0,\"len\":2,\"surface\":\"言っ\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"transparent\",\"expect\":\"split\"}\n\
+         {\"text\":\"言った\",\"source\":\"test:1\",\"start\":1,\"len\":2,\"surface\":\"った\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"ambiguous\",\"expect\":\"skip\"}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--compounds")
+        .arg(&compounds)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = String::from_utf8(out.stdout).unwrap();
+
+    assert!(
+        out.contains("compounds:      1.0000  (2 / 2)"),
+        "the merge and the split are both hits: {out}"
+    );
+    assert!(
+        out.contains("kept whole:   1 / 1     split apart: 1 / 1"),
+        "{out}"
+    );
+    assert!(
+        out.contains("lexical 1 / 1  transparent 1 / 1   (1 ambiguous, excluded)"),
+        "the skip counts beside the ratio, not inside it: {out}"
+    );
+}
+
+/// A fixture sentence the corpus no longer holds would shrink the metric's
+/// denominator without saying so, which is exactly the drift the file is meant
+/// to guard against — so it is a hard error, like an absent `ent_seq`.
+#[test]
+fn an_adjudicated_sentence_missing_from_the_corpus_is_a_hard_error() {
+    let dir = scratch("cli-score-compounds-orphan");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+    let compounds = dir.join("compounds.jsonl");
+    std::fs::write(
+        &compounds,
+        "{\"text\":\"言った\",\"source\":\"test:9\",\"start\":0,\"len\":3,\"surface\":\"言った\",\"headword\":\"言う\",\"entry_id\":1000010,\"class\":\"lexical\",\"expect\":\"merge\"}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--compounds")
+        .arg(&compounds)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(
+        !out.status.success(),
+        "an orphaned adjudication must not score"
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("adjudicated sentence"), "stderr: {err}");
+}
+
+/// A window reaching past the end of its own sentence is a malformed record,
+/// caught on read rather than scored as a miss.
+#[test]
+fn an_adjudicated_window_past_the_end_of_its_text_is_a_hard_error() {
+    let dir = scratch("cli-score-compounds-bad-window");
+    let index = index_dir(&dir);
+    let gold = dir.join("gold.jsonl");
+    std::fs::write(
+        &gold,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":1,\"ent_seq\":1000020}]}\n",
+    )
+    .unwrap();
+    let compounds = dir.join("compounds.jsonl");
+    std::fs::write(
+        &compounds,
+        "{\"text\":\"は\",\"source\":\"test:1\",\"start\":0,\"len\":4,\"surface\":\"は\",\"headword\":\"は\",\"entry_id\":1000020,\"class\":\"lexical\",\"expect\":\"merge\"}\n",
+    )
+    .unwrap();
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .arg("--compounds")
+        .arg(&compounds)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(!out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("outside a 1-character sentence"),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

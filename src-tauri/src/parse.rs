@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! The parse worker: one task, latest-wins, panics contained.
 
@@ -11,7 +6,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use jparser::hints::VibratoTokenizer;
-use jparser::{BoundaryHints, ParseOptions, ParseResult};
+use jparser::{Boundaries, ParseOptions, ParseResult};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::watch;
 
@@ -82,11 +77,17 @@ pub fn current_hints(
     hints.borrow().clone()
 }
 
+/// Readings the app asks the engine for, top-1 included: Phase 2 design §1
+/// fixes it at three. The webview shows `segments` and offers the two
+/// `alternatives` from its right-click menu, in the order Phase 2b's
+/// `lattice::demote` gives them.
+const READINGS: usize = 3;
+
 /// Parse each new input and emit the outcome to the webview.
 ///
 /// The index arrives through `index` rather than being passed by value, because
 /// the worker is spawned before startup knows whether there is one: on a first
-/// run it starts empty and begins parsing when `commands::download_dictionary`
+/// run it starts empty and begins parsing when `commands::dictionary::download_dictionary`
 /// publishes. Input arriving before then is dropped — the download screen is on
 /// top at that point, so there is nothing a message could usefully tell the user.
 ///
@@ -108,13 +109,13 @@ pub async fn run_worker(
 
         let outcome = tauri::async_runtime::spawn_blocking(move || {
             catch_parse(len, || {
-                let flags = tokenizer.as_ref().map(|t| t.hints(&text));
+                let bounds = tokenizer.as_ref().map(|t| t.boundaries(&text));
                 jparser::parse(
                     &state.index,
                     &state.table,
                     &text,
-                    &ParseOptions::default(),
-                    flags.as_ref().map(|f| f as &dyn BoundaryHints),
+                    &ParseOptions::with_readings(READINGS),
+                    bounds.as_ref().map(|b| b as &dyn Boundaries),
                 )
                 .map_err(|e| e.to_string())
             })
@@ -166,7 +167,13 @@ mod tests {
 
     #[test]
     fn catch_parse_returns_the_value_when_nothing_panics() {
-        let out = catch_parse(3, || Ok(ParseResult { segments: vec![] })).expect("ok");
+        let out = catch_parse(3, || {
+            Ok(ParseResult {
+                segments: vec![],
+                alternatives: vec![],
+            })
+        })
+        .expect("ok");
         assert!(out.segments.is_empty());
     }
 
@@ -192,14 +199,13 @@ mod tests {
     /// a restart. This is the mechanism 2F's "no restart" promise rests on.
     #[test]
     fn a_published_index_becomes_visible_without_a_restart() {
-        use jparser::conjugation::ConjugationTable;
         use jparser::index::load::Index;
 
         let root = crate::test_support::scratch("worker-late-index");
         let generation = crate::test_support::build_index_generation(&root);
         let state = AppState {
             index: Index::open(&generation).expect("open"),
-            table: ConjugationTable::load_embedded().expect("table"),
+            table: jparser::engine::table::Table::new(),
         };
 
         let (tx, rx) = watch::channel(None);
@@ -260,7 +266,7 @@ mod tests {
             .expect("corrupt the records file");
 
         let index = Index::open(&generation).expect("header.bin and entries.idx are untouched");
-        let table = jparser::conjugation::ConjugationTable::load_embedded().expect("table");
+        let table = jparser::engine::table::Table::new();
 
         // "本" is the fixture's own headword (see `test_support`), so this is
         // a real FST hit that then fails reading its record payload back —

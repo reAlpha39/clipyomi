@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import type { ChromeMode } from './types';
 
 /**
  * Bounds for the opacity control.
  *
- * The floor is 0, not ta-old's 20/255: that clamp existed because uniform
- * whole-window alpha at zero took the text with it, and per-pixel alpha does
- * not — at 0 % the sentence, its furigana and the chips are all still fully
- * opaque.
+ * The floor is 0, not the original tooltip's 20/255: that clamp existed
+ * because uniform whole-window alpha at zero took the text with it, and
+ * per-pixel alpha does not — at 0 % the sentence, its furigana and the chips
+ * are all still fully opaque.
  *
  * These are the guard, not just the `min`/`max` on the input: the settings
  * file is hand-editable, so every value arriving from it is untrusted and

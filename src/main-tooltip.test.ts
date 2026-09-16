@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 // Split out of `main.test.ts` (Task 6 review, round 2) once the tooltip
@@ -130,6 +132,7 @@ describe('the hover tooltip', () => {
         ],
       },
     ],
+    alternatives: [],
   };
 
   // Three separate chips (distinct `start`s): a single-chip fixture cannot
@@ -153,12 +156,22 @@ describe('the hover tooltip', () => {
         },
       ],
     })),
+    alternatives: [],
   };
 
   function chip(): HTMLButtonElement {
     const el = document.querySelector<HTMLButtonElement>('.chip');
     if (el === null) throw new Error('.chip missing');
     return el;
+  }
+
+  /**
+   * Flush `openFor`'s one await — the `kanji_info` round trip — and the
+   * `.then` that emits. Four ticks is more than the chain needs; the exact
+   * count is not the property under test.
+   */
+  async function flushLookup(): Promise<void> {
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
   }
 
   /** Names of the commands invoked so far, in order. */
@@ -193,16 +206,17 @@ describe('the hover tooltip', () => {
   });
 
   // The dwell is what stops the tooltip firing for every chip the cursor
-  // sweeps across on its way somewhere else.
-  test('a completed dwell sends the content', () => {
+  // sweeps across on its way somewhere else. The content follows one round
+  // trip after the dwell — the kanji lookup — hence the async advance.
+  test('a completed dwell sends the content', async () => {
     chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     expect(events()).not.toContain('popover-content');
-    vi.advanceTimersByTime(350);
+    await vi.advanceTimersByTimeAsync(350);
     expect(emitted).toContainEqual([
       'popover-content',
       {
         entries: SEGMENTS.segments[0].entries,
-        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false },
+        filters: { hide_pos: false, hide_xrefs: false, hide_usage: false, hide_kanji: false },
       },
     ]);
   });
@@ -217,6 +231,7 @@ describe('the hover tooltip', () => {
       segments: [
         { start: 0, len: 2, surface: '𠮟る', reading: null, matched: false, entries: [] },
       ],
+      alternatives: [],
     });
     const span = document.querySelector<HTMLElement>('.unmatched');
     if (span === null) throw new Error('.unmatched missing');
@@ -234,18 +249,24 @@ describe('the hover tooltip', () => {
   });
 
   // Focus moves only on a deliberate keypress, so it has no sweeping problem
-  // for a dwell to solve.
-  test('focus sends the content immediately, with no timer', () => {
+  // for a dwell to solve: no timer, only the kanji round trip.
+  test('focus sends the content immediately, with no timer', async () => {
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     expect(events()).toContain('popover-content');
   });
 
   // Escape must not move focus: the user is mid-sentence and would otherwise
   // have to Tab back in from the start.
-  test('Escape hides it and leaves focus on the chip', () => {
+  // Awaits the lookup before Escape: `pendingChip` is now set only once
+  // `popover-content` is emitted (Minor 1), so `closePopover`'s `wasActive`
+  // gate has nothing to find — and nothing to hide — until that lookup
+  // resolves.
+  test('Escape hides it and leaves focus on the chip', async () => {
     const target = chip();
     target.focus();
     target.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     invoke.mockClear();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
@@ -255,8 +276,9 @@ describe('the hover tooltip', () => {
 
   // `show()` replaces `#output` wholesale, so a tooltip left open would be
   // anchored to a chip that is no longer in the document.
-  test('a new parse-result hides it', () => {
+  test('a new parse-result hides it', async () => {
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     invoke.mockClear();
     emit('parse-result', SEGMENTS);
     expect(calls()).toContain('hide_popover');
@@ -267,17 +289,19 @@ describe('the hover tooltip', () => {
   // Task 6 review's Critical 1: a bare `listen()` targets `{ kind: 'Any' }`,
   // which Tauri's window-event dispatch never matches — the registration
   // itself must carry this window's own label, or the handler never fires.
-  test('moving the main window hides it', () => {
+  test('moving the main window hides it', async () => {
     expect(listenTargets.get('tauri://move')).toEqual({ kind: 'Window', label: 'main' });
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     invoke.mockClear();
     emit('tauri://move', {});
     expect(calls()).toContain('hide_popover');
   });
 
-  test('resizing the main window hides it', () => {
+  test('resizing the main window hides it', async () => {
     expect(listenTargets.get('tauri://resize')).toEqual({ kind: 'Window', label: 'main' });
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     invoke.mockClear();
     emit('tauri://resize', {});
     expect(calls()).toContain('hide_popover');
@@ -305,6 +329,91 @@ describe('the hover tooltip', () => {
     // Past DWELL_MS for every chip touched, including the last.
     vi.advanceTimersByTime(350);
     expect(events()).not.toContain('popover-content');
+  });
+
+  // Phase 3a: the block rides in the same payload as the entries, so the
+  // popover renders once and measures once.
+  test('the kanji records ride along when the index has them', async () => {
+    const records = [
+      { literal: '東', on: ['トウ'], kun: ['ひがし'], meanings: ['east'] },
+      { literal: '京', on: ['キョウ'], kun: ['みやこ'], meanings: ['capital'] },
+    ];
+    invoke.mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'kanji_info') {
+        expect(args).toEqual({ chars: '東京' });
+        return Promise.resolve(records);
+      }
+      return Promise.resolve(null);
+    });
+
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+
+    const content = emitted.find(([event]) => event === 'popover-content');
+    expect(content?.[1]).toEqual(expect.objectContaining({ kanji: records }));
+  });
+
+  // The cache is the whole point of doing this in the main window: the second
+  // hover on any character the session has seen costs no round trip.
+  test('kanji_info is asked once for two hovers of the same word', async () => {
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+
+    expect(calls().filter((c) => c === 'kanji_info')).toHaveLength(1);
+    expect(events().filter((e) => e === 'popover-content')).toHaveLength(2);
+  });
+
+  // A dismissal that lands while the lookup is in flight must win, the way
+  // it wins over `placeFor`'s round trip: no content for a closed popover.
+  test('a dismissal during the lookup suppresses the content', async () => {
+    let answer: ((records: unknown) => void) | undefined;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'kanji_info') return new Promise((resolve) => (answer = resolve));
+      return Promise.resolve(null);
+    });
+
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    answer?.([]);
+    await flushLookup();
+
+    expect(events()).not.toContain('popover-content');
+  });
+
+  // Whole-branch review Minor 1: `pendingChip` is set only once the lookup's
+  // `.then` actually emits, so a measurement that lands before that — the
+  // stale reply from a chip a fast mouse move has already left — finds
+  // `pendingChip` null and is dropped rather than placed.
+  test('a measurement that lands during the lookup places nothing', async () => {
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    emit('popover-measured', { width: 200, height: 60 });
+    await flushLookup();
+
+    expect(calls()).not.toContain('place_popover');
+  });
+
+  // Whole-branch review Minor 2: `hide_kanji` is the only branch `openFor`
+  // gained this phase that had no test of its own.
+  test('hide_kanji skips the kanji_info round trip', async () => {
+    emit('settings-changed', { hide_kanji: true });
+    chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
+
+    expect(calls()).not.toContain('kanji_info');
+    const content = emitted.find(([event]) => event === 'popover-content');
+    expect(content?.[1]).not.toHaveProperty('kanji');
+    expect(content?.[1]).toEqual(
+      expect.objectContaining({ filters: expect.objectContaining({ hide_kanji: true }) }),
+    );
   });
 });
 
@@ -335,12 +444,23 @@ describe('the tooltip round trip', () => {
         ],
       },
     ],
+    alternatives: [],
   };
 
   function chip(): HTMLButtonElement {
     const el = document.querySelector<HTMLButtonElement>('.chip');
     if (el === null) throw new Error('.chip missing');
     return el;
+  }
+
+  /**
+   * Flush `openFor`'s one await — the `kanji_info` round trip — and the
+   * `.then` that emits. `pendingChip` is set only inside that `.then`
+   * (Minor 1), so every test below that measures a chip has to let this
+   * settle first, or the measurement lands with nothing pending to place.
+   */
+  async function flushLookup(): Promise<void> {
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
   }
 
   /**
@@ -362,6 +482,7 @@ describe('the tooltip round trip', () => {
   async function openByHover(): Promise<void> {
     chip().dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     vi.advanceTimersByTime(350);
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();
   }
@@ -426,6 +547,7 @@ describe('the tooltip round trip', () => {
   test('measuring a chip places the popover with rounded, scale-corrected coordinates', async () => {
     scaleFactor.mockResolvedValueOnce(2);
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
 
     // Flushes the `Promise.all` for outerPosition/scaleFactor, the
@@ -459,12 +581,15 @@ describe('the tooltip round trip', () => {
       toLogical: (_factor: number) => ({ x: 100, y: 100 }),
     });
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();
 
+    // The chip sits at (100, 128) with happy-dom's zero-size rect; above-first
+    // placement lands at 128 - 2 - 60.
     expect(invoke).toHaveBeenCalledWith('place_popover', {
       x: 100,
-      y: 130,
+      y: 66,
       width: 200,
       height: 60,
     });
@@ -496,6 +621,7 @@ describe('the tooltip round trip', () => {
   test('the viewport origin comes from the mouse, not from innerPosition', async () => {
     calibrate();
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();
 
@@ -517,6 +643,7 @@ describe('the tooltip round trip', () => {
     invoke.mockClear();
 
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();
 
@@ -547,15 +674,17 @@ describe('the tooltip round trip', () => {
     innerPosition.mockResolvedValueOnce({ x: 2000, y: 300 });
     scaleFactor.mockResolvedValueOnce(2);
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();
 
     // Work area 0..1512 x 25..957 in CSS px; the chip sits at (1000, 150) with
-    // happy-dom's zero-size rect, so below-the-chip placement lands at 152 and
-    // the left edge needs no clamping (1000 < 1512 - 200 - 8).
+    // happy-dom's zero-size rect, so above-the-chip placement lands at
+    // 150 - 2 - 60 = 88, inside the work area, and the left edge needs no
+    // clamping (1000 < 1512 - 200 - 8).
     expect(invoke).toHaveBeenCalledWith('place_popover', {
       x: 1000,
-      y: 152,
+      y: 88,
       width: 200,
       height: 60,
     });
@@ -569,6 +698,7 @@ describe('the tooltip round trip', () => {
     innerPosition.mockResolvedValueOnce({ x: 4000, y: 300 });
     scaleFactor.mockResolvedValueOnce(2);
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
     await flushPlacement();
 
@@ -686,6 +816,7 @@ describe('the tooltip round trip', () => {
     });
 
     chip().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await flushLookup();
     emit('popover-measured', { width: 200, height: 60 });
     // Flushes the outerPosition/scaleFactor Promise.all and the
     // monitorFromPoint await — enough for `place_popover` to have been
@@ -753,6 +884,7 @@ describe('unfocused background hover', () => {
           ],
         },
       ],
+      alternatives: [],
     });
   });
 
