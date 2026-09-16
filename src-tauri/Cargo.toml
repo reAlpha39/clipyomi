@@ -11,7 +11,14 @@ license.workspace = true
 # `icu_provider`, `plist`, `serde_with(_macros)`, `time`/`time-core`/
 # `time-macros` all require 1.88; `idna_adapter` requires only 1.86) —
 # captured from `cargo +1.85 check --workspace`'s failure output.
-rust-version = "1.88"
+# Raised 1.88 -> 1.89 on 2026-09-16: this crate depends *directly* on
+# `vibrato-source` (below), whose own `rust-version` is 1.89, and Cargo
+# treats a dependency whose floor exceeds the active toolchain as a hard
+# error. 1.88 was therefore a promise this crate could not keep, and
+# nothing caught it: CI's `msrv` job checks `-p jparser -p jmdict-source`
+# only, never the shell. The Tauri-transitive figures below are still the
+# reason the floor is not 1.85; they are simply no longer the binding one.
+rust-version = "1.89"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -122,8 +122,11 @@ pub fn to_segment(
 /// `が` has a `suf` sense and `COUNTER_POS` includes `suf`, so the particle
 /// loses its own span 51 times. A counter is not more likely than a noun in
 /// general; it is more likely *after a number*, and that is a fact about the
-/// text rather than a prior about the language. Master plan §5.2's bar for
-/// this key is exactly that distinction.
+/// text rather than a prior about the language. That distinction is the bar
+/// the Phase 1a task brief set for this key -- "a fact JMdict or the match
+/// itself supplies, never a frequency table this project does not have"
+/// (`plans/2026-09-01-engine-v2-phase1a.md`). It was first attributed here to
+/// master plan §5.2, which defines the metrics and sets no such bar.
 ///
 /// The `PARTICLE` clause needs no gate: measured on its own it is **+3 and
 /// costs nothing** in both hint states, since it only ever separates
@@ -439,7 +442,7 @@ mod tests {
         }
     }
 
-    // `order`'s five clauses, isolated one at a time against hand-built
+    // `order`'s seven clauses, isolated one at a time against hand-built
     // candidates rather than against whatever a fixture's FST happens to
     // hand back. This matters concretely for the lowest-priority clause:
     // `engine_v2.rs`'s `ties_break_on_entry_id_ascending` integration test

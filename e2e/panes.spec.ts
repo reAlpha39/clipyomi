@@ -40,13 +40,18 @@ for (const size of SIZES) {
       await expect(page.locator('.sentence')).toBeVisible();
       await expect(page.locator('.def-row')).toHaveCount(0);
 
-      // Screenshot baselines here were written and eyeballed on macOS (see the
-      // task report). CI runs ubuntu-latest, where font rendering differs
-      // enough that these same baselines would mismatch on every run — a
-      // permanently-red visual job that teaches everyone to ignore CI. Rather
-      // than commit baselines we cannot generate on Linux (no git remote here
-      // to run a Linux CI job and capture its output), the pixel comparison
-      // runs locally only; CI still gets the DOM assertions above on every run.
+      // Screenshot baselines here were written and eyeballed on a developer
+      // machine: this directory holds 10 `-darwin` and 10 `-win32` PNGs, not
+      // macOS only. CI runs ubuntu-latest, where font rendering differs enough
+      // that neither set would match on any run — a permanently-red visual job
+      // that teaches everyone to ignore CI. So the pixel comparison runs
+      // locally only; CI still gets the DOM assertions above on every run.
+      //
+      // Capturing Linux baselines from a real run and committing them instead
+      // is possible and simply has not been done. This comment used to say
+      // there was "no git remote here" to run such a job; there is one, and
+      // `.github/workflows/ci.yml`'s header carries the correction — this was
+      // the fifth site of that premise and commit 5273ca1 missed it.
       if (!process.env.CI) {
         await expect(page).toHaveScreenshot(`panes-${size.name}-${theme}.png`);
       }

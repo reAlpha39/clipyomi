@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Vibrato's token boundaries as [`crate::engine::Boundaries`]:
-//! [`VibratoTokenizer::boundaries`] is the one production implementor.
+//! [`BoundarySet`], which [`VibratoTokenizer::boundaries`] returns, is one of
+//! two production implementors; [`crate::engine::relax::Relaxed`] is the
+//! other, and `engine::parse` wraps every boundary source in it.
 
 use std::path::{Path, PathBuf};
 

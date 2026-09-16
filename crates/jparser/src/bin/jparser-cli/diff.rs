@@ -25,9 +25,12 @@ use jparser::{ParseOptions, Segment};
 use crate::corpus::DiffRecord;
 
 /// Index of the reading in an IPADIC feature string, for the unknown-token
-/// count. Deliberately duplicated from `hints.rs`' private constant rather
-/// than made public: `hints.rs` is out of scope for Phase 0, and one integer
-/// is a smaller cost than an API change to the parser library.
+/// count. Once duplicated from a private constant in `hints.rs` rather than
+/// made public, because `hints.rs` was out of scope for Phase 0 and one
+/// integer was a smaller cost than an API change. **That constant went with
+/// the v1 engine and this is the only copy in the tree now (2026-09-16):**
+/// `hints::VibratoTokenizer::boundaries` never consults the reading field at
+/// all, so there is nothing left to keep in step with.
 const READING_FIELD: usize = 7;
 
 /// The cut offsets of a segment cover, including 0 and the text's char length.

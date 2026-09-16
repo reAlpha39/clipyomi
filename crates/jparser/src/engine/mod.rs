@@ -79,12 +79,15 @@ pub struct ConjStep {
 /// Parse `text` against an already-open index — the crate's public entry
 /// point, re-exported as `jparser::parse`.
 ///
-/// `bounds` is a tokenizer's boundary set, applied as a hard constraint:
-/// no span may start or end strictly inside a token. `None` lifts every
-/// constraint.
+/// `bounds` is a tokenizer's boundary set, applied as a near-hard
+/// constraint: no span may start or end strictly inside a token, **except
+/// inside a token that no candidate can cover and that carries a hiragana
+/// character**, whose interior [`relax::Relaxed`] reopens (Phase 4 design §2
+/// and §9). `None` lifts every constraint, `Relaxed` included.
 ///
-/// Three stages, each already a separate module: [`lex::candidates`] finds
-/// every dictionary match at every span, [`lattice::k_best`] chooses the
+/// Four stages, each already a separate module: [`lex::candidates`] finds
+/// every dictionary match at every span, [`relax::Relaxed::over`] decides
+/// which vetoed positions to reopen, [`lattice::k_best`] chooses the
 /// `opts.readings` cheapest distinct covers among them, and
 /// [`assemble::to_segment`] resolves each step of each cover into the
 /// public [`Segment`]/[`Entry`] shape. The cheapest cover is
