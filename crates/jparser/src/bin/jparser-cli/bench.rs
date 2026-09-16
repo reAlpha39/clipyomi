@@ -96,7 +96,9 @@ fn paste(texts: &[&str], target: usize) -> String {
     out
 }
 
-/// The lower-middle element, so an even `runs` is still deterministic.
+/// The upper-middle element for an even `runs`, which is what keeps the
+/// figure deterministic; the choice of side is arbitrary and pinned by
+/// `median_is_the_upper_middle_so_an_even_run_count_is_deterministic` below.
 fn median(mut sorted: Vec<Duration>) -> Duration {
     sorted.sort_unstable();
     sorted[sorted.len() / 2]
@@ -264,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn median_is_the_lower_middle_so_an_even_run_count_is_deterministic() {
+    fn median_is_the_upper_middle_so_an_even_run_count_is_deterministic() {
         let d = |ms| Duration::from_millis(ms);
         assert_eq!(median(vec![d(30), d(10), d(20)]), d(20));
         assert_eq!(median(vec![d(40), d(10), d(30), d(20)]), d(30));

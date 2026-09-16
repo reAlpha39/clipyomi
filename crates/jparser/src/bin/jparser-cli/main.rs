@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! JParser Phase 1 harness. No UI, no Tauri, no network.
+//! JParser Phase 1 harness. No UI, no Tauri.
+//!
+//! **It does reach the network**, in two subcommands and nowhere else:
+//! `fetch-source` (ungated, in the default build) and `fetch-hints` (behind
+//! `hints-source`). Both delegate to the source crates; nothing in
+//! `jparser`'s own library does any I/O beyond the index it is pointed at,
+//! which is what CI's `purity` job pins. This line read "no network" until
+//! 2026-09-16.
 
 mod bench;
 mod compounds;
@@ -185,8 +192,10 @@ enum Command {
         /// `docs/superpowers/2026-09-09-frequency-signal-candidates.md` §10.
         #[arg(long)]
         compounds: Option<PathBuf>,
-        /// With `--compounds`, list every window the parse handled against
-        /// its adjudication, so a regression names its cases.
+        /// With `--compounds`, list every window the parse got *wrong*
+        /// against its adjudication, so a regression names its cases.
+        /// Matches and `ambiguous` windows are skipped -- `compounds::misses`
+        /// emits a line only where the parse and the adjudication disagree.
         #[arg(long, requires = "compounds")]
         compounds_detail: bool,
         /// Emit the metrics as one JSON object instead of the human form.

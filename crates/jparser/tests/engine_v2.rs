@@ -173,9 +173,11 @@ fn dictionary_path() -> PathBuf {
         .join("system.dic")
 }
 
-/// Real Vibrato boundaries for `text`, needed only by the two tests that pin
-/// master plan success criterion 3 against genuine IPADIC tokenization rather
-/// than a hand-built stand-in dictionary.
+/// Real Vibrato boundaries for `text`, needed by the eight tests that take
+/// genuine IPADIC tokenization rather than a hand-built stand-in dictionary --
+/// two of which pin master plan success criterion 3. Those eight are why CI
+/// publishes the dictionary and exports `TA_HINTS_DICT`; with neither that
+/// variable nor `%APPDATA%` set they are the only failures in this file.
 #[cfg(feature = "mecab")]
 fn boundaries_over(text: &str) -> jparser::hints::BoundarySet {
     let path = dictionary_path();
@@ -207,7 +209,7 @@ fn kurumadehakou_parses_as_four_words() {
 // A private fixture, for the reason `KURU_FIXTURE` gives — `jmdict_subset.xml`
 // is extractor-generated and would drop hand-added entries on regeneration —
 // and because the point of the second test is an entry that is *absent*, which
-// a shared fixture could acquire at any time. Eight entries, hand-written
+// a shared fixture could acquire at any time. Fifteen entries, hand-written
 // rather than extracted, with glosses written here rather than copied.
 //
 // 良い is `adj-i` and not the `adj-ix` JMdict gives it. That is deliberate and
@@ -498,9 +500,13 @@ fn a_hint_token_that_is_not_a_key_no_longer_unmatches_its_words() {
 /// it as a key at all, so it is unmatchable by exactly the same test `本当は`
 /// is, and its interior is full of one-character entries waiting to match.
 /// Relaxed unconditionally, a reader who hovered 品川 got "goods" and
-/// "river" — and across the gold corpus that shape cost 88 gold spans
-/// (42 all-kanji tokens, 25 all-katakana, 21 all-digit) against 8 gained,
-/// taking hints-on strict span accuracy from 1768 to 1713.
+/// "river". Across the gold corpus that shape cost **88 gold spans against 8
+/// gained** — the losing spans were 42 kanji, 25 katakana and 21 digit — and
+/// hints-on strict span accuracy fell 1768 to 1713. (The −88/+8 and the −55
+/// are not the same arithmetic: 92 spans lost an exactly-placed hit and 37
+/// gained one, of which 88 and 8 sit in no-hiragana tokens. The per-*token*
+/// breakdown of that cohort is 142, in `engine::relax`.) Both 1768 and 1713
+/// are 2026-09-15 figures; hints-on strict is 1792 today.
 ///
 /// So the escape asks for one hiragana character anywhere in the token, which
 /// is the only evidence the engine has that the token glues a content word to
@@ -1399,9 +1405,11 @@ fn kuru_in_kanji_uninflected_keeps_the_dictionary_reading() {
 
 #[test]
 fn kuru_in_kanji_deinflects_and_reads_through_the_kana_class() {
-    // Fails today at the first assertion: `vk` maps only to カ変・クル, whose
-    // suffixes are whole kana words, so the kanji stem 来 matches nothing and
-    // 来 + た are two unmatched spans.
+    // Written when this failed at the first assertion -- `vk` mapped only to
+    // カ変・クル, whose suffixes are whole kana words, so the kanji stem 来
+    // matched nothing and 来 + た came back as two unmatched spans. **It
+    // passes now** and the "fails today" note survived the fix; corrected
+    // 2026-09-16, when `engine_v2` was 47 of 47 with nothing ignored.
     let r = parse_kuru("kuru-past", "来た");
     assert_eq!(
         r.segments.len(),
@@ -1486,10 +1494,13 @@ fn parse_result_serializes_to_the_documented_wire_shape() {
     // that value would pass even if the field silently stopped
     // serializing and fell back to its default.
     assert_eq!(entry["entry_id"], 1000010);
-    // Present and empty at the default. No frontend consumer exists: the
-    // Phase 2 gate that would have justified a reading-cycling UI was not
-    // met, so nothing reads this field yet (docs/superpowers/
-    // 2026-09-02-engine-v2-phase2-handoff.md §3-4).
+    // Present and empty at the default. **A consumer does exist**, contrary
+    // to what this comment said until 2026-09-16: `src/main.ts:739` returns
+    // `[result.segments, ...result.alternatives]` for the reading-cycling
+    // menu and `src/types.ts:77` declares the field. What the Phase 2 gate
+    // declined was a *dedicated* reading-cycling UI (docs/superpowers/
+    // 2026-09-02-engine-v2-phase2-handoff.md §3-4); the field was wired into
+    // the existing right-click menu afterwards.
     assert_eq!(json["alternatives"].as_array().map(Vec::len), Some(0));
 }
 

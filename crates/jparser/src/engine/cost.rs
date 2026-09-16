@@ -15,10 +15,14 @@
 //!
 //! Design §7.2's cost formula also names a `particle-in-context` evidence
 //! term, alongside `common` (`COMMON` below) and `exact` (`INEXACT` below).
-//! This phase implements the latter two only: `WordFlags::PARTICLE` is
-//! carried on records but nothing in this module reads it, so a particle's
-//! surrounding context prices no differently than any other match. Not
-//! implemented, not forgotten.
+//! That phase implemented the latter two only, and this paragraph used to end
+//! "not implemented, not forgotten". **The particle term shipped after all**:
+//! `FUNCTION_STACK` below *is* a particle-in-context term. `lex` computes
+//! `Candidate::function_stack` by asking whether a span partitions into
+//! candidates that each carry `COMMON` and `PARTICLE`, and `cost` prices
+//! exactly that. The narrow claim that nothing in *this module* reads the flag
+//! is still true, and only because the flag is read one module upstream on
+//! this term's behalf. `assemble::order` reads it too, as of 2026-09-16.
 
 use crate::engine::flags::WordFlags;
 use crate::engine::kana;
@@ -101,18 +105,30 @@ const CROSS: i32 = 0;
 /// Handoff §9.5's ~28 spurious merges are every one of them a match against a
 /// kanji headword's *reading*: `はいた`→履く via はく, `ももう`→揉む via もむ,
 /// `がい`→甲斐, `してい`→指定, `どうし`→同士, `ことし`→今年, `になって`→荷なう.
-/// Every legitimate merge in §9.1 is kanji-bearing: `音がする`, `ことになっている`,
-/// `首を振る`, `これまでに`, `東京都`, `2月`. A kana-only word is PRIMARY by that
-/// flag's own definition, so `は`, `こう` and `もう` are not caught.
+/// **The sentence that used to follow was wrong twice and is corrected here
+/// (2026-09-16).** It read "every legitimate merge in §9.1 is kanji-bearing:
+/// `音がする`, `ことになっている`, `首を振る`, `これまでに`, `東京都`, `2月`" —
+/// but `ことになっている` and `これまでに` carry no kanji at all, so two of its
+/// own six examples falsify it, and `東京都` is not in §9.1 (the handoff's list
+/// is `音がした`, `ことになっている`, `首を振った`, `これまでに`, `天と地`, `2月`
+/// and `18日`). The generalisation was never load-bearing. **What actually
+/// keeps this term off ordinary particles is the flag, not the script:** a
+/// kana-only word is PRIMARY by `WordFlags`' own definition, so `は`, `こう`
+/// and `もう` are not caught whatever they are made of.
 ///
 /// Handoff §9.6's refusal to add a heuristic to the *metric* is unaffected:
 /// there the object is a merged span the corpus carries no label for. Here the
 /// flag is already computed.
 ///
 /// Task 16b measured this term's magnitude as flat across the whole safe
-/// range: 10, 5, 2 and 1 (trials 5, 7, 8, 9) all reproduced trial 2's exact
-/// corpus numbers *and* the `spurious_merges.txt` fixture's exact 4-of-26
-/// failures, no different from the original 25. Only the sign matters here,
+/// range: 10, 5, 2 and 1 (trials 5, 7, 8, 9) all reproduced the
+/// `spurious_merges.txt` fixture's exact 4-of-26 failures, no different from
+/// the original 25. **"Exact corpus numbers" overstated the trial log and is
+/// corrected here (2026-09-16):** only trial 5 reproduced trial 2 cell for
+/// cell; trial 7 read 0.8035 (1738) / 0.8525 (1844) and trial 9 0.8040 (1739)
+/// / 0.8530 (1845), and trial 8 recorded no corpus figures at all. The
+/// handoff's own word was "measurement-identical", which is the honest one:
+/// the spread is three spans across a 25-fold change in magnitude. Only the sign matters here,
 /// not the size: trial 6 (`PRONOUNCE_CROSS = 0`) broke 6 additional fixture
 /// rows (`はいた`, `はこう`, `ももう`, `になって`, `になった`, `してい`) for a
 /// corpus tolerant gain (0.8521 → 0.8682 hints-on) now attributable to that
@@ -198,7 +214,12 @@ const COMMON: i32 = -2;
 /// it is why this term was worth trying where a blanket COMMON derivation
 /// (doc §10.4) was not.
 ///
-/// **What it measured on-engine, hints on:** strict 1737 -> 1768 spans
+/// **What it measured on-engine 2026-09-09, hints on — these are the cells as
+/// they stood that day, and the hints-on half has since moved twice (Phase 4's
+/// escape and `order`'s two new clauses): strict is 1792, tolerant 1870 and
+/// entry top-1 0.9236 today, while the hints-off half below is still exact
+/// because neither change touched that state. Master plan §5.2 carries the
+/// current figures.** strict 1737 -> 1768 spans
 /// (+31), tolerant 1843 -> 1844 (+1), entry top-1 0.9063 -> 0.9092,
 /// compounds 101 -> 114 windows, `transparent` 30 -> 42 of 42 with
 /// `lexical` 41 -> 42 and `false-match` 30 -> 30 -- no class regressed.
@@ -271,7 +292,8 @@ pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
 /// The price of matching `cand`, given where a tokenizer put its boundaries.
 ///
 /// Sums `COVER` per character, `INEXACT` for a folded-not-exact match,
-/// `COMMON` per character for a priority entry, and `CROSS` for each interior
+/// `COMMON` per character for a priority entry, `FUNCTION_STACK` for an
+/// unconjugated stack of common function words, and `CROSS` for each interior
 /// tokenizer boundary the span swallows, with `PRONOUNCE_CROSS` added on top
 /// of `CROSS` per boundary when the match is PRONOUNCE-only. With
 /// `bounds == None` there is nothing to cross, so only the per-character and
@@ -528,7 +550,8 @@ mod tests {
 
     /// Design §7.2/`SCRIPT_TRANSITION`'s own worked example: a genuinely
     /// mixed-script run (kanji/CJK-radical followed by roman letters, the
-    /// OCR-noise shape §7.2 names) prices splitting at the script change
+    /// OCR-noise shape Phase 0 handoff §9.1 names -- not §7.2, which carries only
+    /// the cost formula) prices splitting at the script change
     /// strictly cheaper than keeping it whole, by exactly `SCRIPT_TRANSITION`
     /// -- the one script pairing `classify` actually distinguishes, unlike
     /// the punctuation-only example the doc comment above no longer cites.
