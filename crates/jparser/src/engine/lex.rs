@@ -61,6 +61,14 @@ pub struct Candidate {
     /// All-digit spans are excluded by the "continues past it" half, which is
     /// what keeps `1969` out of this.
     pub digit_counter: bool,
+    /// The span starts immediately after a run of digits, carries no
+    /// `COUNTER`, and a `COUNTER` candidate starts at the same position.
+    ///
+    /// `4人目` is the shape: `人目` is a noun (`ひとめ`, "public gaze") and
+    /// wins the span, so the reader is shown "four public-gaze" instead of
+    /// `4人` + `目`. `人` is a counter and starts in the same place, which is
+    /// the signal. `cost` penalises it; see `DIGIT_NONCOUNTER`.
+    pub after_digit_noncounter: bool,
     /// False when the source characters differ from the stored surface
     /// before folding -- the FST matched only because kana was unified, not
     /// because the two strings actually agree.
@@ -195,6 +203,7 @@ pub fn candidates(
                             // Filled from `chars` below, where the span is
                             // known; the walk here has only the record.
                             digit_counter: false,
+                            after_digit_noncounter: false,
                             // The second pass below fills this in: it needs
                             // every position's candidates, which do not
                             // exist yet.
@@ -243,6 +252,8 @@ pub fn candidates(
             cand.function_stack = stack;
             cand.digit_counter = opens_with_a_number(chars, cand.start, cand.len)
                 && reading_is_not_its_parts(index, &out_ro, chars, cand);
+            cand.after_digit_noncounter = !cand.flags.contains(WordFlags::COUNTER)
+                && loses_to_a_counted_number(chars, &out_ro, cand);
         }
     }
 
@@ -329,6 +340,46 @@ fn first_reading(index: &Index, entry_id: u32) -> Option<String> {
         .ok()
         .flatten()
         .and_then(|e| e.readings.first().cloned())
+}
+
+/// Whether this span sits after a number, begins where a `COUNTER` begins,
+/// and **the number-plus-counter merge is itself an available candidate**.
+///
+/// The last clause is what keeps the rule honest. `4人目` wants `4人` + `目`
+/// because `人目` is `ひとめ`, "public gaze", and `4人` is in the dictionary —
+/// so there is a counted number to lose to. `1969年度` wants `1969` + `年度`:
+/// `年` is a counter and `年度` is not, which looks identical, but `1969年` is
+/// no entry, so nothing is on offer and the compound is left alone. Same for
+/// `点差` against `2点`. Without this clause the rule splits both into `年` +
+/// `度` and `点` + `差`, which cost 3 gold spans when measured.
+fn loses_to_a_counted_number(
+    chars: &[char],
+    by_start: &[Vec<Candidate>],
+    cand: &Candidate,
+) -> bool {
+    if cand.start == 0
+        || !kana::is_digit(chars[cand.start - 1])
+        || kana::is_digit(chars[cand.start])
+    {
+        return false;
+    }
+    let digit_start = chars[..cand.start]
+        .iter()
+        .rposition(|c| !kana::is_digit(*c))
+        .map_or(0, |i| i + 1);
+    let Some(here) = by_start.get(cand.start) else {
+        return false;
+    };
+    let counters = here.iter().filter(|c| c.flags.contains(WordFlags::COUNTER));
+    counters
+        .flat_map(|k| {
+            by_start
+                .get(digit_start)
+                .into_iter()
+                .flatten()
+                .map(move |n| (k, n))
+        })
+        .any(|(k, n)| n.start + n.len == cand.start + k.len)
 }
 
 /// Whether `[start, start + len)` opens with a digit run and continues past
@@ -457,6 +508,47 @@ fn entry_classes(entry: &EntryData) -> Vec<ClassId> {
 
 #[cfg(test)]
 mod tests {
+    /// The guard that keeps `1969年度` together, as the pair it separates.
+    /// Both have a counter starting after the digits and a non-counter
+    /// two-character candidate there; only one has a number-plus-counter
+    /// entry to lose to.
+    #[test]
+    fn a_noncounter_after_a_number_only_loses_to_a_merge_that_exists() {
+        use crate::engine::flags::WordFlags;
+        let counter = {
+            let mut f = WordFlags::PRIMARY;
+            f.insert(WordFlags::COUNTER);
+            f
+        };
+        let at = |start: usize, len: usize, flags: WordFlags| super::Candidate {
+            start,
+            len,
+            entry_id: 1,
+            flags,
+            steps: Vec::new(),
+            exact: true,
+            digit_counter: false,
+            after_digit_noncounter: false,
+            function_stack: false,
+            headword: String::new(),
+        };
+
+        // 4人目: 人 is a counter at 1, and 4人 spans [0,2) -- fire.
+        let c: Vec<char> = "4人目".chars().collect();
+        let mut by: Vec<Vec<super::Candidate>> = vec![Vec::new(); 3];
+        by[0].push(at(0, 2, WordFlags::PRIMARY)); // 4人
+        by[1].push(at(1, 1, counter)); // 人
+        let hitome = at(1, 2, WordFlags::PRIMARY); // 人目
+        assert!(super::loses_to_a_counted_number(&c, &by, &hitome));
+
+        // 1969年度: 年 is a counter at 4, but nothing spans [0,5) -- hold.
+        let c2: Vec<char> = "1969年度".chars().collect();
+        let mut by2: Vec<Vec<super::Candidate>> = vec![Vec::new(); 6];
+        by2[4].push(at(4, 1, counter)); // 年
+        let nendo = at(4, 2, WordFlags::PRIMARY); // 年度
+        assert!(!super::loses_to_a_counted_number(&c2, &by2, &nendo));
+    }
+
     /// The shape test, without the index half. `1969` is the case that must
     /// fail it: an all-digit span has nothing after the number, so a year can
     /// never be discounted into a merge with what follows.
@@ -496,6 +588,7 @@ mod tests {
             exact,
             function_stack: false,
             digit_counter: false,
+            after_digit_noncounter: false,
             headword: headword.to_string(),
         }
     }
