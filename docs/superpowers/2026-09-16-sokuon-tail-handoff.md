@@ -185,10 +185,38 @@ on, with `BOUND_FORMS` and the 87-entry lexicon in place:
 | 6 | 1698 | 124 | 76 / 112 | 27 / 32 | **21 / 42** |
 
 `物思いにふける` needs M >= 4, which already costs 77 strict spans and half
-the `transparent` class. `PARTICLE_CROSS` is a per-crossing surcharge on
-**PARTICLE-flagged matches**, and almost none of that damage is a particle
-match — it cannot buy back 21 windows and 128 spans. The pair is not the
-experiment it looked like one section ago, and this table is why.
+the `transparent` class.
+
+**The rest of the route was then measured rather than argued.** `MATCH`
+alone over-merges `には`-shaped spans, and `FUNCTION_STACK` is precisely the
+flag that names them, so it was swept upward to compensate; `PARTICLE_CROSS`
+was written back into `cost.rs` (it mirrors `PRONOUNCE_CROSS`, gated on
+`WordFlags::PARTICLE`) for the one shape neither catches. Hints on:
+
+| config | strict | tolerant | entry top-1 | compounds | lexical | false-match | transparent | merge gate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **M=2 FS=4 (shipped)** | **1826** | 1912 | 0.9341 | 118 | 46 | **30 / 32** | **42 / 42** | **26 / 26** |
+| M=6 FS=4 | 1698 | 1928 | 0.9387 | 124 | 76 | 27 | 21 | — |
+| M=6 FS=8 | 1730 | 1928 | 0.9402 | 136 | 76 | 27 | 33 | fails |
+| M=6 FS=8 PC=12 | 1733 | 1927 | 0.9411 | **137** | **76** | 27 | 34 | **25 / 26** |
+
+Both new terms are flat in magnitude the way the existing ones are — FS at 8,
+10 and 14 give identical cells, PC at 6, 12 and 25 likewise — so only their
+signs were ever in question. `FUNCTION_STACK = 8` does its job: `私には分かる`
+still splits `に` and `は`. `PARTICLE_CROSS` does its job: `それを聞いて` goes
+back to `それ`|`を`|`聞いて`. All five reported cases merge, and the last four
+lexicon rows would become unnecessary.
+
+**And it is still refused, on success criterion 3.**
+`the_particle_absorbing_merges_are_gone` goes 26 → 25: `ことになっている`
+swallows the `に` in `b:wn28412-1`. JMdict carries that phrase as a headword,
+so the merge is defensible in the abstract — and the gate exists precisely
+because "JMdict carries it" is not the standard this engine is held to. On
+top of that: −93 strict spans, `transparent` 42 → 34, `false-match` 30 → 27.
+
+The route is closed with numbers now, not with an argument. `cost.rs` is
+back at `MATCH = 2`, `FUNCTION_STACK = 4`, no `PARTICLE_CROSS`, and the
+baseline cells reproduce exactly.
 
 **Bench note, so the numbers in this document are read correctly.** The
 machine drifted over the session: the same binary read 522 ms at 10,040
