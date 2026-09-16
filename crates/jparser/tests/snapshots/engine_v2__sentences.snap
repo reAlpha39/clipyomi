@@ -10,14 +10,14 @@ start=1 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=2 len=2 好き matched reading=すき
     好き (-) [すき] liking
     好き (-) [ずき] love of
-    好く (-) [すき] to like
     好い (-) [よき] good
+    好く (-) [すき] to like
 start=4 len=2 です matched reading=-
     です (-) [-] be
     です (-) [-] spit (of land)
@@ -43,9 +43,9 @@ start=0 len=2 これ matched reading=-
     こる (Conditional) [-] to pack
 start=2 len=1 は matched reading=-
     は (-) [-] indicates sentence topic
+    は (-) [-] group
     は (-) [-] tooth
     は (-) [-] edge (of a knife or sword)
-    は (-) [-] group
     は (-) [-] leaf
     ... 9 more
 start=3 len=3 面白い matched reading=おもしろい
@@ -56,8 +56,8 @@ start=8 len=1 だ matched reading=-
     だ (-) [-] be
     だ (-) [-] did
     だる (-) [-] to do ... for (someone of equal or lower status)
-    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
     だ (-) [-] poor
+    だ (-) [-] dui (one of the trigrams of the I Ching: swamp, west)
     ... 2 more
 start=9 len=1 。 unmatched
 
@@ -92,9 +92,9 @@ start=0 len=1 彼 matched reading=かれ
     彼 (-) [かの] that well-known ...
 start=1 len=1 は matched reading=-
     は (-) [-] indicates sentence topic
+    は (-) [-] group
     は (-) [-] tooth
     は (-) [-] edge (of a knife or sword)
-    は (-) [-] group
     は (-) [-] leaf
     ... 9 more
 start=2 len=2 学校 matched reading=がっこう
@@ -120,8 +120,8 @@ start=4 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=5 len=3 来ます matched reading=きます
     来る (Polite) [きます] to come (spatially or temporally)
@@ -134,9 +134,9 @@ start=0 len=1 彼 matched reading=かれ
     彼 (-) [かの] that well-known ...
 start=1 len=1 は matched reading=-
     は (-) [-] indicates sentence topic
+    は (-) [-] group
     は (-) [-] tooth
     は (-) [-] edge (of a knife or sword)
-    は (-) [-] group
     は (-) [-] leaf
     ... 9 more
 start=2 len=2 まだ matched reading=-
@@ -169,8 +169,8 @@ start=7 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=8 len=2 ない matched reading=-
     ない (-) [-] not
@@ -186,9 +186,9 @@ start=0 len=2 昨日 matched reading=きのう
     昨日 (-) [きのう] yesterday
 start=2 len=1 は matched reading=-
     は (-) [-] indicates sentence topic
+    は (-) [-] group
     は (-) [-] tooth
     は (-) [-] edge (of a knife or sword)
-    は (-) [-] group
     は (-) [-] leaf
     ... 9 more
 start=3 len=2 宿題 matched reading=しゅくだい
@@ -240,9 +240,9 @@ start=5 len=2 せま matched reading=-
 start=7 len=2 すか matched reading=-
     すく (-) [-] to become less crowded
     すか (-) [-] disappointment
+    すく (-) [-] to comb (out)
     すく (-) [-] to like
     すく (-) [-] to be transparent
-    すく (-) [-] to comb (out)
     ... 4 more
 start=9 len=1 。 unmatched
 
@@ -288,8 +288,8 @@ start=1 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=2 len=4 飲みたい matched reading=のみたい
     飲む (Want-to) [のみたい] to drink
@@ -301,11 +301,11 @@ start=0 len=2 毎日 matched reading=まいにち
 start=2 len=3 走って matched reading=はしって
     走る (Te-form) [はしって] to run
 start=5 len=2 いる matched reading=-
+    いる (-) [-] to enter
+    いる (-) [-] to be (of animate objects)
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
-    いる (-) [-] to enter
     いる (-) [-] to be needed
-    いる (-) [-] to be (of animate objects)
     ... 5 more
 start=7 len=1 。 unmatched
 
@@ -316,17 +316,17 @@ start=2 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=3 len=3 遅れて matched reading=おくれて
     遅れる (Te-form) [おくれて] to be late
 start=6 len=3 います matched reading=-
-    いる (Polite) [-] to shoot (arrow, bolt, dart)
     いる (Polite) [-] to be (of animate objects)
+    いる (Polite) [-] to shoot (arrow, bolt, dart)
     いる (Polite) [-] to cast
     います (-) [-] to be
-    いる (Polite) [-] to calm down
+    いる (Polite) [-] to lead
     ... 2 more
 start=9 len=1 。 unmatched
 
@@ -350,8 +350,8 @@ start=2 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=3 len=2 公園 matched reading=こうえん
     公園 (-) [こうえん] (public) park
@@ -364,14 +364,14 @@ start=5 len=1 で matched reading=-
     ... 3 more
 start=6 len=3 遊んで matched reading=あそんで
     遊ぶ (Te-form) [あそんで] to play (games, sports)
-    遊む (Te-form) [すさんで] to grow wild
     遊ぶ (Te-form) [すさんで] to grow wild
+    遊む (Te-form) [すさんで] to grow wild
 start=9 len=2 いる matched reading=-
+    いる (-) [-] to enter
+    いる (-) [-] to be (of animate objects)
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
-    いる (-) [-] to enter
     いる (-) [-] to be needed
-    いる (-) [-] to be (of animate objects)
     ... 5 more
 start=11 len=1 。 unmatched
 
@@ -405,17 +405,17 @@ start=5 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=6 len=3 待って matched reading=まって
     待つ (Te-form) [まって] to wait
 start=9 len=2 いる matched reading=-
+    いる (-) [-] to enter
+    いる (-) [-] to be (of animate objects)
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
-    いる (-) [-] to enter
     いる (-) [-] to be needed
-    いる (-) [-] to be (of animate objects)
     ... 5 more
 start=11 len=1 。 unmatched
 
@@ -442,9 +442,9 @@ start=0 len=2 会議 matched reading=かいぎ
     会議 (-) [かいぎ] meeting
 start=2 len=1 は matched reading=-
     は (-) [-] indicates sentence topic
+    は (-) [-] group
     は (-) [-] tooth
     は (-) [-] edge (of a knife or sword)
-    は (-) [-] group
     は (-) [-] leaf
     ... 9 more
 start=3 len=1 十 matched reading=じゅう
@@ -470,9 +470,9 @@ start=0 len=2 東京 matched reading=とうきょう
     東京 (-) [とうきょう] Tokyo
 start=2 len=2 から matched reading=-
     から (-) [-] from
-    から (-) [-] shell
     から (-) [-] emptiness
-    かる (-) [-] to cut (grass, hair, etc.)
+    から (-) [-] shell
+    からい (-) [-] spicy
     かる (-) [-] to spur on
     ... 9 more
 start=4 len=2 大阪 matched reading=おおさか
@@ -500,8 +500,8 @@ start=10 len=1 。 unmatched
 === 先生になりたいです。
 start=0 len=2 先生 matched reading=せんせい
     先生 (-) [せんせい] teacher
-    先生 (-) [シーサン] man
     先生 (-) [せんじょう] teacher
+    先生 (-) [シーサン] man
 start=2 len=1 に matched reading=-
     に (-) [-] at
     に (-) [-] load
@@ -524,8 +524,8 @@ start=4 len=1 が matched reading=-
     が (-) [-] indicates the subject of a sentence
     がる (-) [-] to show signs of being
     が (-) [-] partial equivalent of the "no" particle in standard Japanese
-    が (-) [-] moth
     が (-) [-] picture
+    が (-) [-] obstinacy
     ... 5 more
 start=5 len=3 壊れて matched reading=こわれて
     壊れる (Te-form) [こわれて] to be broken
