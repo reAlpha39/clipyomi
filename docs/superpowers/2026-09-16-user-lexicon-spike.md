@@ -127,3 +127,42 @@ round number.
 The two negative results above are unchanged and still worth having: the
 dictionary-derived list really is worthless, and the cost model really cannot
 do this.
+
+
+## 7. `ある日`, and two corrections to the sweep
+
+Asked the same day: `ある日` parses as `ある` + `日` and is a JMdict headword,
+so why is it not in the list?
+
+**Because JMdict tags it `exp`.** Its entry is `exp,n`, "one day; (on) a
+certain day" — the lexicographers classify it as a phrase, and §2's filter
+drops phrases on purpose, since a phrase should come apart into its component
+words. Here that is also the better reading: `ある` and `日` are both glossable
+and the composition is transparent. `いちゃいちゃ` is `adv,vs` — a single
+lexical item whose pieces are not words at all. That tag is the whole
+distinction, and it is JMdict's rather than ours.
+
+The arithmetic is identical (`ある日` +3 against `ある` −2 plus `日` −1), so if
+the merged reading is ever judged better the route is there. It occurs once in
+3.1M characters of the pool, so frequency does not argue for it.
+
+**Two real defects in the sweep came out of the question.**
+
+1. **It only considered kana-only headwords**, so every mixed-script word was
+   invisible to it — `ある日` among them. The first published figures (956
+   damaged, 12,643 shattered) are the kana-only slice, not the whole class.
+2. **Fixing that naively made it much worse.** Taking every reading as a
+   surface pulls in the readings of *kanji* entries, which are pronunciations
+   rather than ways a word is written, and the frequency-ranked head became
+   `してい` 1906 (指定), `どうし` 755 (同士), `それを` 469 — handoff §9.5's
+   spurious-merge class, item for item. Forcing those as tokens would be
+   actively harmful.
+
+The rule the tool now uses is kanji forms always, readings only where the
+entry has no kanji form. At three characters and up that gives 116,684
+shattered words of which 1,329 are all-hiragana and damaged — against the
+213,400 the broken version reported.
+
+**The shipped 81 entries are unchanged.** They were generated under the
+kana-only rule and measured under it; regenerating with the corrected rule is
+a different list and would need the gates run again.
