@@ -52,6 +52,15 @@ pub struct Candidate {
     pub entry_id: u32,
     pub flags: WordFlags,
     pub steps: Vec<ConjStep>,
+    /// The span opens with a run of digits and continues past it -- `1週間`,
+    /// `1ヶ月`, `10分`. Number and counter are one phonological word in
+    /// Japanese and JMdict records the euphonic reading (`いっしゅうかん`, not
+    /// `いち` + `しゅうかん`), so a candidate of this shape carries a reading
+    /// the split cannot reconstruct. `cost` discounts it; see `DIGIT_COUNTER`.
+    ///
+    /// All-digit spans are excluded by the "continues past it" half, which is
+    /// what keeps `1969` out of this.
+    pub digit_counter: bool,
     /// False when the source characters differ from the stored surface
     /// before folding -- the FST matched only because kana was unified, not
     /// because the two strings actually agree.
@@ -183,6 +192,9 @@ pub fn candidates(
                             flags: WordFlags(record.flags),
                             steps: hit.steps.clone(),
                             exact: record.surface == key,
+                            // Filled from `chars` below, where the span is
+                            // known; the walk here has only the record.
+                            digit_counter: false,
                             // The second pass below fills this in: it needs
                             // every position's candidates, which do not
                             // exist yet.
@@ -226,6 +238,8 @@ pub fn candidates(
     for (start, flags) in stacks.into_iter().enumerate() {
         for (cand, stack) in out[start].iter_mut().zip(flags) {
             cand.function_stack = stack;
+            cand.digit_counter = opens_with_a_number(chars, cand.start, cand.len)
+                && reading_has_a_sokuon(index, cand.entry_id);
         }
     }
 
@@ -245,6 +259,40 @@ pub fn candidates(
 /// clipboard length was the entire subject of Phase 2c; this is bounded by
 /// the span width, which the FST walk's own dead end already bounds.
 /// `jparser-cli bench`'s scaling cell is the check.
+/// Whether the entry's reading carries a small `っ`.
+///
+/// **This is the euphonic change, and it is what makes the merge worth
+/// preferring.** `一週間` reads `いっしゅうかん`, which `いち` + `しゅうかん`
+/// cannot produce, so splitting mispronounces it. `三回` reads `さんかい` and
+/// `三人` `さんにん` — the split says exactly the same thing, so merging buys
+/// nothing there and costs something: measured over 2,743 lines of real text,
+/// an ungated discount re-cut `３|回目` as `３回|目` and `４|人目` as `４人|目`
+/// **49 times**, breaking the ordinal suffix to fix readings that were never
+/// wrong. Gating on the sokuon keeps `週間` and `ヶ月` and drops that whole
+/// class.
+///
+/// An index read per digit-initial candidate, which is a rare shape; the
+/// second pass is already walking every candidate.
+fn reading_has_a_sokuon(index: &Index, entry_id: u32) -> bool {
+    index
+        .entry(entry_id)
+        .ok()
+        .flatten()
+        .and_then(|e| e.readings.first().cloned())
+        // The *first* reading only. `四人` carries よったり as a secondary
+        // form, which has a sokuon and would otherwise let `4人` through --
+        // and `4人目` then breaks the same way `3回目` did.
+        .is_some_and(|r| r.contains('っ') || r.contains('ッ'))
+}
+
+/// Whether `[start, start + len)` opens with a digit run and continues past
+/// it. See [`Candidate::digit_counter`].
+fn opens_with_a_number(chars: &[char], start: usize, len: usize) -> bool {
+    let span = &chars[start..start + len];
+    let digits = span.iter().take_while(|c| kana::is_digit(**c)).count();
+    digits > 0 && digits < span.len()
+}
+
 fn is_function_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> bool {
     let width = end - start;
     if width < 2 {
@@ -363,6 +411,24 @@ fn entry_classes(entry: &EntryData) -> Vec<ClassId> {
 
 #[cfg(test)]
 mod tests {
+    /// The shape test, without the index half. `1969` is the case that must
+    /// fail it: an all-digit span has nothing after the number, so a year can
+    /// never be discounted into a merge with what follows.
+    #[test]
+    fn a_number_alone_is_not_a_number_plus_counter() {
+        let c: Vec<char> = "1969年1週間".chars().collect();
+        assert!(!super::opens_with_a_number(&c, 0, 4), "1969 is all digits");
+        assert!(
+            super::opens_with_a_number(&c, 0, 5),
+            "1969年 continues past it"
+        );
+        assert!(super::opens_with_a_number(&c, 5, 3), "1週間");
+        assert!(
+            !super::opens_with_a_number(&c, 4, 1),
+            "年 opens with no digit"
+        );
+    }
+
     use super::*;
     use crate::engine::ConjStep;
 
@@ -383,6 +449,7 @@ mod tests {
             ],
             exact,
             function_stack: false,
+            digit_counter: false,
             headword: headword.to_string(),
         }
     }

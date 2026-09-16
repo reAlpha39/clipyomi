@@ -315,6 +315,7 @@ mod tests {
             steps,
             exact: true,
             function_stack: false,
+            digit_counter: false,
             headword: String::new(),
         }
     }
@@ -526,6 +527,7 @@ mod tests {
             ],
             exact,
             function_stack: false,
+            digit_counter: false,
             headword: String::new(),
         }
     }

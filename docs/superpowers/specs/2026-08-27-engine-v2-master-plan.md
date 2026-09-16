@@ -665,7 +665,7 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7393 (1599) | 0.8003 (1731) | 0.9374 | 0.6022 (112 / 186) | 132 spans in 65 merges |
+| hints off | 0.7393 (1599) | 0.8003 (1731) | 0.9374 | 0.6129 (114 / 186) | 132 spans in 65 merges |
 | hints on | **0.8428 (1823)** | **0.8826 (1909)** | **0.9347** | **0.6344 (118 / 186)** | 86 spans in 43 merges |
 
 Compounds by class, hints on: `lexical` 46 / 112, `false-match` 30 / 32,
