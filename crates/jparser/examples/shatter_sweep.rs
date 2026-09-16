@@ -51,6 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // word itself. Those are the ones the cost model cannot defend, because a
     // kana word's pieces are overwhelmingly COMMON particles and stems.
     let mut words: BTreeSet<String> = BTreeSet::new();
+    let mut pos_of: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     for entry in jparser::jmdict::parse_entries(BufReader::new(File::open(&a[2])?)) {
         let entry = entry?;
         if !entry.kanji.is_empty() {
@@ -71,6 +72,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let w = &r.text;
             if w.chars().count() >= min_len && w.chars().all(is_kana) {
                 words.insert(w.clone());
+                pos_of.entry(w.clone()).or_default().extend(
+                    entry.senses.iter().flat_map(|sn| sn.pos.iter().cloned()),
+                );
             }
         }
     }
@@ -79,10 +83,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         words.len()
     );
 
+    // Connection ids are lifted from real IPADIC entries rather than invented:
+    // Vibrato verifies them against the connection matrix, and a wrong pair
+    // would distort its own Viterbi rather than fail loudly. `ゆっくり` is a
+    // 副詞, `りんご` a 名詞; tokenizing each gives the ids IPADIC itself uses.
+    let ids_for = |probe: &str| -> (u16, u16) {
+        let t = tok.ids_of(probe);
+        t.unwrap_or((1285, 1285))
+    };
+    let (adv_l, adv_r) = ids_for("ゆっくり");
+    let (noun_l, noun_r) = ids_for("りんご");
+    eprintln!("ids: adverb {adv_l}/{adv_r}, noun {noun_l}/{noun_r}");
+
     let mut split_by_tokenizer = 0usize;
-    let mut shattered: Vec<(String, usize, String, usize, bool)> = Vec::new();
+    let mut shattered: Vec<(String, usize, String, usize, bool, bool)> = Vec::new();
     for w in &words {
         let chars: Vec<char> = w.chars().collect();
+        let entry_pos = pos_of.get(w).cloned().unwrap_or_default();
         let b = tok.boundaries(w);
         let cuts = (1..chars.len())
             .filter(|&p| jparser::engine::Boundaries::is_boundary(&b, p))
@@ -101,7 +118,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             // fragments).
             let min_piece = parsed.segments.iter().map(|s| s.len).min().unwrap_or(0);
             let all_hira = w.chars().all(|c| ('\u{3041}'..='\u{3096}').contains(&c));
-            shattered.push((w.clone(), cuts, got.join("|"), min_piece, all_hira));
+            let is_adv = entry_pos.iter().any(|p| p.starts_with("adv"));
+            shattered.push((w.clone(), cuts, got.join("|"), min_piece, all_hira, is_adv));
         }
     }
 
@@ -127,8 +145,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         "\nDAMAGED -- single lexical items, all-hiragana, shattered to a 1-2 char piece: {}",
         bad.len()
     );
-    for (w, _, got, mp, _) in bad.iter().take(45) {
+    for (w, _, got, mp, _, _) in bad.iter().take(45) {
         println!("  {w}  (min {mp}) -> {got}");
+    }
+    if let Some(out) = a.iter().position(|x| x == "--emit").map(|i| a[i + 1].clone()) {
+        use std::io::Write;
+        let mut f = std::io::BufWriter::new(File::create(&out)?);
+        // `--all` emits every shattered word, not just the damaged tail, so
+        // the list can be ranked by how often it actually occurs.
+        let emit_all = a.iter().any(|x| x == "--all");
+        let rows: Vec<_> = if emit_all {
+            shattered.iter().collect()
+        } else {
+            bad.clone()
+        };
+        for (w, _, _, mp, _, is_adv) in rows.iter() {
+            let _ = mp;
+            let n = w.chars().count() as f64;
+            // MeCab's own user-dictionary heuristic, floored the way mkuserdic
+            // floors it. Low enough that the long word wins Vibrato's lattice,
+            // not so low that it swallows its neighbours.
+            let cost = (-400.0 * n.powf(1.5)).max(-36000.0) as i32;
+            let (l, r) = if *is_adv { (adv_l, adv_r) } else { (noun_l, noun_r) };
+            let pos = if *is_adv { "副詞,一般" } else { "名詞,一般" };
+            writeln!(f, "{w},{l},{r},{cost},{pos},*,*,*,*,{w},{w}")?;
+        }
+        // Companion list so a caller can filter by how badly the word broke:
+        // one that already comes apart into pieces of three or more is served
+        // better by `relax::MIN_PIECE` than by a hint token.
+        let mut m = std::io::BufWriter::new(File::create(format!("{out}.meta"))?);
+        for (w, _, _, mp, _, _) in rows.iter() {
+            writeln!(m, "{w}\t{mp}")?;
+        }
+        eprintln!("wrote {} entries to {out}", rows.len());
     }
     Ok(())
 }
