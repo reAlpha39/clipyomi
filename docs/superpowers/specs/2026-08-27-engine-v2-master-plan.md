@@ -76,9 +76,9 @@ The plan succeeds when all four hold:
    | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7342 (1588) |
    | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8285 (1792) |
    | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9368** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9332** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9334** ✓ |
 
-   Span accuracy hints-on rose again the same day, 0.8285 → **0.8423 (1822)**,
+   Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**,
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
    *inside* an inflection. That change on its own pushed entry top-1 back
    under the floor — 30 newly-placed spans are harder and 15 resolved wrong —
@@ -666,11 +666,11 @@ authoritative current figure and those are history. Gold index rebuilt from
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
 | hints off | 0.7342 (1588) | 0.7924 (1714) | 0.9368 | 0.5860 (109 / 186) | 126 spans in 62 merges |
-| hints on | **0.8423 (1822)** | **0.8784 (1900)** | **0.9332** | **0.6129 (114 / 186)** | 78 spans in 39 merges |
+| hints on | **0.8437 (1825)** | **0.8798 (1903)** | **0.9334** | **0.6129 (114 / 186)** | 78 spans in 39 merges |
 
 Compounds by class, hints on: `lexical` 42 / 112, `false-match` 30 / 32,
 `transparent` 42 / 42, 8 `ambiguous` excluded. Latency at the app's ceiling
-(`jparser-cli bench`, gold index, k = 3): scaling 0.99x hints on, 0.97x off.
+(`jparser-cli bench`, gold index, k = 3): scaling 1.05x hints on, 1.01x off.
 
 **Set 2026-09-16, last by the inflection-interior gate on `PRONOUNCE_CROSS`
 and `order`'s sense-count tiebreak.** Both hint states' entry top-1 and the
