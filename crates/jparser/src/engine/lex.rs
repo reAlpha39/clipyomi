@@ -285,12 +285,19 @@ fn is_function_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> b
 fn dedup_shallowest(bucket: Vec<Candidate>) -> Vec<Candidate> {
     let mut best: HashMap<(usize, u32), Candidate> = HashMap::new();
     let mut order: Vec<(usize, u32)> = Vec::new();
+    // Shallower chain first, then an exact surface. The second half matters
+    // because one entry can carry two kana headwords -- `イチャイチャ` and
+    // `いちゃいちゃ` are the same `ent_seq` -- and they collapse to the same
+    // key here. Keeping whichever came first meant a hiragana input could be
+    // represented by the katakana record and marked `exact: false`, paying
+    // `INEXACT` for a headword spelled character-for-character like itself.
+    let rank = |c: &Candidate| (c.steps.len(), !c.exact);
     for cand in bucket {
         let key = (cand.len, cand.entry_id);
         match best.get(&key) {
-            Some(existing) if existing.steps.len() <= cand.steps.len() => {
-                // Already holding an equal-or-shallower chain for this
-                // exact (len, entry_id) pair -- `cand` adds nothing.
+            Some(existing) if rank(existing) <= rank(&cand) => {
+                // Already holding an equal-or-better representative of this
+                // (len, entry_id) pair -- `cand` adds nothing.
             }
             _ => {
                 if !best.contains_key(&key) {
@@ -352,4 +359,68 @@ fn entry_classes(entry: &EntryData) -> Vec<ClassId> {
         }
     }
     classes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::ConjStep;
+
+    fn rec(entry_id: u32, exact: bool, steps: usize, headword: &str) -> Candidate {
+        Candidate {
+            start: 0,
+            len: 6,
+            entry_id,
+            flags: WordFlags::PRIMARY,
+            steps: vec![
+                ConjStep {
+                    class: 0,
+                    form: 0,
+                    range: 0..0,
+                    aux: None,
+                };
+                steps
+            ],
+            exact,
+            function_stack: false,
+            headword: headword.to_string(),
+        }
+    }
+
+    /// One entry, two kana headwords, one span: `イチャイチャ` and
+    /// `いちゃいちゃ` share an `ent_seq`, so they collapse to the same
+    /// `(len, entry_id)` key here. Keeping whichever arrived first let a
+    /// hiragana input be represented by the katakana record and marked
+    /// inexact -- `cost` then charged `INEXACT` for a headword spelled
+    /// character-for-character like the input, 8 on a span that covers 6.
+    #[test]
+    fn dedup_keeps_the_exact_record_when_the_chains_tie() {
+        let kept = dedup_shallowest(vec![
+            rec(2026650, false, 0, "イチャイチャ"),
+            rec(2026650, true, 0, "いちゃいちゃ"),
+        ]);
+        assert_eq!(kept.len(), 1, "one entry, one candidate");
+        assert!(kept[0].exact);
+        assert_eq!(kept[0].headword, "いちゃいちゃ");
+
+        // Order of arrival must not matter.
+        let other_way = dedup_shallowest(vec![
+            rec(2026650, true, 0, "いちゃいちゃ"),
+            rec(2026650, false, 0, "イチャイチャ"),
+        ]);
+        assert!(other_way[0].exact);
+    }
+
+    /// The chain depth still outranks exactness: a shallower inexact match is
+    /// the better representative of the entry, because the depth is what
+    /// `assemble::order` and `cost` both read first.
+    #[test]
+    fn a_shallower_chain_still_wins_over_an_exact_deeper_one() {
+        let kept = dedup_shallowest(vec![
+            rec(1, false, 0, "カタカナ"),
+            rec(1, true, 2, "かたかな"),
+        ]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].steps.len(), 0, "the shallow one survives");
+    }
 }
