@@ -21,9 +21,13 @@
 //! back onto the gold spans by `source`. Output is one object per line:
 //!
 //! ```text
-//! {"source":..,"text":..,"segs":[[start,len,matched],..],
+//! {"source":..,"text":..,"segs":[[start,len,matched,[[entry_id,headword],..]],..],
 //!  "bounds":[..],"relaxed":[..]}
 //! ```
+//!
+//! Each segment's fourth field is its `entries` in rank order, so entry top-1
+//! can be decomposed the same way span accuracy is — `entries[0]` against the
+//! gold `ent_seq`, and where in the list the gold entry actually landed.
 //!
 //! `bounds` is the tokenizer's own boundary set and `relaxed` the positions
 //! [`jparser::engine::relax::Relaxed`] reopened on top of it, so a diagnostic
@@ -93,7 +97,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         let segs: Vec<serde_json::Value> = parsed
             .segments
             .iter()
-            .map(|s| serde_json::json!([s.start, s.len, s.matched]))
+            .map(|s| {
+                let ids: Vec<serde_json::Value> = s
+                    .entries
+                    .iter()
+                    .map(|e| serde_json::json!([e.entry_id, e.headword]))
+                    .collect();
+                serde_json::json!([s.start, s.len, s.matched, ids])
+            })
             .collect();
         println!(
             "{}",

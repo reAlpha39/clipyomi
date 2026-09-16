@@ -18,6 +18,7 @@
 
 use crate::engine::chain;
 use crate::engine::flags::WordFlags;
+use crate::engine::kana;
 use crate::engine::label;
 use crate::engine::lattice::Step;
 use crate::engine::lex::Candidate;
@@ -77,7 +78,10 @@ pub fn to_segment(
             group.push(sibling.clone());
         }
     }
-    order(&mut group);
+    // `1969|年`: the one piece of context the ordering uses. Computed here
+    // because this is where the span's neighbours are in hand.
+    let prev_is_digit = start > 0 && kana::is_digit(chars[start - 1]);
+    order(&mut group, prev_is_digit);
 
     let mut entries = Vec::with_capacity(group.len());
     for c in &group {
@@ -99,14 +103,39 @@ pub fn to_segment(
 ///
 /// In sequence: an exact surface match before one only reached by folding
 /// kana together; a `COMMON`-priority headword before a rarer one; a
-/// `PRIMARY` headword (the word itself) before a `PRONOUNCE` one (a kanji
-/// entry's own reading, offered only as a fallback); a shallower
-/// deinflection chain before a deeper one, since an uninflected reading of
-/// the same surface is the likelier one; and, last, ascending `entry_id` --
-/// JMdict's own `ent_seq` -- as a tiebreak. Every earlier clause is a fact
-/// JMdict or the match itself supplies, never a frequency table this
-/// project does not have; the last clause carries no quality judgement of
-/// its own, it exists only to make the order total.
+/// `COUNTER` entry before the rest **when the character before the span is a
+/// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
+/// word itself) before a `PRONOUNCE` one (a kanji entry's own reading,
+/// offered only as a fallback); a shallower deinflection chain before a
+/// deeper one, since an uninflected reading of the same surface is the
+/// likelier one; and, last, ascending `entry_id` -- JMdict's own `ent_seq` --
+/// as a tiebreak. Every earlier clause is a fact JMdict, the match itself or
+/// the surrounding text supplies, never a frequency table this project does
+/// not have; the last clause carries no quality judgement of its own, it
+/// exists only to make the order total.
+///
+/// **The `COUNTER` clause is gated on the digit and must stay gated.**
+/// Measured over the 150-sentence gold corpus with
+/// `examples/order_sweep.rs`, hints on: gated it is **+12 entry top-1 hits
+/// and costs nothing**, every one of them `年` after a year like `1969`.
+/// *Ungated* -- "a counter outranks the rest, always" -- it is **-45**, because
+/// `が` has a `suf` sense and `COUNTER_POS` includes `suf`, so the particle
+/// loses its own span 51 times. A counter is not more likely than a noun in
+/// general; it is more likely *after a number*, and that is a fact about the
+/// text rather than a prior about the language. Master plan §5.2's bar for
+/// this key is exactly that distinction.
+///
+/// The `PARTICLE` clause needs no gate: measured on its own it is **+3 and
+/// costs nothing** in both hint states, since it only ever separates
+/// candidates that were about to be decided by ascending `entry_id`.
+///
+/// Together, entry top-1 goes **0.9125 -> 0.9236 hints on and 0.9093 ->
+/// 0.9215 hints off, with no span losing a hit in either state** -- which is
+/// what takes master plan §2's criterion 2 above the v1 baseline it had been
+/// below (0.9155 / 0.9159). Two near misses that were tried and rejected are
+/// recorded in `order_sweep.rs`: folding `COMMON_LINE` into the `COMMON`
+/// clause is an exact wash (+17 / -17), and putting counters and particles in
+/// one ungated tier scores +22 but buys it with 13 real losses.
 ///
 /// `entry_id` sorting last is exactly what makes the key total: two
 /// distinct entries never share one, so no two candidates from different
@@ -121,11 +150,13 @@ pub fn to_segment(
 /// candidates with the same entry but *different* chains -- and therefore
 /// different `Entry::conjugation` labels -- could tie on every key above and
 /// still be visibly different in the output.
-pub fn order(cands: &mut [Candidate]) {
+pub fn order(cands: &mut [Candidate], prev_is_digit: bool) {
     cands.sort_unstable_by_key(|c| {
         (
             !c.exact,
             !c.flags.contains(WordFlags::COMMON),
+            !(prev_is_digit && c.flags.contains(WordFlags::COUNTER)),
+            !c.flags.contains(WordFlags::PARTICLE),
             c.flags.contains(WordFlags::PRONOUNCE),
             c.steps.len(),
             c.entry_id,
@@ -455,10 +486,80 @@ mod tests {
             order_candidate(1, false, WordFlags::PRIMARY, 0),
             order_candidate(2, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands);
+        order(&mut cands, false);
         assert_eq!(
             cands[0].entry_id, 2,
             "the exact match sorts first despite the higher entry_id"
+        );
+    }
+
+    /// The counter clause and its gate, as one test, because the gate is the
+    /// whole finding: ungated this same clause is **-45** entry top-1 hits on
+    /// the gold corpus, `が` alone losing its own span 51 times to a `suf`
+    /// sense. A counter is likelier *after a number*, not in general.
+    #[test]
+    fn order_puts_a_counter_first_only_after_a_digit() {
+        let mut counter = WordFlags::PRIMARY;
+        counter.insert(WordFlags::COUNTER);
+        let build = || {
+            vec![
+                order_candidate(1, true, WordFlags::PRIMARY, 0), // noun, smaller id
+                order_candidate(2, true, counter, 0),            // counter, larger id
+            ]
+        };
+
+        // `1969|年`: the digit is there, so the counter wins despite its id.
+        let mut after_digit = build();
+        order(&mut after_digit, true);
+        assert_eq!(
+            after_digit[0].entry_id, 2,
+            "after a digit the counter sorts first"
+        );
+
+        // `去|年`: no digit, so the clause must not fire and the id decides.
+        let mut elsewhere = build();
+        order(&mut elsewhere, false);
+        assert_eq!(
+            elsewhere[0].entry_id, 1,
+            "without the digit the counter has no claim and entry_id decides"
+        );
+    }
+
+    /// The particle clause, which needs no gate: measured on its own it is
+    /// +3 entry top-1 hits and costs nothing, because it only ever separates
+    /// candidates that `entry_id` was about to decide arbitrarily.
+    #[test]
+    fn order_puts_a_particle_before_a_plain_entry_regardless_of_id() {
+        let mut particle = WordFlags::PRIMARY;
+        particle.insert(WordFlags::PARTICLE);
+        let mut cands = vec![
+            order_candidate(1, true, WordFlags::PRIMARY, 0), // not a particle, smaller id
+            order_candidate(2, true, particle, 0),           // particle, larger id
+        ];
+        order(&mut cands, false);
+        assert_eq!(
+            cands[0].entry_id, 2,
+            "the particle sorts first despite the higher entry_id"
+        );
+    }
+
+    /// `COMMON` outranks both new clauses, which is what keeps them
+    /// tiebreakers rather than a second priority signal.
+    #[test]
+    fn common_still_outranks_the_counter_and_particle_clauses() {
+        let mut common = WordFlags::PRIMARY;
+        common.insert(WordFlags::COMMON);
+        let mut counter = WordFlags::PRIMARY;
+        counter.insert(WordFlags::COUNTER);
+        counter.insert(WordFlags::PARTICLE);
+        let mut cands = vec![
+            order_candidate(9, true, counter, 0), // counter *and* particle, not COMMON
+            order_candidate(1, true, common, 0),  // COMMON only
+        ];
+        order(&mut cands, true);
+        assert_eq!(
+            cands[0].entry_id, 1,
+            "a COMMON headword outranks a counter even after a digit"
         );
     }
 
@@ -470,7 +571,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not COMMON, smaller id
             order_candidate(2, true, common, 0),             // COMMON, larger id
         ];
-        order(&mut cands);
+        order(&mut cands, false);
         assert_eq!(
             cands[0].entry_id, 2,
             "the COMMON match sorts first despite the higher entry_id"
@@ -483,7 +584,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRONOUNCE, 0), // smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0),   // larger id
         ];
-        order(&mut cands);
+        order(&mut cands, false);
         assert_eq!(
             cands[0].entry_id, 2,
             "the PRIMARY match sorts first despite the higher entry_id"
@@ -496,7 +597,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 2), // two-step chain, smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0), // uninflected, larger id
         ];
-        order(&mut cands);
+        order(&mut cands, false);
         assert_eq!(
             cands[0].entry_id, 2,
             "the shallower chain sorts first despite the higher entry_id"
@@ -513,7 +614,7 @@ mod tests {
             order_candidate(10, true, WordFlags::PRIMARY, 0),
             order_candidate(20, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands);
+        order(&mut cands, false);
         let ids: Vec<u32> = cands.iter().map(|c| c.entry_id).collect();
         assert_eq!(ids, vec![10, 20, 30]);
     }
