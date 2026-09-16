@@ -109,6 +109,20 @@ export function toRomaji(text: string, isParticle = false): string {
       continue;
     }
 
+    // Chouon (ー): repeat the vowel already emitted. Without this the mark
+    // fell through to the `!matched` arm below and was copied out verbatim,
+    // so ネイビーガール romanised as `neibi-ga-ru`. `crates/jparser`'s own
+    // romanizer has always handled it, and these are the outputs matched
+    // against it: `ネイビー` -> `neibii`, `コーーヒー` -> `kooohii`,
+    // `アー` -> `aa`, and a mark with no vowel before it (`ー`, `ンー`)
+    // contributes nothing rather than a stray character.
+    if (ch === 'ー') {
+      const last = res[res.length - 1];
+      if (last && 'aeiou'.includes(last)) res += last;
+      i++;
+      continue;
+    }
+
     // Check digraphs (2 chars) then single kana
     let matched = false;
     for (const [k, r] of ROMAJI_TABLE) {
