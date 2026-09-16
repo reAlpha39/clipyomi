@@ -18,6 +18,25 @@ describe('toKatakana', () => {
 });
 
 describe('toRomaji', () => {
+  // Reported from the app: 『ロイヤルネイビーガール』 romanised as
+  // `roiyaruneibi-ga-ru`, because the prolonged sound mark had no case here
+  // and fell through to the copy-verbatim arm. Every expectation below is
+  // what `jparser-cli romaji` prints for the same input -- the engine has a
+  // tested romanizer and this one must not disagree with it.
+  test('repeats the vowel for a prolonged sound mark', () => {
+    expect(toRomaji('ネイビー')).toBe('neibii');
+    expect(toRomaji('ガール')).toBe('gaaru');
+    expect(toRomaji('ロイヤルネイビーガール')).toBe('roiyaruneibiigaaru');
+    expect(toRomaji('コーヒー')).toBe('koohii');
+    expect(toRomaji('コーーヒー')).toBe('kooohii');
+    expect(toRomaji('アー')).toBe('aa');
+  });
+
+  test('drops a prolonged sound mark with no vowel before it', () => {
+    expect(toRomaji('ー')).toBe('');
+    expect(toRomaji('ンー')).toBe('n');
+  });
+
   test('converts basic kana to romaji', () => {
     expect(toRomaji('とうきょう')).toBe('toukyou');
     expect(toRomaji('にほん')).toBe('nihon');
