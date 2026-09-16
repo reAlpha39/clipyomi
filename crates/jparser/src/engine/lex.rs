@@ -395,22 +395,36 @@ fn is_function_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> b
     if width < 2 {
         return false;
     }
-    let mut reachable = vec![false; width + 1];
-    reachable[0] = true;
+    // [p][saw_particle]: a tiling of `[start, start + p)` into COMMON pieces of
+    // at most two characters, `saw_particle` recording whether any was a
+    // PARTICLE. The length cap is what keeps a content word out: ことになっている
+    // tiles into こと|に|なっ|て|いる, all short, while 物思いにふける needs
+    // ふける at three.
+    const MAX_PIECE: usize = 2;
+    let mut reachable = vec![[false; 2]; width + 1];
+    reachable[0][0] = true;
     for p in 0..width {
-        if !reachable[p] {
-            continue;
-        }
-        for cand in &by_start[start + p] {
-            if cand.len >= width || p + cand.len > width {
+        for seen in 0..2 {
+            if !reachable[p][seen] {
                 continue;
             }
-            if cand.flags.contains(WordFlags::COMMON) && cand.flags.contains(WordFlags::PARTICLE) {
-                reachable[p + cand.len] = true;
+            for cand in &by_start[start + p] {
+                if cand.len >= width || p + cand.len > width || cand.len > MAX_PIECE {
+                    continue;
+                }
+                let particle = cand.flags.contains(WordFlags::PARTICLE);
+                // A one-character piece has to be a particle. Single COMMON
+                // kana and kanji are everywhere -- without this, 物思いにふける
+                // tiles as 物|思|い|に|ふ|け|る and every word is a stack.
+                if !cand.flags.contains(WordFlags::COMMON) || (cand.len < 2 && !particle) {
+                    continue;
+                }
+                let next = seen | usize::from(particle);
+                reachable[p + cand.len][next] = true;
             }
         }
     }
-    reachable[width]
+    reachable[width][1]
 }
 
 /// Collapse `bucket` (one `start`'s worth of candidates) so no two entries

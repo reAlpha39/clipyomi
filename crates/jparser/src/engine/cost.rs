@@ -77,6 +77,9 @@ use crate::engine::Boundaries;
 /// compound, so it is not here.
 const MATCH: i32 = 2;
 
+/// EXPERIMENT
+const LEN_GAIN: i32 = 1;
+
 /// Cost of one covered character in a matched span.
 ///
 /// Per character, not per match. A per-match constant is what makes `はこう`
@@ -412,6 +415,13 @@ pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
 /// per-match terms apply.
 pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     let mut total = COVER * cand.len as i32 + MATCH;
+    // EXPERIMENT: superlinear length gain (Ichiran's multiplicative length
+    // coefficient, expressed additively). Additive terms keep the
+    // merge-vs-tiling ratio length-invariant; this breaks that.
+    if !(cand.function_stack && cand.steps.is_empty()) {
+        let l = cand.len as i32 - 1;
+        total -= LEN_GAIN * l * l;
+    }
 
     if !cand.exact {
         total += INEXACT;
