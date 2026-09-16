@@ -44,8 +44,33 @@ impl VibratoTokenizer {
         })?;
         let dict = vibrato::Dictionary::read(std::io::BufReader::new(file))
             .map_err(|e| HintsError::Dictionary(e.to_string()))?;
+        // SPIKE ONLY: a MeCab-format user lexicon, for measuring whether the
+        // words JMdict has and IPADIC cuts apart are worth adding as tokens.
+        let dict = match std::env::var_os("TA_HINTS_USER_DICT") {
+            Some(p) => {
+                let f = std::fs::File::open(&p).map_err(|source| HintsError::Io {
+                    path: std::path::PathBuf::from(&p),
+                    source,
+                })?;
+                dict.reset_user_lexicon_from_reader(Some(std::io::BufReader::new(f)))
+                    .map_err(|e| HintsError::Dictionary(e.to_string()))?
+            }
+            None => dict,
+        };
         Ok(Self {
             tokenizer: vibrato::Tokenizer::new(dict),
+        })
+    }
+
+    /// SPIKE ONLY: the connection ids IPADIC gives `probe`, for generating a
+    /// user lexicon whose ids the connection matrix will accept.
+    pub fn ids_of(&self, probe: &str) -> Option<(u16, u16)> {
+        let mut w = self.tokenizer.new_worker();
+        w.reset_sentence(probe);
+        w.tokenize();
+        (w.num_tokens() == 1).then(|| {
+            let t = w.token(0);
+            (t.left_id(), t.right_id())
         })
     }
 
