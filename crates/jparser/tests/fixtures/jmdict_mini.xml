@@ -3,7 +3,7 @@
 <!ENTITY n "noun (common) (futsuumeishi)">
 <!ENTITY prt "particle">
 <!ENTITY v1 "Ichidan verb">
-<!ENTITY v5r "Godan verb with `ru' ending">
+<!ENTITY v5u "Godan verb with `u' ending">
 <!ENTITY adj-i "adjective (keiyoushi)">
 <!ENTITY uk "word usually written using kana alone">
 ]>
@@ -14,7 +14,7 @@
 <r_ele><reb>いう</reb><re_pri>ichi1</re_pri></r_ele>
 <r_ele><reb>ゆう</reb></r_ele>
 <sense>
-<pos>&v5r;</pos>
+<pos>&v5u;</pos>
 <gloss>to say</gloss>
 <gloss>to utter</gloss>
 <xref>言われる</xref>

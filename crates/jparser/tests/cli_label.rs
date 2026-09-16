@@ -1,0 +1,216 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+//
+// Written independently for the Engine v2 measurement harness. Nothing here
+// derives from Translation Aggregator.
+
+//! `jparser-cli label` end to end, driven by piped stdin.
+//!
+//! Line-buffered input is what makes this possible at all: a raw-keystroke
+//! reader would need a TTY and none of these branches could be covered.
+
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+use jparser::engine::build::build_from_reader;
+
+const BIN: &str = env!("CARGO_BIN_EXE_jparser-cli");
+const FIXTURE: &str = include_str!("fixtures/jmdict_mini.xml");
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn index_dir(dir: &Path) -> PathBuf {
+    let index = dir.join("index");
+    std::fs::create_dir_all(&index).unwrap();
+    build_from_reader(std::io::Cursor::new(FIXTURE), &index).expect("the mini fixture must build");
+    index
+}
+
+/// One diff record over 言った, whose jparser and Vibrato boundaries are
+/// supplied literally — `label` never tokenizes, so this needs no dictionary.
+fn diff_file(dir: &Path, text: &str, jparser: &str, vibrato: &str) -> PathBuf {
+    let path = dir.join("diff.jsonl");
+    std::fs::write(
+        &path,
+        format!(
+            "{{\"text\":\"{text}\",\"source\":\"test:1\",\"jparser\":{jparser},\
+             \"vibrato\":{vibrato},\"conflicts\":[1],\"unknown_tokens\":0}}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+/// Drive `label` with `script` on stdin and return the gold file's contents.
+fn label(index: &Path, diff: &Path, gold: &Path, script: &str) -> String {
+    let mut child = Command::new(BIN)
+        .arg("label")
+        .arg(index)
+        .arg(diff)
+        .arg(gold)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("jparser-cli must be runnable");
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(script.as_bytes())
+        .expect("write the decision script");
+    let out = child.wait_with_output().expect("wait");
+    assert!(
+        out.status.success(),
+        "exit {:?}, stderr: {}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    std::fs::read_to_string(gold).unwrap_or_default()
+}
+
+/// Bless jparser's spans, then pick 言う. The candidate list is sorted by
+/// ent_seq, and 1000010 is the only candidate on the whole-text span, so `1`
+/// is unambiguous.
+#[test]
+fn blessing_jparser_spans_and_picking_an_entry_writes_one_gold_record() {
+    let dir = scratch("cli-label-bless-jparser");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,1,3]");
+    let gold = dir.join("gold.jsonl");
+
+    let written = label(&index, &diff, &gold, "j\n1\n");
+
+    assert_eq!(
+        written.trim(),
+        "{\"text\":\"言った\",\"source\":\"test:1\",\"spans\":[{\"start\":0,\"len\":3,\"ent_seq\":1000010}],\"decision\":\"j\"}"
+    );
+}
+
+/// `n` is a positive label, not a skip: the span is recorded with a null
+/// ent_seq and counts for span accuracy.
+#[test]
+fn n_records_a_null_ent_seq() {
+    let dir = scratch("cli-label-null");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,1,3]");
+    let gold = dir.join("gold.jsonl");
+
+    let written = label(&index, &diff, &gold, "j\nn\n");
+
+    assert!(written.contains("\"ent_seq\":null"), "got {written}");
+}
+
+/// `s` appends nothing. A sentence the adjudicator cannot rule on stays
+/// unlabelled rather than becoming a guess in the gold file.
+#[test]
+fn s_writes_no_record_at_all() {
+    let dir = scratch("cli-label-skip");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,1,3]");
+    let gold = dir.join("gold.jsonl");
+
+    assert_eq!(label(&index, &diff, &gold, "s\n").trim(), "");
+}
+
+/// `v` blesses the tokenizer's boundaries instead. Vibrato cut 言|った here, so
+/// two spans get labelled; neither is a JMdict entry on its own, so both are
+/// null.
+#[test]
+fn blessing_vibrato_spans_labels_every_token() {
+    let dir = scratch("cli-label-bless-vibrato");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,1,3]");
+    let gold = dir.join("gold.jsonl");
+
+    let written = label(&index, &diff, &gold, "v\nn\nn\n");
+
+    assert!(written.contains("\"start\":0,\"len\":1"), "got {written}");
+    assert!(written.contains("\"start\":1,\"len\":2"), "got {written}");
+}
+
+/// `e` retypes the interior cuts. 0 and 3 are implied, so `1` means 言|った.
+#[test]
+fn e_takes_a_retyped_cut_list() {
+    let dir = scratch("cli-label-edit");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,3]");
+    let gold = dir.join("gold.jsonl");
+
+    let written = label(&index, &diff, &gold, "e\n1\nn\nn\n");
+
+    assert!(written.contains("\"start\":0,\"len\":1"), "got {written}");
+    assert!(written.contains("\"start\":1,\"len\":2"), "got {written}");
+}
+
+/// A span with no candidate is still labellable: `#` takes an ent_seq
+/// directly, so the adjudicator never has to skip a sentence they understand.
+#[test]
+fn a_hash_prefixed_ent_seq_is_accepted_directly() {
+    let dir = scratch("cli-label-manual-id");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,3]");
+    let gold = dir.join("gold.jsonl");
+
+    let written = label(&index, &diff, &gold, "j\n#1000030\n");
+
+    assert!(written.contains("\"ent_seq\":1000030"), "got {written}");
+}
+
+/// `#<ent_seq>` is validated against the index, not accepted blind: a typo'd
+/// id (missing a digit here) must not become permanent, unmatchable gold. The
+/// adjudicator is re-prompted and a good answer still gets through.
+#[test]
+fn a_hash_prefixed_ent_seq_absent_from_the_index_is_rejected_and_reprompted() {
+    let dir = scratch("cli-label-bad-manual-id");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,3]");
+    let gold = dir.join("gold.jsonl");
+
+    let written = label(&index, &diff, &gold, "j\n#100001\n1\n");
+
+    assert!(
+        written.contains("\"ent_seq\":1000010"),
+        "the bad id is rejected and the reprompted answer wins: {written}"
+    );
+}
+
+/// The append-only, last-wins contract, driven through the binary rather than
+/// through `corpus.rs`'s own unit tests (which cover the read side directly).
+/// `label` never rewrites, so two labelling passes over the same sentence
+/// leave two lines in `gold.jsonl` — provable by `score`, which folds
+/// duplicates by `text` and reports exactly one live sentence and one
+/// supersession.
+#[test]
+fn relabelling_a_sentence_supersedes_the_earlier_record() {
+    let dir = scratch("cli-label-last-wins");
+    let index = index_dir(&dir);
+    let diff = diff_file(&dir, "言った", "[0,3]", "[0,1,3]");
+    let gold = dir.join("gold.jsonl");
+
+    label(&index, &diff, &gold, "j\n1\n");
+    label(&index, &diff, &gold, "j\nn\n");
+
+    let raw = std::fs::read_to_string(&gold).unwrap();
+    assert_eq!(
+        raw.lines().count(),
+        2,
+        "label never rewrites: both appends survive"
+    );
+
+    let out = Command::new(BIN)
+        .arg("score")
+        .arg(&index)
+        .arg(&gold)
+        .output()
+        .expect("jparser-cli must be runnable");
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("sentences:      1"), "got {stdout}");
+    assert!(stdout.contains("superseded:     1"), "got {stdout}");
+}

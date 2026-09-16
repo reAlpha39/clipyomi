@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Background mouse tracking for macOS and Windows.
 //!
 //! WebKit does not dispatch DOM mousemove/mouseover events when an application
@@ -82,7 +84,8 @@ pub fn start(app: AppHandle) {
                 let sel_style_mask = sel_registerName(c"styleMask".as_ptr());
                 let sel_title_vis = sel_registerName(c"titleVisibility".as_ptr());
                 let sel_is_trans = sel_registerName(c"titlebarAppearsTransparent".as_ptr());
-                let sel_frame_rect_for_content = sel_registerName(c"frameRectForContentRect:styleMask:".as_ptr());
+                let sel_frame_rect_for_content =
+                    sel_registerName(c"frameRectForContentRect:styleMask:".as_ptr());
                 let sel_screens = sel_registerName(c"screens".as_ptr());
                 let sel_first_object = sel_registerName(c"firstObject".as_ptr());
 
@@ -90,7 +93,10 @@ pub fn start(app: AppHandle) {
                 let ns_event_class = objc_getClass(c"NSEvent".as_ptr());
                 let ns_screen_class = objc_getClass(c"NSScreen".as_ptr());
 
-                if ns_window_class.is_null() || ns_event_class.is_null() || ns_screen_class.is_null() {
+                if ns_window_class.is_null()
+                    || ns_event_class.is_null()
+                    || ns_screen_class.is_null()
+                {
                     continue;
                 }
 
@@ -103,8 +109,11 @@ pub fn start(app: AppHandle) {
 
                 #[cfg(target_arch = "x86_64")]
                 let mouse_loc: NSPoint = {
-                    let mouse_loc_fn: unsafe extern "C" fn(*mut NSPoint, *mut c_void, *const c_void) =
-                        std::mem::transmute(objc_msgSend as *const ());
+                    let mouse_loc_fn: unsafe extern "C" fn(
+                        *mut NSPoint,
+                        *mut c_void,
+                        *const c_void,
+                    ) = std::mem::transmute(objc_msgSend as *const ());
                     let mut pt = NSPoint::default();
                     mouse_loc_fn(&mut pt, ns_event_class, sel_mouse_location);
                     pt
@@ -138,20 +147,52 @@ pub fn start(app: AppHandle) {
                     std::mem::transmute(objc_msgSend as *const ());
                 let is_transparent = is_trans_fn(ptr, sel_is_trans);
 
-                let title_bar_height = if (style_mask & 1) != 0 && !(title_visibility == 1 && is_transparent) {
+                let title_bar_height = if (style_mask & 1) != 0
+                    && !(title_visibility == 1 && is_transparent)
+                {
                     #[cfg(target_arch = "aarch64")]
                     {
-                        let frame_rect_fn: unsafe extern "C" fn(*mut c_void, *const c_void, NSRect, usize) -> NSRect =
-                            std::mem::transmute(objc_msgSend as *const ());
-                        let sample = frame_rect_fn(ns_window_class, sel_frame_rect_for_content, NSRect { x: 0.0, y: 0.0, width: 100.0, height: 100.0 }, 15);
+                        let frame_rect_fn: unsafe extern "C" fn(
+                            *mut c_void,
+                            *const c_void,
+                            NSRect,
+                            usize,
+                        ) -> NSRect = std::mem::transmute(objc_msgSend as *const ());
+                        let sample = frame_rect_fn(
+                            ns_window_class,
+                            sel_frame_rect_for_content,
+                            NSRect {
+                                x: 0.0,
+                                y: 0.0,
+                                width: 100.0,
+                                height: 100.0,
+                            },
+                            15,
+                        );
                         sample.height - 100.0
                     }
                     #[cfg(target_arch = "x86_64")]
                     {
-                        let frame_rect_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void, NSRect, usize) =
-                            std::mem::transmute(objc_msgSend as *const ());
+                        let frame_rect_fn: unsafe extern "C" fn(
+                            *mut NSRect,
+                            *mut c_void,
+                            *const c_void,
+                            NSRect,
+                            usize,
+                        ) = std::mem::transmute(objc_msgSend as *const ());
                         let mut sample = NSRect::default();
-                        frame_rect_fn(&mut sample, ns_window_class, sel_frame_rect_for_content, NSRect { x: 0.0, y: 0.0, width: 100.0, height: 100.0 }, 15);
+                        frame_rect_fn(
+                            &mut sample,
+                            ns_window_class,
+                            sel_frame_rect_for_content,
+                            NSRect {
+                                x: 0.0,
+                                y: 0.0,
+                                width: 100.0,
+                                height: 100.0,
+                            },
+                            15,
+                        );
                         sample.height - 100.0
                     }
                 } else {
@@ -178,8 +219,11 @@ pub fn start(app: AppHandle) {
                     }
                     #[cfg(target_arch = "x86_64")]
                     {
-                        let frame_fn: unsafe extern "C" fn(*mut NSRect, *mut c_void, *const c_void) =
-                            std::mem::transmute(objc_msgSend as *const ());
+                        let frame_fn: unsafe extern "C" fn(
+                            *mut NSRect,
+                            *mut c_void,
+                            *const c_void,
+                        ) = std::mem::transmute(objc_msgSend as *const ());
                         let mut r = NSRect::default();
                         frame_fn(&mut r, first_screen, sel_frame);
                         r.height
@@ -200,7 +244,9 @@ pub fn start(app: AppHandle) {
                     && mouse_loc.y <= content_top_cocoa;
 
                 if is_inside {
-                    if (mouse_loc.x - last_loc.0).abs() > 0.1 || (mouse_loc.y - last_loc.1).abs() > 0.1 {
+                    if (mouse_loc.x - last_loc.0).abs() > 0.1
+                        || (mouse_loc.y - last_loc.1).abs() > 0.1
+                    {
                         last_loc = (mouse_loc.x, mouse_loc.y);
                         let client_x = mouse_loc.x - content_left;
                         let client_y = content_top_cocoa - mouse_loc.y;
@@ -226,7 +272,6 @@ pub fn start(app: AppHandle) {
         }
     });
 }
-
 
 #[cfg(target_os = "windows")]
 pub fn start(app: AppHandle) {
@@ -304,7 +349,10 @@ pub fn start(app: AppHandle) {
                     continue;
                 }
 
-                let is_inside = pt_client.x >= client_rect.left && pt_client.x <= client_rect.right && pt_client.y >= client_rect.top && pt_client.y <= client_rect.bottom;
+                let is_inside = pt_client.x >= client_rect.left
+                    && pt_client.x <= client_rect.right
+                    && pt_client.y >= client_rect.top
+                    && pt_client.y <= client_rect.bottom;
 
                 if is_inside {
                     if (pt.x - last_loc.0).abs() > 0 || (pt.y - last_loc.1).abs() > 0 {
@@ -432,4 +480,3 @@ mod tests {
         assert!(!is_title_inside);
     }
 }
-

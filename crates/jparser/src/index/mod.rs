@@ -1,18 +1,12 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Memory-mapped dictionary index.
 //!
-//! Replaces ta-old's hand-rolled sorted-array-plus-binary-search index
-//! (`LoadDict`/`FindMatches`, `ta-old/exe/util/Dictionary.cpp`). Keys are
-//! surfaces normalized with `kana::unify`, so the kana-insensitive comparator
-//! ta-old threaded through three separate binary searches does not exist here.
-//! The original surface is kept in the payload so inexact hiragana/katakana
-//! matches can still be detected and penalized in Phase 1B.
+//! An FST from folded keys to record offsets, plus length-prefixed bincode
+//! blobs for records and entries. Keys are surfaces folded with
+//! `engine::kana::fold`, so a kana-insensitive comparator is not needed at
+//! lookup time. The original surface is kept in the payload so inexact
+//! hiragana/katakana matches can still be detected and penalized.
 
 pub mod build;
 pub mod generations;
@@ -22,21 +16,27 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::conjugation::ConjugationTable;
-use crate::conjugation::VerbTypeId;
 use crate::index::load::Index;
-use crate::stem::StemOptions;
-use crate::stem::StemStats;
 
 /// Bumped whenever the on-disk layout changes. A mismatch forces a rebuild; the
 /// loader must never try to read an index it does not recognize.
-pub const INDEX_FORMAT_VERSION: u32 = 3;
+///
+/// 4 (Phase 1b-ii): `StoredRecord` lost `verb_type`.
+/// 5 (Phase 3a): a sixth file, `kanji.bin`. `IndexHeader`'s own layout is
+/// unchanged, and must stay so unless `open_with` learns to read the version
+/// before decoding the rest — see `a_v4_header_is_refused_with_a_version_mismatch`.
+/// 6 (Phase 3b): `KanjiData` gained `grade`, `strokes`, `freq` and `jlpt`, so
+/// `kanji.bin`'s record layout changed. The header is still untouched — see
+/// `a_v5_header_is_refused_with_a_version_mismatch`.
+pub const INDEX_FORMAT_VERSION: u32 = 6;
 
 pub const HEADER_FILE: &str = "header.bin";
 pub const FST_FILE: &str = "keys.fst";
 pub const RECORDS_FILE: &str = "records.bin";
 pub const ENTRIES_FILE: &str = "entries.bin";
 pub const ENTRIES_INDEX_FILE: &str = "entries.idx";
+/// A bincode `Vec<KanjiData>` sorted by codepoint, read whole on open.
+pub const KANJI_FILE: &str = "kanji.bin";
 
 /// Byte width of the little-endian length prefix `build` writes ahead of
 /// each bincode blob in `records.bin`/`entries.bin`, and `load` reads back.
@@ -49,29 +49,23 @@ pub struct IndexHeader {
     pub keys: u32,
     pub records: u32,
     pub entries: u32,
-    /// FNV-1a fingerprint of the conjugation asset this index's `verb_type`
-    /// ids were assigned from (`conjugation::embedded_asset_fingerprint`).
-    /// `Index::open` rejects a mismatch: reordering or adding a type in the
-    /// asset changes every id downstream of the change, so an index built
-    /// against a different asset would otherwise silently resolve
-    /// `verb_type` to the wrong verb.
+    /// FNV-1a fingerprint of the conjugation table this index's class ids
+    /// were assigned from (`engine::build::fingerprint`). `Index::open`
+    /// rejects a mismatch: reordering or adding a class in the table changes
+    /// every id downstream of the change, so an index built against a
+    /// different table would otherwise silently resolve a class to the wrong
+    /// conjugation.
     pub conjugation_fingerprint: u64,
 }
 
-/// One headword or stem as stored in the payload.
+/// One headword as stored in the payload.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StoredRecord {
     /// Original, unnormalized surface. Compared against the source text to set
-    /// the inexact-match flag in Phase 1B.
+    /// the inexact-match flag.
     pub surface: String,
+    /// The raw bits of an `engine::flags::WordFlags`.
     pub flags: u16,
-    /// `Some` for generated verb stems, `None` for plain headwords. ta-old
-    /// stored `verbType` as `vt + 1`, with `0` meaning "not a verb"
-    /// (`ConjInfo::verbType`, `Dictionary.h`); this port uses a 0-based id
-    /// inside an `Option` instead, so the Phase 1B differential run must
-    /// account for that offset (add 1, map `None` to `0`) when comparing
-    /// against the old encoding.
-    pub verb_type: Option<VerbTypeId>,
     pub entry_id: u32,
 }
 
@@ -88,11 +82,44 @@ pub struct SenseData {
 pub struct EntryData {
     pub id: u32,
     /// The entry's `<reb>` forms in document order, stored **only when the
-    /// entry also has kanji forms** — exactly the set ta-old flags
-    /// `JAP_WORD_PRONOUNCE`. Empty for kana-only entries, where the surface
-    /// already is the reading and ta-old renders no furigana.
+    /// entry also has kanji forms** — exactly the readings a kanji entry
+    /// needs furigana for. Empty for kana-only entries, where the surface
+    /// already is the reading.
     pub readings: Vec<String>,
     pub senses: Vec<SenseData>,
+}
+
+/// One KANJIDIC2 character, as the popover needs it.
+///
+/// Also the wire shape `kanji_info` returns to the webview: `src/types.ts`'s
+/// `KanjiInfo` names these eight fields, and
+/// `kanji_data_serializes_to_the_documented_wire_shape` in
+/// `tests/engine_v2.rs` pins them, so neither side can drift alone. The four
+/// `Option`s cross the wire as a number or `null`; bincode 1.x cannot skip a
+/// field on serialisation and read it back, so they are never omitted.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KanjiData {
+    pub literal: char,
+    /// `ja_on` readings, katakana as KANJIDIC2 gives them.
+    pub on: Vec<String>,
+    /// `ja_kun` readings. KANJIDIC2's `.` (okurigana boundary) and `-`
+    /// (affix) marks are kept: `ひがし`, `た.べる`, `-がた`.
+    pub kun: Vec<String>,
+    /// `<meaning>` elements with no `m_lang` attribute -- English -- the
+    /// first [`crate::kanjidic::MAX_MEANINGS`] of them.
+    pub meanings: Vec<String>,
+    /// `<grade>`: 1–6 the school year a kyōiku kanji is taught in, 8 the
+    /// remaining jōyō kanji (secondary school), 9 and 10 jinmeiyō (name)
+    /// kanji. `None` for the 10,109 characters the file does not grade.
+    pub grade: Option<u8>,
+    /// The first `<stroke_count>` -- the accepted count. Later ones are
+    /// common miscounts and are dropped. The file's maximum is 34.
+    pub strokes: Option<u8>,
+    /// `<freq>`: newspaper frequency rank, 1–2,501. `None` when unranked.
+    pub freq: Option<u16>,
+    /// `<jlpt>`: level in the former four-level JLPT, 1 (advanced) to 4
+    /// (elementary). `None` when the character was on no level's list.
+    pub jlpt: Option<u8>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -100,9 +127,12 @@ pub struct BuildReport {
     pub keys: usize,
     pub records: usize,
     pub entries: usize,
+    /// KANJIDIC2 characters stored. Zero for a `build_from_reader` build.
+    pub kanji: usize,
     /// Malformed JMdict entries skipped. Surfaced, never silently dropped.
     pub skipped_entries: usize,
-    pub stems: StemStats,
+    /// KANJIDIC2 characters skipped for a literal that was not one character.
+    pub skipped_kanji: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -115,6 +145,8 @@ pub enum IndexError {
     Encoding(#[from] bincode::Error),
     #[error("reading JMdict failed: {0}")]
     Jmdict(#[from] crate::jmdict::JmdictError),
+    #[error("reading KANJIDIC2 failed: {0}")]
+    Kanjidic(#[from] crate::kanjidic::KanjidicError),
     #[error("index format version mismatch: found {found}, expected {expected}")]
     VersionMismatch { found: u32, expected: u32 },
     #[error(
@@ -134,25 +166,22 @@ pub enum IndexError {
 
 /// Open the newest usable index in `root`, building one first if necessary.
 ///
-/// `source` is a *lazy* producer of JMdict XML: it is invoked only when a
-/// build is actually required, because the real source is a ~60 MB download
-/// and the steady-state path must not pay for it.
+/// `source` is a *lazy* producer of the two EDRDG files, JMdict XML then
+/// KANJIDIC2 XML: it is invoked only when a build is actually required,
+/// because the real sources are a ~10 MB and a ~1.5 MB download and the
+/// steady-state path must not pay for them. One closure rather than two so a
+/// caller's "downloading" phase covers both fetches (Phase 3a design §3.2).
 ///
 /// A version or conjugation-fingerprint mismatch triggers a rebuild — both are
-/// expected after an application upgrade or a changed `conjugations.json`. Any
-/// **other** open failure is returned rather than rebuilt: a generation that
-/// was published as complete but does not read back is a bug or a failing
+/// expected after an application upgrade or a regenerated conjugation table.
+/// Any **other** open failure is returned rather than rebuilt: a generation
+/// that was published as complete but does not read back is a bug or a failing
 /// disk, and silently rebuilding would hide it.
-pub fn ensure_dictionary<R, F>(
-    root: &Path,
-    table: &ConjugationTable,
-    opts: &StemOptions,
-    keep: usize,
-    source: F,
-) -> Result<Index, IndexError>
+pub fn ensure_dictionary<J, K, F>(root: &Path, keep: usize, source: F) -> Result<Index, IndexError>
 where
-    F: FnOnce() -> std::io::Result<R>,
-    R: std::io::BufRead,
+    F: FnOnce() -> std::io::Result<(J, K)>,
+    J: std::io::BufRead,
+    K: std::io::BufRead,
 {
     // `keep = 0` would let `sweep` delete the generation this very call just
     // published, so the trailing `Index::open` below would fail with a bare
@@ -176,12 +205,13 @@ where
             | Err(e @ IndexError::Fst(_))
             | Err(e @ IndexError::Encoding(_))
             | Err(e @ IndexError::Jmdict(_))
+            | Err(e @ IndexError::Kanjidic(_))
             | Err(e @ IndexError::GenerationExists { .. }) => return Err(e),
         }
     }
 
-    let xml = source()?;
-    let (published, _report) = generations::build_new(root, xml, table, opts)?;
+    let (jmdict, kanjidic) = source()?;
+    let (published, _report) = generations::build_new(root, jmdict, kanjidic)?;
     // Sweep after the publish, never before: sweeping first could delete the
     // generation the caller would have fallen back to had the build failed.
     //
@@ -224,6 +254,7 @@ fn open_published_or_newest(root: &Path, published: &Path) -> Result<Index, Inde
         | Err(e @ IndexError::Fst(_))
         | Err(e @ IndexError::Encoding(_))
         | Err(e @ IndexError::Jmdict(_))
+        | Err(e @ IndexError::Kanjidic(_))
         | Err(e @ IndexError::VersionMismatch { .. })
         | Err(e @ IndexError::ConjugationMismatch { .. })
         | Err(e @ IndexError::GenerationExists { .. }) => Err(e),
@@ -236,8 +267,6 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::conjugation::ConjugationTable;
-    use crate::stem::StemOptions;
 
     const XML: &str = concat!(
         r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -248,18 +277,15 @@ mod tests {
         "</JMdict>",
     );
 
+    /// The empty KANJIDIC2 half of every source pair in this module. Kanji
+    /// records are the roundtrip tests' subject, not this module's.
+    const NO_KANJIDIC: &[u8] = b"";
+
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("jparser-test-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch dir");
         dir
-    }
-
-    fn table_and_opts() -> (ConjugationTable, StemOptions) {
-        (
-            ConjugationTable::load_embedded().expect("table"),
-            StemOptions::default(),
-        )
     }
 
     /// Rewrite `gen-N`'s header so the next open rejects it.
@@ -274,12 +300,11 @@ mod tests {
     #[test]
     fn an_empty_root_builds_the_first_generation() {
         let root = scratch("ensure-first");
-        let (table, opts) = table_and_opts();
         let calls = Cell::new(0usize);
 
-        let index = ensure_dictionary(&root, &table, &opts, 2, || {
+        let index = ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("ensure_dictionary");
 
@@ -296,20 +321,19 @@ mod tests {
     #[test]
     fn a_valid_generation_is_reused_without_consulting_the_source() {
         let root = scratch("ensure-reuse");
-        let (table, opts) = table_and_opts();
 
         let first = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             first.set(first.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("first");
         assert_eq!(first.get(), 1);
 
         let second = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             second.set(second.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("second");
         assert_eq!(second.get(), 0, "the source was consulted on a valid index");
@@ -322,17 +346,16 @@ mod tests {
     #[test]
     fn a_version_mismatch_rebuilds() {
         let root = scratch("ensure-version");
-        let (table, opts) = table_and_opts();
-        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("first");
 
         corrupt_header(&root.join("gen-1"), |h| {
             h.version = INDEX_FORMAT_VERSION - 1;
         });
 
         let calls = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("rebuild");
         assert_eq!(calls.get(), 1, "a stale version must rebuild");
@@ -342,17 +365,16 @@ mod tests {
     #[test]
     fn a_fingerprint_mismatch_rebuilds() {
         let root = scratch("ensure-fingerprint");
-        let (table, opts) = table_and_opts();
-        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("first");
 
         corrupt_header(&root.join("gen-1"), |h| {
             h.conjugation_fingerprint ^= 1;
         });
 
         let calls = Cell::new(0usize);
-        ensure_dictionary(&root, &table, &opts, 2, || {
+        ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect("rebuild");
         assert_eq!(calls.get(), 1);
@@ -364,17 +386,16 @@ mod tests {
     #[test]
     fn a_corrupt_generation_errors_rather_than_rebuilding() {
         let root = scratch("ensure-corrupt");
-        let (table, opts) = table_and_opts();
-        ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("first");
+        ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("first");
 
         // Truncate a file `open` reads eagerly, leaving the header intact so
         // version and fingerprint both still validate.
         std::fs::write(root.join("gen-1").join(ENTRIES_INDEX_FILE), b"\x00\x00").expect("truncate");
 
         let calls = Cell::new(0usize);
-        let err = ensure_dictionary(&root, &table, &opts, 2, || {
+        let err = ensure_dictionary(&root, 2, || {
             calls.set(calls.get() + 1);
-            Ok(XML.as_bytes())
+            Ok((XML.as_bytes(), NO_KANJIDIC))
         })
         .expect_err("corruption must surface");
 
@@ -389,11 +410,10 @@ mod tests {
     #[test]
     fn a_rebuild_sweeps_to_the_retention_limit() {
         let root = scratch("ensure-sweep");
-        let (table, opts) = table_and_opts();
 
         // Four rounds, invalidating the head each time so every round rebuilds.
         for _ in 0..4 {
-            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
@@ -421,17 +441,16 @@ mod tests {
     #[test]
     fn ensure_dictionary_honors_a_keep_of_one() {
         let root = scratch("ensure-keep-one");
-        let (table, opts) = table_and_opts();
 
         // Three rounds at keep=2, so all three generations would survive
         // under the default — the point below is the fourth round's keep=1.
         for _ in 0..3 {
-            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
 
-        let index = ensure_dictionary(&root, &table, &opts, 1, || Ok(XML.as_bytes()))
+        let index = ensure_dictionary(&root, 1, || Ok((XML.as_bytes(), NO_KANJIDIC)))
             .expect("ensure with keep=1");
 
         let remaining = std::fs::read_dir(&root)
@@ -458,9 +477,8 @@ mod tests {
     #[test]
     fn a_zero_keep_is_clamped_rather_than_self_destructive() {
         let root = scratch("ensure-keep-zero");
-        let (table, opts) = table_and_opts();
 
-        let index = ensure_dictionary(&root, &table, &opts, 0, || Ok(XML.as_bytes()))
+        let index = ensure_dictionary(&root, 0, || Ok((XML.as_bytes(), NO_KANJIDIC)))
             .expect("ensure_dictionary must not self-destruct on keep=0");
 
         assert!(
@@ -489,12 +507,9 @@ mod tests {
     #[test]
     fn open_published_or_newest_falls_back_when_its_own_generation_is_swept() {
         let root = scratch("ensure-superseded");
-        let (table, opts) = table_and_opts();
 
-        let (gen1, _) =
-            generations::build_new(&root, XML.as_bytes(), &table, &opts).expect("gen-1");
-        let (gen2, _) =
-            generations::build_new(&root, XML.as_bytes(), &table, &opts).expect("gen-2");
+        let (gen1, _) = generations::build_new(&root, XML.as_bytes(), NO_KANJIDIC).expect("gen-1");
+        let (gen2, _) = generations::build_new(&root, XML.as_bytes(), NO_KANJIDIC).expect("gen-2");
 
         // Simulate a different call's sweep removing gen1 — the generation
         // this call "published" — before this call's own open ran.
@@ -558,13 +573,12 @@ mod tests {
         }
 
         let root = scratch("ensure-sweep-fails");
-        let (table, opts) = table_and_opts();
 
         // Three rounds, invalidating the head each time. keep=2's normal
         // operation already sweeps gen-1 away during this loop, leaving
         // gen-2 and gen-3 (corrupt) once it finishes.
         for _ in 0..3 {
-            ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes())).expect("ensure");
+            ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC))).expect("ensure");
             let head = generations::latest(&root).expect("latest").expect("head");
             corrupt_header(&head, |h| h.version = INDEX_FORMAT_VERSION - 1);
         }
@@ -592,7 +606,7 @@ mod tests {
             return;
         }
 
-        let index = ensure_dictionary(&root, &table, &opts, 2, || Ok(XML.as_bytes()))
+        let index = ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), NO_KANJIDIC)))
             .expect("a failed sweep must not fail ensure_dictionary");
 
         assert_eq!(
@@ -607,5 +621,19 @@ mod tests {
             root.join("gen-2").exists(),
             "the un-removable generation must survive the failed sweep"
         );
+    }
+
+    /// The source closure is consulted once and yields both files; a
+    /// generation built through it carries the kanji records.
+    #[test]
+    fn ensure_dictionary_stores_the_kanjidic_half_of_the_pair() {
+        let root = scratch("ensure-kanji");
+        const KANJIDIC: &str = "<kanjidic2><character><literal>本</literal>\
+            <reading_meaning><rmgroup><reading r_type=\"ja_on\">ホン</reading>\
+            <meaning>book</meaning></rmgroup></reading_meaning></character></kanjidic2>";
+        let index = ensure_dictionary(&root, 2, || Ok((XML.as_bytes(), KANJIDIC.as_bytes())))
+            .expect("ensure_dictionary");
+        assert_eq!(index.kanji_count(), 1);
+        assert_eq!(index.kanji('本').expect("本").meanings, vec!["book"]);
     }
 }

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-# JParser — Japanese text parser ported from Translation Aggregator.
-# Copyright (C) 2026
-#
-# This program is free software; you can redistribute it and/or modify it
-# under the terms of the GNU General Public License version 2 as published
-# by the Free Software Foundation.
+# SPDX-License-Identifier: MIT OR Apache-2.0
 """Extract the JMdict subset the parse-snapshot sentences can reach.
 
 Usage:
@@ -14,9 +9,20 @@ Usage:
         crates/jparser/assets/conjugations.json \\
         crates/jparser/tests/fixtures/jmdict_subset.xml
 
+    python3 tools/extract_jmdict_subset.py \\
+        /tmp/jmdict/JMdict_e.xml \\
+        gold.jsonl \\
+        crates/jparser/assets/conjugations.json \\
+        crates/jparser/tests/fixtures/jmdict_subset.xml
+
 Entries are copied verbatim by text slicing, never re-serialized: JMdict's
 parts of speech are entity references and a DTD-aware parser would expand
 them into prose, which is precisely the data jparser reads as POS codes.
+
+The conjugation-source argument above pointed at the now-deleted
+crates/jparser/assets/conjugations.json; it needs a replacement built from
+crates/jparser/src/engine/table.rs. Until that port lands, recover the old
+asset from git history if a regeneration is needed.
 """
 
 import json
@@ -26,6 +32,7 @@ from pathlib import Path
 
 ENTRY_RE = re.compile(r"<entry>.*?</entry>", re.DOTALL)
 SURFACE_RE = re.compile(r"<(?:keb|reb)>(.*?)</(?:keb|reb)>", re.DOTALL)
+ENT_SEQ_RE = re.compile(r"<ent_seq>(\d+)</ent_seq>")
 # Exactly the POS codes record::headwords can map to a conjugation type: every
 # table name is v*, adj-*, or copula, and copula is not a JMdict code.
 CONJUGABLE_POS_RE = re.compile(r"<pos>&(?:v|adj-)")
@@ -89,6 +96,51 @@ def remove_suffixes(asset_path):
     return {s for s in out if s}
 
 
+def read_corpus(path):
+    """Sentences from a plain-text or JSONL corpus, deduplicated in order, plus
+    every non-null `ent_seq` a JSONL gold corpus names (empty for `.txt`).
+
+    `.txt` is one sentence per line, '#' comments and blanks ignored — the
+    parse_sentences.txt format. `.jsonl` reads each record's "text" field, so
+    the gold corpus is its own single source of truth and no parallel sentence
+    list has to be kept in sync with it. Its "spans" carry the ent_seq an
+    adjudicator actually named, which `wanted_keys`'s substring closure can
+    legitimately miss (an entry named by id but whose surface is not itself a
+    corpus substring), so those ids are returned separately and `is_needed`
+    keeps their entries unconditionally.
+
+    Duplicates are dropped rather than rejected: the substring closure is a
+    set, so a repeated sentence would only widen it redundantly.
+
+    A leading UTF-8 BOM is stripped: hand-authoring a sentence file on Windows
+    saves one by default, and an unstripped BOM glues itself to the first
+    line's first character, silently dropping that whole line's substrings
+    from the closure — Critical 2's failure mode (a "kept" entry that
+    `score` still can't find) through a different door.
+    """
+    p = Path(path)
+    raw = p.read_text(encoding="utf-8").lstrip("\ufeff")
+    ent_seqs = set()
+    if p.suffix == ".jsonl":
+        texts = []
+        for line in raw.splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            texts.append(record["text"])
+            for span in record.get("spans", []):
+                ent_seq = span.get("ent_seq")
+                if ent_seq is not None:
+                    ent_seqs.add(int(ent_seq))
+    else:
+        texts = [
+            s
+            for s in (line.strip() for line in raw.splitlines())
+            if s and not s.startswith("#")
+        ]
+    return list(dict.fromkeys(texts)), ent_seqs
+
+
 def wanted_keys(sentences):
     """Every unified substring of the corpus, plus the empty key.
 
@@ -104,7 +156,14 @@ def wanted_keys(sentences):
     return keys
 
 
-def is_needed(block, wanted, suffixes):
+def is_needed(block, wanted, suffixes, wanted_ent_seqs):
+    seq_match = ENT_SEQ_RE.search(block)
+    if seq_match and int(seq_match.group(1)) in wanted_ent_seqs:
+        # An adjudicator named this entry by ent_seq (label.rs's `#<ent_seq>`
+        # escape hatch), so it must survive even if its surface never appears
+        # as a corpus substring — otherwise score's absent-ent_seq hard error
+        # (design §12) could never be cleared by regenerating the subset.
+        return True
     surfaces = SURFACE_RE.findall(block)
     for surface in surfaces:
         if unify_str(surface) in wanted:
@@ -127,11 +186,7 @@ def main(argv):
         return 2
     jmdict_path, sentences_path, asset_path, out_path = argv[1:]
 
-    sentences = [
-        line.strip()
-        for line in Path(sentences_path).read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
+    sentences, wanted_ent_seqs = read_corpus(sentences_path)
     if not sentences:
         print("no sentences: check the corpus path", file=sys.stderr)
         return 1
@@ -145,8 +200,13 @@ def main(argv):
     kept = [
         m.group(0)
         for m in ENTRY_RE.finditer(text, first)
-        if is_needed(m.group(0), wanted, suffixes)
+        if is_needed(m.group(0), wanted, suffixes, wanted_ent_seqs)
     ]
+    gold_named_kept = 0
+    for block in kept:
+        seq_match = ENT_SEQ_RE.search(block)
+        if seq_match and int(seq_match.group(1)) in wanted_ent_seqs:
+            gold_named_kept += 1
 
     out = Path(out_path)
     out.write_text(prolog + "\n".join(kept) + "\n</JMdict>\n", encoding="utf-8")
@@ -154,6 +214,7 @@ def main(argv):
     print(f"wanted keys:   {len(wanted)}")
     print(f"stem suffixes: {len(suffixes)}")
     print(f"kept entries:  {len(kept)}")
+    print(f"gold-named entries kept: {gold_named_kept}")
     print(f"output bytes:  {out.stat().st_size}")
     return 0
 

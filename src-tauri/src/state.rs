@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Startup state: the index and the conjugation table.
 //!
@@ -16,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use jparser::conjugation::{ConjugationError, ConjugationTable};
+use jparser::engine::table::Table;
 use jparser::hints::{HintsError, VibratoTokenizer};
 use jparser::index::generations;
 use jparser::index::load::Index;
@@ -36,7 +31,7 @@ pub const HINTS_ENV: &str = "TA_HINTS_DICT";
 /// Read by `parse::run_worker`, spawned from `main.rs`'s `setup`.
 pub struct AppState {
     pub index: Index,
-    pub table: ConjugationTable,
+    pub table: Table,
 }
 
 /// A startup failure, kept as a rendered string so the webview can display it.
@@ -93,14 +88,18 @@ pub enum StartupError {
     NoIndex { root: PathBuf },
     #[error("opening the dictionary index failed: {0}")]
     Index(#[from] IndexError),
-    #[error("loading the conjugation table failed: {0}")]
-    Conjugation(#[from] ConjugationError),
     #[error("{HINTS_ENV} is set but the dictionary could not be loaded: {0}")]
     Hints(#[from] HintsError),
 }
 
-/// Whether this startup error is the first-run condition the download screen
-/// can fix, rather than a genuine failure.
+/// Whether this startup error is one the download screen can fix: no index at
+/// all, or an index a previous engine or on-disk format built.
+///
+/// The second case is deliberate. `ensure_dictionary` rebuilds on exactly
+/// `ConjugationMismatch` and `VersionMismatch` — both expected after an
+/// application upgrade — so routing them to the download screen repairs a
+/// stale index through the path that already exists, with no new UI. Every
+/// other `IndexError` is a real failure a download cannot fix.
 ///
 /// Matched exhaustively rather than with a wildcard: a future `StartupError`
 /// variant must force a decision here. Offering a download for an error a
@@ -108,7 +107,10 @@ pub enum StartupError {
 pub fn is_missing_dictionary(error: &StartupError) -> bool {
     match error {
         StartupError::NoIndex { .. } => true,
-        StartupError::Index(_) | StartupError::Conjugation(_) | StartupError::Hints(_) => false,
+        StartupError::Index(
+            IndexError::ConjugationMismatch { .. } | IndexError::VersionMismatch { .. },
+        ) => true,
+        StartupError::Index(_) | StartupError::Hints(_) => false,
     }
 }
 
@@ -124,7 +126,7 @@ pub fn load_state(root: &Path) -> Result<AppState, StartupError> {
     })?;
 
     let index = Index::open(&generation)?;
-    let table = ConjugationTable::load_embedded()?;
+    let table = Table::new();
 
     Ok(AppState { index, table })
 }
@@ -378,6 +380,34 @@ mod tests {
         assert!(matches!(err, StartupError::Index(_)), "got {err:?}");
     }
 
+    /// After an engine upgrade the newest generation carries the previous
+    /// engine's fingerprint, or an older on-disk format. `ensure_dictionary`
+    /// already rebuilds on exactly these two errors, so the download screen
+    /// can repair them; treating them as fatal would strand every upgrading
+    /// user on an error a click can fix.
+    #[test]
+    fn a_stale_index_is_the_download_screens_to_fix() {
+        let stale_fingerprint = StartupError::Index(IndexError::ConjugationMismatch {
+            found: 1,
+            expected: 2,
+        });
+        let stale_format = StartupError::Index(IndexError::VersionMismatch {
+            found: 3,
+            expected: 4,
+        });
+        assert!(is_missing_dictionary(&stale_fingerprint));
+        assert!(is_missing_dictionary(&stale_format));
+    }
+
+    /// Every other index failure stays fatal: a download cannot fix a failing
+    /// disk or a corrupt payload, and offering one would loop the user through
+    /// a wait that changes nothing.
+    #[test]
+    fn a_corrupt_or_unreadable_index_is_still_fatal() {
+        let io = StartupError::Index(IndexError::Io(std::io::Error::other("boom")));
+        assert!(!is_missing_dictionary(&io));
+    }
+
     /// Guards the sentinel `main.rs` relies on: an empty `StartupFailure`
     /// string means "startup succeeded" (see `StartupFailure`'s own doc
     /// comment). If a future `StartupError` variant ever rendered an empty
@@ -390,10 +420,6 @@ mod tests {
                 root: PathBuf::from("/nowhere"),
             },
             StartupError::Index(IndexError::Io(std::io::Error::other("boom"))),
-            StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
-                name: "x".to_string(),
-                pos: "y".to_string(),
-            }),
             StartupError::Hints(HintsError::Dictionary("boom".to_string())),
         ];
         for variant in variants {
@@ -592,7 +618,10 @@ mod tests {
         );
         assert!(result.hints_warning.0.is_empty());
         assert!(result.hints.is_none());
-        assert!(!result.failure.0.is_empty(), "the hints error must be fatal");
+        assert!(
+            !result.failure.0.is_empty(),
+            "the hints error must be fatal"
+        );
         assert!(!result.needs_dictionary.0);
         assert!(result.index.is_none());
     }
@@ -609,12 +638,15 @@ mod tests {
         jparser::hints::write_test_dictionary(&tokenizer_path).expect("fixture dictionary");
         let tokenizer = VibratoTokenizer::load(&tokenizer_path).expect("load fixture");
 
-        let result = startup(Ok((Some(tokenizer), "branch-2 warning".to_string())), || {
-            Ok(AppState {
-                index: Index::open(&generation).expect("open"),
-                table: ConjugationTable::load_embedded().expect("table"),
-            })
-        });
+        let result = startup(
+            Ok((Some(tokenizer), "branch-2 warning".to_string())),
+            || {
+                Ok(AppState {
+                    index: Index::open(&generation).expect("open"),
+                    table: Table::new(),
+                })
+            },
+        );
 
         assert_eq!(result.hints_warning.0, "branch-2 warning");
         assert!(
@@ -649,10 +681,9 @@ mod tests {
     #[test]
     fn any_other_index_failure_stays_fatal() {
         let result = startup(Ok((None, String::new())), || {
-            Err(StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
-                name: "x".to_string(),
-                pos: "y".to_string(),
-            }))
+            Err(StartupError::Index(IndexError::Io(std::io::Error::other(
+                "boom",
+            ))))
         });
 
         assert!(
@@ -786,10 +817,6 @@ mod tests {
     fn every_other_startup_error_stays_fatal() {
         let fatal: Vec<StartupError> = vec![
             StartupError::Index(IndexError::Io(std::io::Error::other("boom"))),
-            StartupError::Conjugation(ConjugationError::BadPartOfSpeech {
-                name: "x".to_string(),
-                pos: "y".to_string(),
-            }),
             StartupError::Hints(HintsError::Dictionary("boom".to_string())),
         ];
         for err in fatal {

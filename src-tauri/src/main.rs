@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -24,7 +19,7 @@ mod test_support;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// The stored startup geometry, clamped onto a monitor that exists now.
 ///
@@ -75,6 +70,17 @@ fn main() {
                 .build(),
         )
         .setup(|app| {
+            // This app has no menu bar, so every menu event is a pick from the
+            // main window's right-click menu. The id goes straight back to the
+            // webview that chose it; see `commands::context_menu`.
+            app.on_menu_event(|app, event| {
+                let _ = app.emit_to(
+                    "main",
+                    commands::context_menu::CONTEXT_MENU_PICK_EVENT,
+                    event.id().0.clone(),
+                );
+            });
+
             let config_dir = app.path().app_config_dir()?;
             let root = state::resolve_dict_root(&config_dir);
 
@@ -96,7 +102,8 @@ fn main() {
                 }
                 #[cfg(target_os = "macos")]
                 if loaded.chrome_mode != Some(settings::ChromeMode::Native) {
-                    let _ = commands::apply_decorations_macos(&main_window.as_ref().window(), false);
+                    let _ =
+                        commands::apply_decorations_macos(&main_window.as_ref().window(), false);
                 }
                 #[cfg(target_os = "windows")]
                 {
@@ -108,7 +115,9 @@ fn main() {
                 // geometry restores verbatim and only a first launch has the
                 // band added to it — by `initial_height`, which answers for
                 // every platform and is still the only place a band appears.
-                let width = loaded.window_width.unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
+                let width = loaded
+                    .window_width
+                    .unwrap_or(commands::DEFAULT_WINDOW_WIDTH);
                 let height = commands::initial_height(loaded.window_height);
                 // One path for both platforms now, because the clamp has to run
                 // wherever a stored box can name a monitor that is gone.
@@ -162,7 +171,7 @@ fn main() {
             // first-run download's result to arrive on. Starting it always
             // deletes that special case rather than adding one.
             let (index_tx, index_rx) = tokio::sync::watch::channel(None::<Arc<state::AppState>>);
-            app.manage(commands::IndexSender(index_tx.clone()));
+            app.manage(commands::dictionary::IndexSender(index_tx.clone()));
 
             // Hints travel on their own channel rather than inside `AppState`:
             // that state is built once and then read-only — which is what
@@ -170,17 +179,21 @@ fn main() {
             // toggle must not rebuild the index to change one flag.
             let (hints_tx, hints_rx) =
                 tokio::sync::watch::channel(None::<Arc<jparser::hints::VibratoTokenizer>>);
-            app.manage(commands::HintsSender(hints_tx.clone()));
+            app.manage(commands::hints::HintsSender(hints_tx.clone()));
 
             let source_dir = config_dir.join(jmdict_source::SOURCE_DIR);
             let hints_dir = config_dir.join(vibrato_source::HINTS_DIR);
-            app.manage(commands::DictionaryPaths {
+            app.manage(commands::dictionary::DictionaryPaths {
                 root: root.clone(),
                 source_dir,
                 hints_dir: hints_dir.clone(),
             });
-            app.manage(commands::DownloadInFlight(Arc::new(AtomicBool::new(false))));
-            app.manage(commands::HintsInFlight(Arc::new(AtomicBool::new(false))));
+            app.manage(commands::dictionary::DownloadInFlight(Arc::new(
+                AtomicBool::new(false),
+            )));
+            app.manage(commands::hints::HintsInFlight(Arc::new(AtomicBool::new(
+                false,
+            ))));
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(parse::run_worker(handle, index_rx, hints_rx, rx));
@@ -264,15 +277,17 @@ fn main() {
             commands::settings_warning,
             commands::shortcut_warning,
             commands::frontend_ready,
-            commands::download_dictionary,
-            commands::needs_dictionary,
-            commands::set_mecab_hints,
-            commands::hints_warning,
-            commands::hints_dir,
+            commands::dictionary::download_dictionary,
+            commands::dictionary::needs_dictionary,
+            commands::hints::set_mecab_hints,
+            commands::hints::hints_warning,
+            commands::hints::hints_dir,
+            commands::fonts::system_fonts,
+            commands::context_menu::show_context_menu,
+            commands::dictionary::kanji_info,
             popover::place_popover,
             popover::hide_popover
         ])
-
         // If the runtime cannot start, there is no window to report anything
         // in, so the alternative to this `expect` is a silent exit.
         .run(tauri::generate_context!())

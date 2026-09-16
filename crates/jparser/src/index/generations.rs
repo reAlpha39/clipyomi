@@ -1,9 +1,4 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Immutable generation directories.
 //!
@@ -24,10 +19,7 @@
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
-use crate::conjugation::ConjugationTable;
-use crate::index::build::build_from_reader;
 use crate::index::{BuildReport, IndexError};
-use crate::stem::StemOptions;
 
 /// Directory-name prefix for a published generation.
 pub const GENERATION_PREFIX: &str = "gen-";
@@ -170,7 +162,8 @@ fn next_generation(root: &Path) -> Result<u64, IndexError> {
 /// alone.
 static BUILD_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Build an index from `xml` and publish it as the next generation.
+/// Build an index from `jmdict` and `kanjidic` and publish it as the next
+/// generation.
 ///
 /// Builds into `<root>/.build-<pid>-<nanos>-<seq>/` first, so `root` never
 /// contains a partially-written generation. `root` and the build directory
@@ -184,9 +177,8 @@ static BUILD_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU
 /// that just lost.
 pub fn build_new(
     root: &Path,
-    xml: impl BufRead,
-    table: &ConjugationTable,
-    opts: &StemOptions,
+    jmdict: impl BufRead,
+    kanjidic: impl BufRead,
 ) -> Result<(PathBuf, BuildReport), IndexError> {
     std::fs::create_dir_all(root)?;
 
@@ -206,7 +198,7 @@ pub fn build_new(
     // and a collision is a signal worth surfacing rather than absorbing.
     std::fs::create_dir(&build_dir)?;
 
-    let report = build_from_reader(xml, table, opts, &build_dir)?;
+    let report = crate::engine::build::build_from_readers(jmdict, kanjidic, &build_dir)?;
 
     let mut published = publish(&build_dir, root, next_generation(root)?);
     for _ in 1..PUBLISH_ATTEMPTS {
@@ -244,7 +236,7 @@ fn remove_if_present(path: &Path) -> Result<bool, IndexError> {
 /// Directories that are neither a valid generation nor a build orphan are left
 /// alone: this function did not create them.
 ///
-/// When `build_from_reader` itself fails — malformed XML, a full disk — `build_new`
+/// When `build_from_readers` itself fails — malformed XML, a full disk — `build_new`
 /// leaves its `.build-<pid>-<nanos>-<seq>` directory behind with no cleanup.
 /// `sweep` is what reclaims those.
 pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
@@ -281,9 +273,6 @@ pub fn sweep(root: &Path, keep: usize) -> Result<usize, IndexError> {
 mod tests {
     use super::*;
 
-    use crate::conjugation::ConjugationTable;
-    use crate::stem::StemOptions;
-
     /// The smallest JMdict that produces a non-empty index.
     const MINI_XML: &str = concat!(
         r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -299,10 +288,10 @@ mod tests {
         "</JMdict>",
     );
 
+    const NO_KANJIDIC: &[u8] = b"";
+
     fn build_into(root: &Path) -> PathBuf {
-        let table = ConjugationTable::load_embedded().expect("table");
-        let opts = StemOptions::default();
-        let (path, _) = build_new(root, MINI_XML.as_bytes(), &table, &opts).expect("build_new");
+        let (path, _) = build_new(root, MINI_XML.as_bytes(), NO_KANJIDIC).expect("build_new");
         path
     }
 
@@ -450,12 +439,10 @@ mod tests {
     #[test]
     fn two_concurrent_builds_use_distinct_temp_names() {
         let root = scratch("gen-nonce");
-        let table = ConjugationTable::load_embedded().expect("table");
-        let opts = StemOptions::default();
 
         let results = std::thread::scope(|s| {
             let handles: Vec<_> = (0..2)
-                .map(|_| s.spawn(|| build_new(&root, MINI_XML.as_bytes(), &table, &opts)))
+                .map(|_| s.spawn(|| build_new(&root, MINI_XML.as_bytes(), NO_KANJIDIC)))
                 .collect();
             handles
                 .into_iter()

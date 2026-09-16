@@ -19,7 +19,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # `macos-private-api` is what `macOSPrivateApi` in tauri.conf.json requires:
 # transparency on macOS goes through a private NSWindow API. It rules out Mac
-# App Store distribution, which this self-distributed GPL v2 build already
+# App Store distribution, which this self-distributed build already
 # accepts (spec §7.5).
 tauri = { version = "2", features = ["macos-private-api"] }
 # `mecab` is enabled here and nowhere else: the shell is the only consumer that
@@ -33,8 +33,7 @@ thiserror = "1"
 # tokio 1.53 is already in the tree via tauri, so this adds no transitive weight.
 # `macros` and `rt` are for `#[tokio::test]`; `time` is for the poll's sleep.
 tokio = { version = "1", features = ["sync", "macros", "rt", "time"] }
-# MIT OR Apache-2.0, taken under MIT: Apache-2.0 alone is incompatible with this
-# project's GPL-2.0-only.
+# MIT OR Apache-2.0, the same pair this project offers.
 tauri-plugin-clipboard-manager = "2.3.2"
 # The first network code in the shell. `crates/jparser` must stay pure — the
 # purity gate guards it — but the shell is where a download belongs, and
@@ -46,9 +45,17 @@ jmdict-source = { path = "../crates/jmdict-source" }
 # flag instead of in the binary that actually downloads. `ci.yml`'s purity gate
 # still proves `jparser --no-default-features` pulls in neither source crate.
 vibrato-source = { path = "../crates/vibrato-source" }
-# MIT OR Apache-2.0, taken under MIT: Apache-2.0 alone is incompatible with this
-# project's GPL-2.0-only. Same for its `global-hotkey` dependency.
+# MIT OR Apache-2.0, the same pair this project offers. Same for its
+# `global-hotkey` dependency.
 tauri-plugin-global-shortcut = "2.3.2"
+# The installed font families for the settings window, both MIT OR Apache-2.0.
+# `font-enumeration` asks the platform — DirectWrite, CoreText, fontconfig —
+# because that is what the webview resolves CSS `font-family` against; a name
+# read from the file itself can differ and then never renders. `ttf-parser`
+# reads each file's cmap so the sentence and furigana selects can list only
+# families with Japanese glyphs.
+font-enumeration = "0.9"
+ttf-parser = "0.25"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

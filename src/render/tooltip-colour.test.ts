@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { describe, expect, test } from 'vitest';
 import { CONJ_MARKER } from './tooltip-text';
 import { colourLine } from './tooltip-colour';
@@ -8,8 +10,9 @@ function kinds(line: string): string[] {
 }
 
 describe('colourLine', () => {
-  // MyToolTip.cpp:154-160 — a line flagged with \x01 is drawn entirely in the
-  // conjugation colour, marker stripped.
+  // The contract between the two modules: tooltip-text.ts writes CONJ_MARKER
+  // at the head of a conjugation line, and this reads it back — the whole
+  // line becomes one conjugation run with the marker stripped.
   test('a marked line is one conjugation run with the marker removed', () => {
     expect(colourLine(`${CONJ_MARKER}Negative Formal Past`)).toEqual([
       { text: 'Negative Formal Past', kind: 'conj' },
@@ -31,14 +34,15 @@ describe('colourLine', () => {
     expect(kinds('旅だつ【たびだつ】')).toEqual(['kanji', 'kana']);
   });
 
-  // StringUtil.cpp:531-535 — the kanji iteration mark 々 is special-cased into
-  // ta-old's IsKanji, not covered by a Unicode range. Without it, 時々 splits
-  // into a kanji run and a stray text run instead of staying one kanji run.
+  // The kanji iteration mark 々 is special-cased into the kanji test, since no
+  // Unicode range covers it. Without it, 時々 splits into a kanji run and a
+  // stray text run instead of staying one kanji run.
   test('kanji iteration mark 々 stays in the kanji run', () => {
     expect(colourLine('時々')).toEqual([{ text: '時々', kind: 'kanji' }]);
   });
 
-  // MyToolTip.cpp:214-217 — everything from ( to its match is one paren run.
+  // Everything from ( to its match is one paren run, matching the original
+  // tooltip's rendered output.
   test('a parenthesised span is one run', () => {
     expect(colourLine('(v1,vi) x')).toEqual([
       { text: '(v1,vi)', kind: 'paren' },
@@ -46,8 +50,7 @@ describe('colourLine', () => {
     ]);
   });
 
-  // Parenthesis colouring is tested BEFORE the Japanese check
-  // (MyToolTip.cpp:224), so kanji inside parentheses does not win.
+  // Kanji inside parentheses takes the paren colour, not the kanji colour.
   test('parenthesis beats kanji', () => {
     expect(colourLine('(e.g. 寿司)')).toEqual([{ text: '(e.g. 寿司)', kind: 'paren' }]);
   });
@@ -73,5 +76,65 @@ describe('colourLine', () => {
 
   test('an empty line produces no runs', () => {
     expect(colourLine('')).toEqual([]);
+  });
+
+  // Assumption: katakana counts as kana just like hiragana does — the ten
+  // cases above only ever exercise hiragana for the non-kanji case.
+  test('an all-katakana run is kana, not text', () => {
+    expect(colourLine('ケーキ')).toEqual([{ text: 'ケーキ', kind: 'kana' }]);
+  });
+
+  // Assumption: the break before 【 is a property of the run boundary, not a
+  // side effect of one side being a kanji run — an all-kana headword still
+  // splits into two runs at its bracketed reading.
+  test('breaks before 【 even when neither side contains kanji', () => {
+    expect(colourLine('たつ【たつ】')).toEqual([
+      { text: 'たつ', kind: 'kana' },
+      { text: '【たつ】', kind: 'kana' },
+    ]);
+  });
+
+  // Assumption: the lenticular brackets are themselves part of a Japanese
+  // run (never `text`), including when the run opens with one rather than
+  // being reached mid-run after a headword.
+  test('a bracketed reading with no preceding headword is one kana run', () => {
+    expect(colourLine('【たとえば】')).toEqual([{ text: '【たとえば】', kind: 'kana' }]);
+  });
+
+  // Assumption: "the standard Unicode ideograph ranges" means more than the
+  // BMP block the other cases happen to use — a supplementary-plane
+  // ideograph (here U+20000, in CJK Unified Ideographs Extension B) must
+  // still count as kanji, and must survive being a UTF-16 surrogate pair.
+  test('a supplementary-plane ideograph counts as kanji', () => {
+    expect(colourLine('\u{20000}')).toEqual([{ text: '\u{20000}', kind: 'kanji' }]);
+  });
+
+  // Phase 3b: the misc aside on a kanji line is a `(…)` span, so it takes the
+  // paren colour with no rule of its own; the katakana middle dot (U+30FB)
+  // sits in the katakana block and rides in the kana run.
+  test('a kanji line with its misc aside ends in one paren run', () => {
+    const line = '東  トウ・ひがし  east  (grade 2, 8 strokes, freq 37, old JLPT 4)';
+    expect(kinds(line)).toEqual(['kanji', 'text', 'kana', 'text', 'paren']);
+    expect(colourLine(line).at(-1)).toEqual({
+      text: '(grade 2, 8 strokes, freq 37, old JLPT 4)',
+      kind: 'paren',
+    });
+  });
+
+  // Phase 3c: the affix hyphen is gone from kun readings before the line
+  // reaches this module, so a reading that carried one is a plain kana run
+  // again. The okurigana dot is not Japanese to this classifier and still
+  // splits the run, as it always has; the middle dot rides in the kana run.
+  test('a kun reading keeps its okurigana dot as a text run', () => {
+    expect(colourLine('食  ショク・た.べる・ぐ.い  eat')).toEqual([
+      { text: '食', kind: 'kanji' },
+      { text: '  ', kind: 'text' },
+      { text: 'ショク・た', kind: 'kana' },
+      { text: '.', kind: 'text' },
+      { text: 'べる・ぐ', kind: 'kana' },
+      { text: '.', kind: 'text' },
+      { text: 'い', kind: 'kana' },
+      { text: '  eat', kind: 'text' },
+    ]);
   });
 });

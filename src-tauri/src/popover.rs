@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! The tooltip window: a second, undecorated, always-on-top webview that can
 //! extend past the main window onto the desktop.
 //!
@@ -14,10 +16,11 @@ pub const LABEL: &str = "popover";
 /// Build the hidden tooltip window. Called once from `main`'s `setup`.
 pub fn create(app: &App) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("popover.html".into()))
-        // ta-old's tooltip is `WS_POPUP | WS_BORDER` with
-        // `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST`
-        // (`MyToolTip.cpp:825`). These are the Tauri equivalents; the border is
-        // CSS on the page, since a decorationless window has no frame to style.
+        // The original tooltip's window was `WS_POPUP | WS_BORDER` with
+        // `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST` — its own
+        // choice of Win32 styles, not the tooltip common control's. These are
+        // the Tauri equivalents; the border is CSS on the page, since a
+        // decorationless window has no frame to style.
         // `WS_EX_NOACTIVATE` is `focusable(false)`, NOT `focused(false)`:
         // `focused` governs creation only, while `show()` below maps to
         // `makeKeyAndOrderFront:` (tauri-runtime-wry `WindowMessage::Show` ->
@@ -37,7 +40,8 @@ pub fn create(app: &App) -> tauri::Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        if let (Some(main_win), Ok(popover_hwnd)) = (app.get_webview_window("main"), window.hwnd()) {
+        if let (Some(main_win), Ok(popover_hwnd)) = (app.get_webview_window("main"), window.hwnd())
+        {
             if let Ok(main_hwnd) = main_win.hwnd() {
                 unsafe {
                     set_window_owner(popover_hwnd.0, main_hwnd.0);

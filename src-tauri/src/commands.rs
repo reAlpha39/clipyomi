@@ -1,30 +1,25 @@
-// JParser — Japanese text parser ported from Translation Aggregator.
-// Copyright (C) 2026
-//
-// This program is free software; you can redistribute it and/or modify it
-// under the terms of the GNU General Public License version 2 as published
-// by the Free Software Foundation.
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! The webview's entry points: push input, toggle settings, read settings, ask
-//! why startup failed or why settings fell back to defaults, ask whether the
-//! dictionary needs downloading, run that download, and signal that the event
-//! listeners are registered. Parsing itself runs in `parse::run_worker`;
-//! results arrive as `parse-result` / `parse-error` events, not as a command
-//! return value.
+//! why startup failed or why settings fell back to defaults, and signal that
+//! the event listeners are registered. The dictionary download, the kanji
+//! lookup and the hints toggle live in [`dictionary`] and [`hints`]. Parsing
+//! itself runs in `parse::run_worker`; results arrive as `parse-result` /
+//! `parse-error` events, not as a command return value.
 
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use jparser::hints::VibratoTokenizer;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::{watch, Notify};
 
 use crate::settings::{ChromeMode, Settings};
-use crate::state::{
-    AppState, HintsWarning, NeedsDictionary, SettingsState, SettingsWarning, ShortcutWarning,
-    StartupFailure,
-};
+use crate::state::{SettingsState, SettingsWarning, ShortcutWarning, StartupFailure};
+
+pub mod context_menu;
+pub mod dictionary;
+pub mod fonts;
+pub mod hints;
 
 /// The sending half of the input channel, managed so commands can reach it.
 pub struct InputSender(pub watch::Sender<String>);
@@ -169,6 +164,19 @@ pub fn apply_decorations_macos(window: &tauri::Window, enabled: bool) -> Result<
 }
 
 #[cfg(target_os = "windows")]
+// `RECT`, `STYLESTRUCT`, `WINDOWPOS` and `SUBCLASSPROC` are Win32's own names
+// and are kept spelled the way MSDN spells them: every field layout and every
+// `extern "system"` signature in here is read against that documentation, and
+// a renamed type makes the comparison one step harder for no gain. Scoped to
+// this module so the lint still applies everywhere else.
+//
+// It is an `allow` rather than a rename because of an asymmetry that would
+// otherwise go unnoticed: this module is `cfg(target_os = "windows")`, so
+// `.github/workflows/ci.yml`'s `clippy --workspace --all-targets -- -D
+// warnings` never compiles it on `ubuntu-latest` and never reports these —
+// while the same command on the machine this is developed on fails with four
+// errors. The declared standard has to be runnable where the code is written.
+#[allow(clippy::upper_case_acronyms)]
 pub mod win32_frameless {
     use tauri::Window;
 
@@ -338,12 +346,7 @@ pub mod win32_frameless {
             uIdSubclass: usize,
             dwRefData: usize,
         ) -> i32;
-        fn DefSubclassProc(
-            hWnd: *mut c_void,
-            uMsg: u32,
-            wParam: usize,
-            lParam: isize,
-        ) -> isize;
+        fn DefSubclassProc(hWnd: *mut c_void, uMsg: u32, wParam: usize, lParam: isize) -> isize;
     }
 
     fn mul_div(n_number: i32, n_numerator: i32, n_denominator: i32) -> i32 {
@@ -381,9 +384,7 @@ pub mod win32_frameless {
     }
 
     fn get_system_metrics(index: i32, dpi: u32) -> i32 {
-        unsafe {
-            GetSystemMetricsForDpi(index, dpi)
-        }
+        unsafe { GetSystemMetricsForDpi(index, dpi) }
     }
 
     /// The pixels that survive a move-or-resize: what the old and the new
@@ -1146,6 +1147,9 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     if incoming.hide_usage.is_some() {
         current.hide_usage = incoming.hide_usage;
     }
+    if incoming.hide_kanji.is_some() {
+        current.hide_kanji = incoming.hide_kanji;
+    }
     // Merged like the toggles above rather than assigned like the sizes below:
     // a range input cannot be cleared, so alpha has no "absent means reset"
     // state, and an unguarded assign would only give a future caller a way to
@@ -1153,13 +1157,36 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     if incoming.surface_alpha.is_some() {
         current.surface_alpha = incoming.surface_alpha;
     }
+    if incoming.text_outline.is_some() {
+        current.text_outline = incoming.text_outline;
+    }
+    if incoming.text_shadow.is_some() {
+        current.text_shadow = incoming.text_shadow;
+    }
+    // Assigned, like the sizes below: a colour's Reset and a font select's
+    // Default both reach here as the key gone, and only an assign can carry
+    // "unset" to disk. The settings window always sends all eight.
+    current.colour_kanji = incoming.colour_kanji;
+    current.colour_kana = incoming.colour_kana;
+    current.colour_particle = incoming.colour_particle;
+    current.colour_counter = incoming.colour_counter;
+    current.colour_furigana = incoming.colour_furigana;
+    current.colour_unmatched = incoming.colour_unmatched;
+    current.colour_bg = incoming.colour_bg;
+    current.font_family_sentence = incoming.font_family_sentence;
+    current.font_family_furigana = incoming.font_family_furigana;
+    current.font_family_gloss = incoming.font_family_gloss;
     // Assigned rather than merged, unlike the toggles above: an absent size
     // means the user cleared that box and wants the stylesheet default back,
     // which a merge could never express. The settings window is the only
-    // caller and always sends all three.
+    // caller and always sends all six.
     current.font_sentence = incoming.font_sentence;
     current.font_gloss = incoming.font_gloss;
     current.furigana_scale = incoming.furigana_scale;
+    current.furigana_gap = incoming.furigana_gap;
+    // The two toggles' sizes are sizes, whatever the toggles beside them are.
+    current.text_outline_width = incoming.text_outline_width;
+    current.text_shadow_size = incoming.text_shadow_size;
 }
 
 #[tauri::command]
@@ -1187,15 +1214,16 @@ pub const SETTINGS_LABEL: &str = "settings";
 /// default white before the theme lands. Shown and hidden, never rebuilt,
 /// there is nothing left to load at reveal time.
 pub fn create_settings_window<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
-    let window = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
-        .title("ClipYomi Settings")
-        .inner_size(360.0, 480.0)
-        .min_inner_size(300.0, 400.0)
-        .resizable(false)
-        .decorations(true)
-        .always_on_top(true)
-        .visible(false)
-        .build()?;
+    let window =
+        WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("settings.html".into()))
+            .title("ClipYomi Settings")
+            .inner_size(360.0, 480.0)
+            .min_inner_size(300.0, 400.0)
+            .resizable(false)
+            .decorations(true)
+            .always_on_top(true)
+            .visible(false)
+            .build()?;
 
     // Closing hides rather than destroys. A destroyed window would have to be
     // rebuilt on the next open, reintroducing exactly the load this eager
@@ -1274,392 +1302,10 @@ pub fn shortcut_warning(warning: State<'_, ShortcutWarning>) -> Option<String> {
     }
 }
 
-/// Emitted with a `String` payload as the download moves between phases:
-/// `"downloading"`, `"building"`, `"ready"`, or an error message.
-pub const DICTIONARY_STATUS_EVENT: &str = "dictionary-status";
-
-/// Emitted with a `String` payload as the hints toggle moves between phases:
-/// `"downloading"`, `"unpacking"`, `"ready"`, `"off"`, or an error message.
-///
-/// A const beside `DICTIONARY_STATUS_EVENT` rather than a literal at each emit
-/// site, for the reason that one already is.
-pub const HINTS_STATUS_EVENT: &str = "hints-status";
-
-/// Guards against two concurrent `set_mecab_hints` acquisitions, exactly as
-/// `DownloadInFlight` does for the index download. An `Arc` rather than a bare
-/// `AtomicBool` because the command must clone it out of `State` before its
-/// first `.await` — `tauri::State` is not `Send`.
-pub struct HintsInFlight(pub Arc<AtomicBool>);
-
-/// Emit a hints phase label, logging rather than propagating a failed emit.
-fn emit_hints_status<R: tauri::Runtime>(app: &tauri::AppHandle<R>, status: &str) {
-    if let Err(e) = app.emit(HINTS_STATUS_EVENT, status.to_string()) {
-        // Nothing to fall back on: if the event cannot reach the webview there
-        // is no other channel to report progress through.
-        eprintln!("emitting a hints-status event failed: {e}");
-    }
-}
-
-/// A `VibratoTokenizer::load` failure, with the format hint the manual route
-/// makes necessary and a way out of the state a bad hand-placed archive
-/// leaves behind.
-///
-/// Before this phase a load failure meant a corrupt download or a bad
-/// `TA_HINTS_DICT`. With any dictionary accepted it also means a format
-/// mismatch, and "the vibrato dictionary could not be loaded" alone reads as a
-/// corrupt archive. Worse, `resolve` has already published the bad file by
-/// the time this runs — `archive_is_newer` now compares the archive against
-/// its own replacement, so every later toggle fails identically until the
-/// directory is gone. `path` is what named `dir`, the thing the user actually
-/// has to remove; the message says so rather than leaving that to be worked
-/// out from a stack of nested paths.
-fn describe_hints_error(err: jparser::hints::HintsError, path: &Path) -> String {
-    let dir = path.parent().unwrap_or(path);
-    format!(
-        "the dictionary at {path} could not be loaded: {err}. A hand-placed \
-         archive must be a Vibrato v0.5.0-format IPADIC dictionary — that is \
-         the format this app downloads. Remove or rename {dir}, then toggle \
-         hints off and on again to re-download the pinned one.",
-        path = path.display(),
-        dir = dir.display(),
-    )
-}
-
-/// Re-parse whatever is on screen.
-///
-/// Enabling hints changes the segmentation of text already displayed, and
-/// without this the toggle appears inert until the next clipboard copy — which
-/// for a segmentation-quality switch is the entire feedback the user gets.
-///
-/// An empty channel value means nothing has been parsed yet, so there is
-/// nothing to re-parse. `watch::send` marks the slot changed even for an equal
-/// value, so the worker wakes and parses the same text again, and
-/// `run_worker`'s loop needs no change — `next_input`'s three tests keep
-/// pinning the same code.
-///
-/// Making the worker `select!` over both channels was the alternative. It puts
-/// the rule where any future publisher inherits it, at the cost of rewriting
-/// the loop those tests cover and making the worker retain the last input
-/// itself.
-fn reparse(tx: &watch::Sender<String>) {
-    let text = tx.borrow().clone();
-    if text.is_empty() {
-        return;
-    }
-    // A dead worker is reported by every other path that touches this channel;
-    // a settings toggle is not where the user should learn about it.
-    let _ = tx.send(text);
-}
-
-/// The sending half of the index channel, managed so `download_dictionary` can
-/// publish a freshly built index to the already-running worker.
-pub struct IndexSender(pub watch::Sender<Option<Arc<AppState>>>);
-
-/// The sending half of the hints channel, managed so `set_mecab_hints` can
-/// publish a freshly loaded tokenizer to the already-running worker.
-///
-/// A second channel rather than a rebuilt `AppState` republished over the index
-/// one: that path reopens the index on every toggle, and gives a mid-rebuild
-/// failure a way to leave the worker holding no index at all.
-pub struct HintsSender(pub watch::Sender<Option<Arc<VibratoTokenizer>>>);
-
-/// Where the dictionaries live. Resolved once in `main`'s `setup`, so no command
-/// needs the app config dir, and so `source/` stays a sibling of `dict/` rather
-/// than living inside a published generation, which is immutable.
-pub struct DictionaryPaths {
-    pub root: PathBuf,
-    pub source_dir: PathBuf,
-    /// The MeCab hints directory: `<app_config_dir>/hints`, holding the single
-    /// published slot and any archive the user drops in beside it.
-    pub hints_dir: PathBuf,
-}
-
-/// Guards against two concurrent `ensure_dictionary` runs. An `Arc` rather than
-/// a bare `AtomicBool` because the command must clone it out of `State` before
-/// its first `.await` — `tauri::State` is not `Send`.
-pub struct DownloadInFlight(pub Arc<AtomicBool>);
-
-/// Take the download slot, or report that it is already taken.
-///
-/// Separated from the command so the exclusion is testable without a Tauri app
-/// handle or a real download.
-fn claim_download(flag: &AtomicBool) -> Result<(), String> {
-    if flag.swap(true, Ordering::SeqCst) {
-        Err("a dictionary download is already running".to_string())
-    } else {
-        Ok(())
-    }
-}
-
-/// Release the slot. Called on every exit path, success or failure — a failed
-/// download that never released would disable Retry for the rest of the session.
-fn release_download(flag: &AtomicBool) {
-    flag.store(false, Ordering::SeqCst);
-}
-
-/// Whether startup found no dictionary, so the webview should show the download
-/// screen rather than the panes.
-#[tauri::command]
-pub fn needs_dictionary(needs: State<'_, NeedsDictionary>) -> bool {
-    needs.0
-}
-
-/// Emit a phase label, logging rather than propagating a failed emit.
-fn emit_status(app: &AppHandle, status: &str) {
-    if let Err(e) = app.emit(DICTIONARY_STATUS_EVENT, status.to_string()) {
-        // Nothing to fall back on: if the event cannot reach the webview there
-        // is no other channel to report progress through.
-        eprintln!("emitting a dictionary-status event failed: {e}");
-    }
-}
-
-/// The failure text for `err`, preferring a more specific inner error when
-/// one is recoverable.
-///
-/// `ensure_dictionary`'s source closure hands `resolve`'s failure to it as a
-/// plain `std::io::Error` — `jmdict_source::resolve_from` boxes the original
-/// `SourceError` via `std::io::Error::other`, since `jmdict-source` cannot
-/// depend on `jparser`'s `IndexError` to return one directly — and
-/// `ensure_dictionary` then wraps *that* a second time as `IndexError::Io`.
-/// Shown as-is, that reads as "index io failed: could not obtain the
-/// dictionary after 3 attempts (...)": the outer wrapper's prefix describes a
-/// build-time I/O failure, which is not what happened. Downcasting recovers
-/// the original `SourceError` and shows its own, more specific message
-/// instead. `jmdict_source`'s own `the_typed_error_survives_the_io_wrapper`
-/// test exists to prove this downcast is reliable; a genuine index-level I/O
-/// failure (no `SourceError` inside) falls through to `IndexError`'s own
-/// message unchanged.
-fn describe_index_error(err: &jparser::index::IndexError) -> String {
-    if let jparser::index::IndexError::Io(io_err) = err {
-        if let Some(source_err) = io_err
-            .get_ref()
-            .and_then(|e| e.downcast_ref::<jmdict_source::SourceError>())
-        {
-            return source_err.to_string();
-        }
-    }
-    err.to_string()
-}
-
-/// Append the manual-fallback instructions to `reason`, unless it already
-/// names `source_dir_display`.
-///
-/// `SourceError::Http` and `SourceError::TooManyAttempts` already end with
-/// "place a JMdict_e.gz in `<source_dir>` manually to bypass the download"
-/// (`crates/jmdict-source/src/lib.rs`) — appending the same instructions
-/// again would say it twice on screen. Every other failure (a corrupt
-/// archive, a conjugation-table load failure, a dead worker) says nothing
-/// about the directory at all, so this is the only place those would ever
-/// learn about the manual escape hatch.
-fn with_fallback(reason: String, source_dir_display: &str) -> String {
-    if reason.contains(source_dir_display) {
-        format!("{reason}. Retry.")
-    } else {
-        format!(
-            "{reason}. Retry, or place {} in {source_dir_display} and retry.",
-            jmdict_source::SOURCE_FILE,
-        )
-    }
-}
-
-/// Download JMdict if absent, build the index, and publish it to the worker.
-///
-/// Returns `Err` only when the work could not be *started*; every outcome after
-/// that — including failure — arrives as a `dictionary-status` event. Same
-/// split as `set_input`, and for the same reason: one path to the screen.
-#[tauri::command]
-pub async fn download_dictionary(
-    app: AppHandle,
-    paths: State<'_, DictionaryPaths>,
-    index: State<'_, IndexSender>,
-    inflight: State<'_, DownloadInFlight>,
-) -> Result<(), String> {
-    claim_download(&inflight.0)?;
-
-    // Everything needed after the `.await` is cloned out first: `tauri::State`
-    // is not `Send`, so holding one across an await point does not compile.
-    let flag = Arc::clone(&inflight.0);
-    let root = paths.root.clone();
-    let source_dir = paths.source_dir.clone();
-    // Read before `source_dir` moves into the closure below, so the fallback
-    // message can still be built from it once the closure has finished.
-    let source_dir_display = source_dir.display().to_string();
-    let tx = index.0.clone();
-    let handle = app.clone();
-
-    let outcome = tauri::async_runtime::spawn_blocking(move || {
-        emit_status(&handle, "downloading");
-        let table = jparser::conjugation::ConjugationTable::load_embedded()
-            .map_err(|e| format!("loading the conjugation table failed: {e}"))?;
-        let opts = jparser::stem::StemOptions::default();
-
-        // `resolve` reuses an already-downloaded archive before it reaches the
-        // network, so a retry after a *build* failure is fast and offline.
-        // `ensure_dictionary` runs the closure only when a rebuild is needed.
-        let index = jparser::index::ensure_dictionary(
-            &root,
-            &table,
-            &opts,
-            jparser::index::generations::DEFAULT_KEEP_GENERATIONS,
-            || {
-                let reader = jmdict_source::resolve(&source_dir)?;
-                // Emitted only after `resolve` returns, not before: the network
-                // fetch (or reuse of an already-downloaded archive) happens
-                // inside `resolve` itself, so emitting "building" any earlier
-                // would mislabel the download as index-building. Matches the
-                // design spec's §4 data flow: "downloading" covers `resolve`,
-                // "building" covers the `build_from_reader` work that follows.
-                emit_status(&handle, "building");
-                Ok(reader)
-            },
-        )
-        .map_err(|e| describe_index_error(&e))?;
-
-        Ok::<AppState, String>(AppState { index, table })
-    })
-    .await;
-
-    release_download(&flag);
-
-    let message = match outcome {
-        Ok(Ok(state)) => {
-            if tx.send(Some(Arc::new(state))).is_err() {
-                // The worker is gone, which no retry fixes. Reported like any
-                // other failure rather than swallowed.
-                "the parse worker is no longer running".to_string()
-            } else {
-                emit_status(&app, "ready");
-                return Ok(());
-            }
-        }
-        // `with_fallback` names the archive and directory only when `message`
-        // does not already: `resolve` serves a hand-placed file without
-        // touching the network, so a user behind a proxy can drop it in and
-        // press Retry either way.
-        Ok(Err(message)) => with_fallback(message, &source_dir_display),
-        Err(e) => with_fallback(
-            format!("the download task failed to run: {e}"),
-            &source_dir_display,
-        ),
-    };
-
-    emit_status(&app, &message);
-    Ok(())
-}
-
-/// Switch MeCab boundary hints on or off, acquiring the dictionary if needed.
-///
-/// Returns `Err` only when the work could not be *started*; every outcome after
-/// that — including failure — arrives as a `hints-status` event. Same split as
-/// `download_dictionary` and `set_input`, and for the same reason: one path to
-/// the screen.
-///
-/// The setting is persisted only on success, so a failed acquisition leaves it
-/// off and the next launch does not claim hints it does not have.
-#[tauri::command]
-pub async fn set_mecab_hints<R: tauri::Runtime>(
-    enabled: bool,
-    app: tauri::AppHandle<R>,
-    settings: State<'_, Arc<SettingsState>>,
-    hints: State<'_, HintsSender>,
-    input: State<'_, InputSender>,
-    paths: State<'_, DictionaryPaths>,
-    inflight: State<'_, HintsInFlight>,
-) -> Result<(), String> {
-    // Everything needed after the `.await` is cloned out first: `tauri::State`
-    // is not `Send`, so holding one across an await point does not compile.
-    let hints_tx = hints.0.clone();
-    let input_tx = input.0.clone();
-    let settings = Arc::clone(&*settings);
-    let hints_dir = paths.hints_dir.clone();
-
-    if !enabled {
-        // Nothing fallible and nothing slow, so no slot to claim and no thread
-        // to spawn: publishing `None` is the whole of switching hints off.
-        let _ = hints_tx.send(None);
-        if let Err(e) = settings.update(|s| s.mecab_hints = false) {
-            // A read-only config dir degrades to "the setting does not survive
-            // a restart", not "the toggle does not work" — the same trade
-            // `SettingsState::update` already documents.
-            eprintln!("persisting the hints setting failed: {e}");
-        }
-        reparse(&input_tx);
-        emit_hints_status(&app, "off");
-        return Ok(());
-    }
-
-    // `claim_download`'s own error text names a dictionary download; this slot
-    // guards the hints acquisition instead, so the message is remapped rather
-    // than shown as-is.
-    claim_download(&inflight.0).map_err(|_| "hints are already being installed".to_string())?;
-    let flag = Arc::clone(&inflight.0);
-    let handle = app.clone();
-
-    let outcome = tauri::async_runtime::spawn_blocking(move || {
-        // `resolve` returns a path, not which branch produced it, and by the
-        // time it returns the label is no longer useful — so the branch is
-        // picked here, with one `read_dir`. Being wrong costs a mislabelled
-        // phase, not a wrong outcome, so the window between this check and
-        // `resolve`'s own call is not worth a second return channel.
-        let phase = if vibrato_source::hand_placed(&hints_dir).is_some() {
-            "unpacking"
-        } else {
-            "downloading"
-        };
-        emit_hints_status(&handle, phase);
-
-        let path = vibrato_source::resolve(&hints_dir).map_err(|e| e.to_string())?;
-        jparser::hints::VibratoTokenizer::load(&path).map_err(|e| describe_hints_error(e, &path))
-    })
-    .await;
-
-    release_download(&flag);
-
-    let message = match outcome {
-        Ok(Ok(tokenizer)) => {
-            let _ = hints_tx.send(Some(Arc::new(tokenizer)));
-            if let Err(e) = settings.update(|s| s.mecab_hints = true) {
-                eprintln!("persisting the hints setting failed: {e}");
-            }
-            reparse(&input_tx);
-            emit_hints_status(&app, "ready");
-            return Ok(());
-        }
-        Ok(Err(message)) => message,
-        Err(e) => format!("the hints task failed to run: {e}"),
-    };
-
-    emit_hints_status(&app, &message);
-    Ok(())
-}
-
-/// Why hints are off while the setting says they are on, or `null` when the two
-/// agree. Same empty-string sentinel as `shortcut_warning`, and read by both
-/// windows — the main window appends it to `#parse-error`, the settings window
-/// seeds its status line from it.
-#[tauri::command]
-pub fn hints_warning(warning: State<'_, HintsWarning>) -> Option<String> {
-    if warning.0.is_empty() {
-        None
-    } else {
-        Some(warning.0.clone())
-    }
-}
-
-/// Where to drop a hand-placed dictionary archive.
-///
-/// The settings note names this path literally, so the manual route is
-/// discoverable without documentation, and the webview cannot resolve the app
-/// config dir itself.
-#[tauri::command]
-pub fn hints_dir(paths: State<'_, DictionaryPaths>) -> String {
-    paths.hints_dir.display().to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tauri::{Listener, Manager};
+    use tauri::Manager;
 
     /// `set_input` is a thin push into the watch channel; the part worth testing
     /// is that the newest value is what a reader sees.
@@ -1680,99 +1326,6 @@ mod tests {
         let (tx, rx) = tokio::sync::watch::channel(String::new());
         drop(rx);
         assert!(push_input(&tx, "東京".to_string()).is_err());
-    }
-
-    /// Two overlapping `ensure_dictionary` runs would build two generations
-    /// against one source directory. The frontend's own guard protects one
-    /// button in one webview, not the command, so the command needs its own.
-    #[test]
-    fn a_second_download_is_rejected_while_one_is_running() {
-        let flag = std::sync::atomic::AtomicBool::new(false);
-        claim_download(&flag).expect("the first claim succeeds");
-        assert!(
-            claim_download(&flag).is_err(),
-            "a concurrent claim must be refused"
-        );
-    }
-
-    /// A finished download — successful or not — must leave the door open, or
-    /// one failure would disable Retry for the rest of the session.
-    #[test]
-    fn releasing_the_claim_allows_a_retry() {
-        let flag = std::sync::atomic::AtomicBool::new(false);
-        claim_download(&flag).expect("first");
-        release_download(&flag);
-        claim_download(&flag).expect("retry after release");
-    }
-
-    /// Final review, Finding 1: `resolve_from` boxes a `SourceError` inside a
-    /// plain `io::Error` (`std::io::Error::other`), which `ensure_dictionary`
-    /// wraps again as `IndexError::Io`. The downcast must recover the
-    /// original message rather than showing the generic "index io failed: "
-    /// wrapper ahead of it.
-    #[test]
-    fn a_wrapped_source_error_replaces_the_generic_io_prefix() {
-        let source_err = jmdict_source::SourceError::TooManyAttempts {
-            attempts: 3,
-            source_dir: PathBuf::from("/tmp/example/source"),
-            last: "downloading the dictionary failed: connection refused".to_string(),
-        };
-        let expected = source_err.to_string();
-        let wrapped = jparser::index::IndexError::Io(std::io::Error::other(source_err));
-
-        let reason = describe_index_error(&wrapped);
-        assert_eq!(reason, expected, "must show SourceError's own message");
-        assert!(
-            !reason.starts_with("index io failed"),
-            "the generic wrapper prefix must not leak: {reason}"
-        );
-    }
-
-    /// An `IndexError::Io` with no `SourceError` inside it is a genuine
-    /// index-level I/O failure (e.g. a disk full while publishing a
-    /// generation), which `IndexError`'s own "index io failed: " prefix
-    /// describes correctly — the downcast must not touch it.
-    #[test]
-    fn a_genuine_index_io_error_keeps_its_own_message() {
-        let wrapped = jparser::index::IndexError::Io(std::io::Error::other("disk full"));
-        let reason = describe_index_error(&wrapped);
-        assert_eq!(reason, wrapped.to_string());
-        assert!(reason.starts_with("index io failed"), "got {reason}");
-    }
-
-    /// `SourceError::Http` and `SourceError::TooManyAttempts` already name the
-    /// source directory as part of their own manual-fallback advice —
-    /// appending a second copy would say it twice, which is the bug the whole
-    /// review finding is about.
-    #[test]
-    fn the_fallback_is_not_repeated_when_the_reason_already_names_the_directory() {
-        let dir = "/tmp/example/source";
-        let reason = format!(
-            "could not obtain the dictionary after 3 attempts (...); place a \
-             JMdict_e.gz in {dir} manually to bypass the download"
-        );
-
-        let full = with_fallback(reason, dir);
-
-        assert_eq!(
-            full.matches(dir).count(),
-            1,
-            "the directory must appear exactly once: {full}"
-        );
-        assert!(full.contains("Retry"), "got {full}");
-    }
-
-    /// A corrupt-archive build failure (`IndexError::Jmdict`) never mentions
-    /// the source directory on its own, so the fallback must still be added —
-    /// this is the escape hatch's only appearance for that failure.
-    #[test]
-    fn the_fallback_is_added_when_the_reason_does_not_name_the_directory() {
-        let dir = "/tmp/example/source";
-        let full = with_fallback("reading JMdict failed: unexpected eof".to_string(), dir);
-
-        assert!(full.contains(dir), "got {full}");
-        assert!(full.contains("Retry"), "got {full}");
-        assert!(full.contains(jmdict_source::SOURCE_FILE), "got {full}");
     }
 
     fn scratch(name: &str) -> std::path::PathBuf {
@@ -1910,6 +1463,7 @@ mod tests {
             hide_pos: Some(true),
             hide_xrefs: Some(true),
             hide_usage: Some(false),
+            hide_kanji: Some(true),
             ..Default::default()
         };
         save_settings(settings, state_arg).unwrap();
@@ -1917,6 +1471,7 @@ mod tests {
         assert_eq!(s.hide_pos, Some(true));
         assert_eq!(s.hide_xrefs, Some(true));
         assert_eq!(s.hide_usage, Some(false));
+        assert_eq!(s.hide_kanji, Some(true));
     }
 
     /// The guard that separates alpha from the font sizes. The sizes are
@@ -2016,10 +1571,8 @@ mod tests {
 
         resolve_chrome_mode(ChromeMode::Native, &state).unwrap();
 
-        let expected = crate::settings::supported(
-            ChromeMode::Native,
-            crate::settings::native_supported(),
-        );
+        let expected =
+            crate::settings::supported(ChromeMode::Native, crate::settings::native_supported());
         assert_eq!(state.snapshot().chrome_mode, Some(expected));
     }
 
@@ -2110,14 +1663,12 @@ mod tests {
 
             assert_eq!(second_saved.window_width, first_saved.window_width);
             assert_eq!(
-                second_saved.window_height,
-                first_saved.window_height,
+                second_saved.window_height, first_saved.window_height,
                 "height fixed point for case ({w},{h},{x},{y})"
             );
             assert_eq!(second_saved.window_x, first_saved.window_x);
             assert_eq!(
-                second_saved.window_y,
-                first_saved.window_y,
+                second_saved.window_y, first_saved.window_y,
                 "y fixed point for case ({w},{h},{x},{y})"
             );
         }
@@ -2168,460 +1719,79 @@ mod tests {
             },
         );
 
-        assert_eq!(current.layout_slots.len(), 1, "a settings save wiped a slot");
+        assert_eq!(
+            current.layout_slots.len(),
+            1,
+            "a settings save wiped a slot"
+        );
         assert_eq!(current.layout_slots["1"].surface_alpha, Some(35));
     }
 
-    /// Nothing has been parsed yet, so there is nothing to re-parse. Sending an
-    /// empty string would wake the worker to parse nothing.
-    #[tokio::test]
-    async fn reparse_skips_an_empty_channel() {
-        let (tx, rx) = tokio::sync::watch::channel(String::new());
-        reparse(&tx);
-        assert!(!rx.has_changed().expect("the sender is alive"));
-    }
-
-    /// Enabling hints changes the segmentation of text already on screen. Without
-    /// this the toggle looks inert until the next clipboard copy, which for a
-    /// segmentation-quality switch is the entire feedback the user gets.
-    ///
-    /// `watch::send` marks the slot changed even for an equal value, which is the
-    /// mechanism this relies on.
-    #[tokio::test]
-    async fn reparse_resends_the_current_text() {
-        let (tx, mut rx) = tokio::sync::watch::channel(String::new());
-        push_input(&tx, "東京都".to_string()).expect("push");
-        assert_eq!(
-            crate::parse::next_input(&mut rx).await.as_deref(),
-            Some("東京都"),
-            "the first send is consumed so the re-send is what the assert below sees"
-        );
-
-        reparse(&tx);
-
-        assert_eq!(
-            crate::parse::next_input(&mut rx).await.as_deref(),
-            Some("東京都")
-        );
-    }
-
-    /// The same exclusion `download_dictionary` has, re-pointed at the hints slot:
-    /// two acquisitions against one hints directory would race on the published
-    /// slot, and the second toggle must be refused rather than queued.
+    /// The appearance keys follow the font sizes: assigned, so a snapshot
+    /// with a key gone reaches disk as "unset" — a colour's Reset and a font
+    /// select's Default are both expressed by omission. The outline toggle is
+    /// a checkbox, always sent, so it merges like `hide_*`.
     #[test]
-    fn a_second_hints_acquisition_is_rejected_while_one_is_running() {
-        let flag = std::sync::atomic::AtomicBool::new(false);
-        claim_download(&flag).expect("the first claim succeeds");
-        assert!(claim_download(&flag).is_err());
-        release_download(&flag);
-        claim_download(&flag).expect("retry after release");
-    }
-
-    /// With any dictionary accepted, a load failure also means a format mismatch —
-    /// this tree pins `vibrato` 0.5.2, which reads v0.5.0-format dictionaries. The
-    /// message has to say so rather than reading as a corrupt download, and it has
-    /// to name the directory the user removes to escape the stranded state
-    /// `resolve` already left them in — see `describe_hints_error`'s own doc.
-    #[test]
-    fn a_hints_load_failure_names_the_format_it_expects_and_the_way_out() {
-        let path = Path::new(r"C:\Users\me\AppData\clipyomi\hints\current\system.dic");
-        let message = describe_hints_error(
-            jparser::hints::HintsError::Dictionary("unsupported version".to_string()),
-            path,
-        );
-        assert!(message.contains("unsupported version"), "got {message}");
-        assert!(message.contains("v0.5.0"), "got {message}");
-        assert!(message.contains("IPADIC"), "got {message}");
-        assert!(
-            message.contains(r"hints\current"),
-            "must name the directory to remove: got {message}"
-        );
-    }
-
-    /// The last uncovered link in item 4's chain: the warning has to reach
-    /// the webview, and `hints_warning` is the command that hands it over.
-    /// Empty-string-means-nothing is the same sentinel every warning state in
-    /// this crate uses (`state.rs`'s own doc comment on `HintsWarning`), so
-    /// this proves the command turns that sentinel into `None` rather than
-    /// `Some("")`, which would render as an empty warning line.
-    #[test]
-    fn hints_warning_reports_none_for_the_empty_sentinel() {
-        let app = tauri::test::mock_app();
-        app.manage(HintsWarning(String::new()));
-
-        assert_eq!(hints_warning(app.state::<HintsWarning>()), None);
-    }
-
-    /// The other half: a non-empty warning must reach the caller verbatim.
-    #[test]
-    fn hints_warning_reports_a_non_empty_message() {
-        let app = tauri::test::mock_app();
-        app.manage(HintsWarning("boundary hints are off".to_string()));
-
-        assert_eq!(
-            hints_warning(app.state::<HintsWarning>()),
-            Some("boundary hints are off".to_string())
-        );
-    }
-
-    // --- Phase 5B handoff §2.3 items 3 and 5, automated -------------------
-    //
-    // Both manual checks name `set_mecab_hints` as the only production caller
-    // of `vibrato_source::resolve` (§2.2's own finding), so driving the real
-    // command through a mock app is what closes the gap the handoff left
-    // open — a fixture-shaped stand-in would prove a different code path.
-
-    /// A scratch hints directory, removed and recreated per test — the same
-    /// pattern `scratch` above uses, named separately so a reader is not left
-    /// wondering whether these tests share a directory with the dictionary
-    /// ones above.
-    fn hints_scratch(name: &str) -> std::path::PathBuf {
-        scratch(&format!("hints-{name}"))
-    }
-
-    /// Every piece of managed state `set_mecab_hints` reads, wired onto a mock
-    /// app the same way `main.rs`'s `setup` wires it onto the real one.
-    ///
-    /// `hints_rx` is kept alive here rather than dropped: a `watch::Sender`
-    /// with no live receiver still accepts a `send`, but the command's own
-    /// `hints_tx.send(...)` result would then prove nothing about what a
-    /// reader downstream (the parse worker, in the real app) actually sees.
-    struct HintsHarness {
-        app: tauri::App<tauri::test::MockRuntime>,
-        settings: Arc<SettingsState>,
-        hints_rx: watch::Receiver<Option<Arc<VibratoTokenizer>>>,
-    }
-
-    fn hints_harness(hints_dir: std::path::PathBuf, mecab_hints: bool) -> HintsHarness {
-        let settings = Arc::new(SettingsState::new(
-            hints_dir.join("settings.json"),
+    fn save_settings_assigns_the_appearance_keys_and_clears_omitted_ones() {
+        let dir = scratch("appearance-keys");
+        let state = Arc::new(SettingsState::new(
+            dir.join("settings.json"),
             Settings {
-                mecab_hints,
+                colour_kanji: Some("#000000".into()),
+                colour_bg: Some("#102030".into()),
+                font_family_sentence: Some("Yu Gothic".into()),
+                text_outline: Some(true),
+                text_outline_width: Some(3),
+                text_shadow: Some(false),
+                text_shadow_size: Some(5),
+                furigana_gap: Some(6),
                 ..Default::default()
             },
         ));
         let app = tauri::test::mock_app();
-        app.manage(Arc::clone(&settings));
+        app.manage(Arc::clone(&state));
+        let state_arg = app.state::<Arc<SettingsState>>();
 
-        let (hints_tx, hints_rx) = watch::channel(None::<Arc<VibratoTokenizer>>);
-        app.manage(HintsSender(hints_tx));
-
-        // Empty, and left empty: `reparse` is a no-op on an empty channel
-        // (see its own doc comment), so nothing in these tests needs to read
-        // this one back.
-        let (input_tx, _input_rx) = watch::channel(String::new());
-        app.manage(InputSender(input_tx));
-
-        app.manage(DictionaryPaths {
-            // Unused by `set_mecab_hints` — it only ever reads `hints_dir` —
-            // but the struct has no `Default`, so these need a value.
-            root: hints_dir.join("dict"),
-            source_dir: hints_dir.join("source"),
-            hints_dir,
-        });
-        app.manage(HintsInFlight(Arc::new(AtomicBool::new(false))));
-
-        HintsHarness {
-            app,
-            settings,
-            hints_rx,
-        }
-    }
-
-    /// Captures every `hints-status` payload the command emits, in the order
-    /// emitted. Registered before the command runs so nothing is missed.
-    ///
-    /// This turned out to be practical against a mock app: `tauri`'s own
-    /// manager tests (`tauri-2.11.5/src/manager/mod.rs`) prove `Listener::
-    /// listen` plus a plain `Emitter::emit` work against `MockRuntime` with
-    /// no window and no webview, and the callback runs synchronously inside
-    /// `emit` — so by the time `set_mecab_hints(..).await` returns, every
-    /// event it emitted (including the one from inside its `spawn_blocking`
-    /// closure) is already in the vec below.
-    fn capture_hints_status(
-        app: &tauri::App<tauri::test::MockRuntime>,
-    ) -> Arc<std::sync::Mutex<Vec<String>>> {
-        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let sink = Arc::clone(&events);
-        app.listen(HINTS_STATUS_EVENT, move |event| {
-            let payload: String = serde_json::from_str(event.payload())
-                .expect("a hints-status payload is always a JSON string");
-            sink.lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .push(payload);
-        });
-        events
-    }
-
-    /// Every `.partial`/`.backup` entry found anywhere under `dir` — the
-    /// substrings [`staging_names`](vibrato_source::staging_names) and
-    /// `publish_replacing`'s own backup suffix leave behind on a killed or
-    /// failed run. An empty result is what "no leftovers" means.
-    fn staging_leftovers(dir: &std::path::Path) -> Vec<String> {
-        let mut leftovers = Vec::new();
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return leftovers;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.contains(".partial") || name.contains(".backup") {
-                leftovers.push(path.display().to_string());
-            }
-            if path.is_dir() {
-                leftovers.extend(staging_leftovers(&path));
-            }
-        }
-        leftovers
-    }
-
-    /// Handoff §2.3 item 3: "A hand-placed archive replaces the dictionary."
-    /// Arranges the exact shape the manual check describes — a published slot
-    /// holding one dictionary, a newer `.tar.xz` dropped beside it — and
-    /// drives the real command rather than `resolve` directly, since the
-    /// command is what picks the phase label and persists the setting.
-    #[tokio::test]
-    async fn a_hand_placed_archive_replaces_the_published_dictionary() {
-        let hints_dir = hints_scratch("hand-placed");
-        let current = hints_dir.join(vibrato_source::DICT_DIR);
-        std::fs::create_dir_all(&current).expect("current dir");
-        let old_dictionary = b"OLD DICTIONARY BYTES - NOT THE ARCHIVE'S".to_vec();
-        std::fs::write(current.join(vibrato_source::SYSTEM_DIC), &old_dictionary)
-            .expect("write old dictionary");
-
-        // Strictly newer than the write above: `archive_is_newer` is an mtime
-        // comparison, and two files written in the same tick can compare
-        // equal. `vibrato-source`'s own suite sleeps 50ms for exactly this
-        // reason (`tests/support::tick`) rather than add a `filetime`
-        // dependency; same trade here.
-        std::thread::sleep(std::time::Duration::from_millis(50));
-
-        // A real, loadable dictionary — built the same way `state.rs`'s own
-        // tests build one — packed into a real `.tar.xz` via `vibrato-
-        // source`'s own fixture-archive helper (Piece 1). `resolve` and
-        // `VibratoTokenizer::load` both see exactly what a real hand-placed
-        // archive would contain.
-        let fixture_path = hints_dir.join("fixture.dic");
-        jparser::hints::write_test_dictionary(&fixture_path).expect("fixture dictionary");
-        let new_dictionary = std::fs::read(&fixture_path).expect("read fixture");
-        vibrato_source::pack_archive(&new_dictionary, &hints_dir.join("dropped.tar.xz"))
-            .expect("pack archive");
-
-        let harness = hints_harness(hints_dir.clone(), false);
-        let events = capture_hints_status(&harness.app);
-        let handle = harness.app.handle().clone();
-
-        let result = set_mecab_hints(
-            true,
-            handle,
-            harness.app.state::<Arc<SettingsState>>(),
-            harness.app.state::<HintsSender>(),
-            harness.app.state::<InputSender>(),
-            harness.app.state::<DictionaryPaths>(),
-            harness.app.state::<HintsInFlight>(),
+        save_settings(
+            Settings {
+                colour_kana: Some("#ffffff".into()),
+                font_family_gloss: Some("Segoe UI".into()),
+                ..Default::default()
+            },
+            state_arg,
         )
-        .await;
+        .unwrap();
 
-        assert!(result.is_ok(), "got {result:?}");
-
-        // The phase label: "unpacking" only when `hand_placed` finds an
-        // archive ahead of `resolve`'s own call (commands.rs's own comment on
-        // that `read_dir`). Proven directly on the emitted events, which
-        // `capture_hints_status`'s own doc explains is practical here — no
-        // precondition-only fallback needed.
+        let s = state.snapshot();
+        assert_eq!(s.colour_kanji, None);
+        assert_eq!(s.colour_kana, Some("#ffffff".into()));
+        assert_eq!(s.font_family_sentence, None);
         assert_eq!(
-            *events.lock().unwrap(),
-            vec!["unpacking", "ready"],
-            "the archive precondition must select \"unpacking\", and the load \
-             must succeed"
+            s.furigana_gap, None,
+            "a size is assigned; omission clears it"
         );
-
-        // The load succeeded on what the archive published: a tokenizer
-        // reached the hints channel.
-        assert!(
-            harness.hints_rx.borrow().is_some(),
-            "a tokenizer must be published to the worker"
-        );
-
-        // `<hints>/current/system.dic` holds the archive's dictionary, not
-        // the one that was there before — asserted on bytes, so a no-op
-        // publish would fail this rather than passing by coincidence.
+        assert_eq!(s.font_family_gloss, Some("Segoe UI".into()));
         assert_eq!(
-            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read published"),
-            new_dictionary,
-            "the published slot must hold the archive's dictionary"
+            s.text_outline,
+            Some(true),
+            "a toggle merges; omission never clears it"
         );
-        assert_ne!(
-            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read published"),
-            old_dictionary,
-            "...and not the old one"
-        );
-
-        // No `.partial` or `.backup` entry survives anywhere in the hints
-        // dir — the leftovers assertion from the manual check.
-        let leftovers = staging_leftovers(&hints_dir);
-        assert!(leftovers.is_empty(), "staging leftovers: {leftovers:?}");
-
-        // The setting persisted as on.
-        assert!(
-            harness.settings.snapshot().mecab_hints,
-            "a successful acquisition must persist the setting"
-        );
-    }
-
-    /// Handoff §2.3 item 5: "An unloadable dictionary names the format." No
-    /// hand-placed archive is present, so `resolve` takes the `published()`
-    /// short-circuit — offline by construction, the same guarantee item 3's
-    /// archive branch relies on, just the other branch of it.
-    #[tokio::test]
-    async fn an_unloadable_dictionary_names_the_way_out_and_persists_nothing() {
-        let hints_dir = hints_scratch("unloadable");
-        let current = hints_dir.join(vibrato_source::DICT_DIR);
-        std::fs::create_dir_all(&current).expect("current dir");
-        let junk_path = current.join(vibrato_source::SYSTEM_DIC);
-        std::fs::write(&junk_path, b"not a vibrato dictionary").expect("write junk");
-
-        let harness = hints_harness(hints_dir.clone(), false);
-        let events = capture_hints_status(&harness.app);
-        let handle = harness.app.handle().clone();
-
-        let result = set_mecab_hints(
-            true,
-            handle,
-            harness.app.state::<Arc<SettingsState>>(),
-            harness.app.state::<HintsSender>(),
-            harness.app.state::<InputSender>(),
-            harness.app.state::<DictionaryPaths>(),
-            harness.app.state::<HintsInFlight>(),
-        )
-        .await;
-
-        // A load failure is reported as an event, not as an `Err` — the
-        // command's documented contract.
-        assert!(result.is_ok(), "got {result:?}");
-
-        // Nothing bad was published to the worker.
-        assert!(
-            harness.hints_rx.borrow().is_none(),
-            "no tokenizer may be published on a load failure"
-        );
-
-        // The setting was not persisted as on — still off.
-        assert!(
-            !harness.settings.snapshot().mecab_hints,
-            "a failed acquisition must not persist the setting"
-        );
-
-        // The failure message, read straight off the emitted event (proven
-        // practical by Test A above, so no `describe_hints_error` workaround
-        // needed here either): names the format and the way out.
-        let captured = events.lock().unwrap();
-        let message = captured.last().expect("at least one event must fire");
-        assert!(message.contains("v0.5.0"), "got {message}");
-        assert!(message.contains("IPADIC"), "got {message}");
-        assert!(
-            message.contains(&current.display().to_string()),
-            "must name the directory to remove: got {message}"
-        );
-    }
-
-    // --- Phase 5B handoff §2.3 item 2, automated ---------------------------
-    //
-    // "Untick, then re-tick. Expect `ready` effectively immediately,
-    // \"Unpacking the archive…\" never shown, and no network activity —
-    // `published()` short-circuited inside `resolve`." Driven through the
-    // real `set_mecab_hints`, the same way items 3 and 5 above are.
-
-    /// Handoff §2.3 item 2: the second toggle is offline and instant. Arranges
-    /// the steady state a first successful toggle leaves behind — a real,
-    /// loadable dictionary already published at `current/system.dic` — and
-    /// **no** `.tar.xz` anywhere in the hints directory, so `resolve`'s
-    /// hand-placed branch has nothing to find and its `published()`
-    /// short-circuit is the only branch that can run.
-    ///
-    /// **What this test does and does not prove about the network.** It
-    /// cannot inject the URL `set_mecab_hints` resolves against —
-    /// `vibrato_source::ASSET_URL` is a hard-coded pinned constant, not a
-    /// parameter — so staying offline here depends entirely on `published()`
-    /// answering before `resolve` ever reaches the network. The precondition
-    /// assertion below exists so a regression in `published` fails fast, on
-    /// this machine, rather than this test silently attempting a real 7.7 MB
-    /// download from GitHub inside `cargo test`. The zero-connection proof
-    /// itself lives in `vibrato-source`'s own suite —
-    /// `resolve_returns_a_published_dictionary_without_downloading`
-    /// (`crates/vibrato-source/tests/download.rs`), which stands up a local
-    /// listener and asserts its connection counter stays at 0. This test
-    /// proves the phase label and the republish-avoidance; it does not itself
-    /// prove "no network".
-    #[tokio::test]
-    async fn the_second_toggle_is_offline_and_instant() {
-        let hints_dir = hints_scratch("second-toggle");
-        let current = hints_dir.join(vibrato_source::DICT_DIR);
-        std::fs::create_dir_all(&current).expect("current dir");
-        jparser::hints::write_test_dictionary(&current.join(vibrato_source::SYSTEM_DIC))
-            .expect("fixture dictionary");
-        let before =
-            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read before");
-
-        // Precondition, not an assumption — see this test's own doc comment.
-        assert!(
-            vibrato_source::published(&hints_dir).is_some(),
-            "precondition: a published dictionary must already be there, or \
-             the command below would fall through to a real download"
-        );
-
-        let harness = hints_harness(hints_dir.clone(), false);
-        let events = capture_hints_status(&harness.app);
-        let handle = harness.app.handle().clone();
-
-        let result = set_mecab_hints(
-            true,
-            handle,
-            harness.app.state::<Arc<SettingsState>>(),
-            harness.app.state::<HintsSender>(),
-            harness.app.state::<InputSender>(),
-            harness.app.state::<DictionaryPaths>(),
-            harness.app.state::<HintsInFlight>(),
-        )
-        .await;
-
-        assert!(result.is_ok(), "got {result:?}");
-
-        // A tokenizer reached the worker.
-        assert!(
-            harness.hints_rx.borrow().is_some(),
-            "a tokenizer must be published to the worker"
-        );
-
-        // The setting persists as on.
-        assert!(
-            harness.settings.snapshot().mecab_hints,
-            "a successful acquisition must persist the setting"
-        );
-
-        // "Unpacking the archive…" is the manual check's own wording for the
-        // one thing it must never show — there was no archive to unpack.
-        // Observed alongside it, and worth noting rather than hiding: the
-        // label actually shown is "downloading", not e.g. "ready" straight
-        // away, because `set_mecab_hints` picks the label from one `read_dir`
-        // before `resolve` runs (this file's own comment on that call
-        // explains the trade — a wrong guess costs a mislabelled phase, not a
-        // wrong outcome). That is existing, deliberate behaviour, not
-        // something this test changes.
-        let captured = events.lock().unwrap();
-        assert!(
-            !captured.iter().any(|e| e == "unpacking"),
-            "no archive was present, so \"unpacking\" must never be shown: got {captured:?}"
-        );
-        assert_eq!(*captured, vec!["downloading", "ready"], "got {captured:?}");
-        drop(captured);
-
-        // Nothing was re-published over a slot that was already good: byte-
-        // identical before and after the offline short-circuit.
         assert_eq!(
-            std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read after"),
-            before,
-            "the published slot must be untouched by the offline short-circuit"
+            s.text_shadow,
+            Some(false),
+            "a toggle merges; omission never clears it"
+        );
+        assert_eq!(
+            s.colour_bg, None,
+            "the window background is a colour; omission clears it"
+        );
+        assert_eq!(
+            s.text_outline_width, None,
+            "the toggles' sizes are sizes: omission clears them"
+        );
+        assert_eq!(
+            s.text_shadow_size, None,
+            "the toggles' sizes are sizes: omission clears them"
         );
     }
 }

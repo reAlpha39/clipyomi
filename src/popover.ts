@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import { emit, listen } from '@tauri-apps/api/event';
 import { clampFont } from './font-sizes';
+import { clampFamily, quoteFamily } from './text-fonts';
 import { renderTooltip } from './render/tooltip';
-import type { Entry, GlossFilters } from './types';
+import type { Entry, GlossFilters, KanjiInfo } from './types';
 import './styles/tooltip.css';
 
 // The tooltip window's entry point. Deliberately does not import `main.ts`:
@@ -21,21 +24,43 @@ const VERTICAL_PADDING = 6;
 
 type PopoverPayload =
   | Entry[]
-  | { entries: Entry[]; filters?: GlossFilters; gloss?: number };
+  | {
+      entries: Entry[];
+      filters?: GlossFilters;
+      gloss?: number;
+      gloss_font?: string;
+      kanji?: KanjiInfo[];
+    };
+
+/**
+ * Write or remove one custom property on this window's root. Removed, not
+ * left: this window is persistent, so a value one payload set has to go when
+ * the next carries none, or Default in the settings window would take effect
+ * only on the next launch.
+ */
+function setRootToken(token: string, value: string): void {
+  if (value === '') document.documentElement.style.removeProperty(token);
+  else document.documentElement.style.setProperty(token, value);
+}
 
 void listen<PopoverPayload>('popover-content', (e) => {
   const payload = e.payload;
   const entries = Array.isArray(payload) ? payload : payload.entries;
   const filters = Array.isArray(payload) ? undefined : payload.filters;
+  // Absent on a bare-array payload and on one from a main window that found
+  // no kanji; either renders exactly as before this field existed.
+  const kanji = Array.isArray(payload) ? [] : (payload.kanji ?? []);
 
   // This webview has its own `:root`, so the main window's token write never
   // reached it. Applied before the render below, whose measurement is what
   // sizes the window — a size arriving afterwards would size it to the old
   // text. An absent size leaves `tooltip.css` owning the default.
   const gloss = Array.isArray(payload) ? null : clampFont('gloss', payload.gloss);
-  if (gloss !== null) document.documentElement.style.setProperty('--text-gloss', `${gloss}px`);
+  setRootToken('--text-gloss', gloss === null ? '' : `${gloss}px`);
+  const family = Array.isArray(payload) ? null : clampFamily(payload.gloss_font);
+  setRootToken('--font-gloss', family === null ? '' : quoteFamily(family));
 
-  const content = renderTooltip(entries, filters);
+  const content = renderTooltip(entries, filters, kanji);
   tooltip.replaceChildren(content);
   tooltip.scrollTop = 0;
   // The main window cannot measure this content — it is in another webview —

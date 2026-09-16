@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 import type { Settings } from './types';
 
-/** The three sizes the user can move. Furigana is a percentage, the rest px. */
-export type FontKind = 'sentence' | 'gloss' | 'furigana';
+/**
+ * The sizes the user can move. Furigana is a percentage, the rest px: `gap`
+ * is the space between the furigana and the text it annotates, `outline` the
+ * width of the stroke around the sentence glyphs, and `shadow` the one knob
+ * the drop shadow's offset and blur are both derived from.
+ */
+export type FontKind = 'sentence' | 'gloss' | 'furigana' | 'gap' | 'outline' | 'shadow';
 
 /**
  * Bounds for each control.
@@ -14,6 +21,11 @@ export const FONT_LIMITS: Record<FontKind, { min: number; max: number }> = {
   sentence: { min: 12, max: 48 },
   gloss: { min: 10, max: 28 },
   furigana: { min: 30, max: 100 },
+  gap: { min: 0, max: 24 },
+  // A stroke is centred on the glyph edge, so only half of this width shows
+  // outside it; past 8px the inner half closes up the counters of dense kanji.
+  outline: { min: 1, max: 8 },
+  shadow: { min: 0, max: 12 },
 };
 
 /**
@@ -37,6 +49,9 @@ const TOKENS: Record<FontKind, string> = {
   sentence: '--text-sentence',
   gloss: '--text-gloss',
   furigana: '--text-furigana',
+  gap: '--furigana-gap',
+  outline: '--text-stroke-width',
+  shadow: '--text-shadow-size',
 };
 
 /** VALUE pinned into KIND's range, or `null` if it is not a finite number. */
@@ -58,6 +73,9 @@ export function fontVars(settings: Partial<Settings>): Array<[string, string]> {
   const sentence = clampFont('sentence', settings.font_sentence);
   const gloss = clampFont('gloss', settings.font_gloss);
   const furigana = clampFont('furigana', settings.furigana_scale);
+  const gap = clampFont('gap', settings.furigana_gap);
+  const outline = clampFont('outline', settings.text_outline_width);
+  const shadow = clampFont('shadow', settings.text_shadow_size);
 
   return [
     ['--text-sentence', sentence === null ? '' : `${sentence}px`],
@@ -67,6 +85,9 @@ export function fontVars(settings: Partial<Settings>): Array<[string, string]> {
       '--text-furigana-romaji',
       furigana === null ? '' : `${(furigana * ROMAJI_PER_MILLE) / PER_MILLE}em`,
     ],
+    ['--furigana-gap', gap === null ? '' : `${gap}px`],
+    ['--text-stroke-width', outline === null ? '' : `${outline}px`],
+    ['--text-shadow-size', shadow === null ? '' : `${shadow}px`],
   ];
 }
 
