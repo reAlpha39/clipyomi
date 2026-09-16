@@ -327,8 +327,29 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
             .filter(|&p| bounds.is_boundary(p))
             .count() as i32;
         total += crossings * CROSS;
+        // A crossing strictly inside the characters the deinflection chain
+        // consumed is the tokenizer cutting an *inflection*, not proposing a
+        // word boundary, so it is not evidence of a spurious merge and pays
+        // nothing. Everything else pays in full. The range is the chain's as a
+        // whole, not each step's: `なった` decomposes into two steps, [1,2) for
+        // the っ and [2,3) for the た, and IPADIC's cut lands exactly on the
+        // junction between them -- inside the inflection, but inside neither
+        // step. See `PRONOUNCE_CROSS`'s comment for the measurement.
         if cand.flags.contains(WordFlags::PRONOUNCE) {
-            total += crossings * PRONOUNCE_CROSS;
+            let chain = cand
+                .steps
+                .iter()
+                .fold(None, |acc: Option<(usize, usize)>, s| {
+                    Some(match acc {
+                        None => (s.range.start, s.range.end),
+                        Some((a, b)) => (a.min(s.range.start), b.max(s.range.end)),
+                    })
+                });
+            let charged = ((cand.start + 1)..(cand.start + cand.len))
+                .filter(|&p| bounds.is_boundary(p))
+                .filter(|&p| !matches!(chain, Some((a, b)) if a < p && p < b))
+                .count() as i32;
+            total += charged * PRONOUNCE_CROSS;
         }
     }
 
