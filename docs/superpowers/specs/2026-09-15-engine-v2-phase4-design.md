@@ -507,16 +507,29 @@ case to special-case. It is recorded as not-needed rather than as untried.
 
 - **Four real compounds stay glued.** They are the whole +8: `東京厚生年金会館`
   (3 spans), `クライシスマッピングパーティー` (3), `田町駅` (1), `冶爺` (1).
-  A kanji or katakana token that genuinely is several words is now
-  unreachable, and the escape cannot tell one from `羽田空港` without
-  information it does not have.
+  A kanji or katakana token that genuinely is several words is unreachable to
+  the hiragana rule, which cannot tell one from `羽田空港`.
+
+  **Three, as of 2026-09-16 — and the missing information turned out to be in
+  hand.** `relax::opens` gained a second clause: a token with no hiragana still
+  opens if it can be tiled end to end by candidates that are each at least
+  three characters. `ロイヤルネイビーガール` tiles as 4 + 4 + 3;
+  `ニュルンベルク` only tiles as ニ+ュ+ル+ン+ベル+ク. Over this corpus it
+  reaches exactly one token — `クライシスマッピングパーティー`, +3 spans — and
+  reopens none of the gazetteer. The test is "it decomposes into real words",
+  not "it is katakana", which is the distinction §9.2's script table could not
+  draw.
 - **Eleven characters on the eighteen reported sentences**, all of them one
   sentence: `w7`, 「お、『ロイヤルネイビーガール』の新刊出てたんだな」, whose
-  katakana title now comes back whole and unglossed rather than as
-  `ロイヤル` + `ネイビー` + `ガール`. On this register that shattering would
-  arguably have helped a reader; on the gold corpus the identical shape is
-  `ニュルンベルク` → six pieces. The registers disagree and the gold corpus is
-  the gate.
+  katakana title came back whole and unglossed rather than as `ロイヤル` +
+  `ネイビー` + `ガール`. The registers looked like they disagreed — on the gold
+  corpus the identical *script* is `ニュルンベルク` → six pieces — and the gold
+  corpus was the gate.
+
+  **Recovered 2026-09-16 and they never really disagreed.** The
+  decomposability clause above splits the title and leaves the name alone,
+  taking the eighteen sentences 475 → **486** of 630 while gold strict rose 3.
+  Script was the wrong axis; piece length was the right one.
 - **Three hiragana runs that are themselves one unit** — `ぱたぱたぱたぱた`,
   `ぇぇぇ`, `ぁぁぁ` — still shatter, because they are indistinguishable from
   `ぱひゅぱひゅぱひゅと`, which is the same shape with a particle on the end
