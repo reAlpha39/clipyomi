@@ -294,6 +294,34 @@ const COMMON: i32 = -2;
 /// snapshot is byte-identical.
 const FUNCTION_STACK: i32 = 4;
 
+/// Discount for a span that opens with a number and whose reading carries the
+/// sound change that number makes — `1週間` as `いっしゅうかん`.
+///
+/// **Why it needs a term at all.** Number and counter are one phonological
+/// word in Japanese and JMdict records the merged reading, but the merged
+/// entry is usually `[primary, common-line]` while the counter alone is
+/// `COMMON` — so `週間` earns −2 a character and `１週間` earns nothing, and
+/// the split wins by 2. The reader is then shown `ichi shuukan` for a word
+/// pronounced `isshuukan`: a mispronunciation, not merely a different cut.
+///
+/// **Why it is gated on the sokuon**, in [`lex::Candidate::digit_counter`]:
+/// that is exactly where the merge earns its keep. `一週間` reads
+/// `いっしゅうかん`, which `いち` + `しゅうかん` cannot produce. `三回` reads
+/// `さんかい` and `三人` `さんにん` — the split says the same thing, so merging
+/// buys nothing and costs something. Measured over 2,743 lines of real text,
+/// an **ungated** discount re-cut `３|回目` as `３回|目` and `４|人目` as
+/// `４人|目` **49 times**, breaking the ordinal suffix to fix readings that
+/// were never wrong. Gated, that class disappears: 89 spans change and 86 are
+/// euphonic merges (`１週間` 62, `1週間` 15, `1ヶ月` 4, `1回` 3, `1箇所` 2).
+///
+/// **Magnitude.** −3 is the smallest that flips the 2-point gap above; −5 and
+/// −8 measured identically on every cell, so only the sign and clearing the
+/// gap matter. Gold is untouched in both hint states — every cell and every
+/// compound class line identical hints on, and hints off the compound metric
+/// *gains* 2 (112 → 114). `1969年` is unaffected: an all-digit span fails the
+/// "continues past it" half of the test, which is what keeps years out.
+const DIGIT_COUNTER: i32 = -3;
+
 /// Penalty for a match whose source characters differ from the stored surface
 /// before folding.
 ///
@@ -364,6 +392,9 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     // corpus's own metrics did not -- they improved through it.
     if cand.function_stack && cand.steps.is_empty() {
         total += FUNCTION_STACK;
+    }
+    if cand.digit_counter {
+        total += DIGIT_COUNTER;
     }
 
     if let Some(bounds) = bounds {
@@ -467,6 +498,7 @@ mod tests {
             steps: Vec::new(),
             exact,
             function_stack: false,
+            digit_counter: false,
             headword: String::new(),
         }
     }
