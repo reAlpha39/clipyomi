@@ -491,6 +491,53 @@ fn a_hint_token_that_is_not_a_key_no_longer_unmatches_its_words() {
     assert_eq!(on.segments[0].reading.as_deref(), Some("ほんとう"));
 }
 
+/// The bundled hint user lexicon, end to end against the real dictionary.
+///
+/// `いちゃいちゃ` is in JMdict with a full gloss and the engine shattered it
+/// into `い` + `ちゃい` + `ちゃ` — in isolation, and with hints off, so neither
+/// coverage nor the hint constraint was at fault. The cost model cannot fix
+/// that class: `COMMON` is −2 a character against `COVER`'s +1, so a tiling of
+/// COMMON fragments beats a longer non-COMMON dictionary word at every
+/// magnitude, and the per-match term that would reverse it reopens master plan
+/// §4.3's particle-absorbing merges
+/// (`docs/superpowers/2026-09-16-per-match-cost-spike.md`).
+///
+/// What fixes it is the constraint, not the cost model. `美少女` is the same
+/// shape and survives hints-on only because IPADIC holds it whole, so
+/// `cost::is_allowed` forbids cutting inside it. IPADIC cuts `いちゃいちゃ`
+/// into four tokens, `い | ちゃ | い | ちゃ`; `assets/hint_user_lexicon.csv`
+/// gives it back as one.
+#[cfg(feature = "mecab")]
+#[test]
+fn the_user_lexicon_keeps_a_word_ipadic_splits() {
+    const TEXT: &str = "いちゃいちゃする";
+    let dir = scratch("user-lexicon");
+
+    // The tokenizer must hold the word whole -- that is the entire mechanism.
+    let bounds = boundaries_over(TEXT);
+    for p in 1..6 {
+        assert!(
+            !jparser::engine::Boundaries::is_boundary(&bounds, p),
+            "position {p} is interior to いちゃいちゃ and must not be a cut"
+        );
+    }
+
+    // The cut after いちゃいちゃ must survive, or the word would have been
+    // glued to する rather than merely held together.
+    assert!(
+        jparser::engine::Boundaries::is_boundary(&bounds, 6),
+        "いちゃいちゃ | する"
+    );
+
+    // Deliberately no parse assertion. The word is JMdict's, so checking the
+    // segmentation would need the real 218k index, which CI does not have --
+    // and the boundary set above *is* the mechanism: `cost::is_allowed` will
+    // not let any span start or end inside a token, so once the tokenizer
+    // holds the word the cost model cannot take it apart. The end-to-end
+    // result is recorded in the spike document instead.
+    let _ = &dir;
+}
+
 /// The other half of the escape, and the one that decides its shape: **a hint
 /// token with no hiragana in it stays shut, and here the two hint states must
 /// *disagree*.**
