@@ -306,20 +306,49 @@ constant can prefer a seven-character idiom while refusing a two-character
 commonness bonus from `prt` entirely (`dict.lisp:842-846`, `:903`), measured
 here as roughly neutral alone (strict 1821).
 
-Parked on **`feat/superlinear-length`**: `total -= LEN_GAIN * (len-1)²` with
-`LEN_GAIN = 1`, withheld from function-word stacks, and the stack test
-sharpened to COMMON pieces of at most two characters where a one-character
-piece must be a particle and at least one piece is. Hints on: strict 1764,
-tolerant **1917**, entry top-1 **0.9371**, compounds **136** (66 / **30** /
-40), coarsening 153 in 68, and **the spurious-merge gate still 26 of 26**.
-Hints off 1543 / 1716 / 0.9377 / 126. All seven case probes correct,
-including `物思いにふける` in both its citation and conjugated forms. It also
-fixes two tests the repo records as *known defects* — `ミスった` and `ミスる`
-are single spans now. Six tests fail, all of them by design: those two
-defect-recorders, three `cost.rs` arithmetic units, and the snapshot. One of
-the three is `coverage_cost_does_not_reward_using_fewer_matches`, §4.3's
-invariant, which this violates deliberately the way `MATCH = 2` already does
-with guards. Unreviewed, ungated, not shipped.
+**Shipped as `fe9dfcd`**: `total -= LEN_GAIN * (len-1)²`, `LEN_GAIN = 1`.
+The first version of it was not shippable and the decomposition is why.
+
+Its hints-off `tolerant` read 1716 against 1749, which §5.2's own rule says
+cannot be compound preservation — `tolerant` forgives a merge whose two
+endpoints are both gold boundaries, so a fall means merges that cut one.
+`examples/span_dump.rs` named all 68: **48 gold spans shattered and 20
+swallowed past a boundary**, and they are not compounds at all — `こと` became
+`きのこ` + `と`, `いつも` became `はい` + `つも`, `また` became `つつま` + `た`,
+`という` became `と` + `いう` six times over. Real words invented across real
+boundaries, because hints-off has no `is_allowed` constraint and a reward
+that grows with length will buy any long span on offer.
+
+A length floor was tried first and gives the whole gain back (compounds 117
+against 142). What works is gating the term on `bounds`, exactly as `CROSS`
+and `PRONOUNCE_CROSS` already are, plus keeping the sharpened stack test as a
+**second predicate** (`lex::is_grammatical_stack`) so `FUNCTION_STACK`'s own
+penalty keeps the narrower test it was measured with. Hints-off is then
+identical to the digit — which matters, because `mecab_hints` is
+`#[serde(default)]` on a `bool` and a fresh install runs hints **off**.
+
+Hints on, against an unmoved hints-off half:
+
+| | strict | tolerant | entry top-1 | compounds | lexical | false-match | transparent |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| before | 1826 | 1912 | 0.9341 | 118 | 46 | **30 / 32** | 42 / 42 |
+| after | 1754 | **1919** | **0.9374** | **142** | **72** | **30 / 32** | 40 / 42 |
+
+Coarsening 86 spans in 43 merges → 165 in 74, which is where the strict fall
+went. Spurious merges **26 of 26**, snapshot byte-identical, 656 tests 0
+failed 1 ignored, clippy and fmt clean, bench 1.05x on / 0.97x off.
+
+`物思いにふける`, `物思いにふけった` and `物思いにふけっていた` all keep the
+idiom whole; `私には分かる`, `それを聞いて`, `ことになっている` and `なりたいです`
+are untouched. **`唐揚げ` still needs its lexicon row** — measured by removing
+it — because three characters earn too little gain; the row stays.
+
+Two `cost.rs` invariants were restated rather than deleted. Both compared a
+with-bounds cost against a no-bounds one, which stops isolating what they are
+for once a term is bounds-gated; both now compare bounds that cut a span
+against bounds that do not, which is the property they were written to
+protect. `coverage_cost_does_not_reward_using_fewer_matches` needed no change
+at all — it evaluates without bounds, where this term does not apply.
 
 **The index read, and a route that looked right and is not.**
 `jmdict.rs:52` collapses all of JMdict's priority data to one boolean, and
