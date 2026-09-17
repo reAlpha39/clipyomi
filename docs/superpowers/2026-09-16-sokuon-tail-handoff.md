@@ -289,6 +289,72 @@ popover, without moving a boundary. Not built, not scoped here — named
 because it is the shape of the answer for every idiom in this class, and
 there are many.
 
+## 3e. Two searches, one answer
+
+With the constant sweeps exhausted, the search widened: one agent read the
+peer implementations, another mapped what the index builder throws away.
+
+**The peer read (Ichiran, MIT, JMdict-based, the closest architectural
+peer).** Its path score multiplies a per-entry score by a **superlinear
+length coefficient** (`dict.lisp:928`, coefficient sequences at `:681-700`,
+len² for kana). Every term in `cost.rs` is *additive*, which makes the
+merge-versus-tiling ratio **length-invariant** — and that is the one-line
+explanation for why four `MATCH` values, four `FUNCTION_STACK`, three
+`PARTICLE_CROSS` and three tiling definitions all failed. No additive
+constant can prefer a seven-character idiom while refusing a two-character
+`には`, because it cannot see the difference. Ichiran also withholds the
+commonness bonus from `prt` entirely (`dict.lisp:842-846`, `:903`), measured
+here as roughly neutral alone (strict 1821).
+
+Parked on **`feat/superlinear-length`**: `total -= LEN_GAIN * (len-1)²` with
+`LEN_GAIN = 1`, withheld from function-word stacks, and the stack test
+sharpened to COMMON pieces of at most two characters where a one-character
+piece must be a particle and at least one piece is. Hints on: strict 1764,
+tolerant **1917**, entry top-1 **0.9371**, compounds **136** (66 / **30** /
+40), coarsening 153 in 68, and **the spurious-merge gate still 26 of 26**.
+Hints off 1543 / 1716 / 0.9377 / 126. All seven case probes correct,
+including `物思いにふける` in both its citation and conjugated forms. It also
+fixes two tests the repo records as *known defects* — `ミスった` and `ミスる`
+are single spans now. Six tests fail, all of them by design: those two
+defect-recorders, three `cost.rs` arithmetic units, and the snapshot. One of
+the three is `coverage_cost_does_not_reward_using_fewer_matches`, §4.3's
+invariant, which this violates deliberately the way `MATCH = 2` already does
+with guards. Unreviewed, ungated, not shipped.
+
+**The index read, and a route that looked right and is not.**
+`jmdict.rs:52` collapses all of JMdict's priority data to one boolean, and
+`nf01`–`nf48` — the DTD's frequency-of-use rank in bands of 500 — is dropped
+at parse time. 30,263 of 41,169 COMMON forms carry a band, spread evenly. It
+looked like the missing graded signal. Built and swept on **`feat/nf-band`**
+(`dda0a53` plumbing at index format 7, every cell identical and all gates
+green; `6e1011f` the best curve), nine curves, both hint states:
+
+| curve | strict on/off | compounds on/off | classes, on |
+| --- | --- | --- | --- |
+| control (flat) | 1826 / 1611 | 118 / 113 | 46 / 30 / 42 |
+| **linear −2@nf01 → 0@nf48** | 1816 / 1619 | 121 / 120 | 49 / 30 / 42 |
+| linear, unbanded at −1 | 1786 / 1592 | 118 / 119 | 54 / 28 / **36** |
+| linear, unbanded at 0 | 1756 / 1532 | 114 / 116 | 53 / 28 / **33** |
+
+It does fix `唐揚げ` → `からあげ`, which would retire that lexicon row. It is
+still **NOT SHIPPABLE**, on two independent counts:
+
+1. **It cannot reach `物思いにふける` at all.** `耽る` and `老ける` carry
+   `ichi1` with **no nf band** — tagging identical to `それ` (`ichi1`) and `を`
+   (`spec1`), verified against `JMdict_e.xml` directly. Any policy that
+   demotes band-0 words far enough to merge the idiom also merges `それを`.
+   JMdict's own tags carry no signal separating a band-0 verb from a band-0
+   pronoun; that is a property of the data, not of the curve.
+2. **The snapshot catches it shattering inflections.** `飲まない` → `飲ま`+`ない`,
+   `帰りたかった` → `帰り`+`たかった`, `飲みたい` → `飲み`+`たい`, in both hint
+   states: a mid-band conjugated verb loses its discount while the unbanded
+   auxiliary keeps −2/char. That is §4.3's shattering class. The gold corpus
+   did not register it and `parse_sentences.txt` did — the same way it caught
+   `FUNCTION_STACK` ungated.
+
+Both branches are kept. `feat/nf-band` is a measured negative; do not
+re-litigate nf grading without new evidence about band-0 words.
+
 ## 4. Not done
 
 - **Gate 6, the eighteen reported sentences, was not run.** The sentence
