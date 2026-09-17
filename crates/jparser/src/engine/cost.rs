@@ -77,7 +77,54 @@ use crate::engine::Boundaries;
 /// compound, so it is not here.
 const MATCH: i32 = 2;
 
-/// EXPERIMENT
+/// Discount for a matched span's length, charged as `LEN_GAIN * (len - 1)²`.
+///
+/// **The one term here that is not linear, and the reason it exists.** Every
+/// other term is per character or per span, so the comparison between a merge
+/// and a tiling of its parts is *length-invariant*: whatever separates
+/// `物思いにふける` from its three parts separates `には` from `に` + `は` by the
+/// same ratio. That is why no value of `MATCH` reaches this class — swept
+/// 2026-09-16 at 2/3/4/6 against four `FUNCTION_STACK` values, three
+/// `PARTICLE_CROSS` values and three stack definitions, and every
+/// configuration that merges the seven-character idiom also merges the
+/// two-character particle stack. A superlinear term is the only shape that
+/// can tell a long dictionary word from a short one.
+///
+/// The form is taken from Ichiran (`dict.lisp:928`, coefficient sequences at
+/// `:681-700`), which multiplies a per-entry score by a superlinear length
+/// coefficient; it is MIT and JMdict-based, the closest architectural peer
+/// this project has. Expressed additively here because this cost model sums
+/// rather than multiplies.
+///
+/// **Gated on `bounds`, which is load-bearing and was measured.** Without a
+/// tokenizer nothing constrains where a span may begin or end, and a reward
+/// that grows with length then buys spurious long spans outright. Measured
+/// hints-off on the gold corpus: 48 gold spans shattered and 20 swallowed
+/// past a gold boundary — `こと` became `きのこ` + `と`, `いつも` became `はい` +
+/// `つも`, `また` became `つつま` + `た`. Real words invented across real
+/// boundaries. With the gate, every hints-off cell is identical to the digit
+/// and only the hints-on half moves.
+///
+/// **Withheld from grammatical stacks**, `lex::is_grammatical_stack`, or the
+/// gain would merge exactly what success criterion 3 forbids: at `LEN_GAIN`
+/// ungated by that test, `ことになっている` swallows its `に` and the 26-row
+/// `spurious_merges.txt` gate goes to 25.
+///
+/// **1, and magnitude is not free here** — unlike `FUNCTION_STACK` and
+/// `PRONOUNCE_CROSS`, whose cells are flat across their whole ranges, this
+/// term's square makes every increment a different engine. 1 is the smallest
+/// value that separates the class and was the only one measured; a floor
+/// variant (no gain at or below three characters) was tried and gives the
+/// gain back entirely — compounds 117 against 142.
+///
+/// **What it buys, hints on** (hints off is unmoved by construction):
+/// strict 1826 -> 1754, tolerant 1912 -> 1919, entry top-1 0.9341 -> 0.9374,
+/// compounds 118 -> **142**, whose class lines are `lexical` 46 -> 72,
+/// `false-match` 30 -> 30 and `transparent` 42 -> 40. The strict fall is
+/// coarsening, not damage: 86 gold spans inside 43 dictionary merges becomes
+/// 165 inside 74, and §5.2 records strict as punishing compound preservation
+/// against a short-unit corpus by about 16.5 points. The spurious-merge gate
+/// stays 26 of 26 and the snapshot is byte-identical.
 const LEN_GAIN: i32 = 1;
 
 /// Cost of one covered character in a matched span.
@@ -415,10 +462,12 @@ pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
 /// per-match terms apply.
 pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     let mut total = COVER * cand.len as i32 + MATCH;
-    // EXPERIMENT: superlinear length gain (Ichiran's multiplicative length
-    // coefficient, expressed additively). Additive terms keep the
-    // merge-vs-tiling ratio length-invariant; this breaks that.
-    if !(cand.function_stack && cand.steps.is_empty()) {
+    // See `LEN_GAIN` for why this is the one superlinear term, why it is gated
+    // on `bounds` the way `CROSS` and `PRONOUNCE_CROSS` below are, and why a
+    // grammatical stack is excluded. `steps.is_empty()` mirrors
+    // `FUNCTION_STACK`'s own gate: a conjugated form is not function-word
+    // stacking, and `物思いにふけった` needs the gain its citation form gets.
+    if bounds.is_some() && !(cand.grammatical_stack && cand.steps.is_empty()) {
         let l = cand.len as i32 - 1;
         total -= LEN_GAIN * l * l;
     }
@@ -547,6 +596,7 @@ mod tests {
             steps: Vec::new(),
             exact,
             function_stack: false,
+            grammatical_stack: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: String::new(),
@@ -642,8 +692,17 @@ mod tests {
             is_allowed(&c, Some(&b)),
             "merging across a boundary is legal"
         );
+        // Both sides carry bounds. They used to be `Some(&b)` against `None`,
+        // which no longer isolates crossing from anything else: `LEN_GAIN`
+        // applies only where a tokenizer exists, so a with-bounds cost is
+        // legitimately below its without-bounds self by the length gain, for
+        // a span that crosses nothing at all. The invariant this test is for
+        // -- a crossing is never *rewarded* -- is the comparison below: the
+        // same candidate under bounds that cut it, against bounds that do
+        // not.
+        let uncut = At(&[0, 4, 7]);
         assert!(
-            cost(&c, Some(&b)) >= cost(&c, None),
+            cost(&c, Some(&b)) >= cost(&c, Some(&uncut)),
             "never a discount for crossing"
         );
     }
@@ -666,7 +725,10 @@ mod tests {
         let b = At(&[0, 1, 3]);
         let kana_only = cand(0, 3, WordFlags::PRIMARY, true);
         let crossing = cost(&kana_only, Some(&b));
-        let not_crossing = cost(&kana_only, None);
+        // Against the same span under bounds that do not cut it, not against
+        // the no-bounds case: `LEN_GAIN` is bounds-gated and would otherwise
+        // show up in this difference as if it were a crossing price.
+        let not_crossing = cost(&kana_only, Some(&At(&[0, 3])));
         assert_eq!(
             crossing - not_crossing,
             CROSS,

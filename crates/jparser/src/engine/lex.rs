@@ -81,6 +81,10 @@ pub struct Candidate {
     /// headword is a function stack at one position and not at another. Set
     /// by a second pass in [`candidates`], read by `cost::cost`.
     pub function_stack: bool,
+    /// Whether the span is a grammatical stack in the wider sense
+    /// [`is_grammatical_stack`] defines. Read only by `cost::cost`, to
+    /// withhold the length gain. Set by the same second pass.
+    pub grammatical_stack: bool,
     pub headword: String,
 }
 
@@ -208,6 +212,7 @@ pub fn candidates(
                             // every position's candidates, which do not
                             // exist yet.
                             function_stack: false,
+                            grammatical_stack: false,
                             headword: record.surface.clone(),
                         },
                     ));
@@ -239,17 +244,23 @@ pub fn candidates(
     // A read-only copy for the reading comparison below, which asks about the
     // *parts* of a span while the originals are being written through.
     let out_ro = out.clone();
-    let stacks: Vec<Vec<bool>> = (0..len)
+    let stacks: Vec<Vec<(bool, bool)>> = (0..len)
         .map(|start| {
             out[start]
                 .iter()
-                .map(|cand| is_function_stack(&out, start, start + cand.len))
+                .map(|cand| {
+                    (
+                        is_function_stack(&out, start, start + cand.len),
+                        is_grammatical_stack(&out, start, start + cand.len),
+                    )
+                })
                 .collect()
         })
         .collect();
     for (start, flags) in stacks.into_iter().enumerate() {
-        for (cand, stack) in out[start].iter_mut().zip(flags) {
+        for (cand, (stack, grammatical)) in out[start].iter_mut().zip(flags) {
             cand.function_stack = stack;
+            cand.grammatical_stack = grammatical;
             cand.digit_counter = opens_with_a_number(chars, cand.start, cand.len)
                 && reading_is_not_its_parts(index, &out_ro, chars, cand);
             cand.after_digit_noncounter = !cand.flags.contains(WordFlags::COUNTER)
@@ -395,12 +406,47 @@ fn is_function_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> b
     if width < 2 {
         return false;
     }
-    // [p][saw_particle]: a tiling of `[start, start + p)` into COMMON pieces of
-    // at most two characters, `saw_particle` recording whether any was a
-    // PARTICLE. The length cap is what keeps a content word out: ことになっている
-    // tiles into こと|に|なっ|て|いる, all short, while 物思いにふける needs
-    // ふける at three.
+    let mut reachable = vec![false; width + 1];
+    reachable[0] = true;
+    for p in 0..width {
+        if !reachable[p] {
+            continue;
+        }
+        for cand in &by_start[start + p] {
+            if cand.len >= width || p + cand.len > width {
+                continue;
+            }
+            if cand.flags.contains(WordFlags::COMMON) && cand.flags.contains(WordFlags::PARTICLE) {
+                reachable[p + cand.len] = true;
+            }
+        }
+    }
+    reachable[width]
+}
+
+/// Whether `[start, start + len)` is a *grammatical* stack rather than a word:
+/// tileable entirely by COMMON pieces of at most two characters, where a
+/// one-character piece must itself be a PARTICLE and at least one piece is.
+///
+/// Wider than [`is_function_stack`], and used for one thing only -- deciding
+/// whether `cost`'s length gain applies. The two are separate predicates on
+/// purpose: `FUNCTION_STACK`'s own penalty keeps the narrower test it was
+/// measured with, so nothing moves in a hint state the gain does not reach.
+///
+/// The two-character cap is what keeps a content word out. `ことになっている`
+/// tiles as `こと|に|なっ|て|いる`, every piece short; `物思いにふける` needs
+/// `ふける` at three and so is a word. The particle requirement on
+/// one-character pieces is what keeps `唐揚げ` out: single COMMON kana and
+/// kanji are everywhere, and without it `物思いにふける` tiles as
+/// `物|思|い|に|ふ|け|る` and every word is a stack.
+fn is_grammatical_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> bool {
     const MAX_PIECE: usize = 2;
+    let width = end - start;
+    if width < 2 {
+        return false;
+    }
+    // `[p][saw_particle]`: a tiling of `[start, start + p)` into qualifying
+    // pieces, `saw_particle` recording whether any of them was a PARTICLE.
     let mut reachable = vec![[false; 2]; width + 1];
     reachable[0][0] = true;
     for p in 0..width {
@@ -413,14 +459,10 @@ fn is_function_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> b
                     continue;
                 }
                 let particle = cand.flags.contains(WordFlags::PARTICLE);
-                // A one-character piece has to be a particle. Single COMMON
-                // kana and kanji are everywhere -- without this, 物思いにふける
-                // tiles as 物|思|い|に|ふ|け|る and every word is a stack.
                 if !cand.flags.contains(WordFlags::COMMON) || (cand.len < 2 && !particle) {
                     continue;
                 }
-                let next = seen | usize::from(particle);
-                reachable[p + cand.len][next] = true;
+                reachable[p + cand.len][usize::from(seen == 1 || particle)] = true;
             }
         }
     }
@@ -544,6 +586,7 @@ mod tests {
             digit_counter: false,
             after_digit_noncounter: false,
             function_stack: false,
+            grammatical_stack: false,
             headword: String::new(),
         };
 
@@ -601,6 +644,7 @@ mod tests {
             ],
             exact,
             function_stack: false,
+            grammatical_stack: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: headword.to_string(),
