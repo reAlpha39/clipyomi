@@ -430,6 +430,7 @@ mod tests {
             steps: Vec::new(),
             exact: true,
             function_stack: false,
+            grammatical_stack: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: String::new(),
