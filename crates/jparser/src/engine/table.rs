@@ -321,13 +321,74 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("じゃう", "五段・ワ行促音便", "連用形"),
     ("ちまう", "五段・ワ行促音便", "連用形"),
     ("じまう", "五段・ワ行促音便", "連用形"),
+    // てる/でる, the colloquial contraction of ている/でいる, and the same
+    // shape as the ちゃう rows above: a contraction IPADIC tokenizes on its
+    // own. Without them 思ってる has no chain at all -- 思っ is 連用タ接続 and
+    // BOUND_FORMS stops it standing alone, 思って ends strictly inside
+    // IPADIC's てる token so `is_allowed` refuses it, and `relax` does not
+    // reopen that token because candidates cover it. The parse was
+    // 思 | っ | てる with てる glossed 照る "to shine".
+    //
+    // **JMdict does carry てる and でる** -- `[primary]` "to be ...-ing", and
+    // they conjugate, so 思ってろ already matched `てる` Imperative. That
+    // entry cannot help here, because reaching it needs a *separate* span
+    // and the only span that could precede one is 思って, which is the span
+    // `is_allowed` refuses. An auxiliary row is what puts the contraction
+    // inside a single span instead of beside it.
+    //
+    // 一段 because the contraction conjugates as one: てる/てた/てて/てない.
+    // でる mirrors `で` below and takes 連用タ接続 only, for the same reason
+    // `で` does -- it follows an onbin stem (遊ん, 読ん) and nothing else.
+    // It reaches 遊んでる and 遊んでない; 遊んでた and 遊んでます keep the
+    // `だ` 連用形 route that was already there and are still labelled Past,
+    // which is a pre-existing asymmetry between て and で, measured on the
+    // binary before these rows and left alone.
     ("だ", "特殊・ダ", "連用タ接続"),
     ("て", "不変化型", "連用タ接続"),
     ("て", "不変化型", "連用形"),
     ("で", "不変化型", "連用タ接続"),
+    // **Below the て/で rows on purpose, and the ordering is load-bearing**
+    // in exactly the way the たい row above records. 一段's 未然形 and 連用形
+    // have empty suffixes, so てる's own surfaces include a bare `て` --
+    // the same surface as the Te-form auxiliary, at the same trie node, at
+    // the same depth. `lex::dedup_shallowest` keeps whichever `Table::new`
+    // inserted first, and inserted first these labelled every plain te-form
+    // "Progressive": 走って, 遅れて, 開けて, 遊んで, して, 待って, all of
+    // them, caught by `parse_sentences.txt`'s snapshot. Below, `て` wins the
+    // bare node and `てる` keeps every node `て` does not reach.
+    ("てる", "一段", "連用タ接続"),
+    ("てる", "一段", "連用形"),
+    ("でる", "一段", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
     ("じゃ", "特殊・ジャ", "基本形"),
     ("や", "特殊・ヤ", "基本形"),
+];
+
+/// Forms an [`ATTACHES_TO`] lemma does **not** generate, by `(lemma, form)`.
+///
+/// One entry's worth of exception, and it exists because 一段 gives both
+/// 命令ｙｏ and 未然ウ接続 the suffix `よ`, so `てる` and `でる` would carry
+/// the surfaces `てよ` and `でよ`. Real 一段 verbs have that imperative
+/// (見ろ/見よ); the colloquial contraction does not -- its imperative is
+/// `待ってろ`, never `待ってよ` -- and what the surface actually collides with
+/// is the sentence-final particle よ.
+///
+/// **Measured over 8,334 lines of dialogue**: ungated, 22 occurrences absorb a
+/// final よ into the verb -- `待ってよ`, `返してよ`, `答えてよ`, `呼んでよ` --
+/// which is the class `spurious_merges.txt` exists to refuse. Five of the 22
+/// are far worse than an absorbed particle: `なく` is 五段・カ行イ音便, so
+/// `な` + `い` is a 連用タ接続 site, and `忘れないでよね` parsed as
+/// `忘れ` + `ないでよ` + `ね` -- the negation destroyed and the span glossed
+/// `なく` "to cry; to shed tears". A wrong headword stated confidently, which
+/// is worse than a missed merge.
+///
+/// Blocking both よ-forms costs the one corpus occurrence of `てよう`
+/// (未然ウ接続 + う, "let's be waiting"), which is the trade.
+const AUX_FORM_BLOCK: &[(&str, &str)] = &[
+    ("てる", "命令ｙｏ"),
+    ("てる", "未然ウ接続"),
+    ("でる", "命令ｙｏ"),
+    ("でる", "未然ウ接続"),
 ];
 
 /// A hit recorded at one node of [`Table`]'s reverse trie.
@@ -450,6 +511,9 @@ impl Table {
             // is "せ", られる's is "られ", even though both are 一段).
             let stem = lemma.strip_suffix(class.remove).unwrap_or(lemma);
             for (form_id, form) in class.forms.iter().enumerate() {
+                if AUX_FORM_BLOCK.contains(&(lemma, form.name)) {
+                    continue;
+                }
                 let surface = format!("{stem}{}", form.suffix);
                 if surface.is_empty() {
                     // No current row produces this — every ATTACHES_TO
@@ -775,6 +839,10 @@ mod tests {
         c.forms
             .iter()
             .enumerate()
+            // The same two exclusions `Table::new` applies, so the coverage
+            // walk asks for a fixture row only where the table really emits
+            // a surface: an empty one, and an `AUX_FORM_BLOCK` row.
+            .filter(|(_, f)| !AUX_FORM_BLOCK.contains(&(lemma, f.name)))
             .map(|(id, f)| (id as FormId, format!("{stem}{}", f.suffix)))
             .filter(|(_, surface)| !surface.is_empty())
             .collect()
@@ -887,12 +955,15 @@ mod tests {
         // 22,783 before the ちゃう family joined ATTACHES_TO. Those four lemmas
         // attach at both 連用タ接続 and 連用形, and their own seven
         // 五段・ワ行促音便 forms become attachment sites in turn, which is where
-        // the depth-2 term more than doubles.
+        // the depth-2 term more than doubles. 50,419 -> 60,926 on 2026-09-18
+        // for てる/でる, the ている contraction: three more rows, whose own
+        // 一段 forms include the empty-suffix 未然形 and 連用形 that every
+        // later auxiliary attaches to, less the four AUX_FORM_BLOCK rows.
         assert_eq!(
-            chains, 50_419,
-            "the walk reached {chains} chains, not 50,419 -- the conjugation table's \
+            chains, 60_926,
+            "the walk reached {chains} chains, not 60,926 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 50,419 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 60,926 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
              maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
              constant, rather than loosening the assertion"

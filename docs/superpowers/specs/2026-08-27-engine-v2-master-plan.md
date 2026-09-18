@@ -73,10 +73,10 @@ The plan succeeds when all four hold:
 
    | | v1 | v2 before | v2 now |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7550 (1633) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8067 (1745) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9507** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9500** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7554 (1634) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8072 (1746) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9506** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9507** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
    — a 2026-09-16 reading; `LEN_GAIN` and `CONTENT_MATCH` have since taken it
@@ -667,8 +667,8 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7550 (1633) | 0.8206 (1775) | 0.9507 | 0.6075 (113 / 186) | 142 spans in 70 merges |
-| hints on | **0.8067 (1745)** | **0.8932 (1932)** | **0.9500** | **0.8172 (152 / 186)** | 187 spans in 85 merges |
+| hints off | 0.7554 (1634) | 0.8220 (1778) | 0.9506 | 0.6075 (113 / 186) | 144 spans in 71 merges |
+| hints on | **0.8072 (1746)** | **0.8946 (1935)** | **0.9507** | **0.8172 (152 / 186)** | 189 spans in 86 merges |
 
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
 `transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 52 / 112,
@@ -678,9 +678,49 @@ of the same binary gave 1.00x and 1.05x hints on against the previous block's
 1.05x, and 0.98x off against 0.97x, which is this section's own ±0.1x read
 noise. Interleaved A/B on the millisecond figures agrees: three rounds each
 way read 536 / 560 / 531 ms before against 524 / 529 / 531 after hints on, and
-579 / 609 / 587 against 589 / 596 / 596 off; the spreads overlap.
+579 / 609 / 587 against 589 / 596 / 596 off; the spreads overlap. The `てる`
+rows below read the same way: 1.02x in both states, and interleaved 596 / 572 /
+551 ms before against 604 / 562 / 579 after.
 
-**Entry top-1's two cells were set last, on 2026-09-18, by one clause in
+**Last moved 2026-09-18 by `table.rs`'s `てる`/`でる` rows**, the ている /
+でいる contraction: `思ってる` read `思` | `っ` | `てる` with `てる` glossed
+照る "to shine", in 122 region surfaces and 300 corpus sentences, and now
+reads as one segment labelled `思う` Progressive. The rows are the same shape
+as the ちゃう family's — a contraction IPADIC tokenizes on its own. JMdict
+does carry `てる`/`でる` as headwords, but reaching that entry needs a separate
+span and the only span that could precede one is the one `is_allowed` refuses,
+so the row is what puts the contraction inside a span rather than beside it.
+They sit **below** the `て`/`で` rows because 一段's
+empty-suffix 未然形 and 連用形 make `てる`'s own surfaces include a bare `て`;
+inserted first they relabelled every plain te-form "Progressive", which
+`parse_sentences.txt`'s snapshot caught.
+
+**The rows also needed `AUX_FORM_BLOCK`, and that is where the real risk
+was.** 一段 gives both 命令ｙｏ and 未然ウ接続 the suffix よ, so `てる` and
+`でる` carried the surfaces `てよ`/`でよ` — which is the sentence-final
+particle. Ungated, 22 occurrences over 8,334 lines absorbed it (`待ってよ`,
+`返してよ`, `呼んでよ`), and five were far worse: `なく` is 五段・カ行イ音便,
+so `な`+`い` is a 連用タ接続 site and `忘れないでよね` parsed as `忘れ` +
+`ないでよ` + `ね`, the negation destroyed and the span glossed `なく` "to
+cry". The contraction's imperative is `待ってろ`, never `待ってよ`, so the two
+よ-forms are blocked; the cost is the corpus's single `てよう`.
+
+Cells: `strict` 1745 → 1746 hints on and 1633 → 1634 off, `tolerant` 1932 →
+1935 and 1775 → 1778, `compounds` and every class line identical in both
+states. The test-walk's reachable-chain count goes 50,419 → 60,926 and
+`bench` says the runtime cost is nothing, as it did for ちゃう.
+
+**What it still costs, measured before and after over the same 8,334
+lines**: 1,225 sentences change and 1,358 new spans appear, of which **34
+absorb a sentence-final ね or な** — `してね` reads `する` Progressive Negative
+where the text is a request, because 特殊・ナイ's 体言接続特殊２ *is* `ね` and
+`してねえ` really is that contraction — and **3 eat a kanji adverb**
+(`決してない` as `決す` Progressive Negative, hints-on only). 37 against
+~1,320 correct contractions. The fix for the first is a chain-level block
+(`ない` may not attach to `てる` at 体言接続特殊２), which the current
+`(lemma, form)` shape cannot express; it is named, not built.
+
+**Entry top-1's two cells were set by one clause in
 `assemble::order`**: the `PRONOUNCE` demotion no longer applies to an entry
 JMdict tags `uk`. A kana spelling of a kanji word is a fallback and deserves
 the demotion; a `uk` entry — 9,580 of JMdict's 218,449 — is one whose kana
@@ -688,8 +728,9 @@ the demotion; a `uk` entry — 9,580 of JMdict's 218,449 — is one whose kana
 where it was found: `いる` is `uk`, and its `いた` lost to `い`, "the Boar
 (twelfth sign of the Chinese zodiac)". **0.9400 → 0.9500 hints on and 0.9358 →
 0.9507 hints off, +13 and +19 hits on unchanged denominators, and every other
-cell in this table is identical to the digit** — `order` runs after the DP, so
-no boundary can move. The snapshot moved in nine places and every one is a
+cell in this table was identical to the digit at the time** — `order` runs
+after the DP, so no boundary can move; the `てる` rows above have since moved
+`tolerant` and one hints-off span. The snapshot moved in nine places and every one is a
 gloss list reordering, `時間がない` now leading with 無い "nonexistent" rather
 than the negative auxiliary.
 
