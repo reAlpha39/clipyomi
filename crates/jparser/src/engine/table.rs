@@ -362,6 +362,29 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("ている", "一段", "連用タ接続"),
     ("ている", "一段", "連用形"),
     ("でいる", "一段", "連用タ接続"),
+    // 歩いて | いく, 落ちて | いった, 沈みこんで | いく -- the directional
+    // auxiliary, split off in **both** hint states where `ている` is now kept
+    // whole. Measured over three visual-novel corpora, 75,767 sentences:
+    // 1,189 lines carry one (renai 80, kf2 491, riruka 618), a rate of 9.6 to
+    // 17.3 per ten thousand in every one of them.
+    //
+    // 五段・カ行促音便, which is 行く's own class and gives the whole
+    // paradigm from one row each: ていく, ていっ(た/て), ていか(ない),
+    // ていき(ます), ていけ(ば), ていこ(う). `でいく` mirrors `でいる` and takes
+    // 連用タ接続 only, for the same reason -- it follows an onbin stem
+    // (遊ん, 沈みこん) and nothing else.
+    //
+    // **No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows follow these**, and the
+    // reason is the class rather than a measurement. Both of those exist
+    // because 一段's 未然形 and 連用形 have *empty* suffixes, so `てる` carries
+    // a bare `て` on which a one-kana auxiliary can stack and collide with a
+    // sentence-final particle -- `してね`, `待ってな`, `待ってよ`. 五段・カ行促
+    // 音便 has no empty form: its 未然形 is `ていか` and its 未然ウ接続 `ていこ`,
+    // so the surfaces an auxiliary could stack on are `ていかね` and `ていかな`,
+    // which are `持っていかねば` and `持っていかなきゃ` -- ordinary Japanese and
+    // nothing a particle collides with.
+    ("ていく", "五段・カ行促音便", "連用タ接続"),
+    ("でいく", "五段・カ行促音便", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
     ("じゃ", "特殊・ジャ", "基本形"),
     ("や", "特殊・ヤ", "基本形"),
@@ -1028,11 +1051,15 @@ mod tests {
         // day for the uncontracted ている/でいる. Six rows between them, whose
         // own 一段 forms include the empty-suffix 未然形 and 連用形 that every
         // later auxiliary attaches to, less the eight AUX_FORM_BLOCK rows.
+        // 72,049 -> 73,731 when ている/でいる's two よ-forms were unblocked, and
+        // 73,731 -> 82,573 when ていく/でいく joined: two rows of 五段・カ行促音便,
+        // whose eight forms include the 連用タ接続 stem `ていっ` that every later
+        // auxiliary attaches to in turn.
         assert_eq!(
-            chains, 73_731,
-            "the walk reached {chains} chains, not 73,731 -- the conjugation table's \
+            chains, 82_573,
+            "the walk reached {chains} chains, not 82,573 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 73,731 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 82,573 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
              maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
              constant, rather than loosening the assertion"

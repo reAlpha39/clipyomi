@@ -73,10 +73,10 @@ The plan succeeds when all four hold:
 
    | | v1 | v2 before | v2 now |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7443 (1610) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7924 (1714) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9513** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9534** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7416 (1604) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7887 (1706) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9510** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9531** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
    — a 2026-09-16 reading; five later changes have moved it and the table
@@ -667,8 +667,8 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7443 (1610) | 0.8280 (1791) | 0.9513 | 0.6344 (118 / 186) | 181 spans in 88 merges |
-| hints on | **0.7924 (1714)** | **0.9006 (1948)** | **0.9534** | **0.8172 (152 / 186)** | 234 spans in 108 merges |
+| hints off | 0.7416 (1604) | 0.8271 (1789) | 0.9510 | 0.6344 (118 / 186) | 185 spans in 90 merges |
+| hints on | **0.7887 (1706)** | **0.9006 (1948)** | **0.9531** | **0.8172 (152 / 186)** | 242 spans in 112 merges |
 
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
 `transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 56 / 112,
@@ -682,7 +682,49 @@ way read 536 / 560 / 531 ms before against 524 / 529 / 531 after hints on, and
 rows below read the same way: 1.02x in both states, and interleaved 596 / 572 /
 551 ms before against 604 / 562 / 579 after.
 
-**Last moved 2026-09-18 by `table.rs`'s `ている`/`でいる` rows**, the
+**Last moved 2026-09-18 by `table.rs`'s `ていく`/`でいく` rows**, the
+directional auxiliary — the one member of the 〜て family that was still a
+separate segment in *both* hint states after the `ている` work. `歩いて` | `いく`
+and `引きずって` | `いった` now read as one segment, `歩く` Directional and
+`引きずる` Directional Past. Found by running the disagreement probe over two
+corpora it had never seen: 1,189 lines of 75,767 carry one, a rate of 9.6 to
+17.3 per ten thousand in each of the three separately, so it is a rate rather
+than one writer's habit.
+
+Hints on: `strict` 1714 → **1706**, `tolerant` **1948** unmoved, `entry top-1`
+0.9534 → 0.9531, `compounds` 152 with all three class lines identical,
+coarsening 234 spans in 108 merges → 242 in 112. Hints off: `strict` 1610 →
+1604, `tolerant` 1791 → 1789, `entry top-1` 0.9513 → 0.9510, `compounds` 118
+with all three class lines identical, coarsening 181 in 88 → 185 in 90.
+
+**The strict fall is decomposed, not assumed.** Hints on, 8 gold spans are
+lost and 0 gained, and **all 8 have both endpoints on gold boundaries** — they
+are the four intended merges and nothing else: `引きずって`+`いった`,
+`沈みこんで`+`いく`, `押しこんで`+`いく`, `歪んで`+`いく`. Zero damage. Hints off,
+6 are lost and 0 gained: 4 are the same coarsening and **2 are real damage** —
+`沈みこんでいく` and `押しこんでいく` read `沈み` | `こんでいく` where gold cuts
+`沈みこんで` | `いく`. In both the left cut is **pre-existing**: with no
+tokenizer the engine already read `沈み` | `こんで` | `いく`, because neither
+`沈みこむ` nor `押しこむ` is reached in that state, so the rows glued `こんで` to
+`いく` across a boundary that was already lost. Reproduced on the full JMdict
+index, so it is not a subset artefact.
+
+**No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows accompany these**, and that is a
+statement about the class rather than a measurement. Both tables exist because
+一段's 未然形 and 連用形 have *empty* suffixes, so `てる` carries a bare `て` on
+which a one-kana auxiliary stacks and collides with a sentence-final particle.
+五段・カ行促音便 has no empty form: its 未然形 is `ていか`, so the surfaces an
+auxiliary could reach are `ていかね` and `ていかな`, which are `持っていかねば`
+and `持っていかなきゃ`. The chain count is 73,731 → **82,573**.
+
+Latency unmoved, interleaved A/B over three rounds each way: hints on, 10,040
+characters read 567 / 543 / 544 ms before against 542 / 545 / 537 after, and
+hints off 618 / 618 / 619 against 620 / 599 / 606. The scaling cell reads
+0.99–1.02x before against 1.05–1.06x after in the hints-on state, and that
+rise is the 1,005-character *denominator* getting faster (57 / 54 / 53 ms
+against 51 / 51 / 51), not the paste getting slower.
+
+**Moved 2026-09-18 by `table.rs`'s `ている`/`でいる` rows**, the
 uncontracted form of the same auxiliary, and it is the largest granularity
 change this engine has made. `待っていた` read `待って` | `い` | `た` with `い`
 glossed "the Boar (twelfth sign of the Chinese zodiac)" — 218 corpus regions,
