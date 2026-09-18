@@ -153,6 +153,61 @@ base-*matched* span, and a base match is not always a base word: `中` | `出` |
 which is not a word. Every such repair is counted against the change. The true
 figure is somewhere between 2.60 and 3.45 and nothing here pins it closer.
 
+### 7.1 The kana third of the gains, adjudicated
+
+69% of the gained spans contain kanji or katakana and are plainly lexical
+(`中出し`, `亀頭`, `子宮口`, `性感`, `愛液`, `魔族`, `種付け`, `先走り汁`,
+`お尻`, `あの子`, `おまえさん`). Only 2.7% of those — 831 of 30,568 — take the
+`十` \| `時に` shape of a kanji stem plus a single kana particle, led by `所で`
+94, `時に` 61, `次に` 22.
+
+The kana third was adjudicated separately, against the `からな` class as the
+thing to test for: 90 surfaces by `lookup` flags and real corpus sentences,
+plus a 901-sentence resample to reach the half the top-90 does not cover.
+Weighted over all 9,735 kana-only occurrences:
+
+| class | share | example |
+| --- | --- | --- |
+| **false-match, the `からな` shape** | **~34%** | `いんだ` claimed as `いぬ` 往ぬ — **0 occurrences of 往ぬ/去ぬ in 85,326 corpus lines**, verified here |
+| boundary overrun | ~5% | `させ` \| `ながら` → `させな` \| `がら` |
+| **entry-less vocalization** | ~7% | `うう` 423 claimed as `植う` "to plant"; `ずず` 96 as 数珠; `くす` 64 as 楠 |
+| real or coarsening | ~54% | `おちんちん` 465, `おまえさん` 198, `このまま` 143, `ありません` 46 |
+
+Zero contamination rows: every single-corpus surface checked is a register or
+SFX habit, not a character name.
+
+**Two findings from that pass are worth more than the percentages.**
+
+**The lemma-absence grep under-detects the class by about a third.** It
+convicts `いんだ` (往ぬ: 0 hits), `りする` (利する: 5, kanji only) and `のせ`
+(のせる in kana: 0) outright, but 祈る, 異なる, 絡む, 歩く, 泣く, 行く, 逸れる
+and 唸る all *do* occur, so it acquits `いの`, `ことな`, `からも`, `あるか`,
+`なこ`, `いって`, `それな` and `うなら` falsely. Those eight had to be convicted
+by parsing the sentence. The test that convicted the `からな` family is
+necessary and not sufficient.
+
+**The bad kana gains are the left half of a residue-1 severing, not a separate
+class.** Verified directly on the two pinned binaries:
+
+| | `HEAD` | ungated |
+| --- | --- | --- |
+| それならいい | `それなら` \| `いい` | `それな` \| `らいい` |
+| 感じやすいんだ | `感じ` \| `やすい` \| `んだ` | `感じやす` \| `いんだ` |
+| 殺すんじゃないの | `殺す` \| `ん` \| `じゃない` \| `の` | `殺す` \| `ん` \| `じゃな` \| `いの` |
+
+Every one takes one kana too many and books the stub as a match. 28 of the 60
+most-severed words — 2,593 of 9,119 severed occurrences in that sample — have a
+top-90 kana gain as their own residue, so **the gain and the severing are the
+same cut counted twice, once on each side of the ledger.** `entangled` above
+catches most of this and is why 2.60 is the conservative figure, but not all of
+it: a residue that happens to span a base boundary lands in the clean bucket.
+
+Striking the false-match and boundary-overrun share takes the optimistic ratio
+from 3.45:1 to **3.03:1** and the conservative one from 2.60:1 to about
+**2.3:1**. The sign does not change. What changes is the reading of the fix:
+because the bogus gains *are* the severings, a residue term removes both at
+once rather than trading one for the other.
+
 **The gold corpus agrees, and the handoff's claim that it does not is wrong.**
 Decomposed on today's `HEAD`, the ungated variant loses 125 gold spans and
 gains 53; of the losses, **96 are coarsening** (swallowed by a merge with both
@@ -265,19 +320,26 @@ with the previous engine, and its damage bucket held seven genuine invented
 compounds out of 27,475 spans.** Re-measured against the dictionary, the same
 twelve slices read 2.60:1 in favour on the most conservative count and 3.45:1
 on the headline — and the gold corpus, decomposed, says 3.3:1, the ratio the
-last handoff reported as not surviving.
+last handoff reported as not surviving. Adjudicating the kana third takes those
+to **2.3:1 and 3.03:1**. Every reading of the evidence is between two and
+three and a half to one in favour; none is 1:1.
 
 Bare ungating is therefore net-positive on the register this engine primarily
 targets, and most positive on its long-narration half. What it costs is
 13,826 severed words across 16,000 sentences — roughly **0.86 broken words per
-sentence against 2.25 recovered** — plus 72 strict on a gold corpus with zero
-VN dialogue in it, two fixture rows that state a property the change removes,
-and one snapshot regression.
+sentence** — plus 72 strict on a gold corpus with zero VN dialogue in it, two
+fixture rows that state a property the change removes, and one snapshot
+regression. `それならいい` reading `それな` \| `らいい` is what that looks like
+on screen.
 
 **The largest reachable fix is no longer `LEN_GAIN` itself. It is the residue
-term**, which reaches 99.6% of that damage and keeps 75.5% of the gains, and
-which is now priced for the first time. It is a `lattice` change and it is a
-phase of its own.
+term**, and the adjudication is what makes that conclusion firm rather than
+merely attractive: the damage and the bogus gains are the *same cut*, so a term
+that refuses a merge leaving a `≤2`-character stub of an already-matched word
+removes both sides together. It reaches 99.6% of the severing and keeps 75.5%
+of the gains, it is priced here for the first time, and because `cost()` is per
+candidate and cannot see the tiling, it is a `lattice` change and a phase of
+its own.
 
 ## 12. Also measured, and not previously on record
 
