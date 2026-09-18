@@ -31,10 +31,11 @@ use crate::engine::ConjStep;
 /// spells it (design §3.1). れる/られる are ambiguous between passive,
 /// potential and honorific and the parser cannot tell, so the label says so.
 /// だ here is the voiced た of 読んだ, not the copula. じゃ/や are
-/// `ATTACHES_TO`'s placeholder rows. "Completive" and "Progressive" are the
-/// two words here that the fixture's Wikipedia terminology list does not
-/// carry — see `tests/fixtures/conjugation_labels.txt`'s notes on ちゃう and
-/// てる for where each came from and why neither is qualified.
+/// `ATTACHES_TO`'s placeholder rows. "Completive", "Progressive" and
+/// "Directional" are the three words here that the fixture's Wikipedia
+/// terminology list does not carry — see `tests/fixtures/conjugation_labels.txt`'s
+/// notes on ちゃう, てる and ていく for where each came from and why none is
+/// qualified.
 const AUX_WORD: &[(&str, &str)] = &[
     ("せる", "Causative"),
     ("させる", "Causative"),
@@ -56,6 +57,8 @@ const AUX_WORD: &[(&str, &str)] = &[
     ("でいる", "Progressive"),
     ("てる", "Progressive"),
     ("でる", "Progressive"),
+    ("ていく", "Directional"),
+    ("でいく", "Directional"),
     ("ちゃう", "Completive"),
     ("じゃう", "Completive"),
     ("ちまう", "Completive"),

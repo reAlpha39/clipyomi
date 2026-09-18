@@ -334,6 +334,47 @@
 遊んでい	五段・バ行:連用タ接続 でいる:未然形	Progressive
 遊んでい	五段・バ行:連用タ接続 でいる:連用形	Progressive
 #
+# ていく/でいく are the directional auxiliary, added 2026-09-18 so that
+# 引きずっていった stops reading 引きずって | いった and 歩いていく stops
+# reading 歩いて | いく. Measured over three visual-novel corpora, 75,767
+# sentences, 1,189 lines carry one -- 9.6 to 17.3 per ten thousand in each of
+# the three, so it is a rate rather than one writer's habit.
+#
+# 五段・カ行促音便 is 行く's own class and gives the whole paradigm from one
+# row per voicing: ていく, ていっ(た), ていか(ない), ていき(ます), ていけ(ば),
+# ていこ(う). でいく mirrors でいる and follows an onbin stem only.
+#
+# "Directional" is the THIRD word in this file the header's Wikipedia
+# terminology list does not carry. That article has no one-word gloss for
+# 〜ていく, and JMdict has no ていく headword either, so neither of the two
+# precedents above applies: Completive took the standard aspect term and
+# Progressive took the aspect term with JMdict's own gloss agreeing. This one
+# takes the learner-standard name instead -- 〜ていく and 〜てくる are taught as
+# the directional pair, motion away from and toward the speaker. It is
+# unqualified for the Completive reason: the two readings, spatial (歩いていく)
+# and temporal (増えていく), are not balanced enough to warrant a slash the way
+# Passive/Potential is. It cannot be confused with a form name here, which
+# "Continuative" would be -- Wikipedia uses that only as an alias for 連用形.
+#
+# 未然形 and 連用形 are listed for the same reason 買っちゃわ is: the walk
+# reaches them and every reachable tuple needs a row.
+待っていけ	五段・タ行:連用タ接続 ていく:仮定形	Directional Conditional
+待っていけ	五段・タ行:連用タ接続 ていく:命令ｅ	Directional Imperative
+待っていきゃ	五段・タ行:連用タ接続 ていく:仮定縮約１	Directional Conditional
+待っていく	五段・タ行:連用タ接続 ていく:基本形	Directional
+待っていこ	五段・タ行:連用タ接続 ていく:未然ウ接続	Directional
+待っていか	五段・タ行:連用タ接続 ていく:未然形	Directional
+待っていっ	五段・タ行:連用タ接続 ていく:連用タ接続	Directional
+待っていき	五段・タ行:連用タ接続 ていく:連用形	Directional
+遊んでいけ	五段・バ行:連用タ接続 でいく:仮定形	Directional Conditional
+遊んでいけ	五段・バ行:連用タ接続 でいく:命令ｅ	Directional Imperative
+遊んでいきゃ	五段・バ行:連用タ接続 でいく:仮定縮約１	Directional Conditional
+遊んでいく	五段・バ行:連用タ接続 でいく:基本形	Directional
+遊んでいこ	五段・バ行:連用タ接続 でいく:未然ウ接続	Directional
+遊んでいか	五段・バ行:連用タ接続 でいく:未然形	Directional
+遊んでいっ	五段・バ行:連用タ接続 でいく:連用タ接続	Directional
+遊んでいき	五段・バ行:連用タ接続 でいく:連用形	Directional
+#
 # てる/でる are the ている/でいる contraction, the colloquial progressive:
 # 思ってる, 遊んでる, 食べてる. table.rs gives them their own ATTACHES_TO
 # rows for the same reason ちゃう has them -- IPADIC tokenizes the
