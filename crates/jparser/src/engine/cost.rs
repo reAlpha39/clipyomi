@@ -580,14 +580,32 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
             .filter(|&p| bounds.is_boundary(p))
             .count() as i32;
         total += crossings * CROSS;
-        // A crossing strictly inside the characters the deinflection chain
-        // consumed is the tokenizer cutting an *inflection*, not proposing a
-        // word boundary, so it is not evidence of a spurious merge and pays
+        // A crossing inside the characters the deinflection chain consumed is
+        // the tokenizer cutting an *inflection*, not proposing a word
+        // boundary, so it is not evidence of a spurious merge and pays
         // nothing. Everything else pays in full. The range is the chain's as a
         // whole, not each step's: `なった` decomposes into two steps, [1,2) for
         // the っ and [2,3) for the た, and IPADIC's cut lands exactly on the
         // junction between them -- inside the inflection, but inside neither
         // step. See `PRONOUNCE_CROSS`'s comment for the measurement.
+        //
+        //
+        // **Widening it to the chain's start was measured and refused
+        // (2026-09-18).** `a <= p` exempts the stem/suffix junction, which is
+        // the cut this exemption most obviously describes, and it does fix
+        // `待っていた` — IPADIC cuts `待っ|て|い|た`, `いた` is `いる` Past and
+        // PRONOUNCE-only because 居る carries kanji, so the boundary at the
+        // `い`/`た` junction cost 25 and the engine preferred `い` + `た`,
+        // glossing `い` as "the Boar". 218 corpus sentences.
+        //
+        // It is refused because the junction cannot distinguish that from the
+        // spurious class: `はこう` is `履く` Volitional with the stem `は` and
+        // the chain on `こう`, structurally identical, and the cut at `は`/`こう`
+        // is the chain's start too. `くるまではこう` is criterion 3's own named
+        // sentence. Measured hints on: `false-match` 30 → 26 and `transparent`
+        // 40 → 37, breaking `はこう`, `はいた`, `いたから`, `とが` and `のか` ×3,
+        // with entry top-1 0.9400 → 0.9314. The engine has no term here that
+        // separates a stem from a particle; see the handoff for the `uk` route.
         if cand.flags.contains(WordFlags::PRONOUNCE) {
             let chain = cand
                 .steps
