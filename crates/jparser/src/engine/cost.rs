@@ -77,6 +77,40 @@ use crate::engine::Boundaries;
 /// compound, so it is not here.
 const MATCH: i32 = 2;
 
+/// Extra `MATCH`, charged only to a span that is **not** a particle.
+///
+/// **What it separates, and why `MATCH` cannot.** `LEN_GAIN`'s square makes
+/// the merge-versus-tiling comparison length-*sensitive*, but only where the
+/// tiling is balanced. Peel a single character off either end and the squares
+/// cancel exactly: for a non-COMMON headword of any length `n` split into a
+/// COMMON piece of `n-1` and a COMMON piece of `1`, the tiling beats the
+/// merge by `3 - MATCH` — the same one point at `n = 2` and at `n = 5`. That
+/// is the whole of the corpus probe's top class, and the gold corpus's too:
+/// `呼び|方`, `発売|所`, `副|大統領`, `部屋|着`, `脳|内`, `危険|日`,
+/// `キャンプ|場`, `月|平均`, `総|売り上げ`, `一歩|先`.
+///
+/// `MATCH = 3` closes that gap and was measured (hints on): `lexical`
+/// 72 → 83. It also merges `彼の`, `名の`, `煙が`, `今も` and `側から` —
+/// `transparent` 40 → 35 and `false-match` 30 → 28 — because a blanket
+/// per-span constant cannot see that the character being peeled off `彼の` is
+/// a **particle** and the one being peeled off `呼び方` is not. That is the
+/// same length-invariance argument `LEN_GAIN`'s comment makes, one level
+/// down: `MATCH` prices spans, not what is in them.
+///
+/// So the surcharge is withheld from particles. A particle standing as its own
+/// span is not a failure to find a longer word — it is the analysis success
+/// criterion 3 and `spurious_merges.txt` exist to protect — so it pays
+/// `MATCH` and nothing more, while two content words that a single dictionary
+/// entry spans pay twice. Every one of the five regressions above has a
+/// particle as its peeled character and stays split; every compound in the
+/// class above has a content character and merges.
+///
+/// 1, because the gap it closes is exactly one point and the term's whole
+/// argument is that it should reach that class and no further. The tie it
+/// creates is resolved by `lattice`'s longer-run tie-break toward the merge,
+/// the same way `COMMON`'s and `FUNCTION_STACK`'s ties already are.
+const CONTENT_MATCH: i32 = 1;
+
 /// Discount for a matched span's length, charged as `LEN_GAIN * (len - 1)²`.
 ///
 /// **The one term here that is not linear, and the reason it exists.** Every
@@ -462,6 +496,9 @@ pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
 /// per-match terms apply.
 pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     let mut total = COVER * cand.len as i32 + MATCH;
+    if !cand.flags.contains(WordFlags::PARTICLE) {
+        total += CONTENT_MATCH;
+    }
     // See `LEN_GAIN` for why this is the one superlinear term, why it is gated
     // on `bounds` the way `CROSS` and `PRONOUNCE_CROSS` below are, and why a
     // grammatical stack is excluded. `steps.is_empty()` mirrors
@@ -638,6 +675,11 @@ mod tests {
     /// per-character coverage must stay neutral, so the two terms together
     /// prefer the longer match without ever rewarding a merge that covers
     /// more ground than its parts.
+    ///
+    /// The per-span constant is `MATCH + CONTENT_MATCH` for a content word
+    /// and `MATCH` alone for a particle; both are flat in length, which is
+    /// the property this test is about, so it pins each separately rather
+    /// than either alone.
     #[test]
     fn the_match_cost_is_flat_and_the_longer_span_wins_on_it() {
         let one = cost(&cand(0, 4, WordFlags::PRIMARY, true), None);
@@ -645,10 +687,21 @@ mod tests {
             + cost(&cand(2, 2, WordFlags::PRIMARY, true), None);
         assert_eq!(
             two - one,
-            MATCH,
-            "two matches pay it twice, one pays it once"
+            MATCH + CONTENT_MATCH,
+            "two content matches pay it twice, one pays it once"
         );
         assert!(one < two, "so the whole span is preferred to the split");
+
+        let one = cost(&cand(0, 4, WordFlags::PARTICLE, true), None);
+        let two = cost(&cand(0, 2, WordFlags::PARTICLE, true), None)
+            + cost(&cand(2, 2, WordFlags::PARTICLE, true), None);
+        assert_eq!(
+            two - one,
+            MATCH,
+            "a particle pays `MATCH` and no surcharge, which is what lets \
+             `彼` + `の` go on beating `彼の` while `呼び` + `方` no longer \
+             beats `呼び方`"
+        );
     }
 
     #[test]
@@ -660,15 +713,25 @@ mod tests {
         // taken out** -- which is the property §4.3 actually needed. `COVER`
         // still contributes nothing to the preference between a span and its
         // parts; only `MATCH` does, and only by its own size.
+        //
+        // `CONTENT_MATCH` joined `MATCH` as a per-span term in 2026-09-18 and
+        // this test is restated rather than deleted: it is the same property,
+        // over the same two terms, and taking *both* out is what leaves the
+        // per-character equality §4.3 needed.
+        let per_span = MATCH + CONTENT_MATCH;
         let whole = cost(&cand(4, 3, WordFlags::PRIMARY, true), None);
         let split = cost(&cand(4, 1, WordFlags::PRIMARY, true), None)
             + cost(&cand(5, 2, WordFlags::PRIMARY, true), None);
         assert_eq!(
-            whole - MATCH,
-            split - 2 * MATCH,
+            whole - per_span,
+            split - 2 * per_span,
             "per-character cost is flat"
         );
-        assert_eq!(split - whole, MATCH, "and the only difference is one match");
+        assert_eq!(
+            split - whole,
+            per_span,
+            "and the only difference is one match"
+        );
     }
 
     #[test]

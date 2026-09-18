@@ -231,19 +231,23 @@ start=0 len=3 日本語 matched reading=にほんご
     日本語 (-) [にほんご] Japanese (language)
 start=3 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
-start=4 len=1 話 matched reading=はなし
-    話 (-) [はなし] talk
-    話 (-) [わ] counter for stories, episodes of TV series, etc.
-start=5 len=2 せま matched reading=-
-    せまい (-) [-] narrow
-    せまる (-) [-] to approach
-start=7 len=2 すか matched reading=-
-    すく (-) [-] to become less crowded
-    すか (-) [-] disappointment
-    すく (-) [-] to comb (out)
-    すく (-) [-] to like
-    すく (-) [-] to be transparent
-    ... 4 more
+start=4 len=2 話せ matched reading=はなせ
+    話す (Conditional) [はなせ] to talk
+    話せる (-) [はなせ] to be able to speak
+start=6 len=2 ます matched reading=-
+    ます (-) [-] measuring container
+    ます (-) [-] to increase
+    ます (-) [-] expresses politeness towards the listener (or reader)
+    ます (-) [-] to be
+    ます (-) [-] trout
+    ... 3 more
+start=8 len=1 か matched reading=-
+    か (-) [-] indicates a question
+    か (-) [-] acceptable
+    か (-) [-] department (of a university or hospital)
+    か (-) [-] lesson
+    か (-) [-] addition
+    ... 26 more
 start=9 len=1 。 unmatched
 
 === 早く帰りたかった。
