@@ -266,9 +266,18 @@ per candidate and cannot see the tiling, so this is a `lattice` change.
 
 Run on a worktree at `HEAD` with the one-line predicate change:
 
+Run to completion with `--no-fail-fast` on a worktree at `HEAD` with the
+one-line predicate change, against `HEAD`'s 658 passed / 0 failed / 1 ignored.
+**The variant reads 653 passed / 5 failed / 1 ignored, and all five are below.**
+
 | gate | result |
 | --- | --- |
 | 26-row spurious-merge gate | **26 / 26**, unmoved |
+| `conjugation_labels` | 3 passed |
+| `cargo fmt --all -- --check` | clean |
+| `cargo clippy --workspace --all-targets` | 0 findings |
+| `bench`, interleaved A/B, three rounds each way | **unmoved**; hints off 598 / 608 / 597 ms before against 588 / 580 / 589 after, hints on 519 / 534 / 539 against 536 / 519 / 537, scaling 0.98–1.03x |
+| `npx tsc --noEmit`, `npx vitest run` | clean, 375/375 — unaffected, the change is one Rust predicate |
 | `engine_v2`, all other tests | 45 passed |
 | `cost.rs` unit tests | **2 fail** — both assert hints-off cost length-invariance, the property the change deliberately removes |
 | `a_conjugated_katakana_verb_loses_to_its_shorter_parts` | **fails because the variant fixes it**: `ミス` \| `った` → `ミスった` |
@@ -296,7 +305,9 @@ Gold cells for the variant, hints off, against `HEAD`'s 1593 / 1786 / 118:
 
 Hints on is identical to the digit in both variants, by construction. **No
 split class regresses**: `false-match` improves 23 → 25 and `transparent` is
-unmoved.
+unmoved. Both halves of the compound metric move the right way at once —
+**kept whole 52 → 90 of 106, split apart 66 → 68 of 80** — so it is not a
+merge-versus-split trade on that metric at all.
 
 `entry top-1` hints-off reads 0.9506 → 0.9578, and that rise is a **selection
 effect, not an improvement**: the denominator falls 1235 → 1162, and of the 73
@@ -345,6 +356,39 @@ alternative is to leave `LEN_GAIN` gated and spend the next phase on the
 signal — the tokenizer's POS, or the hand adjudication `gold_local.jsonl` was
 reserved for. **Nothing in this branch changes the engine**; every cell above
 is `HEAD`'s, re-measured.
+
+## 10a. Held out: three corpora the change was never measured against
+
+`random-2000` from three corpora outside the measured set and outside the
+SEALED pair, which stays shut. Every prediction replicates:
+
+| corpus | avg chars | clean : severed | optimistic | `fragment` | residue ≤ 2 |
+| --- | --- | --- | --- | --- | --- |
+| amakanoPE | 24.3 | 1.60 | 2.32 | **0** | 99.5% |
+| enkou | 28.1 | 1.82 | 2.61 | **0** | 99.3% |
+| **hitoduma2** | **45.1** | **4.54** | **5.44** | **0** | 99.4% |
+| pooled | — | **2.79** | 3.60 | **0** | — |
+
+Three things this settles that the measured set could not.
+
+**The length finding is out-of-sample.** `hitoduma2` at 45.1 characters reads
+4.54, the highest figure measured anywhere, exactly as `ikenaiDX` at 50.4 read
+highest of the original four. Two independent long-sentence corpora by
+different writers, same direction, and neither was used to form the claim. The
+short corpora land where the short corpora landed: 1.60 and 1.82 against
+renai's 1.65 at 28.2 characters.
+
+**`fragment` stays at zero.** Not one merge across a boundary that matches
+nothing, in 6,000 further sentences. The proxy that refused this change counted
+27,475 "invented" spans; on unseen text the genuine count is still 0.
+
+**The residue shape is not an artefact of the corpora it was found in.** 84–93%
+of severings lose exactly one character and 99.3–99.5% lose two or fewer, in
+three corpora that had no part in discovering it.
+
+The SEALED pair (`Start_`, `トリプルペアリング_Crack_`) was **not** opened. It
+is the one clean post-ship confirmation this project can get and a pre-ship
+test would have spent it.
 
 ## 11a. The residue term: built, measured, refused — and the reason is sharp
 
