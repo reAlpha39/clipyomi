@@ -366,7 +366,12 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     // auxiliary, split off in **both** hint states where `ている` is now kept
     // whole. Measured over three visual-novel corpora, 75,767 sentences:
     // 1,189 lines carry one (renai 80, kf2 491, riruka 618), a rate of 9.6 to
-    // 17.3 per ten thousand in every one of them.
+    // 17.3 per *thousand* in every one of them.
+    //
+    // It is not the only 〜て auxiliary still split, only the most frequent
+    // one measured: 〜てくる, 〜ておく and 〜てみる all still read as two
+    // segments (`歩いて` | `くる`, `買って` | `おく`, `歩いて` | `みる`), and
+    // `持ってくる` merges only because JMdict carries it as a headword.
     //
     // 五段・カ行促音便, which is 行く's own class and gives the whole
     // paradigm: ていく, ていっ(た/て), ていか(ない), ていき(ます), ていけ(ば),
@@ -381,15 +386,31 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     // 歩いていった and 引きずっていく and left every 一段 verb behind --
     // 食べていく, 落ちていった, 溶けていく, 見ていく all still split.
     //
-    // **No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows follow these**, and the
-    // reason is the class rather than a measurement. Both of those exist
-    // because 一段's 未然形 and 連用形 have *empty* suffixes, so `てる` carries
-    // a bare `て` on which a one-kana auxiliary can stack and collide with a
-    // sentence-final particle -- `してね`, `待ってな`, `待ってよ`. 五段・カ行促
-    // 音便 has no empty form: its 未然形 is `ていか` and its 未然ウ接続 `ていこ`,
-    // so the surfaces an auxiliary could stack on are `ていかね` and `ていかな`,
-    // which are `持っていかねば` and `持っていかなきゃ` -- ordinary Japanese and
-    // nothing a particle collides with.
+    // **No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows follow these.** The two
+    // tables answer different questions and each was asked separately.
+    //
+    // `CHAIN_BLOCK` exists because 一段's 未然形 and 連用形 have *empty*
+    // suffixes, so `てる` carries a bare `て` on which a one-kana auxiliary
+    // stacks and lands on a sentence-final particle -- `してね`, `待ってな`.
+    // 五段・カ行促音便 has no empty form, so every attachment site `ていく`
+    // offers already carries two kana of its own: 未然形 `ていか` (ない, ぬ),
+    // 連用形 `ていき` (ます, たい, た), 連用タ接続 `ていっ` (た, て, ちゃう,
+    // てる, ている) and 基本形 `ていく` (です). What an auxiliary reaches
+    // through them is `ていかね`, `ていかな`, `ていきたい`, `ていった` --
+    // ordinary Japanese, none of it a particle's surface. The `〜ていきな`
+    // soft imperative is safe for a reason worth naming: `ない` at ガル接続
+    // demands 未然形, which is `ていか`, not 連用形's `ていき`.
+    //
+    // `AUX_FORM_BLOCK`'s reason is **not** emptiness -- 一段 gives 命令ｙｏ and
+    // 未然ウ接続 the *non-empty* suffix `よ`, so `てる` carries the surface
+    // `てよ`, and that collides because `待って` is a standalone word and `よ`
+    // is a particle. The transferable test is therefore "does any of this
+    // auxiliary's own surfaces decompose as [standalone word] + [particle]?".
+    // Run against `ていく`'s seven surfaces -- ていか, ていき, ていきゃ, ていく,
+    // ていけ, ていこ, ていっ -- none does: いか, いき, いく, いけ, いこ, いっ
+    // and いきゃ are not particles. Checked on the corpus binary:
+    // `遊んでいきな`, `持っていきな`, `帰っていくね`, `歩いていくよ` and
+    // `遊んでいってね` all keep the particle as its own span.
     ("ていく", "五段・カ行促音便", "連用タ接続"),
     ("ていく", "五段・カ行促音便", "連用形"),
     ("でいく", "五段・カ行促音便", "連用タ接続"),

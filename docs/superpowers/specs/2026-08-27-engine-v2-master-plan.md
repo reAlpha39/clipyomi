@@ -79,8 +79,9 @@ The plan succeeds when all four hold:
    | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9528** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
-   — a 2026-09-16 reading; five later changes have moved it and the table
-   three lines above carries the current figure —
+   — a 2026-09-16 reading; later changes have moved it repeatedly and the
+   table three lines above carries the current figure, which is the only one
+   to quote —
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
    *inside* an inflection. That change on its own pushed entry top-1 back
    under the floor — 30 newly-placed spans are harder and 15 resolved wrong —
@@ -683,13 +684,20 @@ rows below read the same way: 1.02x in both states, and interleaved 596 / 572 /
 551 ms before against 604 / 562 / 579 after.
 
 **Last moved 2026-09-18 by `table.rs`'s `ていく`/`でいく` rows**, the
-directional auxiliary — the one member of the 〜て family that was still a
-separate segment in *both* hint states after the `ている` work. `歩いて` | `いく`
-and `引きずって` | `いった` now read as one segment, `歩く` Directional and
+directional auxiliary — the most frequent member of the 〜て family still
+split in *both* hint states after the `ている` work. `歩いて` | `いく` and
+`引きずって` | `いった` now read as one segment, `歩く` Directional and
 `引きずる` Directional Past. Found by running the disagreement probe over two
 corpora it had never seen: 1,189 lines of 75,767 carry one, a rate of 9.6 to
-17.3 per ten thousand in each of the three separately, so it is a rate rather
+17.3 per **thousand** in each of the three separately, so it is a rate rather
 than one writer's habit.
+
+**It is not the last of them.** 〜てくる, 〜ておく and 〜てみる have no rows
+either and still read as two segments — `歩いて` | `くる`, `買って` | `おく`,
+`歩いて` | `みる` — and `持ってくる` merges only because JMdict carries it as a
+headword. 〜てくる is the same directional concept in the opposite direction
+and wants a label word of its own, not this one; `conjugation_labels.txt`
+records why.
 
 **Shipped in two commits, and the second is the one to read.** The first gave
 `ていく` a single attachment site, 連用タ接続, which reaches 五段 onbin stems and
