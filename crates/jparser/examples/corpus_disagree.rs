@@ -475,7 +475,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // a change that merges more will always look better in the ranking above.
     // The counter-reading is this: how many regions did each engine cut into
     // fewer pieces. Both counts are needed, because the ranking cannot see one
-    // of them.
+    // of them. "Every region" means every *disagreement* region -- a place the
+    // two engines cut identically never becomes one.
     let pieces = |cover: &str| cover.split('|').count();
     let (mut merged, mut split, mut same) = (0usize, 0usize, 0usize);
     let (mut merged_n, mut split_n, mut same_n) = (0usize, 0usize, 0usize);
@@ -497,10 +498,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    println!("merge direction, all regions (the ranking above cannot see the first)");
-    println!("  we merge, v1 splits:   {merged:>6} regions, {merged_n:>6} sentence-occurrences");
-    println!("  we split, v1 merges:   {split:>6} regions, {split_n:>6} sentence-occurrences");
-    println!("  same count, cuts move: {same:>6} regions, {same_n:>6} sentence-occurrences");
+    // The second column is **not** a count of occurrences that cut that way.
+    // `v1_cover`/`v2_cover` are recorded on a region's first occurrence only,
+    // so the direction is judged once per surface and then weighted by how
+    // often the surface appears -- a homograph that merges in some sentences
+    // and splits in others is counted wholly as whichever came first. The
+    // region counts are exact and are what this block exists to give.
+    println!("merge direction, every disagreement region (the ranking above cannot see the first)");
+    println!("  we merge, v1 splits:   {merged:>6} regions, {merged_n:>6} sentences carrying them");
+    println!("  we split, v1 merges:   {split:>6} regions, {split_n:>6} sentences carrying them");
+    println!("  same count, cuts move: {same:>6} regions, {same_n:>6} sentences carrying them");
 
     println!(
         "\n{:>4}  {:<20} {:>4}  {:<12} {:<26} {:<26} one entry covering it",

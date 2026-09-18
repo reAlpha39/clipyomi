@@ -97,6 +97,7 @@ surfaces appear in all three hints-on heads, 232 hints-off.**
 | a covered unit split anyway — kanji compound *and* kana word | ~1,640 | **off only** | defect |
 | clause-final particle string re-lemmatised as an unrelated godan verb | 169 | both | defect |
 | `ていく`/`でいく` a separate segment | 157 | both | defect — **fixed, §7** |
+| 〜てくる / 〜ておく / 〜てみる a separate segment | unmeasured | both | defect — **open, §7** |
 | quotative `と言った` matched as `といった` "such … as" | 56 | both | defect |
 | `ておく` contractions shatter | 22 | both | defect |
 | `X`+particle tiling where v1 merges | ~1,100 / 1,967 / ~5,100 occ | both | **correct** — criterion 3 working |
@@ -165,11 +166,19 @@ open it.
 ## 7. `ていく` / `でいく`
 
 `歩いて` | `いく`, `引きずって` | `いった`, in **both** hint states. Every other
-member of the 〜て family already merged — 〜た, 〜ない, 〜ます, 〜たい, 〜ちゃう,
-and 〜てる / 〜ている as of the two commits before this session — so the split
-was a missing row rather than a policy. 1,189 lines of 75,767 carry one, at
-9.6, 15.5 and 17.3 per ten thousand in the three corpora **separately**, which
-is what makes it a rate rather than one writer's habit.
+auxiliary this engine knows already merged — 〜た, 〜ない, 〜ます, 〜たい,
+〜ちゃう, and 〜てる / 〜ている as of the two commits before this session — so
+the split was a missing row rather than a policy. 1,189 lines of 75,767 carry
+one, at 9.6, 15.5 and 17.3 per **thousand** in the three corpora
+**separately**, which is what makes it a rate rather than one writer's habit.
+
+**It is the most frequent 〜て auxiliary still split, not the only one.**
+〜てくる, 〜ておく and 〜てみる have no rows either and still read as two
+segments — `歩いて` | `くる`, `買って` | `おく`, `歩いて` | `みる` — and
+`持ってくる` merges only because JMdict carries it as a headword. Anyone adding
+〜てくる needs a *second* label word: it is the same directional concept in the
+opposite direction, and `label::fmt`'s "each word appears at most once" rule
+would silently drop one of them from a chain carrying both.
 
 `五段・カ行促音便` is 行く's own class and gives the paradigm from one row per
 voicing: ていく, ていっ(た), ていか(ない), ていき(ます), ていけ(ば), ていこ(う).
@@ -263,9 +272,13 @@ split class regresses in either**, which is the check the old note's headline
 hid, and 99 of the ungated variant's 132 lost gold spans are coarsening
 against 33 of real damage. On the gold corpus, both variants say ship it.
 
-**The corpus is what refuses them.** Span dumps over 18,000 corpus sentences
-in both builds, classifying each new span by whether **both its endpoints were
-boundaries in the previous engine's own parse**:
+**The corpus says it is a wash, and a wash is not worth the risk.** Span dumps
+over 18,000 corpus sentences in both builds, classifying each new span by
+whether **both its endpoints were boundaries in the other build's own parse**.
+Read the proxy for what it is: it measures agreement with the *previous
+engine*, not with truth, so a genuine boundary correction files under "cuts
+across one" too. It says the conservative and the boundary-moving changes are
+equally numerous; it does not by itself say harm equals good.
 
 | variant | sentences changed | new spans merging adjacent base spans | new spans cutting across one |
 | --- | --- | --- | --- |
@@ -282,14 +295,20 @@ compound: `話しかける` → `話しかけ` + `る`, `やってくる` → `�
 Against real gains on the same sample — `あの頃`, `おかげ`, `居座る`, `人魚族`,
 `滑り込ませて`, `言葉を失った`, `小金`, `州長官`, `金貸し`, `しゃぶりついた`,
 `おまえさん`, `ちょいと`, `待ち合わせ`, `後にする`, `目を逸らす`, `三つ指` — the
-two sides are of the same order. That is the refusal.
+two sides are of the same order — which is what reading the changed sentences,
+rather than the counts, actually establishes. That is the refusal, and the
+finding worth carrying past it is that **the gold corpus's 3:1
+coarsening-to-damage ratio does not survive 18,000 real sentences.**
 
-**The narrower variant is worse, not better, and that settles the shape.** It
-reads better than ungating on every gold cell and worse on the corpus, because
-the asymmetry is itself the defect: an inflected span gets no gain while a
-shorter uninflected one does, so `来ていない` shatters into `来` + `ていない`
-(庭内, "grounds"). Two variants, opposite gold readings, one corpus verdict —
-**the term needs the tokenizer, not a narrower predicate.**
+**The narrower variant does not help.** It reads better than ungating on every
+gold cell and worse on the corpus, and the mechanism is specific: an inflected
+span gets no gain while a shorter uninflected one does, so `来ていない` shatters
+into `来` + `ていない` (庭内, "grounds"). **Two predicates tried, both refused;
+no narrower one has been found** — which is not a proof that none exists, and
+the doc comment says so in those words. The shape nothing expresses today is a
+term that sees the **residue** of a cut rather than the length of a span, the
+way `relax::MIN_PIECE` and `KATAKANA_MIN_PIECE` already do. `cost` is per
+candidate and cannot see the tiling, so that is a `lattice` change.
 
 Capped variants were swept and are dominated: `min(l, 3)` reads strict 1550 /
 `lexical` 82, `min(l, 2)` reads 1571 / 71, both below the two above on the

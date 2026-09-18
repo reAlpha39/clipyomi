@@ -337,8 +337,10 @@
 # ていく/でいく are the directional auxiliary, added 2026-09-18 so that
 # 引きずっていった stops reading 引きずって | いった and 歩いていく stops
 # reading 歩いて | いく. Measured over three visual-novel corpora, 75,767
-# sentences, 1,189 lines carry one -- 9.6 to 17.3 per ten thousand in each of
-# the three, so it is a rate rather than one writer's habit.
+# sentences, 1,189 lines carry one -- 9.6 to 17.3 per *thousand* in each of
+# the three, so it is a rate rather than one writer's habit. It is the most
+# frequent 〜て auxiliary still split, not the only one: 〜てくる, 〜ておく and
+# 〜てみる have no rows either.
 #
 # 五段・カ行促音便 is 行く's own class and gives the whole paradigm from one
 # row per voicing: ていく, ていっ(た), ていか(ない), ていき(ます), ていけ(ば),
@@ -355,6 +357,11 @@
 # and temporal (増えていく), are not balanced enough to warrant a slash the way
 # Passive/Potential is. It cannot be confused with a form name here, which
 # "Continuative" would be -- Wikipedia uses that only as an alias for 連用形.
+# **One thing to settle before 〜てくる gets rows**, which it will: it is the
+# same concept in the opposite direction and would want the same word, and
+# label.rs's "each word appears at most once" rule would then silently drop
+# one of them from a chain carrying both. Whoever adds てくる needs two words,
+# not one.
 #
 # 未然形 and 連用形 are listed for the same reason 買っちゃわ is: the walk
 # reaches them and every reachable tuple needs a row.
