@@ -471,6 +471,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ranked.iter().filter(|(_, r)| r.signals() == 0).count()
     );
 
+    // Three of the four signals detect over-*splitting* only (module doc), so
+    // a change that merges more will always look better in the ranking above.
+    // The counter-reading is this: how many regions did each engine cut into
+    // fewer pieces. Both counts are needed, because the ranking cannot see one
+    // of them.
+    let pieces = |cover: &str| cover.split('|').count();
+    let (mut merged, mut split, mut same) = (0usize, 0usize, 0usize);
+    let (mut merged_n, mut split_n, mut same_n) = (0usize, 0usize, 0usize);
+    for r in regions.values() {
+        let (a, b) = (pieces(&r.v1_cover), pieces(&r.v2_cover));
+        let n = r.sentences.len();
+        match b.cmp(&a) {
+            std::cmp::Ordering::Less => {
+                merged += 1;
+                merged_n += n;
+            }
+            std::cmp::Ordering::Greater => {
+                split += 1;
+                split_n += n;
+            }
+            std::cmp::Ordering::Equal => {
+                same += 1;
+                same_n += n;
+            }
+        }
+    }
+    println!("merge direction, all regions (the ranking above cannot see the first)");
+    println!("  we merge, v1 splits:   {merged:>6} regions, {merged_n:>6} sentence-occurrences");
+    println!("  we split, v1 merges:   {split:>6} regions, {split_n:>6} sentence-occurrences");
+    println!("  same count, cuts move: {same:>6} regions, {same_n:>6} sentence-occurrences");
+
     println!(
         "\n{:>4}  {:<20} {:>4}  {:<12} {:<26} {:<26} one entry covering it",
         "#", "signals", "n", "region", "v1", "v2 (ours)"
