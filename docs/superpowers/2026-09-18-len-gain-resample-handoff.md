@@ -295,9 +295,26 @@ The method reproduces the handoff's own `ていく` rates (9.6 / 15.5 / 17.3 per
 thousand) within 15%, so the two are comparable. This is a surface-regex count
 and therefore an upper bound — `持ってくる` is a JMdict headword and already
 merges — but the ordering is not in doubt. `〜てくる` is the largest `〜て`
-auxiliary still split, and it needs **both** attachment sites and a **second
-label word**, because `label::fmt` drops a repeated word from a chain carrying
-both directions.
+auxiliary still split.
+
+**It is not a copy of the `ていく` rows.** Its class is `カ変・クル`, whose
+surfaces are `くる`, `こ`, `き`, `くれ`, `こい`, `こよ`, `くん`, `く` — so
+`ATTACHES_TO`'s own transferable test, "does any of this auxiliary's surfaces
+decompose as [standalone word] + [particle]?", has two answers `ていく` did not
+have to give:
+
+- **`てくれ`** is `てくる`'s 仮定形 *and* the imperative of the benefactive
+  `てくれる`. `買ってくれ` is "buy it for me", not "go and buy". The two
+  meanings share a surface and only one of them is this row's.
+- **`てく`** is 体言接続特殊２ *and* the spoken contraction of `ていく`
+  (`歩いてく`), which the `ていく` rows already own.
+
+Add to that the `でくる` mirror for an onbin stem (`遊んでくる`), both
+attachment sites (`ATTACHES_TO`'s rule: IPADIC names 連用タ接続 only where it
+differs from 連用形, so either row alone leaves half the classes unreachable),
+and a **second label word**, because `label::fmt`'s "each word appears at most
+once" would silently drop one from a chain carrying both directions and
+`ていく` already took "Directional". This is a phase, not a row.
 
 ## 13. How to rebuild this run
 
