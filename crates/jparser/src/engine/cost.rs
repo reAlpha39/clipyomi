@@ -176,6 +176,40 @@ const CONTENT_MATCH: i32 = 1;
 /// boundaries. With the gate, every hints-off cell is identical to the digit
 /// and only the hints-on half moves.
 ///
+/// **Re-measured 2026-09-18 and refused again, and the second refusal is the
+/// one to read** — the paragraph above predates `CONTENT_MATCH`,
+/// `KATAKANA_MIN_PIECE`, the `uk` clause and the 〜てる/〜ている/〜ていく rows,
+/// so it was a statement about an engine that no longer exists. Ungating is
+/// the *only* shape that can reach the largest defect class three corpora
+/// agree on: hints-off, a non-COMMON entry of length `n` tiling into `k`
+/// COMMON content pieces loses by `2n + 3 − 3k`, which at `k = 2` is `2n − 3`
+/// and **grows with `n`**, so no value of `MATCH` or `CONTENT_MATCH` reaches
+/// it at any length. Only the square can. The gold corpus agrees it should be
+/// ungated — strict 1604 → 1525, tolerant 1789 → **1811**, `compounds` 118 →
+/// **158** with `lexical` 56 → **94**, `false-match` 23 → 25 and `transparent`
+/// 39 unmoved, so **no split class regresses**, the 26-row spurious-merge gate
+/// holds at 26, and 99 of the 132 lost gold spans are coarsening against 33 of
+/// real damage.
+///
+/// **The corpus is what refuses it.** Over 18,000 sentences of visual-novel
+/// dialogue, hints off, the ungated term changes about half of them and the
+/// spans it invents are as numerous as the ones it merges: 9,849 new spans
+/// that merge adjacent base spans against **9,737 that cut across one**. The
+/// gold corpus's 3:1 ratio is an artefact of 150 curated sentences. What the
+/// invented spans destroy is morphology, which is worse than an unmerged
+/// compound: `話しかける` → `話しかけ` + `る`, `やってくる` → `やってく` + `る`,
+/// `言いつつ` → `言`("word") + `いつつ`, `見つめながら` → `見つめな` + `がら`,
+/// `もしかして` → `も` + `し` + `かして`, and `かもしれない` splits again.
+///
+/// **Narrowing it to uninflected spans is worse, not better**, which is the
+/// measurement that settles the shape. Gating hints-off on `steps.is_empty()`
+/// reads better on every gold cell than ungating (strict 1576, tolerant 1816,
+/// `lexical` 87) and worse on the corpus: 7,248 coarsening against **9,537
+/// invented**. The asymmetry is the cause — an inflected span gets no gain
+/// while a shorter uninflected one does, so `来ていない` shatters into `来` +
+/// `ていない` (庭内, "grounds"). Two variants, opposite gold readings, the same
+/// corpus verdict: the term needs the tokenizer, not a narrower predicate.
+///
 /// **Withheld from grammatical stacks**, `lex::is_grammatical_stack`, or the
 /// gain would merge exactly what success criterion 3 forbids: at `LEN_GAIN`
 /// ungated by that test, `ことになっている` swallows its `に` and the 26-row
