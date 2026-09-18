@@ -73,10 +73,10 @@ The plan succeeds when all four hold:
 
    | | v1 | v2 before | v2 now |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7554 (1634) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8072 (1746) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9506** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9507** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7443 (1610) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7924 (1714) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9513** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9534** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
    — a 2026-09-16 reading; `LEN_GAIN` and `CONTENT_MATCH` have since taken it
@@ -667,12 +667,12 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7554 (1634) | 0.8220 (1778) | 0.9506 | 0.6075 (113 / 186) | 144 spans in 71 merges |
-| hints on | **0.8072 (1746)** | **0.8946 (1935)** | **0.9507** | **0.8172 (152 / 186)** | 189 spans in 86 merges |
+| hints off | 0.7443 (1610) | 0.8280 (1791) | 0.9513 | 0.6344 (118 / 186) | 181 spans in 88 merges |
+| hints on | **0.7924 (1714)** | **0.9006 (1948)** | **0.9534** | **0.8172 (152 / 186)** | 234 spans in 108 merges |
 
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
-`transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 52 / 112,
-`false-match` 22 / 32, `transparent` 39 / 42. Latency at the app's ceiling
+`transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 56 / 112,
+`false-match` 23 / 32, `transparent` 39 / 42. Latency at the app's ceiling
 (`jparser-cli bench`, gold index, k = 3): scaling **unmoved** — two readings
 of the same binary gave 1.00x and 1.05x hints on against the previous block's
 1.05x, and 0.98x off against 0.97x, which is this section's own ±0.1x read
@@ -682,7 +682,56 @@ way read 536 / 560 / 531 ms before against 524 / 529 / 531 after hints on, and
 rows below read the same way: 1.02x in both states, and interleaved 596 / 572 /
 551 ms before against 604 / 562 / 579 after.
 
-**Last moved 2026-09-18 by `table.rs`'s `てる`/`でる` rows**, the ている /
+**Last moved 2026-09-18 by `table.rs`'s `ている`/`でいる` rows**, the
+uncontracted form of the same auxiliary, and it is the largest granularity
+change this engine has made. `待っていた` read `待って` | `い` | `た` with `い`
+glossed "the Boar (twelfth sign of the Chinese zodiac)" — 218 corpus regions,
+the largest single count the disagreement probe found — and now reads as one
+segment, `待つ` Progressive Past. So do `思っている`, `食べている`,
+`している`, `遊んでいる`, `来ていない` and `遅れています`.
+
+**〜ている is an auxiliary and every other auxiliary this engine knows already
+merges** — 〜た, 〜ない, 〜ます, 〜たい, 〜ちゃう, and as of the rows below
+〜てる. Splitting it was not a policy; it was a missing row, and keeping it
+split while the contraction merged would have made the same construction two
+granularities apart by which spelling the speaker chose.
+
+Hints on: `strict` 1746 → 1714 and `tolerant` 1935 → **1948**, `entry top-1`
+0.9507 → **0.9534**, `compounds` 152 with all three class lines identical.
+Hints off: `strict` 1634 → 1610, `tolerant` 1778 → **1791**, `entry top-1`
+0.9506 → **0.9513**, `compounds` 113 → **118** with `lexical` 52 → 56.
+Coarsening 189 spans in 86 merges → 234 in 108.
+
+**The strict fall is decomposed, not assumed.** Of the 25 new spans on the
+gold corpus hints on, **23 have both endpoints on gold boundaries** — the
+coarsening this section prices at about 16.5 points — and 2 do not:
+`当惑|していた` where gold cuts `当惑して|いた`, and `行き|あっていました` where gold
+cuts `行きあって|いました`. In both the offending left cut is **pre-existing** —
+the engine already read `当惑|して|い|た` and `行き|あって|い|ました` — so the
+merge coarsens the auxiliary tail of an already-misplaced boundary rather
+than inventing a word across a good one. `tolerant` rising in **both** hint
+states is the same finding from the other side.
+
+**Over 8,334 lines of dialogue**: 652 sentences change, 754 new spans, **336
+stray `い` segments and 239 stray `た` segments disappear**, and **zero** new
+spans end in a sentence-final particle — the failure mode the `てる` rows
+below had to be gated against does not arise here.
+
+**The one gate row that moved, and why it was re-pointed rather than
+weakened.** `spurious_merges.txt`'s `してい` row asserts a cut inside that
+surface in `b:wn25517-3`; with `ている` the sentence reads `予定` | `に` |
+`している`, so there is none. The row exists to stop 1308000 (指定) or the
+kana-unified 子弟/師弟 taking that span, and neither does: the `に` is its own
+segment, nothing is absorbed, and the covering entry is `する` Progressive.
+Verified before touching it — across eight readings of that sentence 指定 never
+takes the span, and `してい` parsed alone now leads with `する` Progressive where
+it used to lead with 子弟 "children; sons". The test now accepts a **strictly
+longer** matched word covering the surface **only when its top entry is not
+the row's own `ent_seq`** — which is what the row was always about — and a
+segment sitting exactly on the surface still fails whatever it matched.
+Column 2 of that fixture was read by nothing until now.
+
+**Set earlier the same day by `table.rs`'s `てる`/`でる` rows**, the ている /
 でいる contraction: `思ってる` read `思` | `っ` | `てる` with `てる` glossed
 照る "to shine", in 122 region surfaces and 300 corpus sentences, and now
 reads as one segment labelled `思う` Progressive. The rows are the same shape
@@ -705,10 +754,12 @@ so `な`+`い` is a 連用タ接続 site and `忘れないでよね` parsed as `
 cry". The contraction's imperative is `待ってろ`, never `待ってよ`, so the two
 よ-forms are blocked; the cost is the corpus's single `てよう`.
 
-Cells: `strict` 1745 → 1746 hints on and 1633 → 1634 off, `tolerant` 1932 →
-1935 and 1775 → 1778, `compounds` and every class line identical in both
-states. The test-walk's reachable-chain count goes 50,419 → 60,926 and
-`bench` says the runtime cost is nothing, as it did for ちゃう.
+Cells at the time: `strict` 1745 → 1746 hints on and 1633 → 1634 off,
+`tolerant` 1932 → 1935 and 1775 → 1778, `compounds` and every class line
+identical in both states. The reachable-chain count went 50,419 → 60,926 here
+and then 72,049 for the `ている` rows above; `bench` says the runtime cost is
+nothing, as it did for ちゃう — 1.04x hints on and 0.98x off after both, with
+interleaved spreads overlapping on a loaded machine.
 
 **What it still costs, measured before and after over the same 8,334
 lines**: 1,225 sentences change and 1,358 new spans appear, of which **34

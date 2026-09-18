@@ -142,14 +142,8 @@ start=1 len=1 は matched reading=-
 start=2 len=2 まだ matched reading=-
     まだ (-) [-] still
     マダ (-) [-] Japanese linden (Tilia japonica)
-start=4 len=1 来 matched reading=らい
-    来 (-) [らい] next (year, spring, etc.)
-    来る (-) [く] to come (spatially or temporally)
-    来る (-) [きた] next (e.g. "next April")
-start=5 len=4 ていない matched reading=-
-    ていない (-) [-] grounds
-    ていない (-) [-] inside the court
-    ていない (-) [-] inside the garden
+start=4 len=5 来ていない matched reading=きていない
+    来る (Progressive Negative) [きていない] to come (spatially or temporally)
 start=9 len=1 。 unmatched
 
 === 勉強をする時間がない。
@@ -302,15 +296,8 @@ start=6 len=1 。 unmatched
 === 毎日走っている。
 start=0 len=2 毎日 matched reading=まいにち
     毎日 (-) [まいにち] every day
-start=2 len=3 走って matched reading=はしって
-    走る (Te-form) [はしって] to run
-start=5 len=2 いる matched reading=-
-    いる (-) [-] to be (of animate objects)
-    いる (-) [-] to be needed
-    いる (-) [-] to enter
-    いる (-) [-] to shoot (arrow, bolt, dart)
-    いる (-) [-] to roast
-    ... 5 more
+start=2 len=5 走っている matched reading=はしっている
+    走る (Progressive) [はしっている] to run
 start=7 len=1 。 unmatched
 
 === 電車が遅れています。
@@ -323,15 +310,8 @@ start=2 len=1 が matched reading=-
     が (-) [-] picture
     が (-) [-] obstinacy
     ... 5 more
-start=3 len=3 遅れて matched reading=おくれて
-    遅れる (Te-form) [おくれて] to be late
-start=6 len=3 います matched reading=-
-    いる (Polite) [-] to be (of animate objects)
-    いる (Polite) [-] to shoot (arrow, bolt, dart)
-    いる (Polite) [-] to cast
-    いる (Polite) [-] to calm down
-    います (-) [-] to be
-    ... 2 more
+start=3 len=6 遅れています matched reading=おくれています
+    遅れる (Progressive Polite) [おくれています] to be late
 start=9 len=1 。 unmatched
 
 === ドアを開けてください。
@@ -366,17 +346,10 @@ start=5 len=1 で matched reading=-
     で (-) [-] and
     で (-) [-] without doing ...
     ... 3 more
-start=6 len=3 遊んで matched reading=あそんで
-    遊ぶ (Te-form) [あそんで] to play (games, sports)
-    遊ぶ (Te-form) [すさんで] to grow wild
-    遊む (Te-form) [すさんで] to grow wild
-start=9 len=2 いる matched reading=-
-    いる (-) [-] to be (of animate objects)
-    いる (-) [-] to be needed
-    いる (-) [-] to enter
-    いる (-) [-] to shoot (arrow, bolt, dart)
-    いる (-) [-] to roast
-    ... 5 more
+start=6 len=5 遊んでいる matched reading=あそんでいる
+    遊ぶ (Progressive) [あそんでいる] to play (games, sports)
+    遊ぶ (Progressive) [すさんでいる] to grow wild
+    遊む (Progressive) [すさんでいる] to grow wild
 start=11 len=1 。 unmatched
 
 === もう一度説明してください。
@@ -412,15 +385,8 @@ start=5 len=1 が matched reading=-
     が (-) [-] picture
     が (-) [-] obstinacy
     ... 5 more
-start=6 len=3 待って matched reading=まって
-    待つ (Te-form) [まって] to wait
-start=9 len=2 いる matched reading=-
-    いる (-) [-] to be (of animate objects)
-    いる (-) [-] to be needed
-    いる (-) [-] to enter
-    いる (-) [-] to shoot (arrow, bolt, dart)
-    いる (-) [-] to roast
-    ... 5 more
+start=6 len=5 待っている matched reading=まっている
+    待つ (Progressive) [まっている] to wait
 start=11 len=1 。 unmatched
 
 === コーヒーを二杯ください。
@@ -555,13 +521,6 @@ start=4 len=1 の matched reading=-
     ... 1 more
 start=5 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
-start=6 len=3 待って matched reading=まって
-    待つ (Te-form) [まって] to wait
-start=9 len=2 いた matched reading=-
-    いる (Past) [-] to be (of animate objects)
-    いた (-) [-] board
-    いたる (-) [-] to arrive at (e.g. a decision)
-    いたい (-) [-] painful
-    いる (Past) [-] to shoot (arrow, bolt, dart)
-    ... 5 more
+start=6 len=5 待っていた matched reading=まっていた
+    待つ (Progressive Past) [まっていた] to wait
 start=11 len=1 。 unmatched

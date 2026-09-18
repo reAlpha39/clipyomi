@@ -359,6 +359,9 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("てる", "一段", "連用タ接続"),
     ("てる", "一段", "連用形"),
     ("でる", "一段", "連用タ接続"),
+    ("ている", "一段", "連用タ接続"),
+    ("ている", "一段", "連用形"),
+    ("でいる", "一段", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
     ("じゃ", "特殊・ジャ", "基本形"),
     ("や", "特殊・ヤ", "基本形"),
@@ -389,6 +392,10 @@ const AUX_FORM_BLOCK: &[(&str, &str)] = &[
     ("てる", "未然ウ接続"),
     ("でる", "命令ｙｏ"),
     ("でる", "未然ウ接続"),
+    ("ている", "命令ｙｏ"),
+    ("ている", "未然ウ接続"),
+    ("でいる", "命令ｙｏ"),
+    ("でいる", "未然ウ接続"),
 ];
 
 /// A hit recorded at one node of [`Table`]'s reverse trie.
@@ -956,14 +963,15 @@ mod tests {
         // attach at both 連用タ接続 and 連用形, and their own seven
         // 五段・ワ行促音便 forms become attachment sites in turn, which is where
         // the depth-2 term more than doubles. 50,419 -> 60,926 on 2026-09-18
-        // for てる/でる, the ている contraction: three more rows, whose own
-        // 一段 forms include the empty-suffix 未然形 and 連用形 that every
-        // later auxiliary attaches to, less the four AUX_FORM_BLOCK rows.
+        // for てる/でる, the ている contraction, and 60,926 -> 72,049 the same
+        // day for the uncontracted ている/でいる. Six rows between them, whose
+        // own 一段 forms include the empty-suffix 未然形 and 連用形 that every
+        // later auxiliary attaches to, less the eight AUX_FORM_BLOCK rows.
         assert_eq!(
-            chains, 60_926,
-            "the walk reached {chains} chains, not 60,926 -- the conjugation table's \
+            chains, 72_049,
+            "the walk reached {chains} chains, not 72,049 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 60,926 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 72,049 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
              maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
              constant, rather than loosening the assertion"
