@@ -59,6 +59,23 @@ derived from ta-old (criterion 1), so the old engine is built in a detached
 worktree at `fb450f6^` and dumps `text<TAB>start:len:matched,...`. Nothing in
 this repository links it, and the probe reads a file.
 
+To re-run the whole thing:
+
+```text
+git worktree add <path-outside-repo> fb450f6^
+# in that worktree, with a dumper of your own beside its examples/:
+cargo build --release -p jparser --features mecab
+jparser-cli build-index --engine v1 <JMdict_e.xml> <v1-index>   # format 3
+# in this repository:
+jparser-cli build-index <JMdict_e.xml> <v2-index>               # format 6
+cargo run --release -p jparser --features mecab --example corpus_disagree -- \
+    <v2-index> <corpus.txt> <v1-dump.tsv> [--hints <system.dic>] [--top N]
+```
+
+The dumper in the worktree is forty lines around `jparser::parse` and is
+deliberately not described further here: it is GPL-2.0-only code and this
+document is not the place to carry it.
+
 ## 3. What it found, and what was fixed
 
 Hints on, 8,334 sentences, 5,153 distinct regions, 6,601 sentences where the
