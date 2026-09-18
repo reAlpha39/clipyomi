@@ -73,10 +73,10 @@ The plan succeeds when all four hold:
 
    | | v1 | v2 before | v2 now |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7416 (1604) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7887 (1706) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9510** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9531** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7365 (1593) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7850 (1698) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9506** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9528** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
    — a 2026-09-16 reading; five later changes have moved it and the table
@@ -667,8 +667,8 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7416 (1604) | 0.8271 (1789) | 0.9510 | 0.6344 (118 / 186) | 185 spans in 90 merges |
-| hints on | **0.7887 (1706)** | **0.9006 (1948)** | **0.9531** | **0.8172 (152 / 186)** | 242 spans in 112 merges |
+| hints off | 0.7365 (1593) | 0.8257 (1786) | 0.9506 | 0.6344 (118 / 186) | 193 spans in 94 merges |
+| hints on | **0.7850 (1698)** | **0.9006 (1948)** | **0.9528** | **0.8172 (152 / 186)** | 250 spans in 116 merges |
 
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
 `transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 56 / 112,
@@ -691,23 +691,44 @@ corpora it had never seen: 1,189 lines of 75,767 carry one, a rate of 9.6 to
 17.3 per ten thousand in each of the three separately, so it is a rate rather
 than one writer's habit.
 
-Hints on: `strict` 1714 → **1706**, `tolerant` **1948** unmoved, `entry top-1`
-0.9534 → 0.9531, `compounds` 152 with all three class lines identical,
-coarsening 234 spans in 108 merges → 242 in 112. Hints off: `strict` 1610 →
-1604, `tolerant` 1791 → 1789, `entry top-1` 0.9513 → 0.9510, `compounds` 118
-with all three class lines identical, coarsening 181 in 88 → 185 in 90.
+**Shipped in two commits, and the second is the one to read.** The first gave
+`ていく` a single attachment site, 連用タ接続, which reaches 五段 onbin stems and
+**leaves every 一段, サ変・スル and 特殊・デス verb behind** — `食べていく`,
+`落ちていった`, `溶けていく`, `見ていく` all still split. That is the rule
+`ATTACHES_TO`'s own doc already states for た/て: IPADIC names 連用タ接続 only
+where a class distinguishes it from plain 連用形, so either row alone leaves
+half the classes unreachable. `でいく` keeps one row, because で follows an
+onbin stem and nothing else.
+
+Hints on: `strict` 1714 → **1698**, `tolerant` **1948** unmoved, `entry top-1`
+0.9534 → 0.9528, `compounds` 152 with all three class lines identical,
+coarsening 234 spans in 108 merges → 250 in 116. Hints off: `strict` 1610 →
+1593, `tolerant` 1791 → 1786, `entry top-1` 0.9513 → 0.9506, `compounds` 118
+with all three class lines identical, coarsening 181 in 88 → 193 in 94.
 
 **The strict fall is decomposed, not assumed.** Hints on, 8 gold spans are
 lost and 0 gained, and **all 8 have both endpoints on gold boundaries** — they
-are the four intended merges and nothing else: `引きずって`+`いった`,
-`沈みこんで`+`いく`, `押しこんで`+`いく`, `歪んで`+`いく`. Zero damage. Hints off,
-6 are lost and 0 gained: 4 are the same coarsening and **2 are real damage** —
-`沈みこんでいく` and `押しこんでいく` read `沈み` | `こんでいく` where gold cuts
-`沈みこんで` | `いく`. In both the left cut is **pre-existing**: with no
-tokenizer the engine already read `沈み` | `こんで` | `いく`, because neither
-`沈みこむ` nor `押しこむ` is reached in that state, so the rows glued `こんで` to
-`いく` across a boundary that was already lost. Reproduced on the full JMdict
-index, so it is not a subset artefact.
+are four intended merges and nothing else, `折れて`+`いった`, `溶けて`+`いく`
+among them. Zero damage. Hints off, 11 are lost and 0 gained: 8 are the same
+coarsening and **3 are real damage**, all in one sentence — `出ていったようだ`
+reads `出ていっ` | `たよう` | `だ`, where `たよう` is 態様 "condition; manner"
+and the auxiliary's own onbin stem has been taken for a word.
+
+**That last one has a named cause and a priced fix, and the fix is refused
+here.** `BOUND_FORMS` exists so that a chain *ending* at 連用タ接続 is not a
+word — `優しいっ` must not read `優し` + `いっ` — but it is consulted only for a
+headword's own inflection, never for an auxiliary's. Extending it to
+auxiliaries was built and does fix it: `出ていったようだ` comes back whole,
+hints-off `strict` 1593 → 1594, `tolerant` 1786 → **1789**, `compounds`
+118 → **119** with `lexical` 56 → 57, and hints on is identical to the digit.
+It is refused because it deletes **nine committed rows** from
+`conjugation_labels.txt` — `食べなかっ`, `食べたかっ`, `読んだっ`, `買っちゃっ`,
+`読んじゃっ`, `買っちまっ`, `読んじまっ` and this change's own two — and that
+fixture declares itself authoritative over the code. Seven of the nine predate
+this work, so the change is a fixture revision needing its own adjudication,
+not a row to slip in beside a table addition. `BOUND_FORMS`'s own comment set
+that precedent: each bound form "deletes candidates of its own and wants its
+own score run".
 
 **No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows accompany these**, and that is a
 statement about the class rather than a measurement. Both tables exist because

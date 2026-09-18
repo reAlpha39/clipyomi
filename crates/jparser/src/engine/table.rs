@@ -369,10 +369,17 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     // 17.3 per ten thousand in every one of them.
     //
     // 五段・カ行促音便, which is 行く's own class and gives the whole
-    // paradigm from one row each: ていく, ていっ(た/て), ていか(ない),
-    // ていき(ます), ていけ(ば), ていこ(う). `でいく` mirrors `でいる` and takes
-    // 連用タ接続 only, for the same reason -- it follows an onbin stem
-    // (遊ん, 沈みこん) and nothing else.
+    // paradigm: ていく, ていっ(た/て), ていか(ない), ていき(ます), ていけ(ば),
+    // ていこ(う). `でいく` mirrors `でいる` and takes 連用タ接続 only, for the
+    // same reason -- it follows an onbin stem (遊ん, 沈みこん) and nothing else.
+    //
+    // **`ていく` needs both attachment sites and `でいく` needs one**, which is
+    // the rule this module's `ATTACHES_TO` doc already states for た/て:
+    // IPADIC names 連用タ接続 only where a class distinguishes it from plain
+    // 連用形, so 五段's onbin stems arrive at one site and 一段, サ変・スル and
+    // 特殊・デス at the other. Shipped with 連用タ接続 alone, `ていく` reached
+    // 歩いていった and 引きずっていく and left every 一段 verb behind --
+    // 食べていく, 落ちていった, 溶けていく, 見ていく all still split.
     //
     // **No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows follow these**, and the
     // reason is the class rather than a measurement. Both of those exist
@@ -384,6 +391,7 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     // which are `持っていかねば` and `持っていかなきゃ` -- ordinary Japanese and
     // nothing a particle collides with.
     ("ていく", "五段・カ行促音便", "連用タ接続"),
+    ("ていく", "五段・カ行促音便", "連用形"),
     ("でいく", "五段・カ行促音便", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
     ("じゃ", "特殊・ジャ", "基本形"),
@@ -1054,12 +1062,16 @@ mod tests {
         // 72,049 -> 73,731 when ている/でいる's two よ-forms were unblocked, and
         // 73,731 -> 82,573 when ていく/でいく joined: two rows of 五段・カ行促音便,
         // whose eight forms include the 連用タ接続 stem `ていっ` that every later
-        // auxiliary attaches to in turn.
+        // auxiliary attaches to in turn. 82,573 -> 90,359 when `ていく` gained
+        // its second attachment site, 連用形 -- the row this comment's own
+        // ATTACHES_TO doc predicts for た/て, because IPADIC names 連用タ接続
+        // only where it differs from 連用形, so either row alone leaves half
+        // the classes unreachable.
         assert_eq!(
-            chains, 82_573,
-            "the walk reached {chains} chains, not 82,573 -- the conjugation table's \
+            chains, 90_359,
+            "the walk reached {chains} chains, not 90,359 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 82,573 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 90,359 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
              maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
              constant, rather than loosening the assertion"
