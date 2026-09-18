@@ -161,7 +161,8 @@ Gates: spurious merges **26 of 26**, 657 tests 0 failed 1 ignored, `fmt` and
 `clippy --all-targets --features mecab` clean, `bench` interleaved three
 rounds each way (hints on 536 / 560 / 531 ms before against 524 / 529 / 531
 after; hints off 579 / 609 / 587 against 589 / 596 / 596 — spreads overlap),
-scaling 1.00x on and 0.98x off.
+scaling unmoved within its read noise — two readings of the same binary gave
+1.00x and 1.05x hints on, against 1.05x before, and 0.98x off against 0.97x.
 
 The snapshot moved once and it is a correction: `日本語を話せますか。` read
 `話` + `せま`("narrow") + `すか`("disappointment") and now reads `話せ` +

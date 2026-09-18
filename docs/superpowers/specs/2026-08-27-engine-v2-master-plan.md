@@ -673,7 +673,12 @@ authoritative current figure and those are history. Gold index rebuilt from
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
 `transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 52 / 112,
 `false-match` 22 / 32, `transparent` 39 / 42. Latency at the app's ceiling
-(`jparser-cli bench`, gold index, k = 3): scaling 1.00x hints on, 0.98x off.
+(`jparser-cli bench`, gold index, k = 3): scaling **unmoved** — two readings
+of the same binary gave 1.00x and 1.05x hints on against the previous block's
+1.05x, and 0.98x off against 0.97x, which is this section's own ±0.1x read
+noise. Interleaved A/B on the millisecond figures agrees: three rounds each
+way read 536 / 560 / 531 ms before against 524 / 529 / 531 after hints on, and
+579 / 609 / 587 against 589 / 596 / 596 off; the spreads overlap.
 
 **Set 2026-09-18, last by `cost.rs`'s `CONTENT_MATCH`** — a `MATCH`
 surcharge withheld from particles. It exists because `LEN_GAIN`'s square
