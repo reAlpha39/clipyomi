@@ -52,6 +52,8 @@ const AUX_WORD: &[(&str, &str)] = &[
     ("だ", "Past"),
     ("て", "Te-form"),
     ("で", "Te-form"),
+    ("ている", "Progressive"),
+    ("でいる", "Progressive"),
     ("てる", "Progressive"),
     ("でる", "Progressive"),
     ("ちゃう", "Completive"),

@@ -17,7 +17,8 @@ the sixth would have found. This session replaced that with a corpus.
 | `a3279ca` | `cost.rs`'s `CONTENT_MATCH` — a `MATCH` surcharge withheld from particles, which is the probe's whole top class |
 | `bdfe9c6` | the review's findings: the term's second mode, its arithmetic test, two dead lexicon rows, and the probe's ranking |
 | `30726c4` | `assemble::order` stops demoting a kana spelling JMdict calls normal — §6 |
-| this one | `table.rs`'s `てる`/`でる` rows, the ている contraction — §7 |
+| `0983fd7` | `table.rs`'s `てる`/`でる` rows, the ている contraction — §7 |
+| this one | `table.rs`'s `ている`/`でいる` rows and the re-pointed gate row — §8 |
 
 ## 2. The probe
 
@@ -330,8 +331,8 @@ occurrences. **No signal can see it**: no single entry covers `思ってる`, so
 `sht` and `rdg` are structurally impossible, and readings 2–3 do not differ
 there, so `alt` is quiet too. 75 of the 122 fire nothing at all.
 
-**2. `いた`, 218 sentences — the largest single count in the corpus. Half
-fixed, see §6.** `待っていた` → `待って` + `い` + `た`, where `い` glossed "the
+**2. `いた`, 218 sentences — the largest single count in the corpus. FIXED,
+§8** (the gloss half in §6, the span half in §8).** `待っていた` → `待って` + `い` + `た`, where `い` glossed "the
 Boar (twelfth sign of the Chinese zodiac)". Hints off it is `待って`|`いた`.
 Signals: `alt=v1` only, which put it at rank 316 under the old ordering and
 rank 1 under the corrected one.
@@ -506,7 +507,74 @@ lexicalised contractions, all wins). `捨てる`, `育てる`, `撫でる`, `照
 reconstructed key's entry to carry a POS matching the chain's class: `捨る`
 and `育る` are not entries at all, and `当る` is `v5r`, not 一段.
 
-## 8. Not done
+## 8. `ている` / `でいる`, and the gate row that was re-pointed
+
+`待っていた` read `待って` | `い` | `た`, with `い` glossed "the Boar (twelfth
+sign of the Chinese zodiac)". §6 fixed the gloss by exempting `uk` entries
+from `order`'s PRONOUNCE demotion; the span stayed wrong, and two routes to it
+were measured and refused there.
+
+The third route is the one the `てる` rows had already taken: **`ている` is an
+auxiliary, and every other auxiliary this engine knows already merges** —
+〜た, 〜ない, 〜ます, 〜たい, 〜ちゃう, and as of §7 〜てる. Splitting it was never
+a policy, it was a missing row, and after §7 the same construction had two
+granularities depending on which spelling the speaker used.
+
+```
+("ている", "一段", "連用タ接続"),   待っている, 思っていた
+("ている", "一段", "連用形"),        食べている, 見ていない, している
+("でいる", "一段", "連用タ接続"),   遊んでいる, 読んでいた
+```
+
+plus the same two よ-forms blocked, for the same reason as §7.
+
+| | strict | tolerant | entry top-1 | compounds | lexical | false-match | transparent |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| on, before | 1746 | 1935 | 0.9507 | 152 | 82 | 30 / 32 | 40 / 42 |
+| on, after | 1714 | **1948** | **0.9534** | 152 | 82 | **30 / 32** | **40 / 42** |
+| off, before | 1634 | 1778 | 0.9506 | 113 | 52 | 22 / 32 | 39 / 42 |
+| off, after | 1610 | **1791** | **0.9513** | **118** | **56** | **23 / 32** | 39 / 42 |
+
+**The strict fall is decomposed, not assumed**, which §5.2's own rule
+requires. Of 25 new spans on the gold corpus hints on, **23 have both
+endpoints on gold boundaries** and 2 do not: `当惑|していた` against gold's
+`当惑して|いた`, and `行き|あっていました` against gold's `行きあって|いました`. In
+both the offending left cut is **pre-existing** — the engine already read
+`当惑|して|い|た` — so the merge coarsens the auxiliary tail of a boundary that
+was already misplaced rather than inventing a word across a good one.
+`tolerant` rising in both hint states says the same thing from the other side.
+
+**On the corpus**: 652 sentences change, 754 new spans, **336 stray `い`
+segments and 239 stray `た` segments disappear**, and **zero** new spans end in
+a sentence-final particle — the failure mode §7's rows had to be gated against
+does not arise here. Top new spans are `している` 95, `していた` 48, `思っていた`
+19, `見ている` 18, `しまっている` 16.
+
+**The gate row, and why it was re-pointed rather than weakened.**
+`spurious_merges.txt`'s `してい` row asserts a cut inside that surface in
+`b:wn25517-3`; with `ている` the sentence reads `予定` | `に` | `している`, so
+there is none. The row exists to stop 1308000 (指定) or the kana-unified
+子弟/師弟 taking that span. Neither does: the `に` is its own segment, nothing
+is absorbed, and the covering entry is `する` Progressive. **Verified before
+touching the fixture** — across eight readings of that sentence 指定 never
+takes the span, and `してい` parsed alone now leads with `する` Progressive
+where it used to lead with 子弟 "children; sons". The test now accepts a
+*strictly longer* matched word covering the surface **only when its top entry
+is not the row's own `ent_seq`**, and a segment sitting exactly on the surface
+still fails whatever it matched. Column 2 of that fixture was read by nothing
+until now.
+
+This is the third change this session to be weighed against the 26-row gate
+and the first to be allowed past it. The other two — widening
+`PRONOUNCE_CROSS`'s chain exemption and `uk` as a `WordFlags` bit — were
+refused because the merge **was** the guarded class: `ことになって` swallowing
+its `に`, and `はこう`. Here it is not, and the difference is checkable rather
+than a matter of taste.
+
+`いた` standing alone is still `い` | `た` — 「猫がいた」 reads `猫`|`が`|`い`|`た`.
+Only the auxiliary use after a te-form is fixed.
+
+## 9. Not done
 
 - **The `〜てね` / `〜てな` absorption the `てる` rows introduced**, 34
   occurrences, and the chain-level block that would fix it (§7).
@@ -521,7 +589,8 @@ and `育る` are not entries at all, and `当る` is `v5r`, not 一段.
   it** — `jparser-cli diff`, the corpus's sampling signal, requires `--hints`,
   so hints-off-only disagreements were structurally unreachable by the
   sampler.
-- **`いた`'s span and `からね` are not fixed** (the `ってる` family is, §7).** §5 is a
+- **`からね` (44) and `からな` (39) are not fixed**, nor is `いた` standing
+  alone outside the auxiliary (§8). §5 is a
   measurement, not a queued task; each wants its own adjudication and its own
   score run, and §6 records the two routes to `いた` that were tried and
   refused.

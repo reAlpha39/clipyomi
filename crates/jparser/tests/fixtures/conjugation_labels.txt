@@ -304,6 +304,28 @@
 # rather than quietly dropped, the way the three 連用タ接続 stems above
 # are.
 #
+# ている/でいる are the uncontracted form of the same auxiliary, added
+# 2026-09-18 so that 待っていた stops reading 待って | い | た with い glossed
+# "the Boar (twelfth sign of the Chinese zodiac)" -- 218 corpus sentences,
+# the largest single count the disagreement probe found. Same 一段 class and
+# same two よ-forms blocked as てる above: 一段's 命令ｙｏ and 未然ウ接続
+# would give ていよ/でいよ, and the contraction's imperative is 待っていろ.
+# The stem てい is what reaches た and ます: 待っていた, 待っています.
+待っていれ	五段・タ行:連用タ接続 ている:仮定形	Progressive Conditional
+待っていりゃ	五段・タ行:連用タ接続 ている:仮定縮約１	Progressive Conditional
+待っていん	五段・タ行:連用タ接続 ている:体言接続特殊	Progressive
+待っていろ	五段・タ行:連用タ接続 ている:命令ｒｏ	Progressive Imperative
+待っている	五段・タ行:連用タ接続 ている:基本形	Progressive
+待ってい	五段・タ行:連用タ接続 ている:未然形	Progressive
+待ってい	五段・タ行:連用タ接続 ている:連用形	Progressive
+遊んでいれ	五段・バ行:連用タ接続 でいる:仮定形	Progressive Conditional
+遊んでいりゃ	五段・バ行:連用タ接続 でいる:仮定縮約１	Progressive Conditional
+遊んでいん	五段・バ行:連用タ接続 でいる:体言接続特殊	Progressive
+遊んでいろ	五段・バ行:連用タ接続 でいる:命令ｒｏ	Progressive Imperative
+遊んでいる	五段・バ行:連用タ接続 でいる:基本形	Progressive
+遊んでい	五段・バ行:連用タ接続 でいる:未然形	Progressive
+遊んでい	五段・バ行:連用タ接続 でいる:連用形	Progressive
+#
 # てる/でる are the ている/でいる contraction, the colloquial progressive:
 # 思ってる, 遊んでる, 食べてる. table.rs gives them their own ATTACHES_TO
 # rows for the same reason ちゃう has them -- IPADIC tokenizes the

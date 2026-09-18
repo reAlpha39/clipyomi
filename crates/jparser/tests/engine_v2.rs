@@ -909,8 +909,17 @@ fn the_particle_absorbing_merges_are_gone() {
     {
         let mut cols = line.split('\t');
         let surface = cols.next().expect("column 1 is the surface");
+        // Column 2 is the `ent_seq` the spurious merge matched, and it used to
+        // be read by nothing. It is the row's actual subject -- `\u3057\u3066\u3044` is here
+        // because 1308000 (\u6307\u5b9a) and the kana-unified \u5b50\u5f1f could win that span --
+        // and the acceptance below needs it. See the fixture's own note.
+        let ent_seq: u32 = cols
+            .next()
+            .unwrap_or_else(|| panic!("{surface}: no second column naming an ent_seq"))
+            .parse()
+            .unwrap_or_else(|e| panic!("{surface}: column 2 is not an ent_seq: {e}"));
         let source = cols
-            .nth(2)
+            .nth(1)
             .unwrap_or_else(|| panic!("{surface}: no fourth column naming a gold sentence"));
         rows += 1;
 
@@ -946,12 +955,30 @@ fn the_particle_absorbing_merges_are_gone() {
         let cuts = segment_cuts(&r.segments);
         let interior = cuts.iter().any(|&c| c > at && c < at + len);
 
-        if absorbed || !interior {
+        // **A strictly longer word covering the surface is not this class**, and
+        // saying so is what keeps the row asserting its own subject rather than
+        // a proxy for it. `\u3057\u3066\u3044` is the case: 2026-09-18's `\u3066\u3044\u308b` auxiliary
+        // makes \u4e88\u5b9a\u306b\u3057\u3066\u3044\u308b read `\u4e88\u5b9a` | `\u306b` | `\u3057\u3066\u3044\u308b`, so there is no cut
+        // inside `\u3057\u3066\u3044` any more -- and nothing is absorbed either. The `\u306b` is
+        // its own span, and the covering segment's top entry is `\u3059\u308b`
+        // Progressive, not 1308000. The defect this row exists for is a
+        // semantically absurd kana-unified headword taking the span; that is
+        // still failed, because the covering entry is checked by id. A segment
+        // sitting *exactly* on the surface stays a failure whatever it matched:
+        // that shape is the class by construction.
+        let covered_by_longer = r.segments.iter().any(|s| {
+            s.matched
+                && s.start <= at
+                && at + len <= s.start + s.len
+                && s.len > len
+                && s.entries.first().is_some_and(|e| e.entry_id != ent_seq)
+        });
+        if absorbed || (!interior && !covered_by_longer) {
             let surfaces: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
             let reason = if absorbed {
                 "absorbed into one matched segment"
             } else {
-                "no segment boundary inside it"
+                "no segment boundary inside it, and no longer word covers it"
             };
             wrong.push(format!(
                 "{surface} at {at} in {source}: {reason}; gold cuts inside at \
