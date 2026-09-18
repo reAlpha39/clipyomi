@@ -75,8 +75,8 @@ The plan succeeds when all four hold:
    | --- | --- | --- | --- |
    | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7550 (1633) |
    | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8067 (1745) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9358** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9400** ✓ |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9507** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9500** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
    — a 2026-09-16 reading; `LEN_GAIN` and `CONTENT_MATCH` have since taken it
@@ -667,8 +667,8 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7550 (1633) | 0.8206 (1775) | 0.9358 | 0.6075 (113 / 186) | 142 spans in 70 merges |
-| hints on | **0.8067 (1745)** | **0.8932 (1932)** | **0.9400** | **0.8172 (152 / 186)** | 187 spans in 85 merges |
+| hints off | 0.7550 (1633) | 0.8206 (1775) | 0.9507 | 0.6075 (113 / 186) | 142 spans in 70 merges |
+| hints on | **0.8067 (1745)** | **0.8932 (1932)** | **0.9500** | **0.8172 (152 / 186)** | 187 spans in 85 merges |
 
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
 `transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 52 / 112,
@@ -680,7 +680,33 @@ noise. Interleaved A/B on the millisecond figures agrees: three rounds each
 way read 536 / 560 / 531 ms before against 524 / 529 / 531 after hints on, and
 579 / 609 / 587 against 589 / 596 / 596 off; the spreads overlap.
 
-**Set 2026-09-18, last by `cost.rs`'s `CONTENT_MATCH`** — a `MATCH`
+**Entry top-1's two cells were set last, on 2026-09-18, by one clause in
+`assemble::order`**: the `PRONOUNCE` demotion no longer applies to an entry
+JMdict tags `uk`. A kana spelling of a kanji word is a fallback and deserves
+the demotion; a `uk` entry — 9,580 of JMdict's 218,449 — is one whose kana
+*is* the normal spelling, and demoting it is simply wrong. `待っていた` is
+where it was found: `いる` is `uk`, and its `いた` lost to `い`, "the Boar
+(twelfth sign of the Chinese zodiac)". **0.9400 → 0.9500 hints on and 0.9358 →
+0.9507 hints off, +13 and +19 hits on unchanged denominators, and every other
+cell in this table is identical to the digit** — `order` runs after the DP, so
+no boundary can move. The snapshot moved in nine places and every one is a
+gloss list reordering, `時間がない` now leading with 無い "nonexistent" rather
+than the negative auxiliary.
+
+**It is deliberately not a `WordFlags` bit.** That was built and measured, and
+it carries `uk` into `cost::PRONOUNCE_CROSS` as well: entry top-1 rises about
+as far, `lexical` goes 82 → 87 and `strict` 1745 → 1737, but `ことになって`
+swallows its `に` and the 26-row `spurious_merges.txt` gate goes to 25, because
+`なる` is `uk` too. Criterion 3 refuses it. The same refusal covers widening
+`PRONOUNCE_CROSS`'s chain exemption to the chain's *start*, which fixes
+`待っていた`'s span as well as its gloss and breaks `はこう` — criterion 3's own
+named sentence — for `false-match` 30 → 26 and `transparent` 40 → 37.
+
+**The span half of that defect is therefore still open**: `待っていた` reads
+`待って`|`い`|`た` hints on, in 218 corpus sentences, and only the gloss on the
+`い` is fixed.
+
+**The span cells were set by `cost.rs`'s `CONTENT_MATCH`** — a `MATCH`
 surcharge withheld from particles. It exists because `LEN_GAIN`'s square
 cancels exactly when a tiling peels a *single* character off either end of a
 headword: a non-COMMON entry of any length split into a COMMON piece of

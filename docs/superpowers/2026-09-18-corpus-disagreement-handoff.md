@@ -15,6 +15,8 @@ the sixth would have found. This session replaced that with a corpus.
 | --- | --- |
 | `1bb166f` | `examples/corpus_disagree.rs` — ranks two engines' disagreements over a corpus by how many of the engine's own signals agree |
 | `a3279ca` | `cost.rs`'s `CONTENT_MATCH` — a `MATCH` surcharge withheld from particles, which is the probe's whole top class |
+| `bdfe9c6` | the review's findings: the term's second mode, its arithmetic test, two dead lexicon rows, and the probe's ranking |
+| this one | `assemble::order` stops demoting a kana spelling JMdict calls normal — §6 |
 
 ## 2. The probe
 
@@ -157,7 +159,7 @@ The one cost is one hints-off `false-match` window: `はいた` in
 `d:a:003521-6`, §9.5's shape in the state where `PRONOUNCE_CROSS` is
 bounds-gated and cannot reach it.
 
-Gates: spurious merges **26 of 26**, 657 tests 0 failed 1 ignored, `fmt` and
+Gates: spurious merges **26 of 26**, 658 tests 0 failed 1 ignored, `fmt` and
 `clippy --all-targets --features mecab` clean, `bench` interleaved three
 rounds each way (hints on 536 / 560 / 531 ms before against 524 / 529 / 531
 after; hints off 579 / 609 / 587 against 589 / 596 / 596 — spreads overlap),
@@ -327,10 +329,10 @@ occurrences. **No signal can see it**: no single entry covers `思ってる`, so
 `sht` and `rdg` are structurally impossible, and readings 2–3 do not differ
 there, so `alt` is quiet too. 75 of the 122 fire nothing at all.
 
-**2. `いた`, 218 sentences — the largest single count in the corpus.**
-`待っていた` → `待って` + `い` + `た`, where `い` glosses "the Boar (twelfth
-sign of the Chinese zodiac)" and `た` "want to". Hints off it is
-`待って`|`いた`. Signals: `alt=v1` only, which put it at rank 316 under the old ordering and
+**2. `いた`, 218 sentences — the largest single count in the corpus. Half
+fixed, see §6.** `待っていた` → `待って` + `い` + `た`, where `い` glossed "the
+Boar (twelfth sign of the Chinese zodiac)". Hints off it is `待って`|`いた`.
+Signals: `alt=v1` only, which put it at rank 316 under the old ordering and
 rank 1 under the corrected one.
 
 **3. `からね` 44 and `からな` 39.** `そうだからね` → `そうだ` + `からね`, where
@@ -345,7 +347,50 @@ direction: `CONTENT_MATCH` did not cause them — they reproduce on the
 pre-change binary as well — and the over-merge counts above say the term did
 not enlarge the class either.
 
-## 6. Not done
+## 6. The `uk` clause, and the two routes refused beside it
+
+`PRONOUNCE_CROSS` charges 25 per boundary a kana match of a kanji entry
+crosses, and `assemble::order` demotes such a match below a `PRIMARY` one.
+Both are right for a kana *spelling* of a kanji word. Both are wrong for an
+entry JMdict tags `uk`, "word usually written using kana alone" — 9,580 of
+JMdict's 218,449 entries, `居る`, `見る`, `有る`, `成る` among them — where
+the kana **is** the normal spelling. `履く` and `穿く` are not `uk`, which is
+what makes the tag a discriminator rather than a blanket.
+
+**Shipped: the ordering half.** `order`'s `PRONOUNCE` clause is exempted when
+any sense carries `uk`, read straight off `SenseData::misc` rather than
+through a new flag bit. Entry top-1 **0.9400 → 0.9500 hints on and 0.9358 →
+0.9507 hints off**, +13 and +19 hits on unchanged denominators, and **every
+other cell in both states is identical to the digit** — `order` runs after the
+DP, so no boundary can move. `待っていた`'s `い` now glosses "to be (of animate
+objects); to exist". The snapshot moved in nine places, all gloss list
+reorderings, and `時間がない` now leads with 無い "nonexistent" instead of the
+negative auxiliary.
+
+**Refused, with numbers: `uk` as a `WordFlags` bit.** Built by flagging a `uk`
+entry's reading `PRIMARY` instead of `PRONOUNCE`, which carries the tag into
+`cost::PRONOUNCE_CROSS` too. It is better on nearly every cell — entry top-1
+0.9497 / 0.9507, `lexical` 82 → 87, `strict` 1745 → 1737, `tolerant` 1932 →
+1964 — and it **fails success criterion 3**: `ことになって` swallows its `に`
+and the 26-row `spurious_merges.txt` gate goes to 25, because `なる` is `uk`
+as well. `transparent` 40 → 37 and `false-match` 30 → 29 besides.
+
+**Refused, with numbers: widening `PRONOUNCE_CROSS`'s chain exemption to the
+chain's start.** The exemption is `a < p && p < b` over the characters the
+deinflection chain consumed, so the one cut it most obviously describes — the
+junction between a stem and the inflection after it — pays in full. `a <= p`
+fixes `待っていた`'s span outright. It is refused because the junction cannot
+tell that from the spurious class: `はこう` is `履く` Volitional with the stem
+`は` and the chain on `こう`, structurally identical, and `くるまではこう` is
+criterion 3's own named sentence. Measured hints on: `false-match` 30 → 26,
+`transparent` 40 → 37, entry top-1 0.9400 → 0.9314, breaking `はこう`,
+`はいた`, `いたから`, `とが` and `のか` ×3.
+
+So `待っていた` still reads `待って`|`い`|`た` hints on. The gloss is right and
+the span is not, and nothing in the current term set separates a verb stem
+from a particle.
+
+## 7. Not done
 
 - **The hints-off class is different and was not touched.** Its top 60 is
   full atomisation: `お姉ちゃん` → `お|姉|ちゃん` (39 sentences), `林間学校` →
@@ -358,9 +403,10 @@ not enlarge the class either.
   it** — `jparser-cli diff`, the corpus's sampling signal, requires `--hints`,
   so hints-off-only disagreements were structurally unreachable by the
   sampler.
-- **`いた`, the `ってる` family and `からね` are not fixed.** §5 is a
+- **`いた`'s span, the `ってる` family and `からね` are not fixed.** §5 is a
   measurement, not a queued task; each wants its own adjudication and its own
-  score run.
+  score run, and §6 records the two routes to `いた` that were tried and
+  refused.
 - **How much spurious-merge margin `ことになっている` has left is unmeasured.**
   §3.3.
 - **`夕陽` is corpus contamination and any gate built off this list must

@@ -37,8 +37,8 @@ start=7 len=1 。 unmatched
 === これは面白い映画だ。
 start=0 len=2 これ matched reading=-
     これ (-) [-] this
-    こる (Conditional) [-] to become stiff (of muscles)
     くる (Passive/Potential) [-] to come (spatially or temporally)
+    こる (Conditional) [-] to become stiff (of muscles)
     これ (-) [-] hey
     こる (Conditional) [-] to pack
 start=2 len=1 は matched reading=-
@@ -173,11 +173,11 @@ start=7 len=1 が matched reading=-
     が (-) [-] obstinacy
     ... 5 more
 start=8 len=2 ない matched reading=-
-    ない (-) [-] not
     ない (-) [-] nonexistent
+    ない (-) [-] not
     ない (-) [-] within ...
     ない (-) [-] emphatic suffix
-    なう (-) [-] to do ...
+    ない (-) [-] earthquake
     ... 3 more
 start=10 len=1 。 unmatched
 
@@ -237,9 +237,9 @@ start=4 len=2 話せ matched reading=はなせ
 start=6 len=2 ます matched reading=-
     ます (-) [-] measuring container
     ます (-) [-] to increase
+    ます (-) [-] trout
     ます (-) [-] expresses politeness towards the listener (or reader)
     ます (-) [-] to be
-    ます (-) [-] trout
     ... 3 more
 start=8 len=1 か matched reading=-
     か (-) [-] indicates a question
@@ -305,11 +305,11 @@ start=0 len=2 毎日 matched reading=まいにち
 start=2 len=3 走って matched reading=はしって
     走る (Te-form) [はしって] to run
 start=5 len=2 いる matched reading=-
-    いる (-) [-] to enter
     いる (-) [-] to be (of animate objects)
+    いる (-) [-] to be needed
+    いる (-) [-] to enter
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
-    いる (-) [-] to be needed
     ... 5 more
 start=7 len=1 。 unmatched
 
@@ -329,8 +329,8 @@ start=6 len=3 います matched reading=-
     いる (Polite) [-] to be (of animate objects)
     いる (Polite) [-] to shoot (arrow, bolt, dart)
     いる (Polite) [-] to cast
+    いる (Polite) [-] to calm down
     います (-) [-] to be
-    いる (Polite) [-] to lead
     ... 2 more
 start=9 len=1 。 unmatched
 
@@ -371,11 +371,11 @@ start=6 len=3 遊んで matched reading=あそんで
     遊ぶ (Te-form) [すさんで] to grow wild
     遊む (Te-form) [すさんで] to grow wild
 start=9 len=2 いる matched reading=-
-    いる (-) [-] to enter
     いる (-) [-] to be (of animate objects)
+    いる (-) [-] to be needed
+    いる (-) [-] to enter
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
-    いる (-) [-] to be needed
     ... 5 more
 start=11 len=1 。 unmatched
 
@@ -415,11 +415,11 @@ start=5 len=1 が matched reading=-
 start=6 len=3 待って matched reading=まって
     待つ (Te-form) [まって] to wait
 start=9 len=2 いる matched reading=-
-    いる (-) [-] to enter
     いる (-) [-] to be (of animate objects)
+    いる (-) [-] to be needed
+    いる (-) [-] to enter
     いる (-) [-] to shoot (arrow, bolt, dart)
     いる (-) [-] to roast
-    いる (-) [-] to be needed
     ... 5 more
 start=11 len=1 。 unmatched
 
@@ -515,8 +515,8 @@ start=2 len=1 に matched reading=-
     ... 6 more
 start=3 len=6 なりたいです matched reading=-
     なる (Want-to Polite) [-] to become
-    なる (Want-to Polite) [-] to sound
     なる (Want-to Polite) [-] to bear fruit
+    なる (Want-to Polite) [-] to sound
     なり (Want-to Polite) [-] to be
 start=9 len=1 。 unmatched
 
@@ -558,10 +558,10 @@ start=5 len=1 を matched reading=-
 start=6 len=3 待って matched reading=まって
     待つ (Te-form) [まって] to wait
 start=9 len=2 いた matched reading=-
+    いる (Past) [-] to be (of animate objects)
     いた (-) [-] board
     いたる (-) [-] to arrive at (e.g. a decision)
     いたい (-) [-] painful
-    いる (Past) [-] to be (of animate objects)
     いる (Past) [-] to shoot (arrow, bolt, dart)
     ... 5 more
 start=11 len=1 。 unmatched

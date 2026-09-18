@@ -112,7 +112,9 @@ pub fn to_segment(
 /// `COUNTER` entry before the rest **when the character before the span is a
 /// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
 /// word itself) before a `PRONOUNCE` one (a kanji entry's own reading,
-/// offered only as a fallback); a shallower deinflection chain before a
+/// offered only as a fallback) **unless JMdict tags the entry `uk`**, where
+/// the kana spelling is the normal one and demoting it is simply wrong; a
+/// shallower deinflection chain before a
 /// deeper one, since an uninflected reading of the same surface is the
 /// likelier one; and, last, ascending `entry_id` -- JMdict's own `ent_seq` --
 /// as a tiebreak. Every earlier clause is a fact JMdict, the match itself or
@@ -159,6 +161,23 @@ pub fn to_segment(
 /// candidates with the same entry but *different* chains -- and therefore
 /// different `Entry::conjugation` labels -- could tie on every key above and
 /// still be visibly different in the output.
+/// Whether JMdict tags the entry `uk`, "word usually written using kana
+/// alone".
+///
+/// Read off the senses rather than a flag bit on purpose. `order` already has
+/// the assembled [`Entry`] and `SenseData::misc` is already stored, so this
+/// costs nothing; putting `uk` into [`WordFlags`] would carry it into
+/// `cost::PRONOUNCE_CROSS` as well, which was measured and refused — it takes
+/// the 26-row `spurious_merges.txt` gate to 25 by letting `ことになって`
+/// swallow its `に`, because `なる` is `uk` too. The ordering half is free of
+/// that: it runs after the DP and moves no boundary.
+fn usually_kana(entry: &Entry) -> bool {
+    entry
+        .senses
+        .iter()
+        .any(|s| s.misc.iter().any(|m| m == "uk"))
+}
+
 pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool) {
     built.sort_unstable_by_key(|(c, e)| {
         (
@@ -166,7 +185,7 @@ pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool) {
             !c.flags.contains(WordFlags::COMMON),
             !(prev_is_digit && c.flags.contains(WordFlags::COUNTER)),
             !c.flags.contains(WordFlags::PARTICLE),
-            c.flags.contains(WordFlags::PRONOUNCE),
+            c.flags.contains(WordFlags::PRONOUNCE) && !usually_kana(e),
             c.steps.len(),
             // More senses first. JMdict's own editorial content, not a corpus
             // count -- and placed last, where `entry_id` was about to decide
@@ -660,6 +679,58 @@ mod tests {
         assert_eq!(
             mixed[0].0.entry_id, 1,
             "COMMON still outranks the sense count"
+        );
+    }
+
+    /// The `uk` exemption on the `PRONOUNCE` clause.
+    ///
+    /// `PRONOUNCE` demotes a kanji entry's own reading because a kana
+    /// spelling of a kanji word is a fallback. For an entry JMdict tags `uk`
+    /// — "usually written using kana alone" — that premise is false: the kana
+    /// *is* how the word is written, and 9,580 of JMdict's 218,449 entries
+    /// say so. `待っていた` is the case it was found on: `いる` is `uk`, its
+    /// `いた` lost the clause to `い` "the Boar (twelfth sign of the Chinese
+    /// zodiac)", and the corpus probe counts `いた` in 218 sentences.
+    ///
+    /// Measured over the gold corpus with `score`: entry top-1 **0.9400 →
+    /// 0.9500 hints on and 0.9358 → 0.9507 hints off, +13 and +19 hits on an
+    /// unchanged denominator, with no span moving in either state** — `order`
+    /// runs after the DP, so it cannot. Every other cell is identical to the
+    /// digit.
+    ///
+    /// **It is deliberately not a `WordFlags` bit**, which would carry `uk`
+    /// into `cost::PRONOUNCE_CROSS`. That was measured: entry top-1 rises
+    /// further (0.9497 / 0.9507) and `lexical` goes 82 → 87, but
+    /// `ことになって` swallows its `に` and the 26-row `spurious_merges.txt`
+    /// gate goes to 25, because `なる` is `uk` as well. Success criterion 3
+    /// refuses it.
+    #[test]
+    fn order_does_not_demote_a_kana_spelling_the_dictionary_calls_normal() {
+        let uk = |id: u32, senses: usize| {
+            let (c, mut e) = with_senses(id, true, WordFlags::PRONOUNCE, 0, senses);
+            e.senses[0].misc.push("uk".to_string());
+            (c, e)
+        };
+        // The exemption makes the two *tie* on this clause, so the test has
+        // to be visible one clause further down: the `uk` entry carries more
+        // senses, which is only ever consulted once PRONOUNCE has tied.
+        let mut cands = vec![with_senses(1, true, WordFlags::PRIMARY, 0, 1), uk(2, 2)];
+        order(&mut cands, false);
+        assert_eq!(
+            cands[0].0.entry_id, 2,
+            "a `uk` reading is not a fallback, so the clause ties and the              sense count decides"
+        );
+
+        // The same shape without `uk`: the clause fires and the PRIMARY
+        // entry wins despite having fewer senses.
+        let mut plain = vec![
+            with_senses(1, true, WordFlags::PRIMARY, 0, 1),
+            with_senses(2, true, WordFlags::PRONOUNCE, 0, 2),
+        ];
+        order(&mut plain, false);
+        assert_eq!(
+            plain[0].0.entry_id, 1,
+            "without `uk` the clause still demotes the reading"
         );
     }
 
