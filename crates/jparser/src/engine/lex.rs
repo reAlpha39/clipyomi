@@ -73,6 +73,13 @@ pub struct Candidate {
     /// before folding -- the FST matched only because kana was unified, not
     /// because the two strings actually agree.
     pub exact: bool,
+    /// Every character of the span is katakana.
+    ///
+    /// Set here rather than recomputed in `cost`, which never receives
+    /// `chars` -- the same reason `digit_counter` lives on this struct. Read
+    /// by `cost::cost` to decide whether a tokenizer boundary *inside* the
+    /// span is evidence of anything; see `KATAKANA_MIN_PIECE`.
+    pub all_katakana: bool,
     /// Whether this span also partitions into two or more candidates that
     /// each carry both `COMMON` and `PARTICLE` -- `には` as `に` + `は`.
     ///
@@ -204,6 +211,9 @@ pub fn candidates(
                             flags: WordFlags(record.flags),
                             steps: hit.steps.clone(),
                             exact: record.surface == key,
+                            all_katakana: chars[start..end]
+                                .iter()
+                                .all(|c| kana::is_kana(*c) && !kana::is_hiragana(*c)),
                             // Filled from `chars` below, where the span is
                             // known; the walk here has only the record.
                             digit_counter: false,
@@ -583,6 +593,7 @@ mod tests {
             flags,
             steps: Vec::new(),
             exact: true,
+            all_katakana: false,
             digit_counter: false,
             after_digit_noncounter: false,
             function_stack: false,
@@ -643,6 +654,7 @@ mod tests {
                 steps
             ],
             exact,
+            all_katakana: false,
             function_stack: false,
             grammatical_stack: false,
             digit_counter: false,

@@ -369,12 +369,21 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
 
 /// Forms an [`ATTACHES_TO`] lemma does **not** generate, by `(lemma, form)`.
 ///
-/// One entry's worth of exception, and it exists because 一段 gives both
-/// 命令ｙｏ and 未然ウ接続 the suffix `よ`, so `てる` and `でる` would carry
-/// the surfaces `てよ` and `でよ`. Real 一段 verbs have that imperative
-/// (見ろ/見よ); the colloquial contraction does not -- its imperative is
-/// `待ってろ`, never `待ってよ` -- and what the surface actually collides with
-/// is the sentence-final particle よ.
+/// Two lemmas' worth of exception -- `てる` and `でる`, and **not** the
+/// uncontracted `ている`/`でいる` -- and the difference between them is the
+/// whole argument. 一段 gives both 命令ｙｏ and 未然ウ接続 the suffix `よ`, so
+/// `てる` and `でる` carry the surfaces `てよ` and `でよ`. Real 一段 verbs have
+/// that imperative (見ろ/見よ); the colloquial contraction does not -- its
+/// imperative is `待ってろ`, never `待ってよ` -- and what the surface collides
+/// with is the sentence-final particle よ, because `待って` is a word and `よ`
+/// is a particle.
+///
+/// **`ていよ` cannot decompose that way**, because `待ってい` is not a standalone
+/// anything, so the collision argument does not transfer and the
+/// uncontracted pair is deliberately not blocked. Blocking it by analogy was
+/// tried and cost `待っていよう` and `遊んでいよう`, which are ordinary
+/// Japanese; measured over 8,334 lines, unblocking changes 2 sentences, both
+/// gains, and absorbs no particle.
 ///
 /// **Measured over 8,334 lines of dialogue**: ungated, 22 occurrences absorb a
 /// final よ into the verb -- `待ってよ`, `返してよ`, `答えてよ`, `呼んでよ` --
@@ -387,15 +396,55 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
 ///
 /// Blocking both よ-forms costs the one corpus occurrence of `てよう`
 /// (未然ウ接続 + う, "let's be waiting"), which is the trade.
+/// Auxiliary pairs that may not stack, by `(outer lemma, outer form, inner
+/// lemma)`.
+///
+/// 一段's 未然形 and 連用形 have empty suffixes, so `てる`'s own surfaces
+/// include a bare `て` and every auxiliary that takes a 未然形 can stack on it.
+/// That is what reaches `思ってない`, `思ってた` and `思ってます`, and it is why
+/// the rows exist. Two of those auxiliaries produce a single kana that is far
+/// commoner as a sentence-final particle:
+///
+/// - `ぬ` at 仮定形 is `ね`, so `してね` ("please do it") read `する`
+///   Progressive Negative **Conditional** -- 25 occurrences over 8,334 lines.
+/// - `ない` at ガル接続 is `な`, so `待ってな` read `待つ` Progressive Negative
+///   -- 9 more.
+///
+/// **Neither auxiliary can lose the form**, which is why this is keyed on the
+/// pair and not on `AUX_FORM_BLOCK`'s `(lemma, form)`. `行かねば` is `ぬ` at
+/// 仮定形 and `食べな` is `ない` at ガル接続, both committed fixture rows;
+/// blocking the forms outright deletes them, and measured over the corpus it
+/// changes 167 sentences against this rule's 34 while still leaving 9 of the
+/// defects standing.
+///
+/// **`ねえ` is untouched and that is the point.** `してねえ` and `知らねえ` are
+/// `ない` at 音便基本形, a different form from either blocked one: 150 spans
+/// ending `ねえ` are byte-identical before and after.
+///
+/// Ledger over 8,334 lines, hints on: 34 sentences change, 30 release a
+/// particle correctly, 1 is neutral, and **3 regress** -- the `〜てなさそう`
+/// shape (`わかってなさそうな顔`), where the `な` really is the negative and the
+/// disambiguator is the `さ` in the *next* span, which a chain search
+/// structurally cannot see. No tighter key avoids them.
+///
+/// Two rows per contraction lemma, so a new one added to [`ATTACHES_TO`]
+/// wants two here.
+const CHAIN_BLOCK: &[(&str, &str, &str)] = &[
+    ("ぬ", "仮定形", "てる"),
+    ("ぬ", "仮定形", "でる"),
+    ("ぬ", "仮定形", "ている"),
+    ("ぬ", "仮定形", "でいる"),
+    ("ない", "ガル接続", "てる"),
+    ("ない", "ガル接続", "でる"),
+    ("ない", "ガル接続", "ている"),
+    ("ない", "ガル接続", "でいる"),
+];
+
 const AUX_FORM_BLOCK: &[(&str, &str)] = &[
     ("てる", "命令ｙｏ"),
     ("てる", "未然ウ接続"),
     ("でる", "命令ｙｏ"),
     ("でる", "未然ウ接続"),
-    ("ている", "命令ｙｏ"),
-    ("ている", "未然ウ接続"),
-    ("でいる", "命令ｙｏ"),
-    ("でいる", "未然ウ接続"),
 ];
 
 /// A hit recorded at one node of [`Table`]'s reverse trie.
@@ -623,7 +672,19 @@ impl Table {
                         if len == 0 || !form_named(required, class, form) {
                             continue;
                         }
+                        let outer_form = CLASSES[class as usize].forms[form as usize].name;
                         for mut sub in self.search(chars, end - len, budget - len, Some(requires)) {
+                            // `steps` is innermost-first and each recursion
+                            // level pushes at the end, so `last()` is the step
+                            // immediately inside this one. `aux` is `None`
+                            // there exactly when it is the headword's own
+                            // inflection, which CHAIN_BLOCK never refuses --
+                            // that is what keeps `食べな` and `行かねば` alive.
+                            if let Some(inner) = sub.steps.last().and_then(|s| s.aux) {
+                                if CHAIN_BLOCK.contains(&(lemma, outer_form, inner)) {
+                                    continue;
+                                }
+                            }
                             sub.consumed += len;
                             sub.steps.push(ConjStep {
                                 class,
@@ -968,10 +1029,10 @@ mod tests {
         // own 一段 forms include the empty-suffix 未然形 and 連用形 that every
         // later auxiliary attaches to, less the eight AUX_FORM_BLOCK rows.
         assert_eq!(
-            chains, 72_049,
-            "the walk reached {chains} chains, not 72,049 -- the conjugation table's \
+            chains, 73_731,
+            "the walk reached {chains} chains, not 73,731 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 72,049 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 73,731 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
              maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
              constant, rather than loosening the assertion"

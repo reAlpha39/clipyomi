@@ -966,9 +966,16 @@ fn the_particle_absorbing_merges_are_gone() {
         // still failed, because the covering entry is checked by id. A segment
         // sitting *exactly* on the surface stays a failure whatever it matched:
         // that shape is the class by construction.
+        // `s.start == at`, not `<=`, and the difference is the whole class.
+        // A covering segment that starts **left** of the surface has absorbed
+        // something, which is precisely what this fixture refuses; one that
+        // starts *at* it has not. With `<=` the `になって` row passed while
+        // `ことになって` swallowed its `に` -- the exact parse the `uk`
+        // WordFlags variant was refused over -- because a 7-character segment
+        // from 37 covers 39..43 and its top entry is 事になる, not 1599900.
         let covered_by_longer = r.segments.iter().any(|s| {
             s.matched
-                && s.start <= at
+                && s.start == at
                 && at + len <= s.start + s.len
                 && s.len > len
                 && s.entries.first().is_some_and(|e| e.entry_id != ent_seq)

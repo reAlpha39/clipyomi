@@ -229,6 +229,7 @@ mod tests {
             flags: WordFlags::PRIMARY,
             steps: Vec::new(),
             exact: true,
+            all_katakana: false,
             function_stack: false,
             grammatical_stack: false,
             digit_counter: false,
