@@ -73,10 +73,10 @@ The plan succeeds when all four hold:
 
    | | v1 | v2 before | v2 now |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7448 (1611) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8109 (1754) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9347** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9374** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7550 (1633) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8067 (1745) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9358** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9400** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**,
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
@@ -665,34 +665,53 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7448 (1611) | 0.8086 (1749) | 0.9347 | 0.6075 (113 / 186) | 138 spans in 68 merges |
-| hints on | **0.8109 (1754)** | **0.8872 (1919)** | **0.9374** | **0.7634 (142 / 186)** | 165 spans in 74 merges |
+| hints off | 0.7550 (1633) | 0.8206 (1775) | 0.9358 | 0.6075 (113 / 186) | 142 spans in 70 merges |
+| hints on | **0.8067 (1745)** | **0.8932 (1932)** | **0.9400** | **0.8172 (152 / 186)** | 187 spans in 85 merges |
 
-Compounds by class, hints on: `lexical` 72 / 112, `false-match` 30 / 32,
-`transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 51 / 112,
-`false-match` 23 / 32, `transparent` 39 / 42. Latency at the app's ceiling
-(`jparser-cli bench`, gold index, k = 3): scaling 1.05x hints on, 0.97x off.
+Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
+`transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 52 / 112,
+`false-match` 22 / 32, `transparent` 39 / 42. Latency at the app's ceiling
+(`jparser-cli bench`, gold index, k = 3): scaling 1.00x hints on, 0.98x off.
 
-**Set 2026-09-17, last by `cost.rs`'s `LEN_GAIN`** — the first non-linear term
-in this cost model, and the only shape that separates a long dictionary word
-from a short particle stack (see its own comment for why no `MATCH` value
-can). **The hints-off half is unmoved to the digit and that is by
-construction:** the term is gated on `bounds`, because without a tokenizer
-nothing constrains a span's endpoints and a length reward then invents words
-across real boundaries — measured, 48 shattered gold spans and 20 swallowed
-past a boundary.
+**Set 2026-09-18, last by `cost.rs`'s `CONTENT_MATCH`** — a `MATCH`
+surcharge withheld from particles. It exists because `LEN_GAIN`'s square
+cancels exactly when a tiling peels a *single* character off either end of a
+headword: a non-COMMON entry of any length split into a COMMON piece of
+`n-1` and a COMMON piece of `1` loses by the same one point at `n = 2` as at
+`n = 5`, which is `呼び|方`, `発売|所`, `副|大統領`, `月|平均`, `一歩|先`,
+`総|売り上げ` and `年|ぶり`. Raising `MATCH` to 3 closes that gap and also
+merges `彼の`, `名の`, `煙が`, `今も` and `側から` — because a per-span
+constant cannot see that the peeled character is a particle in one set and a
+bound morpheme in the other. Withholding the surcharge from `PARTICLE` is
+that distinction, and it costs neither split class anything.
 
-Hints on, **read the compound line and the coarsening column together**.
-`compounds` rises 118 -> 142 with `lexical` 46 -> 72 and `false-match`
-unmoved at 30 / 32, while `strict` falls 1826 -> 1754 and coarsening rises 86
-spans in 43 merges to 165 in 74. That is this section's own 16.5-point
-measurement happening in front of you: the corpus is adjudicated at
-short-unit granularity, so every compound now kept whole costs its own gold
-spans. `tolerant` and `entry top-1` both rise, and criterion 2 clears in both
-states by a wider margin than before on entry top-1.
+**It was found by corpus, not by screenshot.**
+`examples/corpus_disagree.rs` ranks the places this engine and the ta-old
+port cut differently over 8,334 lines of visual-novel dialogue, by how many
+of the engine's own signals agree. This class was the whole head of that
+ranking: 77 regions at three signals and 238 at two, hints on. After the
+term, 7 and 36.
 
-The one genuine cost is `transparent` 42 -> 40. The spurious-merge gate holds
-at 26 of 26 and the snapshot is byte-identical.
+Hints on: `compounds` 142 -> **152** with `lexical` 72 -> 82 and **both
+split classes unmoved** — `false-match` 30 / 32 and `transparent` 40 / 42.
+`strict` falls 1754 -> 1745 while coarsening rises 165 spans in 74 merges to
+187 in 85, which is this section's own 16.5-point measurement again: ten more
+compounds kept whole cost their own short-unit gold spans. `tolerant` rises
+1919 -> 1932 and `entry top-1` 0.9374 -> 0.9400.
+
+**Hints off moves for once, and upward**: `strict` 1611 -> 1633, `tolerant`
+1749 -> 1775, `entry top-1` 0.9347 -> 0.9358. `LEN_GAIN` is gated on
+`bounds` and this term is not, because a per-span constant cannot invent a
+span — it reprices spans that already exist. That matters more than the
+hints-on half: `mecab_hints` is `#[serde(default)]` on a `bool`, so a fresh
+install runs hints **off**.
+
+The one cost is one hints-off `false-match` window, `はいた` in
+`d:a:003521-6` (23 / 32 to 22 / 32), the §9.5 shape in the state where
+`PRONOUNCE_CROSS` is bounds-gated and cannot reach it. The spurious-merge
+gate holds at 26 of 26. The snapshot moved once and it is a correction:
+`日本語を話せますか。` read `話` + `せま`("narrow") + `すか`("disappointment")
+and now reads `話せ` + `ます` + `か`.
 
 **This block was stale for two phases and the staleness had a cost.** It read
 `0.8174 / 0.8525 / 0.9092` hints on and `0.9093` entry top-1 hints off until
