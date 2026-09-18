@@ -16,7 +16,8 @@ the sixth would have found. This session replaced that with a corpus.
 | `1bb166f` | `examples/corpus_disagree.rs` — ranks two engines' disagreements over a corpus by how many of the engine's own signals agree |
 | `a3279ca` | `cost.rs`'s `CONTENT_MATCH` — a `MATCH` surcharge withheld from particles, which is the probe's whole top class |
 | `bdfe9c6` | the review's findings: the term's second mode, its arithmetic test, two dead lexicon rows, and the probe's ranking |
-| this one | `assemble::order` stops demoting a kana spelling JMdict calls normal — §6 |
+| `30726c4` | `assemble::order` stops demoting a kana spelling JMdict calls normal — §6 |
+| this one | `table.rs`'s `てる`/`でる` rows, the ている contraction — §7 |
 
 ## 2. The probe
 
@@ -319,7 +320,7 @@ Every one reproduces on the shipped engine, hints on, and all three are
 distinct corpus sentences out of 8,334.
 
 **1. The te-form euphonic stem shatters, 122 region surfaces / 300
-occurrences.** `思ってる` → `思` + `っ` + `てる`, where `てる` glosses 照る
+occurrences. FIXED, §7.** `思ってる` → `思` + `っ` + `てる`, where `てる` glosses 照る
 "to shine"; `言ってる` → `言`("word") + `っ` + `てる`; `遊んでる` → `遊` + `ん`
 ("yes; yeah") + `でる`(出る). Shape: a lone `っ`/`ん` segment followed by a
 segment opening `て`/`で`. It is a hint artefact — IPADIC cuts `言っ`+`てる`,
@@ -390,8 +391,125 @@ So `待っていた` still reads `待って`|`い`|`た` hints on. The gloss is 
 the span is not, and nothing in the current term set separates a verb stem
 from a particle.
 
-## 7. Not done
+## 7. The てる / でる rows
 
+思ってる read 思 | っ | てる, with てる glossed 照る "to shine"; 遊んでる read
+遊 | ん | でる, with でる glossed 出る. 122 region surfaces, 300 corpus
+sentences, and **no signal could see any of it**: no single JMdict entry
+covers 思ってる, so `sht` and `rdg` are structurally impossible, and readings
+2–3 do not differ there either.
+
+**Why nothing could cover it.** IPADIC tokenizes 思っ|てる. JMdict's
+思って ends strictly inside the てる token, so `cost::is_allowed` refuses it;
+`relax::Relaxed` reopens only a token no candidate can cover and 照る covers
+this one; and 思っ alone is 連用タ接続, which `BOUND_FORMS` stopped from
+standing alone when the sokuon-tail branch fixed 優しいっ. Three constraints,
+each right on its own, leaving the region uncoverable.
+
+**JMdict does carry てる and でる** — `[primary]` "to be ...-ing", and they
+conjugate, so `思ってろ` already matched `てる` Imperative. The entry cannot
+help here: reaching it needs a *separate* span, and the only span that could
+precede one is `思って`, which is the span `is_allowed` refuses. An earlier
+draft of this document and of `table.rs` said JMdict had no headword; that was
+wrong and is corrected here.
+
+**The fix is three `ATTACHES_TO` rows**, the same shape the ちゃう family
+already has — a contraction IPADIC tokenizes on its own — which put the
+contraction *inside* one span rather than beside it:
+
+```
+("てる", "一段", "連用タ接続"),   # 思ってる, 待ってる
+("てる", "一段", "連用形"),         # 食べてる, 見てる, してる
+("でる", "一段", "連用タ接続"),   # 遊んでる, 読んでる
+```
+
+一段 because the contraction conjugates as one: てる / てた / てて / てない /
+てます. でる mirrors the existing で row and takes 連用タ接続 only, for the
+same reason で does — it follows an onbin stem and nothing else. It reaches
+`遊んでる` and `遊んでない`; `遊んでた` and `遊んでます` keep the `だ` 連用形
+route that was already there and are still labelled Past, **a pre-existing
+asymmetry between て and で** measured on the previous binary and left alone —
+fixing it means inserting `でる` above `だ`, which relabels bare `遊んで`
+"Progressive", the same trap as below.
+
+The label is **Progressive**, and it is the **second** word in
+`conjugation_labels.txt` its Wikipedia terminology list does not carry.
+An earlier draft claimed the opposite. That article discusses ている under its
+gerund and infinitive sections with no one-word English gloss and uses
+"continuative" only as an alias for 連用形, so Progressive has exactly
+Completive's status: the standard term for the aspect, from Wikipedia's
+"Grammatical aspect". The aspect is genuinely ambiguous — progressive for
+`走ってる`, resultative for `知ってる` — but unlike れる/られる the readings are
+not balanced, so the primary one is used unqualified, which is the Completive
+precedent rather than the Passive/Potential one.
+
+**Row order is load-bearing, and it was measured the hard way.** 一段's
+未然形 and 連用形 have empty suffixes, so てる's own surfaces include a bare
+`て` — the same surface as the Te-form auxiliary, at the same trie node, at
+the same depth. `lex::dedup_shallowest` keeps whichever `Table::new` inserted
+first. Inserted **above** the て/で rows, every plain te-form in the corpus
+relabelled "Progressive": 走って, 遅れて, 開けて, 遊んで, して, 待って. The gold
+corpus did not register it; `parse_sentences.txt`'s snapshot did, which is the
+third time that fixture has caught what the corpus could not. Below the て/で
+rows, `て` wins the bare node and `てる` keeps every node `て` does not reach.
+
+**What it costs.**
+
+**The rows alone were not shippable, and a before/after over the corpus is
+what showed it.** 一段 gives both 命令ｙｏ and 未然ウ接続 the suffix よ, so
+`てる` and `でる` carried `てよ`/`でよ` — the sentence-final particle. 22
+occurrences absorbed it (`待ってよ`, `返してよ`, `答えてよ`, `呼んでよ`), and
+five were much worse: `なく` is 五段・カ行イ音便, so `な` + `い` is a 連用タ接続
+site, and `忘れないでよね` parsed as `忘れ` + `ないでよ` + `ね` — the negation
+destroyed and the span glossed `なく` "to cry; to shed tears". A wrong
+headword stated confidently, which is worse than a missed merge.
+
+`AUX_FORM_BLOCK` is the answer: four `(lemma, form)` rows that stop the table
+generating a form at all. The contraction's imperative is `待ってろ`, never
+`待ってよ`, so blocking both よ-forms is right on the language as well as on
+the corpus. It costs the one `てよう` in 8,334 lines.
+
+| | strict | tolerant | entry top-1 | compounds | lexical | false-match | transparent |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| on, before | 1745 | 1932 | 0.9500 | 152 | 82 | 30 / 32 | 40 / 42 |
+| on, after | **1746** | **1935** | 0.9507 | 152 | 82 | **30 / 32** | **40 / 42** |
+| off, before | 1633 | 1775 | 0.9507 | 113 | 52 | 22 / 32 | 39 / 42 |
+| off, after | **1634** | **1778** | 0.9506 | 113 | 52 | **22 / 32** | 39 / 42 |
+
+Nothing falls. The reachable-chain constant goes 50,419 → 60,926 — test-walk
+only, and `bench` reads 1.02x in both states with interleaved spreads that
+overlap, the same answer the ちゃう rows got. 658 tests, 0 failed, 1 ignored;
+spurious merges 26 of 26; `tsc` clean and `vitest` 375 passed.
+
+**What it still costs.** Before/after over the same 8,334 lines: 1,225
+sentences change, 1,358 new spans appear, and of those
+
+- **34 absorb a sentence-final ね or な.** `してね` reads `する` Progressive
+  Negative where the text is a request, because 特殊・ナイ's 体言接続特殊２ *is*
+  `ね` and `してねえ` really is that contraction. The fix is a **chain-level**
+  block — `ない` may not attach to `てる` at 体言接続特殊２ — which the current
+  `(lemma, form)` shape cannot express. Named, not built.
+- **3 eat a kanji adverb**: `決してない` as `決す` Progressive Negative, because
+  `決す` is サ変・ースル with 連用形 `決し`. Hints-on only.
+
+37 against about 1,320 correct contractions, and the gate is 26 of 26
+throughout. **An earlier draft of this section said "of 428 newly merged
+regions exactly one has v1 splitting a lone particle inside it".** That number
+came from the v1-comparison probe, which is not a before/after of this change
+at all; the figures above are, and they are the ones to trust.
+
+The homographs the rows could have broken are untouched. All 441 JMdict
+headwords ending てる/でる were swept before and after: **0 gain a span**, 9
+lose one (`付いてる`, `来てる`, `変わってる`, `言えてる`, `背負ってる` — all
+lexicalised contractions, all wins). `捨てる`, `育てる`, `撫でる`, `照る`,
+`出てる` are byte-identical, because `lex::allows_chain` requires the
+reconstructed key's entry to carry a POS matching the chain's class: `捨る`
+and `育る` are not entries at all, and `当る` is `v5r`, not 一段.
+
+## 8. Not done
+
+- **The `〜てね` / `〜てな` absorption the `てる` rows introduced**, 34
+  occurrences, and the chain-level block that would fix it (§7).
 - **The hints-off class is different and was not touched.** Its top 60 is
   full atomisation: `お姉ちゃん` → `お|姉|ちゃん` (39 sentences), `林間学校` →
   `林|間|学校` (19), `四足歩行` (8), `乙女`, `舎弟`, `魔性`, `お嬢様`,
@@ -403,7 +521,7 @@ from a particle.
   it** — `jparser-cli diff`, the corpus's sampling signal, requires `--hints`,
   so hints-off-only disagreements were structurally unreachable by the
   sampler.
-- **`いた`'s span, the `ってる` family and `からね` are not fixed.** §5 is a
+- **`いた`'s span and `からね` are not fixed** (the `ってる` family is, §7).** §5 is a
   measurement, not a queued task; each wants its own adjudication and its own
   score run, and §6 records the two routes to `いた` that were tried and
   refused.

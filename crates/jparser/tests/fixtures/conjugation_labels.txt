@@ -295,6 +295,51 @@
 # 未然ウ接続 and 未然形 rows are stems, not free words, listed for the same
 # reason 書いたろ is: the walk reaches them and every reachable tuple needs a
 # row.
+# 待ってよ and 遊んでよ had a row each here for てる/でる's 命令ｙｏ and
+# 未然ウ接続 until table.rs's AUX_FORM_BLOCK stopped the table generating
+# the よ surface at all. The contraction's imperative is 待ってろ, never
+# 待ってよ, and the surface collided with the sentence-final particle よ --
+# 22 absorbed particles over 8,334 lines of dialogue, five of them the
+# 忘れないでよ shape that destroyed the negation outright. Named here
+# rather than quietly dropped, the way the three 連用タ接続 stems above
+# are.
+#
+# てる/でる are the ている/でいる contraction, the colloquial progressive:
+# 思ってる, 遊んでる, 食べてる. table.rs gives them their own ATTACHES_TO
+# rows for the same reason ちゃう has them -- IPADIC tokenizes the
+# contraction as its own token, and although JMdict does carry てる and
+# でる as headwords, reaching that entry needs a separate span and the only
+# span that could precede one is refused by the tokenizer constraint. See
+# table.rs.
+#
+# "Progressive" is the SECOND word in this file that the Wikipedia
+# terminology list in the header does not carry -- that article discusses
+# ている under its gerund and infinitive sections and gives no one-word
+# English gloss, and it uses "continuative" only as an alias for 連用形.
+# Like Completive above, the word is the standard grammatical term for the
+# aspect (Wikipedia, "Grammatical aspect", read 2026-09). The aspect is
+# genuinely ambiguous -- progressive for 走ってる, resultative for
+# 知ってる and 結婚してる -- but unlike れる/られる the two readings are not
+# balanced, so the primary one is used unqualified, which is the Completive
+# precedent rather than the Passive/Potential one. JMdict's own gloss for
+# the entry is "to be ...-ing" and agrees.
+#
+# 未然形 and 連用形 are the empty-suffix stems, listed for the same reason
+# 買っちゃわ is: the walk reaches them and every reachable tuple needs a row.
+待ってれ	五段・タ行:連用タ接続 てる:仮定形	Progressive Conditional
+待ってりゃ	五段・タ行:連用タ接続 てる:仮定縮約１	Progressive Conditional
+待ってん	五段・タ行:連用タ接続 てる:体言接続特殊	Progressive
+待ってろ	五段・タ行:連用タ接続 てる:命令ｒｏ	Progressive Imperative
+待ってる	五段・タ行:連用タ接続 てる:基本形	Progressive
+待って	五段・タ行:連用タ接続 てる:未然形	Progressive
+待って	五段・タ行:連用タ接続 てる:連用形	Progressive
+遊んでれ	五段・バ行:連用タ接続 でる:仮定形	Progressive Conditional
+遊んでりゃ	五段・バ行:連用タ接続 でる:仮定縮約１	Progressive Conditional
+遊んでん	五段・バ行:連用タ接続 でる:体言接続特殊	Progressive
+遊んでろ	五段・バ行:連用タ接続 でる:命令ｒｏ	Progressive Imperative
+遊んでる	五段・バ行:連用タ接続 でる:基本形	Progressive
+遊んで	五段・バ行:連用タ接続 でる:未然形	Progressive
+遊んで	五段・バ行:連用タ接続 でる:連用形	Progressive
 買っちゃえ	五段・ワ行促音便:連用タ接続 ちゃう:仮定形	Completive Conditional
 買っちゃえ	五段・ワ行促音便:連用タ接続 ちゃう:命令ｅ	Completive Imperative
 買っちゃう	五段・ワ行促音便:連用タ接続 ちゃう:基本形	Completive
