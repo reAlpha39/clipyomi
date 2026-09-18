@@ -34,6 +34,17 @@
 //! with v1 exactly, so the cover is already in the lattice and only the cost
 //! model ranked it second.
 //!
+//! **Three of the four detect over-*splitting* only, and that is a blind
+//! spot, not a design.** `sht` requires that we cut a covered region, `rdg`
+//! compares the *parts'* readings so a merge makes it trivially equal, and
+//! `prt` needs a lone `は`/`へ` to still be its own segment — so when the
+//! engine swallows one into a bogus word (`今の俺はいない` → `はい` "yes")
+//! every one of them is silent. Only `alt` is symmetric, and it scores 1. A
+//! region where this engine merged and v1 split can therefore never reach the
+//! head of the ranking, and a change that increases merging will always look
+//! good here. Read the ranking against a count of merge-direction regions,
+//! not on its own.
+//!
 //! ```text
 //! cargo run --release -p jparser --features mecab --example corpus_disagree -- \
 //!   <v2-index> <corpus.txt> <v1-dump.tsv> [--hints <system.dic>] [--top N]
@@ -48,6 +59,11 @@ use std::collections::BTreeSet;
 #[cfg(feature = "mecab")]
 const USAGE: &str =
     "usage: corpus_disagree <index-dir> <corpus.txt> <v1-dump.tsv> [--hints <dic>] [--top N]";
+
+/// Kana that carry no word on their own: the small vowels, the sokuon, the
+/// small `や`-row and the long mark, in both scripts.
+#[cfg(feature = "mecab")]
+const SMALL_KANA: &str = "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶー";
 
 #[cfg(feature = "mecab")]
 /// Readings asked of the engine. 3 is what the `alt` signal was found with
@@ -84,11 +100,19 @@ struct Region {
 
 #[cfg(feature = "mecab")]
 impl Region {
+    /// `alt` and `sht` only, and the count is a tiebreak rather than the
+    /// ranking — both measured over the corpus.
+    ///
+    /// `rdg` fired on 82 rows hints-on and **every one of them also fired
+    /// `sht`**: it is a strict subset, so counting it adds no row and merely
+    /// double-weights a quarter of the `sht` class. That is how `誰が`(たが)
+    /// reached rank 1 on a surface whose 28 corpus sentences all read
+    /// `だれが`. `prt` fired **0 times** hints-on across 4,838 rows and 8
+    /// times hints-off, all 8 already `sht`. Both are kept as annotations,
+    /// because they say something about the *kind* of defect, and neither
+    /// ranks.
     fn signals(&self) -> usize {
-        usize::from(self.alt)
-            + usize::from(self.reading_differs)
-            + usize::from(self.shattered)
-            + usize::from(self.particle_romaji)
+        usize::from(self.alt) + usize::from(self.shattered)
     }
 
     fn tags(&self) -> String {
@@ -115,12 +139,28 @@ impl Region {
 
 #[cfg(feature = "mecab")]
 /// Cut positions strictly inside `(lo, hi)`, from a span list.
+///
+/// Sorted, because the two sides are compared with `==` and only one of them
+/// is this crate's. Nothing in the dump's format contract says the v1 spans
+/// arrive in ascending order, and an unsorted dump would otherwise mint
+/// regions whose cut *sets* are identical.
 fn cuts_in(spans: &[(usize, usize)], lo: usize, hi: usize) -> Vec<usize> {
-    spans
+    let mut out: Vec<usize> = spans
         .iter()
         .map(|(s, l)| s + l)
         .filter(|&p| p > lo && p < hi)
-        .collect()
+        .collect();
+    out.sort_unstable();
+    out
+}
+
+/// Whether `spans` covers `0..n` exactly once, in order.
+#[cfg(feature = "mecab")]
+fn tiles(spans: &[(usize, usize)], n: usize) -> bool {
+    spans
+        .iter()
+        .try_fold(0, |at, &(s, l)| (s == at).then_some(s + l))
+        == Some(n)
 }
 
 #[cfg(feature = "mecab")]
@@ -166,8 +206,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let top: usize = args
         .iter()
         .position(|a| a == "--top")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|s| s.parse().ok())
+        .map(|i| args.get(i + 1).expect(USAGE).parse().expect(USAGE))
         .unwrap_or(40);
 
     // `text -> spans`. The dump is keyed by the sentence itself rather than by
@@ -201,6 +240,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut regions: HashMap<String, Region> = HashMap::new();
     let (mut sentences, mut disagreeing, mut missing) = (0usize, 0usize, 0usize);
+    let mut untiled = 0usize;
 
     for text in fs::read_to_string(Path::new(corpus))?.lines() {
         if text.trim().is_empty() {
@@ -219,12 +259,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let v2_spans: Vec<(usize, usize)> =
             parsed.segments.iter().map(|s| (s.start, s.len)).collect();
+        // Both starts and ends. A dump that omits its unmatched runs would
+        // otherwise hide every gap's opening position, `b1 == b2` would be
+        // unsatisfiable and every sentence would read as disagreeing. The
+        // tiling check below is the other half of that guard: `surfaces_in`
+        // and the reading comparisons all assume no span straddles a region
+        // edge, which holds only while both lists cover `0..n` exactly.
         let b1: BTreeSet<usize> = std::iter::once(0)
-            .chain(v1_spans.iter().map(|(s, l)| s + l))
+            .chain(v1_spans.iter().flat_map(|&(s, l)| [s, s + l]))
             .collect();
         let b2: BTreeSet<usize> = std::iter::once(0)
-            .chain(v2_spans.iter().map(|(s, l)| s + l))
+            .chain(v2_spans.iter().flat_map(|&(s, l)| [s, s + l]))
             .collect();
+        if !tiles(v1_spans, n) {
+            untiled += 1;
+            continue;
+        }
         if b1 == b2 {
             continue;
         }
@@ -256,9 +306,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let surface: String = chars[lo..hi].iter().collect();
             // A region of pure punctuation is a disagreement about how to
             // group characters neither engine matched. Nothing to adjudicate.
+            //
+            // A small kana does not count as content. The first version of
+            // this guard asked `is_kana || is_kanji` and let 146 zero-signal
+            // rows of `ぅ……`, `ゅ、`, `っ、` through, because `ぅ` is kana:
+            // v1 glues an unmatched small kana to the punctuation beside it
+            // and the engine does not, which is not a segmentation opinion.
             if !surface
                 .chars()
-                .any(|c| kana::is_kana(c) || kana::is_kanji(c))
+                .any(|c| kana::is_kanji(c) || (kana::is_kana(c) && !SMALL_KANA.contains(c)))
             {
                 continue;
             }
@@ -306,12 +362,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 })
                 .map(|c| (c.entry_id, c.headword.clone(), c.grammatical_stack));
             if let Some((id, headword, stack)) = cover {
-                r.stack = stack;
-                let whole = index
-                    .entry(id)?
-                    .and_then(|e| e.readings.first().cloned())
-                    .unwrap_or_else(|| surface.clone());
-                r.covered_by = Some((headword, whole.clone()));
+                // A region whose last piece is a COMMON particle is the same
+                // refusal as a grammatical stack, and `is_grammatical_stack`
+                // does not catch it because it asks about *every* piece.
+                // Measured: 33 such rows carry 287 occurrences and only two
+                // are worth fixing. The class is every archaic-reading trap —
+                // `誰が`(たが), `天の`(あめの), `外に`(ほかに), `本の`(ほんの),
+                // `並に`(ならびに) — where the split is right, plus `みたいな`
+                // at n = 128. Commonness of the *cover* is not the
+                // discriminator and reaching for it is backwards: those are
+                // `[primary,common-line]` while `呼び方`, `部屋着` and
+                // `キャンプ場`, the real defects, are bare `[primary]`.
+                let particle_tail = parsed
+                    .segments
+                    .iter()
+                    .rfind(|s| s.start >= lo && s.start + s.len <= hi)
+                    .and_then(|s| s.entries.first())
+                    .is_some_and(|e| {
+                        e.flags.contains(WordFlags::PARTICLE) && e.flags.contains(WordFlags::COMMON)
+                    });
+                r.stack |= stack || particle_tail;
+                // Every reading, not the first. An entry stores its `<reb>`
+                // forms in document order and a multi-reading entry's first is
+                // arbitrary as far as this comparison goes, so `rdg` would
+                // otherwise fire or not for a reason unrelated to the region.
+                // Kana-only entries store none and the surface is the reading.
+                let readings = index.entry(id)?.map(|e| e.readings).unwrap_or_default();
+                let whole = if readings.is_empty() {
+                    vec![surface.clone()]
+                } else {
+                    readings
+                };
+                r.covered_by = Some((headword, whole[0].clone()));
                 if !c2.is_empty() {
                     r.shattered = true;
                 }
@@ -324,7 +406,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .filter(|s| s.start >= lo && s.start + s.len <= hi)
                     .map(|s| s.reading.clone().unwrap_or_else(|| s.surface.clone()))
                     .collect();
-                if !parts.is_empty() && kana::fold_str(&parts) != kana::fold_str(&whole) {
+                if !parts.is_empty()
+                    && !whole
+                        .iter()
+                        .any(|w| kana::fold_str(&parts) == kana::fold_str(w))
+                {
                     r.reading_differs = true;
                 }
                 // `prt`: a lone は/へ inside a region a real word covers takes
@@ -346,10 +432,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // **Frequency first, among the rows a signal reached.** Ranking by signal
+    // count was measured against the corpus and it is close to ranking by
+    // "does a dictionary entry happen to exist": `alt` fires on 53% of rows
+    // and `sht` on 6.7%, so the count separates almost nothing while
+    // frequency — the thing the whole probe exists to supply — was only a
+    // tiebreak inside it. It buried `いた` (219 sentences, `待って`|`い`|`た`
+    // where `い` glosses "the Boar") at rank 316 under `誰が` at 28. Whether
+    // *any* signal fired still gates: a row no signal touches is probably v1
+    // being wrong, and those sort last.
     let by_rank = |a: &(&String, &Region), b: &(&String, &Region)| {
-        b.1.signals()
-            .cmp(&a.1.signals())
+        (b.1.signals() > 0)
+            .cmp(&(a.1.signals() > 0))
             .then(b.1.sentences.len().cmp(&a.1.sentences.len()))
+            .then(b.1.signals().cmp(&a.1.signals()))
             .then(a.0.cmp(b.0))
     };
     let (stacks, mut ranked): (Vec<_>, Vec<_>) = regions.iter().partition(|(_, r)| r.stack);
@@ -359,6 +455,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("sentences parsed:        {sentences}");
     println!("  not in the v1 dump:    {missing}");
+    println!("  v1 spans do not tile:  {untiled}");
     println!("  where the two differ:  {disagreeing}");
     println!("distinct regions:        {}", regions.len());
     println!(

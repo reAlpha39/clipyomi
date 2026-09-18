@@ -78,7 +78,9 @@ The plan succeeds when all four hold:
    | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9358** ✓ |
    | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9400** ✓ |
 
-   Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**,
+   Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
+   — a 2026-09-16 reading; `LEN_GAIN` and `CONTENT_MATCH` have since taken it
+   to 0.8067 (1745) and §5.2 carries the current figure —
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
    *inside* an inflection. That change on its own pushed entry top-1 back
    under the floor — 30 newly-placed spans are harder and 15 resolved wrong —
@@ -94,8 +96,8 @@ The plan succeeds when all four hold:
    is the measurement, and `order` runs after the DP, so nothing else moved.
 
    **Read "span accuracy" as §5.2 defines it — strict.** `span tolerant` is a
-   later diagnostic and *is* below v1 (0.8465 → 0.7924 hints off), because v1
-   earned it with 167 dictionary merges against v2's 62 and tolerant credits
+   later diagnostic and *is* below v1 (0.8465 → 0.8206 hints off), because v1
+   earned it with 167 dictionary merges against v2's 70 and tolerant credits
    exactly the particle-absorbing merges criterion 3's fixture exists to kill.
    §5.2 already records that metric as over-forgiving by about 1.3 points for
    this reason. It is not this criterion's metric and is not a regression.
@@ -690,7 +692,17 @@ that distinction, and it costs neither split class anything.
 port cut differently over 8,334 lines of visual-novel dialogue, by how many
 of the engine's own signals agree. This class was the whole head of that
 ranking: 77 regions at three signals and 238 at two, hints on. After the
-term, 7 and 36.
+term, 7 and 36 — **and that figure is a split-detector reporting on a
+merge-increasing change**, so read it as confirmation that the intended class
+closed, never as evidence that nothing else opened. Three of the four signals
+can only see over-splitting; the probe's own module doc names the blind spot.
+The merge direction was counted separately and is flat: regions where this
+engine has fewer segments than v1 go 525 to 529 and 1,228 sentences to 1,232.
+**The corpus is copyrighted game script and is not in the repository**, so
+this figure cannot be re-checked in-tree — the same standing as §4's "gate 6
+was not run". What is re-checkable is every gold cell above and the arithmetic
+contract `a_one_character_peel_ties_unless_the_peeled_piece_is_a_particle`
+pins.
 
 Hints on: `compounds` 142 -> **152** with `lexical` 72 -> 82 and **both
 split classes unmoved** — `false-match` 30 / 32 and `transparent` 40 / 42.
@@ -700,11 +712,22 @@ compounds kept whole cost their own short-unit gold spans. `tolerant` rises
 1919 -> 1932 and `entry top-1` 0.9374 -> 0.9400.
 
 **Hints off moves for once, and upward**: `strict` 1611 -> 1633, `tolerant`
-1749 -> 1775, `entry top-1` 0.9347 -> 0.9358. `LEN_GAIN` is gated on
-`bounds` and this term is not, because a per-span constant cannot invent a
-span — it reprices spans that already exist. That matters more than the
+1749 -> 1775, `entry top-1` 0.9347 -> 0.9358. That matters more than the
 hints-on half: `mecab_hints` is `#[serde(default)]` on a `bool`, so a fresh
 install runs hints **off**.
+
+**It is not the class above that moves there, and the term's own arithmetic
+says so.** `LEN_GAIN` is gated on `bounds`, so hints off the squares are not
+present to cancel and the one-character-peel gap is `2n − MATCH −
+CONTENT_MATCH`, which *grows* with `n` — 1 point at `n = 2`, 3 at `n = 3`, 7
+at `n = 5`. What moves is the term's second mode: it favours a merge by
+(content pieces in the tiling − 1), so a three-piece all-content shatter gains
+two. Verified — `罪|悪|感` and `解|像|度` become whole hints off, `林|間|学校`
+does not. This term is ungated where `LEN_GAIN` is gated because its magnitude
+is bounded at one point per span-count difference, so its worst case is one
+boundary; `LEN_GAIN`'s reward grows as `n²` and ungated it buys arbitrarily
+long spurious spans. "A constant cannot invent a span" would have been the
+wrong reason: `LEN_GAIN` only repriced spans that already existed too.
 
 The one cost is one hints-off `false-match` window, `はいた` in
 `d:a:003521-6` (23 / 32 to 22 / 32), the §9.5 shape in the state where

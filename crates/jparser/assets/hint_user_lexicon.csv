@@ -55,17 +55,20 @@
 # the particle entry, and `furiganaFor` reads `wa`/`e` off that flag. Kana-only,
 # so the sweep did see it; it ranked below the 81-word cutoff.
 #
-# あたし達: `[primary]`, "we; us". Costs +6 against あたし(-1) + 達(+1). The
-# sweep is kana-only by construction and this has a kanji, so it was never a
-# candidate. The `[noun]達` class is open (私達 is already one JMdict
-# headword, 君達 and 侺達 are others); this is the one that was reported, and
-# the class wants a suffix rule rather than a row each if more turn up.
+# あたし達 and 唐揚げ WERE here and were removed on 2026-09-18, because
+# `cost.rs`'s `CONTENT_MATCH` closed their shape structurally and both now
+# merge unaided -- measured by deleting the rows and re-running, whole in
+# both cases with every gold cell identical to the digit in both hint states.
+# They are named rather than quietly dropped, the way conjugation_labels.txt
+# names its three deleted rows.
 #
-# 唐揚げ: `[primary]`, "deep-fried food". Costs +5 against 唐(+1) + 揚げ(0),
-# both COMMON. The reading is the proof it is lexical rather than
-# compositional: からあげ, not とう + あげ, which is what the split rendered.
-# Kanji-bearing, so the sweep never saw it. 唐揚 (no げ) already merges
-# unaided and needs no row.
+# あたし達 was `[primary]`, "we; us", +6 against あたし(-1) + 達(+1); the
+# kana-only sweep never saw it. The `[noun]達` class is still open (私達 is
+# its own JMdict headword, 君達 and 侺達 are others) but it is no longer this
+# file's problem unless one turns up that `CONTENT_MATCH` does not reach.
+# 唐揚げ was `[primary]`, "deep-fried food", +5 against 唐(+1) + 揚げ(0); its
+# reading is what proved it lexical, からあげ and not とう + あげ. Both are
+# the one-character-peel shape `CONTENT_MATCH` exists for.
 #
 # 無断で is in the same sentence, is also `[primary]` without `common`, and is
 # deliberately **not** here. It is compositional -- 無断 + で, and the reading
@@ -73,8 +76,12 @@
 # class says split it, and the engine already does. Translation Aggregator
 # merges it; that is not a standard this project follows.
 #
-# **This list is not converging.** Four reported screenshots on 2026-09-16
-# produced four instances of one defect class: a `[primary]` headword with no
+# **It converged by half.** Four reported screenshots on 2026-09-16 produced
+# four instances of one defect class, and `CONTENT_MATCH` took two of the
+# four on 2026-09-18. What is left here is the half that term cannot reach:
+# なのに and へへ are both tiled by COMMON *particles*, which is exactly the
+# tiling it withholds its surcharge from. The rest of this block is the
+# 2026-09-16 record, kept as written. The class was: a `[primary]` headword with no
 # `common` tag losing to its own COMMON parts, by exactly the arithmetic at
 # the top of this block. A row each is a patch, not a fix. The structural
 # candidate is `MATCH = 6` -- which `cost.rs` records as what ある日 needs
@@ -173,5 +180,3 @@
 その日,1,1,-2078,名詞,一般,*,*,*,*,その日,その日
 なのに,1,1,-3200,名詞,一般,*,*,*,*,なのに,なのに
 へへ,1,1,-1131,名詞,一般,*,*,*,*,へへ,へへ
-あたし達,1,1,-3200,名詞,一般,*,*,*,*,あたし達,あたしたち
-唐揚げ,1,1,-2078,名詞,一般,*,*,*,*,唐揚げ,からあげ

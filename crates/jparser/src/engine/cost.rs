@@ -89,8 +89,12 @@ const MATCH: i32 = 2;
 /// `呼び|方`, `発売|所`, `副|大統領`, `部屋|着`, `脳|内`, `危険|日`,
 /// `キャンプ|場`, `月|平均`, `総|売り上げ`, `一歩|先`.
 ///
-/// `MATCH = 3` closes that gap and was measured (hints on): `lexical`
-/// 72 → 83. It also merges `彼の`, `名の`, `煙が`, `今も` and `側から` —
+/// `MATCH = 3` closes that gap and was measured **on today's engine, the one
+/// with `LEN_GAIN`** (hints on): `lexical` 72 → 83. The sokuon-tail handoff
+/// §3c records `M = 3` as inert — 1823 / 118 / 46 / 30 / 42, identical to
+/// M = 2 — and that sweep is not wrong, it predates `LEN_GAIN`. The square is
+/// what gives a per-span constant a class to reach. It also merges
+/// `彼の`, `名の`, `煙が`, `今も` and `側から` —
 /// `transparent` 40 → 35 and `false-match` 30 → 28 — because a blanket
 /// per-span constant cannot see that the character being peeled off `彼の` is
 /// a **particle** and the one being peeled off `呼び方` is not. That is the
@@ -101,14 +105,47 @@ const MATCH: i32 = 2;
 /// span is not a failure to find a longer word — it is the analysis success
 /// criterion 3 and `spurious_merges.txt` exist to protect — so it pays
 /// `MATCH` and nothing more, while two content words that a single dictionary
-/// entry spans pay twice. Every one of the five regressions above has a
-/// particle as its peeled character and stays split; every compound in the
-/// class above has a content character and merges.
+/// entry spans pay twice. Both split classes are unmoved on the gold corpus,
+/// 30 / 32 and 40 / 42 before and after, which is the check that the five
+/// regressions above did not happen.
+///
+/// **The general rule is wider than "withheld from particles", and is stated
+/// here because the narrow phrasing hides it.** The term favours the *merge*
+/// by (content pieces in the tiling − 1), and favours the *split* only where a
+/// content merge tiles entirely into particles. A two-piece tiling with one
+/// particle (`彼` + `の`) is therefore exactly neutral — the designed case —
+/// while a three-piece tiling with two content pieces hands the merge a point.
+/// Two consequences worth naming:
+///
+/// - **That second mode is what moves hints off**, where `LEN_GAIN` is absent,
+///   the one-character-peel gap is `2n − MATCH − CONTENT_MATCH` and grows with
+///   `n` instead of cancelling — so the class above is not reached there at any
+///   length. What is reached is the three-piece all-content shatter: `罪|悪|感`
+///   and `解|像|度` become whole, `林|間|学校` does not.
+/// - **It spends margin on criterion 3's weakest row.** `ことになっている` is
+///   `exp,v1`, so it is content, and it tiles `こと` + `に` + `なっている` —
+///   two content pieces, so the merge gains a point. Handoff §3c records that
+///   row as the one that took the spurious-merge gate 26 → 25 under
+///   `M=6 FS=8 PC=12`. The gate is 26 of 26 here and `grammatical_stack` still
+///   withholds `LEN_GAIN` from that merge, but how much margin is left is
+///   unmeasured.
+///
+/// **The flag is per entry and `any`-over-senses** (`flags.rs`'s
+/// `PARTICLE_POS = ["prt", "conj"]`), so one `conj` sense anywhere withholds
+/// the surcharge from every headword that entry produces, kanji forms
+/// included: 41 of the 104 PARTICLE entries in `gold_jmdict_subset.xml` are
+/// kanji-bearing or carry a content POS (`間` `adv,conj,n`, `程` `adv,n,prt`,
+/// `又` `adv,conj,pref`, `プラス`). That is a **coverage ceiling, not a risk** —
+/// withholding only ever makes a span cheaper, and a merge is one span against
+/// a tiling of many, so the term cannot fire the wrong way from it. A compound
+/// whose peeled character is one of those simply stays in the failing class.
 ///
 /// 1, because the gap it closes is exactly one point and the term's whole
 /// argument is that it should reach that class and no further. The tie it
-/// creates is resolved by `lattice`'s longer-run tie-break toward the merge,
-/// the same way `COMMON`'s and `FUNCTION_STACK`'s ties already are.
+/// creates is resolved toward the merge by `lattice::beats`' last-step-length
+/// tie-break — a merge's single step is always longer than the tiling's last
+/// step, which is a proper suffix of it — the same way `COMMON`'s and
+/// `FUNCTION_STACK`'s ties already are.
 const CONTENT_MATCH: i32 = 1;
 
 /// Discount for a matched span's length, charged as `LEN_GAIN * (len - 1)²`.
@@ -348,10 +385,12 @@ const COMMON: i32 = -2;
 ///
 /// **What it measured on-engine 2026-09-09, hints on — these are the cells as
 /// they stood that day, and the hints-on half has since moved twice (Phase 4's
-/// escape and `order`'s two new clauses): strict is 1792, tolerant 1870 and
-/// entry top-1 0.9236 today, while the hints-off half below is still exact
-/// because neither change touched that state. Master plan §5.2 carries the
-/// current figures.** strict 1737 -> 1768 spans
+/// escape and `order`'s two new clauses, and twice more since for `LEN_GAIN`
+/// and `CONTENT_MATCH`): "strict is 1792, tolerant 1870 and entry top-1
+/// 0.9236 today" was a 2026-09-16 reading and is 1745 / 1932 / 0.9400 as of
+/// 2026-09-18. The hints-off half below stopped being exact on 2026-09-18 for
+/// the same reason. Master plan §5.2 carries the current figures and this
+/// paragraph is a dated record.** strict 1737 -> 1768 spans
 /// (+31), tolerant 1843 -> 1844 (+1), entry top-1 0.9063 -> 0.9092,
 /// compounds 101 -> 114 windows, `transparent` 30 -> 42 of 42 with
 /// `lexical` 41 -> 42 and `false-match` 30 -> 30 -- no class regressed.
@@ -667,6 +706,47 @@ mod tests {
             cost(&plain, None),
             "a conjugated match pays nothing, however its span decomposes"
         );
+    }
+
+    /// `CONTENT_MATCH`'s whole claim, as an arithmetic contract rather than a
+    /// corpus number — the shape
+    /// `a_function_stack_pays_only_while_it_is_unconjugated` above uses for
+    /// `FUNCTION_STACK`'s gate.
+    ///
+    /// The claim is that a non-COMMON headword under bounds now **ties** its
+    /// COMMON `(n-1)` + COMMON `1` tiling at every `n`, because `LEN_GAIN`'s
+    /// squares cancel for that split, and still **loses by one** when the
+    /// peeled character is a PARTICLE. Without this the length-invariance in
+    /// the comment is unguarded: nothing else here would fail if the term
+    /// became per-character, or if the particle case stopped being withheld.
+    #[test]
+    fn a_one_character_peel_ties_unless_the_peeled_piece_is_a_particle() {
+        /// Every position is a boundary, which is what a merge and its tiling
+        /// both need to be legal; the term under test is gated on `bounds`
+        /// being present at all.
+        struct At;
+        impl Boundaries for At {
+            fn is_boundary(&self, _: usize) -> bool {
+                true
+            }
+        }
+        let b: Option<&dyn Boundaries> = Some(&At);
+        for n in 2..=5usize {
+            let whole = cost(&cand(0, n, WordFlags::PRIMARY, true), b);
+            let head = cost(&cand(0, n - 1, WordFlags::COMMON, true), b);
+            assert_eq!(
+                whole,
+                head + cost(&cand(n - 1, 1, WordFlags::COMMON, true), b),
+                "at n = {n} a content peel ties, and `lattice::beats` gives \
+                 the tie to the merge"
+            );
+            let particle = WordFlags(WordFlags::COMMON.0 | WordFlags::PARTICLE.0);
+            assert_eq!(
+                head + cost(&cand(n - 1, 1, particle, true), b) + 1,
+                whole,
+                "at n = {n} a particle peel still beats the merge by one"
+            );
+        }
     }
 
     /// `MATCH` is charged once per span, whatever its length — that is the

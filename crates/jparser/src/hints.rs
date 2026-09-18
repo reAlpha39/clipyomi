@@ -232,10 +232,18 @@ mod tests {
     ///
     /// 83 -> 87 on 2026-09-16 for `なのに`, `へへ`, `あたし達` and `唐揚げ`, all
     /// the same shape as `ある日`/`その日`. Gates re-run at each step, every cell
-    /// in both hint states identical to the digit. Four screenshots produced
-    /// four instances of one defect class in one day, so the number will keep
-    /// climbing until something structural closes it -- see the CSV's last
-    /// block for what that would be.
+    /// in both hint states identical to the digit.
+    ///
+    /// **87 -> 85 on 2026-09-18, and the direction is the point.** That
+    /// comment used to end "the number will keep climbing until something
+    /// structural closes it"; `cost.rs`'s `CONTENT_MATCH` closed half of it.
+    /// `あたし達` and `唐揚げ` are the one-character-peel shape that term
+    /// exists for and both now merge unaided -- measured by deleting the rows
+    /// and re-running, every gold cell identical to the digit in both hint
+    /// states. `なのに` and `へへ` stay, because both tile into COMMON
+    /// *particles* and that is exactly the tiling the surcharge is withheld
+    /// from. A dead row is not free: the cap below exists because Vibrato's
+    /// Viterbi is global.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
