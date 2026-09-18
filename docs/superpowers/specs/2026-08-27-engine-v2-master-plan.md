@@ -65,6 +65,13 @@ The plan succeeds when all four hold:
 2. **Span accuracy** and **entry top-1** (§5.2) on the Phase 0 gold corpus are
    each no lower than the current engine's, measured by the same harness.
 
+   **That corpus contains no visual-novel dialogue** — 69 pastiche, 41 Aozora
+   pre-war literary, 32 Wikinews/Wikipedia, 8 noise, and tier C2 excluded by
+   design. This criterion is therefore a floor on literary and news prose, not
+   on the register README's first paragraph names as the target. It is still a
+   floor and it still binds; §5.2's "what register these numbers speak for"
+   block says how to weigh it against corpus evidence when the two disagree.
+
    **Met 2026-09-16, and it was not met before that day.** Span accuracy had
    cleared the v1 baseline since Phase 1b; **entry top-1 had been sitting
    below it in both hint states for eight phases and no document said so.**
@@ -682,6 +689,45 @@ way read 536 / 560 / 531 ms before against 524 / 529 / 531 after hints on, and
 579 / 609 / 587 against 589 / 596 / 596 off; the spreads overlap. The `てる`
 rows below read the same way: 1.02x in both states, and interleaved 596 / 572 /
 551 ms before against 604 / 562 / 579 after.
+
+**WHAT REGISTER THESE NUMBERS SPEAK FOR, added 2026-09-18 because nothing said
+it and a refusal was argued on it.** The 150 sentences behind every cell above
+are, by `source` tier: **69 hand-written pastiche (C1), 41 Aozora Bunko pre-war
+literary prose (A), 32 ja.Wikinews / ja.Wikipedia (B), 8 derived noise (D)**.
+Visual-novel dialogue is **0 of 150, by design** —
+`tests/fixtures/gold_sources.md` records that tier C2, real `vn_data` lines, "is
+never committed and has no rows here", because the text is copyrighted and the
+committed corpus is the reproducible contract.
+
+That exclusion is a licensing decision and it is the right one. Naming its
+*measurement* consequence is what was missing: README's first paragraph says
+this program is "for visual novels, games, and immersion reading", so **every
+gate in this section is measured on text the product does not primarily
+target**, and the corpora the disagreement probe runs on are visual-novel
+dialogue and nothing else. Neither side is "the truth". The rule, when they
+disagree, is to **say which register each number speaks for** rather than
+quoting whichever agrees with the change under test — and in particular a
+`strict` fall on literary and news prose is weaker evidence against a change
+than the same fall would be on the target register. This is a weighting, not
+a licence to skip a gate; criterion 3's fixture and the compound class lines
+stay absolute.
+
+Worked example, [`2026-09-18-three-corpus-adjudication-handoff.md`](../2026-09-18-three-corpus-adjudication-handoff.md)
+§8: ungating `LEN_GAIN` hints-off reads `compounds` 118 → 158 with `lexical`
+56 → 94 and no split class regressing, against `strict` 1604 → 1525. It was
+refused on independent VN-corpus evidence — the spans it invents sever
+morphology, `話しかける` → `話しかけ` + `る` — and that refusal stands. But the
+strict fall was quoted beside it as though the two carried equal weight, and
+they do not.
+
+**The fix for this is `tests/fixtures/gold_local.jsonl`**, which `.gitignore`
+already reserves: "the local gold corpus over `vn_data` lines, scored by the
+same `jparser-cli score` as the committed corpus but never committed (Phase 0
+design §3.2)". Phase 0 built the mechanism and nothing has used it. A few
+hundred hand-adjudicated VN-register spans would make a VN-class change
+*approvable* rather than only detectable, which is the constraint that decided
+the largest available change of 2026-09-18. It is hand adjudication, so it is
+a phase of its own.
 
 **Last moved 2026-09-18 by `table.rs`'s `ていく`/`でいく` rows**, the
 directional auxiliary — the most frequent member of the 〜て family still
