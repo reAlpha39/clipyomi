@@ -308,10 +308,18 @@
 # 2026-09-18 so that 待っていた stops reading 待って | い | た with い glossed
 # "the Boar (twelfth sign of the Chinese zodiac)" -- 218 corpus sentences,
 # the largest single count the disagreement probe found. Same 一段 class and
-# same two よ-forms blocked as てる above: 一段's 命令ｙｏ and 未然ウ接続
-# would give ていよ/でいよ, and the contraction's imperative is 待っていろ.
+# 一段 class. **The two よ-forms are NOT blocked here**, unlike てる below:
+# てる's てよ collides with the sentence-final particle because 待って is a
+# word and よ is a particle, but ていよ cannot decompose that way -- 待ってい
+# is not a standalone anything. Blocking them by analogy cost 待っていよう and
+# 遊んでいよう, which are ordinary Japanese; measured over 8,334 lines,
+# unblocking them changes 2 sentences, both gains, and absorbs no particle.
 # The stem てい is what reaches た and ます: 待っていた, 待っています.
 待っていれ	五段・タ行:連用タ接続 ている:仮定形	Progressive Conditional
+待っていよ	五段・タ行:連用タ接続 ている:命令ｙｏ	Progressive Imperative
+待っていよ	五段・タ行:連用タ接続 ている:未然ウ接続	Progressive
+遊んでいよ	五段・バ行:連用タ接続 でいる:命令ｙｏ	Progressive Imperative
+遊んでいよ	五段・バ行:連用タ接続 でいる:未然ウ接続	Progressive
 待っていりゃ	五段・タ行:連用タ接続 ている:仮定縮約１	Progressive Conditional
 待っていん	五段・タ行:連用タ接続 ている:体言接続特殊	Progressive
 待っていろ	五段・タ行:連用タ接続 ている:命令ｒｏ	Progressive Imperative

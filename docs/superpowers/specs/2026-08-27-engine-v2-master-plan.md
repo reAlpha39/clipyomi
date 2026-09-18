@@ -79,8 +79,8 @@ The plan succeeds when all four hold:
    | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9534** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
-   — a 2026-09-16 reading; `LEN_GAIN` and `CONTENT_MATCH` have since taken it
-   to 0.8067 (1745) and §5.2 carries the current figure —
+   — a 2026-09-16 reading; five later changes have moved it and the table
+   three lines above carries the current figure —
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
    *inside* an inflection. That change on its own pushed entry top-1 back
    under the floor — 30 newly-placed spans are harder and 15 resolved wrong —
@@ -731,6 +731,18 @@ the row's own `ent_seq`** — which is what the row was always about — and a
 segment sitting exactly on the surface still fails whatever it matched.
 Column 2 of that fixture was read by nothing until now.
 
+**Three later changes on 2026-09-18 moved no cell at all and are recorded in
+the handoff's §9 and §10**: the gate acceptance above tightened from
+`s.start <= at` to `s.start == at`, which is what restores the `uk`-flag
+refusal to a running check; `table.rs`'s `CHAIN_BLOCK`, which stops `ぬ` at
+仮定形 and `ない` at ガル接続 stacking on the `てる` family so `してね` is a
+request again rather than `する` Progressive Negative Conditional; and
+`cost.rs`'s `KATAKANA_MIN_PIECE`, the mirror of `relax::MIN_PIECE`, which
+stops `PRONOUNCE_CROSS` charging for a tokenizer cut inside a katakana run
+that leaves a piece shorter than three — `センパイ` read `セン` "line" +
+`パイ` "pie" in 70 corpus lines and correctly in 5, and the only thing that
+varied was whether IPADIC called it one token.
+
 **Set earlier the same day by `table.rs`'s `てる`/`でる` rows**, the ている /
 でいる contraction: `思ってる` read `思` | `っ` | `てる` with `てる` glossed
 照る "to shine", in 122 region surfaces and 300 corpus sentences, and now
@@ -794,9 +806,10 @@ swallows its `に` and the 26-row `spurious_merges.txt` gate goes to 25, because
 `待っていた`'s span as well as its gloss and breaks `はこう` — criterion 3's own
 named sentence — for `false-match` 30 → 26 and `transparent` 40 → 37.
 
-**The span half of that defect is therefore still open**: `待っていた` reads
-`待って`|`い`|`た` hints on, in 218 corpus sentences, and only the gloss on the
-`い` is fixed.
+**The span half of that defect was still open when this paragraph was
+written and is closed by the `ている` rows above**, later the same day.
+`待っていた` is one segment. `いた` standing outside the auxiliary is not:
+「猫がいた」 still reads `猫`|`が`|`い`|`た`.
 
 **The span cells were set by `cost.rs`'s `CONTENT_MATCH`** — a `MATCH`
 surcharge withheld from particles. It exists because `LEN_GAIN`'s square

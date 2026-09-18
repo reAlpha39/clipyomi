@@ -387,8 +387,8 @@ const COMMON: i32 = -2;
 /// they stood that day, and the hints-on half has since moved twice (Phase 4's
 /// escape and `order`'s two new clauses, and twice more since for `LEN_GAIN`
 /// and `CONTENT_MATCH`): "strict is 1792, tolerant 1870 and entry top-1
-/// 0.9236 today" was a 2026-09-16 reading and is 1745 / 1932 / 0.9400 as of
-/// 2026-09-18. The hints-off half below stopped being exact on 2026-09-18 for
+/// 0.9236 today" was a 2026-09-16 reading, and the cells moved four more
+/// times on 2026-09-18 alone. The hints-off half below stopped being exact on 2026-09-18 for
 /// the same reason. Master plan §5.2 carries the current figures and this
 /// paragraph is a dated record.** strict 1737 -> 1768 spans
 /// (+31), tolerant 1843 -> 1844 (+1), entry top-1 0.9063 -> 0.9092,
@@ -480,6 +480,41 @@ const DIGIT_NONCOUNTER: i32 = 3;
 /// JMdict's `COUNTER` flag cannot separate it: `週間`, `時間` and `匹` are
 /// counters and carry no flag.
 const DIGIT_COUNTER: i32 = -3;
+
+/// Shortest piece a tokenizer cut inside an all-katakana span may leave
+/// before that cut counts as evidence at all.
+///
+/// **The mirror of `relax::MIN_PIECE`, at the same value and for the same
+/// reason.** That constant asks whether an unmatchable katakana token may be
+/// *reopened*: only when it tiles into candidates of three characters or
+/// more, because "it decomposes into real words" and not "it is katakana" is
+/// the test. This one asks the converse: when the tokenizer cuts *inside* a
+/// katakana run and leaves a piece shorter than that, it has failed on a word
+/// it does not know rather than proposed a boundary, so `PRONOUNCE_CROSS`
+/// must not charge 25 for crossing it.
+///
+/// **`センパイ` is the case, and it is decided by that term alone.** JMdict has
+/// no `センパイ` headword; the span reaches 先輝 through `kana::fold`, so the
+/// record is the hiragana reading and is PRONOUNCE-only. Merged it costs
+/// `4 + 2 + 1 - 9 + 8 - 8 = 8` against `セン` + `パイ`'s 8 -- and then pays 25
+/// for IPADIC's interior cut, so the reader is shown "line" and "pie" where
+/// the word is 先輝. The same word in the same corpus is kept whole in the 5
+/// lines where IPADIC happens to call it one token, and split in 70 where it
+/// does not.
+///
+/// **Swept over every katakana run in 8,334 lines of dialogue**: 1,110
+/// distinct runs of three characters or more, of which the engine splits 110
+/// hints-on. Eight are real words shattered (`センパイ`, `アブナイ`,
+/// `サイアク`, `ヘンテコ`, `シロクロ`, `ハンパ`, `モンモン`,
+/// `ナイナイ`) and **every one leaves a piece shorter than three**; 63 are
+/// correct compound decompositions (`オンライン|フレンド`,
+/// `レトルト|カレー`) and **every one of those has both pieces at three or
+/// more**. Zero overlap on this corpus.
+///
+/// Safe against criterion 3 by construction: all 26 rows of
+/// `spurious_merges.txt` are hiragana or kanji, and the one mixed-script row
+/// (`タッとい`) is not an all-katakana run, so no row can reach this clause.
+const KATAKANA_MIN_PIECE: usize = 3;
 
 /// Penalty for a match whose source characters differ from the stored surface
 /// before folding.
@@ -580,7 +615,8 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
             .filter(|&p| bounds.is_boundary(p))
             .count() as i32;
         total += crossings * CROSS;
-        // A crossing inside the characters the deinflection chain consumed is
+        // A crossing **strictly** inside the characters the deinflection chain
+        // consumed is
         // the tokenizer cutting an *inflection*, not proposing a word
         // boundary, so it is not evidence of a spurious merge and pays
         // nothing. Everything else pays in full. The range is the chain's as a
@@ -588,7 +624,6 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
         // the っ and [2,3) for the た, and IPADIC's cut lands exactly on the
         // junction between them -- inside the inflection, but inside neither
         // step. See `PRONOUNCE_CROSS`'s comment for the measurement.
-        //
         //
         // **Widening it to the chain's start was measured and refused
         // (2026-09-18).** `a <= p` exempts the stem/suffix junction, which is
@@ -618,6 +653,12 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
                 });
             let charged = ((cand.start + 1)..(cand.start + cand.len))
                 .filter(|&p| bounds.is_boundary(p))
+                // See `KATAKANA_MIN_PIECE`.
+                .filter(|&p| {
+                    !(cand.all_katakana
+                        && (p - cand.start < KATAKANA_MIN_PIECE
+                            || cand.start + cand.len - p < KATAKANA_MIN_PIECE))
+                })
                 .filter(|&p| !matches!(chain, Some((a, b)) if a < p && p < b))
                 .count() as i32;
             total += charged * PRONOUNCE_CROSS;
@@ -689,6 +730,7 @@ mod tests {
             flags,
             steps: Vec::new(),
             exact,
+            all_katakana: false,
             function_stack: false,
             grammatical_stack: false,
             digit_counter: false,

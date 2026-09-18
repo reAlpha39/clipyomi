@@ -18,7 +18,8 @@ the sixth would have found. This session replaced that with a corpus.
 | `bdfe9c6` | the review's findings: the term's second mode, its arithmetic test, two dead lexicon rows, and the probe's ranking |
 | `30726c4` | `assemble::order` stops demoting a kana spelling JMdict calls normal — §6 |
 | `0983fd7` | `table.rs`'s `てる`/`でる` rows, the ている contraction — §7 |
-| this one | `table.rs`'s `ている`/`でいる` rows and the re-pointed gate row — §8 |
+| `79ccb71` | `table.rs`'s `ている`/`でいる` rows and the re-pointed gate row — §8 |
+| this one | the gate acceptance tightened, `CHAIN_BLOCK`, `KATAKANA_MIN_PIECE` — §9, §10 |
 
 ## 2. The probe
 
@@ -331,8 +332,8 @@ occurrences. **No signal can see it**: no single entry covers `思ってる`, so
 `sht` and `rdg` are structurally impossible, and readings 2–3 do not differ
 there, so `alt` is quiet too. 75 of the 122 fire nothing at all.
 
-**2. `いた`, 218 sentences — the largest single count in the corpus. FIXED,
-§8** (the gloss half in §6, the span half in §8).** `待っていた` → `待って` + `い` + `た`, where `い` glossed "the
+**2. `いた`, 218 sentences — the largest single count in the corpus. Fixed:
+the gloss half in §6, the span half in §8.** `待っていた` → `待って` + `い` + `た`, where `い` glossed "the
 Boar (twelfth sign of the Chinese zodiac)". Hints off it is `待って`|`いた`.
 Signals: `alt=v1` only, which put it at rank 316 under the old ordering and
 rank 1 under the corrected one.
@@ -574,7 +575,109 @@ than a matter of taste.
 `いた` standing alone is still `い` | `た` — 「猫がいた」 reads `猫`|`が`|`い`|`た`.
 Only the auxiliary use after a te-form is fixed.
 
-## 9. Not done
+## 9. Three corrections the review and the design pass produced
+
+None of these moves a gold cell. All three were found by reading, not by the
+corpus.
+
+### 9.1 The gate acceptance §8 added was too loose
+
+§8 widened `the_particle_absorbing_merges_are_gone` to accept a strictly
+longer word covering the surface when its top entry is not the row's
+`ent_seq`. The predicate was `s.start <= at`, and **that let the `になって` row
+pass while `ことになって` swallowed its `に`** — the exact parse the
+`uk`-as-`WordFlags` route was refused over in §6. A 7-character segment
+starting at 37 covers 39..43, and its top entry is 事になる, not 1599900.
+
+`s.start == at`. The class is *a preceding particle absorbed into the
+following word*: a covering segment that starts **left** of the surface has
+absorbed something, one that starts *at* it has not. §8's own case is
+untouched — `してい` is at 52 and `している` starts at 52.
+
+**Verified by re-running the refused variant.** With `<=`, the `uk` flag bit
+passed 26 of 26; with `==` it fails on `になって` again. The claim in §6 and in
+§5.2 that criterion 3 is what refuses it is backed by a running check once
+more — it was not, for one commit.
+
+### 9.2 The よ-block does not transfer to `ている`
+
+§8 blocked 命令ｙｏ and 未然ウ接続 on `ている`/`でいる` by analogy with §7.
+The analogy is false: `てよ` collides with the sentence-final particle because
+`待って` is a word and `よ` is a particle, and `ていよ` cannot decompose that way
+because `待ってい` is not a standalone anything. What the block actually cost
+was `待っていよう` and `遊んでいよう`, ordinary Japanese. Unblocked: 2 corpus
+sentences change, both gains, no particle absorbed. Four fixture rows added,
+chain constant 72,049 → 73,731.
+
+### 9.3 `CHAIN_BLOCK`, for the debt §7 shipped
+
+§7 knowingly shipped 34 occurrences where a sentence-final ね or な is read
+as the negative auxiliary. **The handoff named the wrong form for it**: 特殊・ナイ
+has no 体言接続特殊２. The `ね` is `ぬ` at 仮定形 — which is why the label read
+*Conditional* — and the `な` is `ない` at ガル接続. Two defects, 25 and 9.
+
+Neither auxiliary can lose the form: `行かねば` and `食べな` are committed
+fixture rows. So the block is keyed on the **pair** — `(outer lemma, outer
+form, inner lemma)`, eight rows — and consulted at one place in
+`Table::search`, after the recursion returns and before the step is pushed,
+where `steps.last().aux` is the inner lemma. `aux` is `None` for a headword's
+own inflection, which is what keeps `食べな` and `行かねば` alive.
+
+Ledger over 8,334 lines, hints on: 34 sentences change, **30 release the
+particle correctly**, 1 is neutral, **3 regress** — the `〜てなさそう` shape
+(`わかってなさそうな顔`), where the `な` really is the negative and the
+disambiguator is the `さ` in the *next* span, which a chain search
+structurally cannot see. No tighter key avoids them. `ねえ` is untouched:
+`してねえ` and `知らねえ` are `ない` at 音便基本形, a different form, and 150
+spans ending `ねえ` are byte-identical.
+
+**The `(lemma, form)` alternative was priced and refused.** Neither half fixes
+the 34 alone (9 and 25 left over); together they change 167 sentences instead
+of 34, and 391 instead of 79 hints-off, and delete two adjudicated fixture
+rows. They *also* clear about 115 pre-existing absurd merges — `からね` and
+`からな` ×90, glossed `かる` "to spur on" — which is a real measured win and
+belongs on its own branch with its own adjudication, not smuggled in here.
+
+`決してない` stays broken: 2 occurrences, plus 1 `決してなく`. `決す` and `愛す`
+are both サ変・ースル, so any class-keyed refusal kills `愛してる`. Nothing
+cheap fixes it.
+
+## 10. `KATAKANA_MIN_PIECE`, the mirror of `relax::MIN_PIECE`
+
+`センパイ` read `セン` ("line") + `パイ` ("pie") in 70 corpus lines and correctly
+in 5, and **the only thing that varied was whether IPADIC happened to call it
+one token**. JMdict has no `センパイ` headword; the span reaches 先輝 through
+`kana::fold`, so the record is the hiragana reading, is PRONOUNCE-only, and
+pays 25 for the interior cut. Merged it costs 8 against the split's 8 and then
+loses by the crossing — `PRONOUNCE_CROSS` alone decides it.
+
+`relax::MIN_PIECE = 3` already answers the converse question: an unmatchable
+katakana token may be *reopened* only when it tiles into pieces of three or
+more, because "it decomposes into real words" and not "it is katakana" is the
+test. The mirror is that a cut *inside* a katakana run leaving a piece shorter
+than three is the tokenizer failing on a word it does not know, so it is not
+evidence and pays nothing.
+
+Swept over every katakana run in the corpus: 1,110 distinct runs of three or
+more characters, 110 split hints-on. **Eight are real words shattered** —
+`センパイ`, `アブナイ`, `サイアク`, `ヘンテコ`, `シロクロ`, `ハンパ`,
+`モンモン`, `ナイナイ` — and every one leaves a piece shorter than three.
+**63 are correct compound decompositions** — `オンライン|フレンド`,
+`レトルト|カレー`, `クリスタル|ソーダ` — and every one has both pieces at
+three or more. Zero overlap.
+
+Result: 89 sentences change, 90 new spans, all of them the eight words plus
+`テキトー`, `スジモン`, `ノリノリ`, `カツオブシ`. **Every gold cell is identical
+to the digit in both hint states.** Safe against criterion 3 by construction:
+all 26 rows of `spurious_merges.txt` are hiragana or kanji, and the one
+mixed-script row is not an all-katakana run.
+
+`ヘンタイ` (10) and `ヨシヨシ` (6) are **not** reached and are a different cause:
+変態 carries a genuine katakana `r_ele` flagged `[reading, common-line]` with
+no `common`, so the merge forfeits the COMMON discount its parts keep. That is
+the `[primary]`-without-`[common]` class again.
+
+## 11. Not done
 
 - **The `〜てね` / `〜てな` absorption the `てる` rows introduced**, 34
   occurrences, and the chain-level block that would fix it (§7).

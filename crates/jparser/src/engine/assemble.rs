@@ -105,6 +105,23 @@ pub fn to_segment(
     })
 }
 
+/// Whether JMdict tags the entry `uk`, "word usually written using kana
+/// alone".
+///
+/// Read off the senses rather than a flag bit on purpose. `order` already has
+/// the assembled [`Entry`] and `SenseData::misc` is already stored, so this
+/// costs nothing; putting `uk` into [`WordFlags`] would carry it into
+/// `cost::PRONOUNCE_CROSS` as well, which was measured and refused — it takes
+/// the 26-row `spurious_merges.txt` gate to 25 by letting `ことになって`
+/// swallow its `に`, because `なる` is `uk` too. The ordering half is free of
+/// that: it runs after the DP and moves no boundary.
+fn usually_kana(entry: &Entry) -> bool {
+    entry
+        .senses
+        .iter()
+        .any(|s| s.misc.iter().any(|m| m == "uk"))
+}
+
 /// Decide which same-span candidate a caller sees first.
 ///
 /// In sequence: an exact surface match before one only reached by folding
@@ -161,23 +178,6 @@ pub fn to_segment(
 /// candidates with the same entry but *different* chains -- and therefore
 /// different `Entry::conjugation` labels -- could tie on every key above and
 /// still be visibly different in the output.
-/// Whether JMdict tags the entry `uk`, "word usually written using kana
-/// alone".
-///
-/// Read off the senses rather than a flag bit on purpose. `order` already has
-/// the assembled [`Entry`] and `SenseData::misc` is already stored, so this
-/// costs nothing; putting `uk` into [`WordFlags`] would carry it into
-/// `cost::PRONOUNCE_CROSS` as well, which was measured and refused — it takes
-/// the 26-row `spurious_merges.txt` gate to 25 by letting `ことになって`
-/// swallow its `に`, because `なる` is `uk` too. The ordering half is free of
-/// that: it runs after the DP and moves no boundary.
-fn usually_kana(entry: &Entry) -> bool {
-    entry
-        .senses
-        .iter()
-        .any(|s| s.misc.iter().any(|m| m == "uk"))
-}
-
 pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool) {
     built.sort_unstable_by_key(|(c, e)| {
         (
@@ -333,6 +333,7 @@ mod tests {
             flags,
             steps,
             exact: true,
+            all_katakana: false,
             function_stack: false,
             grammatical_stack: false,
             digit_counter: false,
@@ -547,6 +548,7 @@ mod tests {
                 step_count
             ],
             exact,
+            all_katakana: false,
             function_stack: false,
             grammatical_stack: false,
             digit_counter: false,
@@ -718,7 +720,7 @@ mod tests {
         order(&mut cands, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
-            "a `uk` reading is not a fallback, so the clause ties and the              sense count decides"
+            "a `uk` reading is not a fallback, so the clause ties and the sense count decides"
         );
 
         // The same shape without `uk`: the clause fires and the PRIMARY
