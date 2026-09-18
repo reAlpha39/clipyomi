@@ -100,6 +100,23 @@ pub struct Settings {
     /// `set_mecab_hints` is the only writer. The alternative — a snapshot
     /// written by an unrelated font-box change clobbering an in-flight toggle —
     /// is silent when it happens.
+    ///
+    /// **Why it defaults to `false`, since hints-off is measurably the worse
+    /// parse.** On the gold corpus hints-off reads strict 1593 against 1698,
+    /// tolerant 1786 against 1948 and 118 compound windows against 152, so a
+    /// fresh install runs the weaker engine. The default is nonetheless not a
+    /// quality preference — it records **whether the 7.7 MB Vibrato dictionary
+    /// has been acquired**. `state::load_hints` never downloads; it only opens
+    /// an already-published `hints/current/system.dic`, and
+    /// `commands::hints::set_mecab_hints` is the only code path that fetches
+    /// one. So flipping this to `true` on its own makes a fresh install boot
+    /// with `hints_off_warning("no dictionary in …")` and hints still off —
+    /// strictly worse than today, not better.
+    ///
+    /// Turning hints on for a first run therefore needs an *acquisition* on
+    /// the first-run path — the download screen in `src/main.ts` already has
+    /// the one gesture that would carry it — and the flip is a consequence of
+    /// that change, never a substitute for it.
     #[serde(default)]
     pub mecab_hints: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
