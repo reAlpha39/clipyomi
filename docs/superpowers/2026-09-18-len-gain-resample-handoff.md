@@ -332,14 +332,100 @@ fixture rows that state a property the change removes, and one snapshot
 regression. `それならいい` reading `それな` \| `らいい` is what that looks like
 on screen.
 
-**The largest reachable fix is no longer `LEN_GAIN` itself. It is the residue
-term**, and the adjudication is what makes that conclusion firm rather than
-merely attractive: the damage and the bogus gains are the *same cut*, so a term
-that refuses a merge leaving a `≤2`-character stub of an already-matched word
-removes both sides together. It reaches 99.6% of the severing and keeps 75.5%
-of the gains, it is priced here for the first time, and because `cost()` is per
-candidate and cannot see the tiling, it is a `lattice` change and a phase of
-its own.
+**The residue term was the obvious next move and it is refused** — see §11a,
+which was written after building it three ways. It is expressible and it costs
+roughly what §9 predicted, but it cannot be *aimed*: the words it must protect
+(`ながら`, `それなら`, `じゃない`) and the stacks it must not (`ために`,
+`くせに`, `ように`) carry identical JMdict flags, so no predicate over the
+dictionary separates them. The discriminator has to come from outside it.
+
+That leaves the decision where §10 puts it. Bare ungating is net-positive on
+the target register and ships a visible defect with no available fix; the
+alternative is to leave `LEN_GAIN` gated and spend the next phase on the
+signal — the tokenizer's POS, or the hand adjudication `gold_local.jsonl` was
+reserved for. **Nothing in this branch changes the engine**; every cell above
+is `HEAD`'s, re-measured.
+
+## 11a. The residue term: built, measured, refused — and the reason is sharp
+
+§9 priced it and §11 called it the largest reachable fix. It was then built, in
+three formulations, and **it is refused.** Not on cost: on the discovery that
+the signal it needs does not exist in the dictionary.
+
+**Formulation 1 — a per-position mask.** Mark every position interior to a
+`COMMON` candidate that would leave a `≤ RESIDUE_STUB` stub, and charge a step
+that ends there. It works on the class it was built for and it also suppresses
+the criterion-3 splits the engine exists to make: `transparent` **40/42 →
+25/42** hints on, **39/42 → 25/42** hints off. `ように` is a `COMMON` candidate,
+so cutting it to `よう` \| `に` was charged exactly like cutting `ながら`.
+
+**Formulation 2 — the same mask, excluding `grammatical_stack` candidates.**
+`is_grammatical_stack` already means "function-word stacking whose parts are
+each what the reader needs", so excluding it should free `ように`. It does, and
+it reads better than anything else tried:
+
+| hints off | strict | tolerant | compounds | lexical | false-match | transparent |
+| --- | --- | --- | --- | --- | --- | --- |
+| `HEAD` | 1593 | 1786 | 118 | 56 | 23 | 39 |
+| residue alone | 1581 | 1786 | 121 | 61 | 23 | 37 |
+| residue + ungated | 1519 | 1817 | 155 | 93 | 23 | 39 |
+
+and on the corpus it beats bare ungating on both sides at once — severings down
+12.5%, clean gains up 9.6%, so `clean : severed` over the four `random-4000`
+slices goes **2.62 → 3.29**:
+
+| | renai | kf2 | riruka | ikenaiDX |
+| --- | --- | --- | --- | --- |
+| ungated alone | 1.67 | 3.39 | 2.02 | 3.57 |
+| residue + ungated | **2.24** | **4.41** | **2.74** | **4.02** |
+
+**But it fixes none of the named defects.** `抱えながら`, `それならいい`,
+`感じやすいんだ` and `殺すんじゃないの` all still break, because `ながら`,
+`それなら` and `じゃない` are themselves grammatical stacks and the exclusion
+that frees `ように` frees them too. It costs hints-on 2 strict and 3 compounds
+to buy a corpus gain, and leaves the visible defect untouched.
+
+**Formulation 3 — charge the span that straddles, not the cut.** The diagnosis
+was right: `よう` \| `に` leaves `に` standing as its own span while `抱えな` \|
+`がら` leaves `な` *absorbed*, and only a span crossing the word's own end can
+absorb. Implemented, it is degenerate. A one-character span can never straddle
+anything, so shattering is a free escape from the penalty and the engine takes
+it: `感じやすいんだ` → `感じ` \| `や` \| `す` \| `い` \| `ん` \| `だ`, and
+`歩いていくように` — correct in **both** other builds — → `歩いていく` \| `よ` \|
+`う` \| `に`. A term that punishes crossing a boundary rewards never spanning
+one.
+
+**Why no fourth formulation was tried.** The two classes are flag-identical in
+JMdict, and that is checkable in one command:
+
+| must **not** split | flags |
+| --- | --- |
+| `ながら`, `それなら` | `[reading, common, common-line, particle]` |
+| `じゃない`, `かもしれない`, `やすい` | `[reading, common, common-line]` |
+
+| must split (criterion 3) | flags |
+| --- | --- |
+| `ために`, `くせに`, `ところで` | `[reading, common, common-line, particle]` |
+| `ように`, `たびに` | `[reading, common, common-line]` |
+
+Every combination on the first list appears on the second. `COMMON`,
+`PRIMARY`, `PARTICLE` and `is_grammatical_stack` each cut straight through the
+middle of both sets. **No predicate over the dictionary's own flags separates
+"a word that must not come apart" from "a stack that must".** This is the same
+wall §6 of the predecessor hit from the other direction, where adjudicating 68
+kana rows split the review — and it is the same wall in the same place.
+
+So the CLOSED list gets a new entry, and it is stronger than the one it
+replaces. It is no longer "a residue term is the one shape nobody has
+expressed". It is: **the residue term is expressible, costs what §9 predicted,
+and cannot be aimed, because the discriminator it needs is not in the
+dictionary.** Whatever supplies it has to come from outside — the tokenizer's
+POS, or hand adjudication of the kind `compound_gold.jsonl` already is, which
+is what `gold_local.jsonl` was reserved for.
+
+Formulation 2 is the one worth reviving if anything is. It is a net gain on the
+corpus and a small loss on gold, it is twenty lines in `lattice.rs`, and it is
+recorded here rather than committed because it buys a ratio and not a defect.
 
 ## 12. Also measured, and not previously on record
 
@@ -413,7 +499,10 @@ measurement that decides this question compares two v2 builds.
 
 ## 14. Not done
 
-- **The residue term.** Priced here, unbuilt. §9.
+- **`LEN_GAIN` hints-off itself.** Reopened, not shipped. The refusal that
+  closed it is withdrawn; the decision to ship is open.
+- **The signal the residue term needs.** §11a. Not in the dictionary, so it is
+  the tokenizer's POS or hand adjudication, and that is the next phase.
 - **`〜てくる` / `〜ておく` / `〜てみる` rows.** Rate measured here for the first
   time. §12.
 - The zero-signal tail is still truncated by `--top 2000` and still unread.
