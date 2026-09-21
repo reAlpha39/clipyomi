@@ -10,4 +10,14 @@
   font-family: var(--font-cjk);
   font-size: var(--text-sentence);
   line-height: 1.7;
+  /* The parse is a set of controls, not a document: a drag across it used to
+     paint a selection over the chips, and the only thing it could be copied
+     into is the clipboard the app is watching. `rt` already opted out on its
+     own (`global.css`); this covers the chips and the unmatched runs too.
+     Inherited, so the one rule reaches every element the renderer makes.
+     The prefix is for WKWebView, where the unprefixed property alone does
+     nothing. Scoped to the sentence: `.startup-error` and `.dictionary` stay
+     selectable, so an error message can still be copied out. */
+  -webkit-user-select: none;
+  user-select: none;
 }
