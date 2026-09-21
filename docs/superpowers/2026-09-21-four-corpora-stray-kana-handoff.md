@@ -249,9 +249,11 @@ a class can be real and still be rare in the text a given reader is parsing.
 - ~~**The 〜てくる / 〜ておく / 〜てみる rows.**~~ **Shipped the same day** —
   see §9.
 - **`やだ`.** One row, 84 occurrences, both states.
-- **Six corpora in `vn-text` were not run** — PxC2, enkou, hitoduma2, ikenaiDX,
-  kf3if_sFHD, おにキスＨ — a deliberate scope choice, four being enough to
-  separate a writer's habit from Japanese.
+- ~~**Six corpora in `vn-text` were not run**~~ — PxC2, enkou, hitoduma2,
+  ikenaiDX, kf3if_sFHD, おにキスＨ — a deliberate scope choice, four being enough
+  to separate a writer's habit from Japanese. **All six were run the same day**,
+  and `vn-text` is now exhausted — see
+  [`2026-09-21-six-corpora-handoff.md`](2026-09-21-six-corpora-handoff.md).
 - Everything the predecessor's §10 left open that this session only re-measured:
   the particle → godan family, the hints-off atomisation class, criterion 2 on
   the split parts, `BOUND_FORMS` for an auxiliary's own 連用タ接続, and the six
