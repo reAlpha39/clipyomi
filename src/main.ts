@@ -506,8 +506,24 @@ function applyChromeMode(mode: ChromeMode): void {
   if (mode !== 'header') {
     window.clearTimeout(peekHide);
     peekHide = undefined;
-    peeking = false;
     app.classList.remove('peeked', 'peek-offset');
+    // And `content` has to tell the backend. The reveal is its state, not the
+    // class's — the region on Windows, the frame height on macOS — and this is
+    // the last chance to undo it: the `pointerleave` that follows reads the
+    // flag dropped just below and returns early. Left standing, the reserved
+    // row stays inside the Windows region while `content` hides every control
+    // that paints it, which is a dead 28px strip above the sentence until the
+    // next peek.
+    //
+    // `native` is deliberately excluded, not overlooked: there the chrome the
+    // peek was borrowing is now shown for real, and un-peeking would take it
+    // straight back off. Gated on `peeking` for the reason a repeated
+    // `pointerenter` is: only transitions talk to the backend, and boot applies
+    // a mode before any pointer has been near the band.
+    if (peeking && mode === 'content') {
+      void invoke('peek_titlebar', { visible: false, height: BAND_HEIGHT }).catch(() => {});
+    }
+    peeking = false;
   }
   // The clamp reads the mode, so it has to be re-evaluated whenever the mode
   // moves — `native` renders opaque whatever `currentAlpha` holds.
