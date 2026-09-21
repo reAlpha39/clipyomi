@@ -208,8 +208,8 @@ a class can be real and still be rare in the text a given reader is parsing.
   the gold corpus contains almost none of it, so no cell in `score` moves when it
   moves. A gate comes first, then a fix, and the fix must not touch the 26% that
   follow punctuation.
-- **The 〜てくる / 〜ておく / 〜てみる rows.** Measured, precedent written, not
-  written. Highest-value next change.
+- ~~**The 〜てくる / 〜ておく / 〜てみる rows.**~~ **Shipped the same day** —
+  see §9.
 - **`やだ`.** One row, 84 occurrences, both states.
 - **Six corpora in `vn-text` were not run** — PxC2, enkou, hitoduma2, ikenaiDX,
   kf3if_sFHD, おにキスＨ — a deliberate scope choice, four being enough to
@@ -218,3 +218,51 @@ a class can be real and still be rare in the text a given reader is parsing.
   the particle → godan family, the hints-off atomisation class, criterion 2 on
   the split parts, `BOUND_FORMS` for an auxiliary's own 連用タ接続, and the six
   darwin screenshot baselines.
+
+## 9. Postscript: the three rows, shipped
+
+`640074c`, the same day, because §4 had already priced it and §7 of the
+predecessor had already written the method down.
+
+Nine `ATTACHES_TO` rows — `てくる`/`でくる` as カ変・クル, `ておく`/`でおく` as
+五段・カ行イ音便, `てみる`/`でみる` as 一段, both attachment sites for the
+て-forms and 連用タ接続 alone for the で-forms. Labels `Approaching`,
+`Preparatory` and `Tentative`; `てくる` could not also be `Directional`,
+because the fixture's own ていく note had reserved a second word for it.
+
+| class | before, on | after, on | before, off | after, off |
+| --- | --- | --- | --- | --- |
+| てくる | 73.3% | **1.6%** | 74.4% | **2.9%** |
+| ておく | 92.5% | **13.3%** | 100% | **11.6%** |
+| てみる | 99.3% | **1.6%** | 100% | **2.8%** |
+| ていく | 2.6% | 2.6% | 4.7% | 4.7% |
+
+`ていく`'s own column is the control and it does not move. What is left of
+`ておく` is mostly the window counter rather than the auxiliary — `すぎておかしく`
+matches the literal `ておか` — plus the hint-boundary class that splits
+`やめておく` hints-on and parses it correctly hints-off.
+
+**Two collisions the ていく work never met**, both measured on the corpora
+before any row was written, both priced in the commit:
+
+- カ変's 仮定形 `くれ`, 体言接続特殊 `くん` and 体言接続特殊２ `く` all belong to
+  something else in running text — **2,455 `〜てくれ`** (くれる) against 7
+  `〜てくれば`, and **919 of the bare `〜てく` are `〜てください`**. All three are
+  in `AUX_FORM_BLOCK`, and `〜てくれ` and `〜てください` come out byte-identical
+  to before.
+- 一段's empty 未然形 makes `てみ` a stacking site. `やってみな` read Tentative
+  **Negative** where the な is なさい (14), and **all 99 `〜てみせ` read
+  Tentative Causative** where the word is 見せる. `CHAIN_BLOCK` gains the
+  ぬ/ない pair its own doc asks for and a `せる` row under a new `*` form,
+  because every せる form produces the collision.
+
+Gold cells: hints on strict 1698 → 1694 with tolerant unmoved at 1948 and
+compounds 152 on all three class lines; hints off strict 1593 → 1588, tolerant
+1786 → 1785, compounds 118. **Zero damage hints-on** — 4 spans lost, 0 gained,
+every one of them an intended merge with both endpoints on gold boundaries —
+and hints-off's fifth is `行ってきちゃえ` + `ば` against gold's `きちゃえば`,
+the right word under a different grouping. Chain walk 90,359 → 140,947,
+latency unmoved on an interleaved A/B.
+
+Residue named rather than fixed: `待っておいで` (5) and one `守りぬいてみせます`
+whose span now ends at `てみ`.
