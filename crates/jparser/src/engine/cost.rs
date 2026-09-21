@@ -568,6 +568,30 @@ const DIGIT_COUNTER: i32 = -3;
 /// (`タッとい`) is not an all-katakana run, so no row can reach this clause.
 const KATAKANA_MIN_PIECE: usize = 3;
 
+/// What a span pays for being a piece shorter than [`KATAKANA_MIN_PIECE`] of
+/// a longer katakana run (`lex::Candidate::inside_katakana_run`).
+///
+/// **The defect.** A run is cut wherever its pieces happen to be dictionary
+/// words, whether or not the run is one: `ユリナス`, a character's name,
+/// reads `ユリ` ("lily") + `ナス` ("eggplant") 1,721 times over six corpora
+/// and `アジュラ` reads `ア` + `ジュ` + `ラ` 663 times hints-off. 2,320 runs
+/// of three or more characters are split hints-on and 8,050 hints-off, and
+/// the shortest piece is under three in 87% and 94% of them.
+///
+/// **Why a charge and not a rule.** Gold cuts five of its 58 katakana runs
+/// and two of those leave a short piece — `ソロ` in ソロホームラン, `ラン` in
+/// ラストラン — both of which the engine gets right today. Forbidding a short
+/// piece deletes those tilings and costs four gold spans. A charge does not,
+/// because the alternative to a split is leaving the run unmatched at
+/// [`UNMATCHED`] **per character**: the whole-run option costs 120 for a
+/// four-character name and 210 for ソロホームラン, so the same flat charge
+/// flips the first and not the second.
+///
+/// **Magnitude.** Swept against a zero-gold-damage gate; see the plan's Task
+/// 3 and the design's §4. The value shipped is the lowest that recovers the
+/// hints-off katakana spans without moving a gold cell.
+const KATAKANA_FRAGMENT: i32 = 60;
+
 /// Penalty for a match whose source characters differ from the stored surface
 /// before folding.
 ///
@@ -656,6 +680,9 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     }
     if cand.after_digit_noncounter {
         total += DIGIT_NONCOUNTER;
+    }
+    if cand.inside_katakana_run && cand.len < KATAKANA_MIN_PIECE {
+        total += KATAKANA_FRAGMENT;
     }
 
     if let Some(bounds) = bounds {
@@ -818,6 +845,27 @@ mod tests {
             cost(&conjugated, None),
             cost(&plain, None),
             "a conjugated match pays nothing, however its span decomposes"
+        );
+    }
+
+    #[test]
+    fn a_short_piece_of_a_katakana_run_is_charged_and_a_long_one_is_not() {
+        let plain = cand(0, 2, WordFlags::PRIMARY, true);
+        let mut fragment = cand(0, 2, WordFlags::PRIMARY, true);
+        fragment.inside_katakana_run = true;
+        assert_eq!(
+            cost(&fragment, None) - cost(&plain, None),
+            KATAKANA_FRAGMENT,
+            "a two-character piece pays the charge"
+        );
+
+        let long_plain = cand(0, 3, WordFlags::PRIMARY, true);
+        let mut long_piece = cand(0, 3, WordFlags::PRIMARY, true);
+        long_piece.inside_katakana_run = true;
+        assert_eq!(
+            cost(&long_piece, None),
+            cost(&long_plain, None),
+            "three characters is KATAKANA_MIN_PIECE, so it is a word-sized piece"
         );
     }
 

@@ -1910,6 +1910,73 @@ fn a_span_that_leaves_the_katakana_run_is_not_a_piece_of_it() {
     );
 }
 
+/// The defect. No entry covers ユリナス, so the run comes out as one
+/// unmatched span — which is the honest output for a name the dictionary does
+/// not have, and still romanises, because `src/render/furigana.ts` falls back
+/// to the surface when a segment has no reading.
+#[test]
+fn a_katakana_name_is_one_run_not_two_words() {
+    let dir = scratch("katakana-name");
+    build_katakana(&dir);
+    let r = parse_v2_over(&dir, "ユリナス");
+    assert_eq!(r.segments.len(), 1, "{:?}", r.segments);
+    assert_eq!(r.segments[0].surface, "ユリナス");
+    assert!(
+        !r.segments[0].matched,
+        "no entry covers it; unglossed is the honest output"
+    );
+}
+
+/// The long-run case the charge must not reach, and the reason this is a
+/// charge rather than a rule: gold cuts ソロホームラン at a two-character
+/// piece and the engine agrees today.
+#[test]
+fn a_long_katakana_compound_keeps_its_cut_at_a_short_piece() {
+    let dir = scratch("katakana-solo-homerun");
+    build_katakana(&dir);
+    let r = parse_v2_over(&dir, "ソロホームラン");
+    assert_eq!(r.segments.len(), 2, "{:?}", r.segments);
+    assert_eq!(r.segments[0].surface, "ソロ");
+    assert_eq!(r.segments[1].surface, "ホームラン");
+}
+
+/// The window's other end, also a gold cut: ラスト + ラン, five characters.
+#[test]
+fn a_five_character_compound_keeps_its_cut_at_a_short_piece() {
+    let dir = scratch("katakana-last-run");
+    build_katakana(&dir);
+    let r = parse_v2_over(&dir, "ラストラン");
+    assert_eq!(r.segments.len(), 2, "{:?}", r.segments);
+    assert_eq!(r.segments[0].surface, "ラスト");
+    assert_eq!(r.segments[1].surface, "ラン");
+}
+
+/// A compound whose pieces are both word-sized is never charged at all, so it
+/// is untouched by any magnitude.
+#[test]
+fn a_compound_of_word_sized_pieces_is_not_charged() {
+    let dir = scratch("katakana-running-wear");
+    build_katakana(&dir);
+    let c = cands(&dir, "ランニングウェア");
+    // `ラン` is also a real two-character entry inside this run -- it is a
+    // charged candidate, and must be, the same as any other short piece of a
+    // longer katakana run. This test is about the pieces the parse actually
+    // chooses, not every candidate incidentally starting at their positions.
+    for x in c[0]
+        .iter()
+        .filter(|x| x.headword == "ランニング")
+        .chain(c[5].iter().filter(|x| x.headword == "ウェア"))
+    {
+        assert!(
+            !(x.inside_katakana_run && x.len < 3),
+            "{:?} is word-sized and must not be a charged fragment",
+            x.headword
+        );
+    }
+    let r = parse_v2_over(&dir, "ランニングウェア");
+    assert_eq!(r.segments.len(), 2, "{:?}", r.segments);
+}
+
 #[test]
 fn empty_text_parses_into_no_segments() {
     let r = parse_kuru("kuru-empty", "");
