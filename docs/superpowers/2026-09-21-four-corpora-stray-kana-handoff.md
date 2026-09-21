@@ -225,6 +225,8 @@ a class can be real and still be rare in the text a given reader is parsing.
 
 ## 8. Not done
 
+- **The heavier auxiliary metric**, if rates and sub-classes are ever wanted:
+  §10's gate is a pass/fail list, not a number that can be tracked across runs.
 - **The stray-kana class has no gate.** It is the largest thing measured here and
   the gold corpus contains almost none of it, so no cell in `score` moves when it
   moves. A gate comes first, then a fix, and the fix must not touch the 26% that
@@ -321,13 +323,40 @@ commits**, and that the corpus evidence has quietly been doing the gate's job �
 which is exactly the position §3's stray-kana class is in, arrived at from the
 other direction.
 
-The two honest ways out, and the first is cheap because the pattern already
-exists: **an adjudicated auxiliary file in the shape of `compound_gold.jsonl`**,
-listing 〜て+auxiliary sites with the expected whole-span reading, scored as its
-own line. Or: state in the master plan that for auxiliary attachment the corpus
-is the gate and `score` is only a regression check. Doing neither means the next
-row in this family is argued the way these four were — on a table where every
-number is worse.
+**Built, in `420725b`.** `tests/fixtures/auxiliary_merges.txt` is the mirror of
+`spurious_merges.txt` — that file refuses merges the engine must not make, this
+one requires the merges it must — with 32 rows over the gold sentences that
+carry them. Each row asserts that gold still splits the surface (so no row can
+pass by agreeing with gold), that the engine emits exactly one matched segment
+there, and that the winning entry's label carries the auxiliary's own word. It
+was falsified before being trusted: dropping the two `てくる` rows from
+`ATTACHES_TO` fails three rows, one of them on the label alone
+(`行ってきちゃえ` degrades to "Completive Conditional").
+
+The heavier option — an adjudicated file in `compound_gold.jsonl`'s shape, with
+a metric line of its own in `score` — was not taken. It buys rates and
+sub-classes, and it costs the plumbing plus a new adjudicated fixture; the
+compound metric took a phase to get right. The cheap gate closes the hole that
+mattered: **removing an `ATTACHES_TO` row now fails a test instead of improving
+a number.**
+
+Three gold pairs are excluded and the fixture says why for each. One of them is
+a finding in its own right — see §5a.
+
+### 5a. The particle class is in the gold corpus too
+
+Building the gate turned one up where the corpus work had never looked.
+`従っていたから` (`a:003521-2`) parses as **one seven-character span glossed
+`従う` "Progressive Want-to"** — the `から` absorbed into the verb chain and
+re-lemmatised, which is exactly §5's clause-final-particle class, the one
+measured at ~237 occurrences per 10k on visual-novel dialogue.
+
+It is **byte-identical before and after §9's rows**, so it is neither caused nor
+fixed by them, and it is not new — it has presumably been there since the
+corpus was adjudicated. What is new is knowing that the class is not a
+register artefact of eroge dialogue: it reaches ordinary prose, in the very
+corpus every gate is measured against. Whoever prices the fix for §5 now has a
+gold sentence to test it on, which the class did not have before.
 
 ## 11. The hints-off premise, audited
 
