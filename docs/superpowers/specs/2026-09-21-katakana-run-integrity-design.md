@@ -385,6 +385,18 @@ suite's side: under `KATAKANA_FIXTURE`'s arithmetic it passes only when
 one-token edit — that test must be deleted or inverted as part of the
 revert.
 
+**Reverted 2026-09-22.** The user decided the trade above was not worth the
+three gold cells it costs and reverted the charge rather than shipping it.
+The implementation this section describes — `KATAKANA_FRAGMENT`, its `if` in
+`cost()`, its unit test, and the four parse tests in `engine_v2.rs` — is
+recoverable from `4007a45`, the commit that added it, and the sweep and
+measurement it failed are unchanged above. Task 1's geometry (`kana.rs`'s
+`is_katakana`, `lex.rs`'s `katakana_runs` and the `inside_katakana_run` field
+and its assignment) was not part of the revert and remains in the tree, so a
+later attempt at this problem starts from the geometry rather than from
+nothing. Gold returns to baseline: on-strict 1692 → 1694, on-entry-top-1
+0.9526 → 0.9527, off-entry-top-1 0.9493 → 0.9504.
+
 ### 8.5 Interaction with `PRONOUNCE_CROSS`'s `KATAKANA_MIN_PIECE` exemption
 
 `cost.rs`'s older `KATAKANA_MIN_PIECE` exemption (in the `PRONOUNCE_CROSS`
