@@ -1,0 +1,94 @@
+# The auxiliary-attachment gate: a 〜て auxiliary that must come out inside one
+# span, with the label word its ATTACHES_TO row promises.
+#
+# Written 2026-09-21, and the reason it exists is a measurement rather than a
+# defect. **Of the 38 adjacent 〜て + auxiliary pairs in gold.jsonl, every one
+# is annotated as two spans and none as one** -- 引きずって | いった, 沈みこんで |
+# いく, 頬張って | いる. The corpus's short-unit policy is deliberate and the
+# rest of the engine is scored against it, but it means an auxiliary-merge row
+# loses `strict` by construction (two gold spans become one), leaves `tolerant`
+# neutral at best (the merge is credited as coarsening, never rewarded), cannot
+# touch the compound metric (which holds no auxiliaries) and moves entry top-1
+# on a denominator the merge itself changes. Four commits shipped in this family
+# -- てる/でる, ている/でいる, ていく/でいく and てくる/ておく/てみる -- and the
+# last two produced no positive cell anywhere in `score` while the corpus rate
+# for their class went from 73.3% split to 1.6%.
+#
+# So this file is the cell those changes did not have. It is the mirror of
+# spurious_merges.txt: that one refuses merges the engine must not make, this
+# one requires merges it must. A row here is a claim the four commits above
+# already made in their own tests and comments; what is new is that removing an
+# ATTACHES_TO row now fails a test instead of improving a number.
+#
+# Columns, tab-separated: surface, label word, gold source.
+#   surface  - the verb and its auxiliary, exactly as they appear in that gold
+#              sentence. The test finds it in the sentence rather than parsing
+#              it alone, because a bare surface is a different measurement --
+#              spurious_merges.txt was ignored for four releases over exactly
+#              that mistake (2026-09-16: 4 of its 26 "failures" were the test
+#              parsing two-character surfaces out of context).
+#   label    - one word that must appear in the winning entry's `conjugation`.
+#              Not the whole label: 刻まれていた is "Passive/Potential
+#              Progressive Past" and pinning every word would make this file a
+#              second conjugation_labels.txt, which already exists and is
+#              authoritative for that question. What this column pins is that
+#              the auxiliary was recognised as itself.
+#   source   - the gold sentence, by its `source` field. The test asserts gold
+#              puts a boundary inside the surface, so a row that stopped
+#              disagreeing with gold fails loudly rather than passing empty.
+#
+# Rows are every pair in gold.jsonl whose auxiliary this engine models, and a
+# surface is the auxiliary's own span rather than the whole predicate. The
+# difference is not cosmetic: 当惑 | していた and 行き | あっていました both split
+# at a *different* boundary -- a noun+する and a compound verb -- and a row that
+# spanned it would fail for a reason this file does not measure. The auxiliary
+# is whole in both, which is the claim.
+#
+# Three pairs are deliberately absent.
+#
+# - して | おり (b:wn25517-3): おり is 居り and has no ATTACHES_TO row. Adding
+#   one is a decision, not an omission.
+# - 行って | きちゃえば: the gold span carries the ば. The merge is here under
+#   the surface the engine actually produces, 行ってきちゃえ, which is the
+#   longest chain in the file -- Approaching, Completive and an imperative in
+#   one span.
+# - 従って | いた (a:003521-2): **a defect, and an instructive one.** The engine
+#   reads 従っていたから as a single seven-character span glossed 従う
+#   "Progressive Want-to" -- the から absorbed and re-lemmatised, which is the
+#   clause-final-particle class the corpus work measured at ~237 occurrences per
+#   10k on visual-novel dialogue. This is that class inside the gold corpus,
+#   where it had not been seen before. It is byte-identical before and after the
+#   rows this file gates, so it is neither caused nor fixed by them; a row for it
+#   belongs here once the particle class is fixed, not before.
+吹き出してきた	Approaching	c1:mim-54
+近づいてくる	Approaching	c1:mim-01
+行ってきちゃえ	Approaching	c1:cas-16
+引きずっていった	Directional	c1:mim-49
+沈みこんでいく	Directional	c1:mim-45
+折れていった	Directional	c1:mim-22
+押しこんでいく	Directional	c1:mim-48
+歪んでいく	Directional	c1:mim-57
+溶けていく	Directional	c1:mim-36
+溶けていった	Directional	c1:mim-53
+潰していく	Directional	c1:mim-20
+出ていった	Directional	a:057582-7
+頬張っている	Progressive	c1:mim-56
+している	Progressive	b:wn25517-3
+吸いついている	Progressive	c1:mim-59
+なっている	Progressive	b:wn28412-1
+佇んでいた	Progressive	a:057516-3
+上がっている	Progressive	c1:mim-63
+封じられている	Progressive	c1:kat-09
+刻まれている	Progressive	c1:kat-04
+刻まれていた	Progressive	c1:kat-19
+していた	Progressive	b:wn9103-2
+知っていた	Progressive	a:054479-8
+鳴っている	Progressive	c1:mim-46
+噛んでいる	Progressive	c1:mim-32
+していた	Progressive	d:a:003521-6
+崩れていた	Progressive	c1:kat-15
+見ていた	Progressive	c1:kat-01
+知っている	Progressive	c1:kat-13
+眺めていた	Progressive	a:057582-1
+使っていた	Progressive	b:wn9103-3
+あっていました	Progressive	a:043426-2

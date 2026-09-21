@@ -1006,6 +1006,98 @@ fn the_particle_absorbing_merges_are_gone() {
     );
 }
 
+/// The mirror of the spurious-merge gate: a 〜て auxiliary must come out
+/// *inside* one span, with its label word.
+///
+/// It exists because `score` cannot say so. Every one of the 38 adjacent
+/// 〜て+auxiliary pairs in `gold.jsonl` is annotated as two spans, so merging
+/// one costs `strict` by construction and gains nothing anywhere else — the
+/// `ていく` rows and the 〜てくる/〜ておく/〜てみる rows both shipped with no
+/// positive cell in any metric while the corpus rate they were written for
+/// collapsed. `fixtures/auxiliary_merges.txt` carries the reasoning and the
+/// column contract.
+///
+/// The same context rule as the spurious gate, and for the same scar: the row
+/// is measured inside its gold sentence, never parsed as a bare surface.
+#[test]
+fn the_te_auxiliaries_stay_inside_one_span() {
+    const FIXTURE_AUX: &str = include_str!("fixtures/auxiliary_merges.txt");
+    let dir = scratch("auxiliary");
+    build_gold_v2(&dir);
+    let gold = gold_records();
+
+    let mut wrong = Vec::new();
+    let mut rows = 0;
+    for line in FIXTURE_AUX
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+    {
+        let mut cols = line.split('\t');
+        let surface = cols.next().expect("column 1 is the surface");
+        let word = cols
+            .next()
+            .unwrap_or_else(|| panic!("{surface}: no second column naming a label word"));
+        let source = cols
+            .next()
+            .unwrap_or_else(|| panic!("{surface}: no third column naming a gold sentence"));
+        rows += 1;
+
+        let record = gold.iter().find(|r| r.source == source).unwrap_or_else(|| {
+            panic!("{surface}: gold.jsonl carries no sentence with source {source}")
+        });
+        let at = char_index_of(&record.text, surface)
+            .unwrap_or_else(|| panic!("{surface} does not occur in {source}"));
+        let len = surface.chars().count();
+
+        // Re-derived, exactly as the spurious gate re-derives its own: a row
+        // whose gold boundary has moved out of the surface would be asserting
+        // that the engine agrees with gold, which is a different claim from
+        // the one this file makes.
+        let gold_inside = record.cuts.iter().any(|&c| c > at && c < at + len);
+        assert!(
+            gold_inside,
+            "{surface} at {at} in {source}: gold no longer splits it, so this row no \
+             longer records a deliberate disagreement -- repoint or retire it"
+        );
+
+        let bounds = boundaries_over(&record.text);
+        let r = parse_v2_with_bounds(&dir, &record.text, Some(&bounds));
+        let whole = r
+            .segments
+            .iter()
+            .find(|s| s.matched && s.start == at && s.len == len);
+        match whole {
+            None => {
+                let surfaces: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
+                wrong.push(format!(
+                    "{surface} at {at} in {source}: not one matched segment; parse is {surfaces:?}"
+                ));
+            }
+            // The label is checked on the *top* entry, because that is the one
+            // the reader sees. One word, not the whole label: 刻まれていた is
+            // "Passive/Potential Progressive Past" and pinning every word here
+            // would duplicate `conjugation_labels.txt`, which owns that
+            // question and is authoritative over the code.
+            Some(s) => {
+                let label = s.entries.first().and_then(|e| e.conjugation.as_deref());
+                if !label.is_some_and(|l| l.split(' ').any(|w| w == word)) {
+                    wrong.push(format!(
+                        "{surface} in {source}: merged, but its top entry reads {label:?}, \
+                         which does not carry {word:?}"
+                    ));
+                }
+            }
+        }
+    }
+
+    assert_eq!(rows, 32, "the fixture should hold 32 rows");
+    assert!(
+        wrong.is_empty(),
+        "a 〜て auxiliary is split again, or lost its label:\n{}",
+        wrong.join("\n")
+    );
+}
+
 #[test]
 fn the_result_is_a_contiguous_cover_in_ascending_order() {
     let dir = scratch("cover");
