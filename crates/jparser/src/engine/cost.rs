@@ -594,7 +594,7 @@ const KATAKANA_MIN_PIECE: usize = 3;
 /// 1186/1245), and every one from 60 up also drops hints-off entry top-1
 /// (1169/1230 → 1160/1222) and turns one hints-on *and* hints-off katakana
 /// gold span (`ラスト`) from matched to missed — a casualty the charge-free
-/// build does not have. 60 and above recover 8 of the 26 hints-off katakana
+/// build does not have. 60 and above recover 7 of the 26 hints-off katakana
 /// misses this charge exists for; 40 and 50 recover none and additionally
 /// drop hints-off strict and tolerant. 60 is kept — the least damaged of the
 /// six swept values, not a validated magnitude; 0 was Step 2's zero-charge

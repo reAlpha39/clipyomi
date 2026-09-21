@@ -252,7 +252,7 @@ loses. Nothing swept holds all eight.
 
 ### 8.2 Tests, katakana misses, and the corpus
 
-| value | `katakana`-filtered tests | the 2 tests outside that filter | on misses (of 7) | off misses (of 26) | 2-corpus on: whole / short / ≥3 | 2-corpus off: whole / short / ≥3 |
+| value | `katakana`-filtered tests | the 2 tests outside that filter | on misses (baseline 7) | off misses (of 26) | 2-corpus on: whole / short / ≥3 | 2-corpus off: whole / short / ≥3 |
 | --- | --- | --- | --- | --- | --- | --- |
 | baseline | — | — | 7 | 26 | 9094 / 1918 / 79 | 6830 / 4148 / 113 |
 | 40 | 5/6 — `a_katakana_name_is_one_run_not_two_words` fails (too low, per §6, not a stop) | pass, pass | 8 | 27 | 9095 / 1915 / 81 | 7390 / 3578 / 123 |
@@ -265,17 +265,21 @@ loses. Nothing swept holds all eight.
 40 and 50 recover none of the 26 hints-off katakana misses — the short-piece
 corpus row barely moves (1918 → 1915, 4148 → 3568/3578) because the charge is
 below the ユリナス end of §2.1's window and does not flip enough tilings to
-matter. 60 through 130 are identical on every cell in both tables: once the
-charge clears whatever local margin each decision needs, more of it changes
-nothing further, all the way to the window's own upper edge. They recover 8
-of the 26 — short of §5's "at least 20" bar on its own, before the gold gate
-is even considered.
+matter. 60 through 130 are identical on every cell of *this* table — tests,
+katakana misses and the corpus counts — once the charge clears whatever local
+margin each of these decisions needs, more of it changes nothing further
+here, all the way to the window's own upper edge. (§8.1's gold table does not
+share that pattern: on-entry-top-1 keeps falling between 60 and 80, and §8.4
+relies on exactly that difference.) They recover 7 of the 26 — short of §5's
+"at least 20" bar on its own, before the gold gate is even considered.
 
-**The new casualty, every value.** `ラスト` is a genuine, isolated gold span
-(not part of ラストラン, which is a separate sentence and is unaffected) that
-is matched at baseline and missed at every swept value, hints-on and
-hints-off alike. It is the reason on-strict and on-entry-top-1 fall even at
-the lowest value tried; nothing in this sweep found a magnitude below it.
+**The new casualty, every value.** `ラスト` is the gold span at (32, 3) in
+`b:wn21710-1`, half of the `ラスト` + `ラン` pair gold annotates inside that
+sentence's `ラストラン`. It is matched at baseline (gold's own split) and
+missed at every swept value, hints-on and hints-off alike, because the engine
+returns the whole run as one span instead. It is the reason on-strict and
+on-entry-top-1 fall even at the lowest value tried; nothing in this sweep
+found a magnitude below it. §8.3 traces why.
 
 **A row that was expected not to move, moved.** §2.2's ≥3 ("word-sized") row
 was expected to hold, and at 60 and above it does not: 79 → 81 hints-on,
@@ -289,17 +293,62 @@ boundary in §2.2 is real but not perfectly clean under the charge; it is a
 second-order effect and not itself a gate failure, since §5 gates gold, not
 this row.
 
-### 8.3 The refusal
+### 8.3 The cause: `ラストラン` is a dictionary entry, and §2.1's table did not know
+
+The whole of the hints-on gold damage traces to one sentence, `b:wn21710-1`:
+
+> 産経新聞によると、この日、東京駅のホームには、東京-新大阪間でのラストランを
+> 見る目的で、多くの鉄道ファンらが集まった。
+
+Gold annotates two spans there, `ラスト` (start 32, len 3) and `ラン` (start
+35, len 2). At baseline the engine agrees and returns the same two spans. At
+every swept value — 40 included, the lowest tried — and in both hint states,
+the engine instead returns `ラストラン` (start 32, len 5) as one span,
+matched to entry 2843587. That single substitution, confirmed directly from
+the `gold.on.jsonl` and `gold.off.jsonl` dumps in each of `$SCR/v40` through
+`$SCR/v130`, is the entire −2 on hints-on strict span accuracy and the
+matching −2/−2 on hints-on entry top-1 in §8.1's table; it is the only thing
+the `ラスト` casualty named in §8.2 is.
+
+The cause is an error in §2.1's table, not a defect in the charge. That
+table prices ラストラン's whole-run alternative as `unmatched whole = 150`
+(`UNMATCHED` × 5 characters) and concludes the split "stays split below
+P ≈ 134" — but `crates/jparser/tests/fixtures/gold_jmdict_subset.xml:136897`
+carries an entry whose `<reb>` is `ラストラン` (ent_seq 2843587, gloss "last
+run (of a train being retired)"): the compound is itself a dictionary entry.
+The whole-run candidate is therefore a cheap **matched** span, not a
+150-point unmatched fallback, and any charge from 40 up — the lowest value
+this sweep tried — makes it cheaper than the split. The window §2.1 derived
+never had a lower edge for this particular run; the table's arithmetic was
+right for a run the dictionary does not cover and wrong for one it does.
+
+Task 2's fixture test, `a_five_character_compound_keeps_its_cut_at_a_short_piece`,
+cannot see this: `KATAKANA_FIXTURE` defines `ラスト` and `ラン` as entries but
+never defines `ラストラン`, so inside the fixture the whole run really is
+unmatched at 150 and the test passes at 60 exactly as §2.1 predicted. The
+test is correct about the fixture and silent about the installed index — a
+later session must not read its passing as evidence that this particular run
+is safe against the real dictionary.
+
+Read plainly: on this one sentence, gold and JMdict disagree about whether
+`ラストラン` is one word or two, and the charge moves the engine to JMdict's
+side. That is a data disagreement, not a bug in the implementation, and it is
+not a reason to loosen §5 — the refusal in §8.4 stands regardless of which
+side is "right" about this sentence, because the gate judges the whole
+corpus, not one case.
+
+### 8.4 The refusal
 
 No value clears §5. Every one of the six loses hints-on strict span accuracy
-and hints-on entry top-1 to the new `ラスト` casualty; 60 and above also lose
-hints-off entry top-1, and 40/50 lose hints-off strict and tolerant besides.
-Even the three cells that do recover at 60 and above — off-strict,
-off-tolerant, and 8 of the 26 katakana misses — fall short of the "at least
-20" bar §5 sets for the phase to have done its job. §4 named this outcome in
-advance: *"If no value in the window clears §5, the phase is refused and says
-so — the same way `LEN_GAIN` and the residue term were refused."* This is
-that outcome.
+and hints-on entry top-1 to the `ラスト`/`ラストラン` disagreement traced in
+§8.3; 60 and above also lose hints-off entry top-1, and 40/50 lose hints-off
+strict and tolerant besides. Even the two gold cells that do recover at 60
+and above — off-strict and off-tolerant — plus the 7 of 26 katakana misses
+recovered alongside them (a separate quantity, not a gold cell) fall short of
+the "at least 20" bar §5 sets for the phase to have done its job. §4 named
+this outcome in advance: *"If no value in the window clears §5, the phase is
+refused and says so — the same way `LEN_GAIN` and the residue term were
+refused."* This is that outcome.
 
 `KATAKANA_FRAGMENT` is left at **60**, the least damaged of the six swept
 values (three gold cells fall, against five at 40 and 50, and a smaller
