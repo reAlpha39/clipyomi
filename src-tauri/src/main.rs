@@ -281,6 +281,7 @@ fn main() {
             commands::dictionary::needs_dictionary,
             commands::hints::set_mecab_hints,
             commands::hints::hints_warning,
+            commands::hints::hints_available,
             commands::hints::hints_dir,
             commands::fonts::system_fonts,
             commands::context_menu::show_context_menu,
