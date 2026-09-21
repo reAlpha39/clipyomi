@@ -1215,6 +1215,39 @@ describe('the titlebar band', () => {
     }
   });
 
+  // Leaving `header` mid-peek has to reach the backend, not just the classes.
+  // The reveal is a *backend* state on both platforms — the region on Windows,
+  // the frame height on macOS — and the mode change is the last chance to undo
+  // it: the `pointerleave` that follows reads the flag this drops and returns
+  // early, so nothing else ever would. Dropping it locally alone left the
+  // reserved 28px row inside the Windows region with `content` hiding every
+  // control that paints it: a dead strip above the sentence, permanently.
+  test('leaving header while peeked hides the chrome in the backend too', async () => {
+    await load('header');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    shell().dispatchEvent(new Event('pointerenter'));
+    expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: true, height: 28 });
+
+    emit('settings-changed', { chrome_mode: 'content' });
+
+    expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
+  });
+
+  // The other half of the gate: a mode change with no peek up must stay silent,
+  // for the reason a repeated `pointerenter` does — only transitions talk to the
+  // backend, and boot applies a mode before any pointer has been near the band.
+  test('leaving header with no peek up says nothing to the backend', async () => {
+    await load('header');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('settings-changed', { chrome_mode: 'content' });
+
+    expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', expect.anything());
+  });
+
   // The colour the Windows frame growth erases newly exposed pixels with. A
   // wrong one is visible as a coloured strip for the frame or two before the
   // webview paints, which is why the renderer reports its own.
