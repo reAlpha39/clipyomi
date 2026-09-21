@@ -181,6 +181,21 @@ remains 100% false-match by construction.
 Raw literal frequency, for the denominator: `のも` 73.9 per 10k, `からな` 65.8,
 `ないだろ` 27.8, `からね` 26.7, `のかな` 25.3, `もんな` 7.4, `とかな` 4.9, `ぐぐ` 3.2.
 
+### 5a. The particle class is in the gold corpus too
+
+Building the gate turned one up where the corpus work had never looked.
+`従っていたから` (`a:003521-2`) parses as **one seven-character span glossed
+`従う` "Progressive Want-to"** — the `から` absorbed into the verb chain and
+re-lemmatised, which is exactly §5's clause-final-particle class, the one
+measured at ~237 occurrences per 10k on visual-novel dialogue.
+
+It is **byte-identical before and after §9's rows**, so it is neither caused nor
+fixed by them, and it is not new — it has presumably been there since the
+corpus was adjudicated. What is new is knowing that the class is not a
+register artefact of eroge dialogue: it reaches ordinary prose, in the very
+corpus every gate is measured against. Whoever prices the fix for §5 now has a
+gold sentence to test it on, which the class did not have before.
+
 ## 6. Smaller confirmations, and one small defect worth a row
 
 - **`やだ` never survives.** 84 occurrences, **0** emitted whole in either state,
@@ -342,21 +357,6 @@ a number.**
 
 Three gold pairs are excluded and the fixture says why for each. One of them is
 a finding in its own right — see §5a.
-
-### 5a. The particle class is in the gold corpus too
-
-Building the gate turned one up where the corpus work had never looked.
-`従っていたから` (`a:003521-2`) parses as **one seven-character span glossed
-`従う` "Progressive Want-to"** — the `から` absorbed into the verb chain and
-re-lemmatised, which is exactly §5's clause-final-particle class, the one
-measured at ~237 occurrences per 10k on visual-novel dialogue.
-
-It is **byte-identical before and after §9's rows**, so it is neither caused nor
-fixed by them, and it is not new — it has presumably been there since the
-corpus was adjudicated. What is new is knowing that the class is not a
-register artefact of eroge dialogue: it reaches ordinary prose, in the very
-corpus every gate is measured against. Whoever prices the fix for §5 now has a
-gold sentence to test it on, which the class did not have before.
 
 ## 11. The hints-off premise, audited
 
