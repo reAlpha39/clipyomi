@@ -24,10 +24,6 @@ const HINTS_NOTE_BASE = 'Improves word splitting. Enabling downloads an 8 MB IPA
 export function initSettingsApp(container: HTMLElement) {
   container.innerHTML = `
     <div class="settings-page">
-      <header class="settings-header">
-        <h1>ClipYomi Settings</h1>
-      </header>
-
       <section class="settings-group">
         <h2 class="settings-group-title">Gloss &amp; Definitions</h2>
         <label class="settings-checkbox-row">
