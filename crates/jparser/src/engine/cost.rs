@@ -590,9 +590,10 @@ const KATAKANA_MIN_PIECE: usize = 3;
 /// **Magnitude — measured 2026-09-21 and refused.** Swept over 40, 50, 60,
 /// 80, 100, 130 against a zero-gold-damage gate; see the design's §8 for the
 /// full table. No value clears it: every one drops hints-on strict span
-/// accuracy (1694 → 1692) and hints-on entry top-1 (1188/1247 → at best
-/// 1186/1245), and every one from 60 up also drops hints-off entry top-1
-/// (1169/1230 → 1160/1222) and turns one hints-on *and* hints-off katakana
+/// accuracy (1694 → 1692), hints-on entry top-1 (1188/1247 → at best
+/// 1186/1245) and hints-off entry top-1 (1169/1230 → at best 1161/1222); 60
+/// and above drop hints-off entry top-1 further still (1161/1222 →
+/// 1160/1222). Every value also turns one hints-on *and* hints-off katakana
 /// gold span (`ラスト`) from matched to missed — a casualty the charge-free
 /// build does not have. 60 and above recover 7 of the 26 hints-off katakana
 /// misses this charge exists for; 40 and 50 recover none and additionally
@@ -600,6 +601,13 @@ const KATAKANA_MIN_PIECE: usize = 3;
 /// six swept values, not a validated magnitude; 0 was Step 2's zero-charge
 /// reference rather than a candidate in this sweep, and no swept value
 /// improves on 60.
+///
+/// **Interacts with `PRONOUNCE_CROSS`.** That filter's `KATAKANA_MIN_PIECE`
+/// exemption clause (below, in the `PRONOUNCE`-flagged branch of `cost()`)
+/// withholds a charge from a *merge* across a short piece of the same kind of
+/// run this charge prices a *split* for. The two never charge the same
+/// candidate, but hints-on they pull the same direction — retune one without
+/// checking the other and its effect will be masked or double-counted.
 const KATAKANA_FRAGMENT: i32 = 60;
 
 /// Penalty for a match whose source characters differ from the stored surface

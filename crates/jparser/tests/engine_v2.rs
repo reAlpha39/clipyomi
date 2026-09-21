@@ -1914,6 +1914,12 @@ fn a_span_that_leaves_the_katakana_run_is_not_a_piece_of_it() {
 /// unmatched span — which is the honest output for a name the dictionary does
 /// not have, and still romanises, because `src/render/furigana.ts` falls back
 /// to the surface when a segment has no reading.
+///
+/// Requires `KATAKANA_FRAGMENT >= 55` under this fixture's arithmetic: the
+/// split (ユリ + ナス) costs `2 * (COVER*2 + MATCH + CONTENT_MATCH) + 2P =
+/// 10 + 2P`, the whole run costs `UNMATCHED * 4 = 120`, and the whole run
+/// only wins once `120 < 10 + 2P`. Reverting the charge to 0 must delete or
+/// invert this test, not just retune the constant.
 #[test]
 fn a_katakana_name_is_one_run_not_two_words() {
     let dir = scratch("katakana-name");
@@ -1930,6 +1936,10 @@ fn a_katakana_name_is_one_run_not_two_words() {
 /// The long-run case the charge must not reach, and the reason this is a
 /// charge rather than a rule: gold cuts ソロホームラン at a two-character
 /// piece and the engine agrees today.
+///
+/// This assertion holds only while JMdict has no entry for the whole run.
+/// `ラストラン` is the case where it does; see design §8.3 for what that does
+/// to a test shaped like this one.
 #[test]
 fn a_long_katakana_compound_keeps_its_cut_at_a_short_piece() {
     let dir = scratch("katakana-solo-homerun");
@@ -1942,7 +1952,7 @@ fn a_long_katakana_compound_keeps_its_cut_at_a_short_piece() {
 
 /// The window's other end, also a gold cut: ラスト + ラン, five characters.
 #[test]
-fn a_five_character_compound_keeps_its_cut_at_a_short_piece() {
+fn a_five_character_katakana_compound_keeps_its_cut() {
     let dir = scratch("katakana-last-run");
     build_katakana(&dir);
     let r = parse_v2_over(&dir, "ラストラン");
@@ -1953,8 +1963,12 @@ fn a_five_character_compound_keeps_its_cut_at_a_short_piece() {
 
 /// A compound whose pieces are both word-sized is never charged at all, so it
 /// is untouched by any magnitude.
+///
+/// This assertion holds only while JMdict has no entry for the whole run.
+/// `ラストラン` is the case where it does; see design §8.3 for what that does
+/// to a test shaped like this one.
 #[test]
-fn a_compound_of_word_sized_pieces_is_not_charged() {
+fn a_katakana_compound_of_word_sized_pieces_is_not_charged() {
     let dir = scratch("katakana-running-wear");
     build_katakana(&dir);
     let c = cands(&dir, "ランニングウェア");
@@ -1962,13 +1976,23 @@ fn a_compound_of_word_sized_pieces_is_not_charged() {
     // charged candidate, and must be, the same as any other short piece of a
     // longer katakana run. This test is about the pieces the parse actually
     // chooses, not every candidate incidentally starting at their positions.
-    for x in c[0]
+    let running = c[0]
         .iter()
-        .filter(|x| x.headword == "ランニング")
-        .chain(c[5].iter().filter(|x| x.headword == "ウェア"))
-    {
+        .find(|x| x.headword == "ランニング")
+        .expect("ランニング is a candidate at 0");
+    let wear = c[5]
+        .iter()
+        .find(|x| x.headword == "ウェア")
+        .expect("ウェア is a candidate at 5");
+    for x in [running, wear] {
         assert!(
-            !(x.inside_katakana_run && x.len < 3),
+            x.inside_katakana_run,
+            "{:?} must be marked as a piece of the run",
+            x.headword
+        );
+        // 3 is `KATAKANA_MIN_PIECE`, private to `cost.rs`.
+        assert!(
+            x.len >= 3,
             "{:?} is word-sized and must not be a charged fragment",
             x.headword
         );

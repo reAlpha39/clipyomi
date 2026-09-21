@@ -416,6 +416,13 @@ Fresh gold dumps at this tip (rebuilt for this task, not reused from Task 3)
 give: katakana gold spans ≥3 missed, hints-on 8 of 54 (baseline 7 — the new
 `ラスト` casualty, §9.4), hints-off 19 of 54 (baseline 26 — 7 recovered).
 These match design §8.1/§8.2's already-recorded value-60 figures exactly.
+(58 in design §1.1 and 54 here are different quantities, not a
+discrepancy: §1.1 counts katakana *runs* of three or more characters found by
+scanning the corpus text, while this 54 counts gold-annotated *spans* that
+are all-katakana and three or more characters. The two differ wherever gold
+cuts a run — a cut can leave a piece shorter than three characters, which no
+longer counts as its own qualifying span. Re-running `gold_katakana.py`
+should reproduce 54 against gold's annotations, not 58.)
 
 ### 9.4 The `ラストラン` cause
 
@@ -427,7 +434,7 @@ itself a JMdict entry (ent_seq 2843587,
 `crates/jparser/tests/fixtures/gold_jmdict_subset.xml:136897`) and any
 charge above zero makes that cheap matched whole-run candidate beat the
 split. Task 2's fixture test,
-`a_five_character_compound_keeps_its_cut_at_a_short_piece`, cannot see this:
+`a_five_character_katakana_compound_keeps_its_cut`, cannot see this:
 `KATAKANA_FIXTURE` defines `ラスト` and `ラン` as entries but never defines
 `ラストラン`, so inside the fixture the whole run really is an unmatched
 150-point fallback and the test passes for a reason that does not hold

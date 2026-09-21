@@ -123,7 +123,7 @@ charged under §2.
 
 ## 3. Where it goes
 
-- **`engine/lex.rs`** — one more `Candidate` field, `katakana_fragment`, set in
+- **`engine/lex.rs`** — one more `Candidate` field, `inside_katakana_run`, set in
   `candidates()` where `all_katakana`, `digit_counter` and
   `after_digit_noncounter` are already set from `chars`. The maximal run around
   each position is computed once per sentence, O(n), not per candidate.
@@ -226,10 +226,7 @@ protocol. Baseline (the charge absent, `KATAKANA_FRAGMENT = 0`) was
 re-confirmed to match §5 exactly before the sweep ran: on strict 1694/2163,
 tolerant 1948/2163, entry top-1 1188/1247 (0.9527), compounds 152/186; off
 strict 1588/2163, tolerant 1785/2163, entry top-1 1169/1230 (0.9504),
-compounds 118/186. Two of the "four parses" in §6 — `ラストラン` and the
-all-≥3 compound — have no `katakana` substring in their test names, so
-`cargo test ... katakana` does not run them; they were run by exact name
-alongside the filtered set at every value.
+compounds 118/186.
 
 ### 8.1 Gold, all eight cells
 
@@ -283,15 +280,24 @@ found a magnitude below it. §8.3 traces why.
 
 **A row that was expected not to move, moved.** §2.2's ≥3 ("word-sized") row
 was expected to hold, and at 60 and above it does not: 79 → 81 hints-on,
-113 → 164 hints-off. The mechanism is visible in the whole-run row moving in
-step (9094 → 10843 hints-on, 6830 → 9276 hints-off): a run that used to split
-at a short piece does not only fall back to unmatched when the charge blocks
-that split — a few runs find a *different*, all-≥3 tiling instead, and get
-reclassified into the row the charge should not have been able to touch,
-since nothing under 3 characters is ever a candidate there. The class
-boundary in §2.2 is real but not perfectly clean under the charge; it is a
-second-order effect and not itself a gate failure, since §5 gates gold, not
-this row.
+113 → 164 hints-off (this table's two-corpus subset). The mechanism is
+visible in the whole-run row moving in step (9094 → 10843 hints-on,
+6830 → 9276 hints-off): a run that used to split at a short piece does not
+only fall back to unmatched when the charge blocks that split — a few runs
+find a *different*, all-≥3 tiling instead, and get reclassified into the row
+the charge should not have been able to touch, since nothing under 3
+characters is ever a candidate there.
+
+For an isolated run the class boundary in §2.2 is in fact clean: an all-≥3
+tiling pays no new term and neither does the whole-run candidate, so a run
+already in that row cannot leave it — the row can only gain. The six-corpus
+counts (handoff §9.3) show exactly that, each summing to zero: hints-on
+−1807 (short-piece) / +1783 (whole) / +24 (word-sized), hints-off −4927 /
++4836 / +91. The remaining caveat is that the Viterbi search is global, so a
+span crossing a run boundary elsewhere in the sentence can perturb a run
+indirectly — that is why the row moved by 24 (91 hints-off) rather than 0.
+It is a second-order effect and not itself a gate failure, since §5 gates
+gold, not this row.
 
 ### 8.3 The cause: `ラストラン` is a dictionary entry, and §2.1's table did not know
 
@@ -322,7 +328,7 @@ this sweep tried — makes it cheaper than the split. The window §2.1 derived
 never had a lower edge for this particular run; the table's arithmetic was
 right for a run the dictionary does not cover and wrong for one it does.
 
-Task 2's fixture test, `a_five_character_compound_keeps_its_cut_at_a_short_piece`,
+Task 2's fixture test, `a_five_character_katakana_compound_keeps_its_cut`,
 cannot see this: `KATAKANA_FIXTURE` defines `ラスト` and `ラン` as entries but
 never defines `ラストラン`, so inside the fixture the whole run really is
 unmatched at 150 and the test passes at 60 exactly as §2.1 predicted. The
@@ -361,3 +367,37 @@ does. Tasks 1 and 2's mechanism — the `inside_katakana_run` marking and the
 cost term itself — is unaffected; what is refused is trusting any value in
 the §2.1 window to fix the hints-off katakana defect without a cost this
 gate can see.
+
+**The damage and benefit thresholds are ordered the wrong way round, so no
+finer sweep can help.** The `ラストラン` damage (§8.3) is already present at
+40, the lowest value tried, while nothing useful moves until above 50: at 50
+the two-corpus short-piece row (§8.2) goes 1918 → 1915 and **zero** of the 26
+hints-off katakana misses return; at 60 it goes to 167 and 7 return. There is
+no magnitude between a live defect and a dead charge — both halves are in
+§8.1/§8.2's tables above, but the ordering is worth stating plainly, because
+without it the record invites a re-sweep between 40 and 60 that cannot
+succeed.
+
+The fixture test `a_katakana_name_is_one_run_not_two_words`
+(`crates/jparser/tests/engine_v2.rs`) pins a floor under this from the test
+suite's side: under `KATAKANA_FIXTURE`'s arithmetic it passes only when
+`KATAKANA_FRAGMENT >= 55`. Reverting the charge to 0 is therefore not a
+one-token edit — that test must be deleted or inverted as part of the
+revert.
+
+### 8.5 Interaction with `PRONOUNCE_CROSS`'s `KATAKANA_MIN_PIECE` exemption
+
+`cost.rs`'s older `KATAKANA_MIN_PIECE` exemption (in the `PRONOUNCE_CROSS`
+filter chain) and `KATAKANA_FRAGMENT` do not double-charge — the exemption
+withholds a cost from a *merged* PRONOUNCE-only span, and the new charge
+prices the *split* pieces, so they never land on the same candidate. But
+both fire on the same condition, a piece under three characters inside an
+all-katakana span, and both push toward the merge. Hints-on, a short-piece
+run gets the withheld `PRONOUNCE_CROSS` on the merge *and* the new charge on
+the split pieces, stacking; hints-off, with no tokenizer boundaries to
+exempt anything from, only the new charge applies. §2.1's window was derived
+ignoring `PRONOUNCE_CROSS` entirely, so it describes the hints-off state
+only — which is a likely explanation for why the measured collapse is so
+asymmetric (split-with-short-piece falls 9.6x hints-on against 2.9x
+hints-off, handoff §9.3), though nobody has isolated the two effects to
+measure this directly.
