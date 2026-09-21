@@ -331,3 +331,152 @@ auxiliary: `気持ちよ`|`くないです` glossed "to come" is now
 `気持ちよく`|`ないです`, `全くない` reads `くない` instead of くる, and
 `気持ちよ`|`くさせたい` is now `気持ちよく`|`させたい`. 1,868 sentences change
 hints-off in total.
+
+## 9. Postscript: the katakana run charge, measured and refused
+
+`76edf85` and `4007a45`, the same day. The katakana-run-integrity phase
+(`docs/superpowers/specs/2026-09-21-katakana-run-integrity-design.md`) added
+one field and one cost term and changed nothing else:
+`lex::Candidate.inside_katakana_run` is pure geometry, set at construction
+and read by nothing until the cost term exists; `cost::KATAKANA_FRAGMENT`
+(`crates/jparser/src/engine/cost.rs:603`) is a flat charge paid by a
+candidate shorter than `KATAKANA_MIN_PIECE` (3) that sits inside a longer
+run of katakana. No new constraint, no index format change, nothing outside
+`crates/jparser/src/engine/`.
+
+Task 3 swept six candidate magnitudes — 40, 50, 60, 80, 100, 130 — against
+the design's zero-gold-damage gate (§5) and cleared none of them; design §8
+carries the full table and the per-value reasoning and is not duplicated
+here. The constant was left at 60, "the least damaged of the six," recorded
+in `cost.rs`'s own doc comment as an unvalidated placeholder rather than a
+shipped magnitude. This section re-runs every gate against that decision on
+the tip that carries it (`585f8a9`), across all six corpora rather than the
+two Task 3 used for its corpus rows.
+
+### 9.1 Gates
+
+`cargo fmt --all -- --check` is clean. `cargo clippy --workspace
+--all-targets --features mecab` reports zero warnings and zero errors.
+`cargo test --workspace --features mecab` is 675 passed, 0 failed, 1
+ignored (the pre-existing `jmdict_source` doc-test). `git diff --stat`
+against `crates/jparser/tests/fixtures/parse_sentences.txt` is empty — its
+only katakana runs of three or more, コーヒー and パソコン, are unaffected in
+both hint states.
+
+### 9.2 The gold pair
+
+Both `score` commands, at this tip, against §5's baseline (1694 / 1948 /
+0.9527 (1188/1247) / 152 hints-on; 1588 / 1785 / 0.9504 (1169/1230) / 118
+hints-off):
+
+| | on strict | on tolerant | on entry top-1 | on compounds | off strict | off tolerant | off entry top-1 | off compounds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline | 1694 | 1948 | 0.9527 (1188/1247) | 152 | 1588 | 1785 | 0.9504 (1169/1230) | 118 |
+| this tip (60) | 1692 ↓ | 1948 | 0.9526 ↓ (1186/1245) | 153 ↑ | 1590 ↑ | 1791 ↑ | 0.9493 ↓ (1160/1222) | 120 ↑ |
+
+Three cells fall: on strict (1694 → 1692), on entry top-1 (0.9527 → 0.9526,
+1188/1247 → 1186/1245), and off entry top-1 (0.9504 → 0.9493, 1169/1230 →
+1160/1222) — the same three cells, and the same values, design §8.1 already
+recorded for value 60. On tolerant holds exactly. Four cells rise: off
+strict, off tolerant, on compounds and off compounds. §5's gate is "no cell
+above may fall"; three do, so the gate fails here exactly as it failed for
+every value Task 3 swept — this reproduces design §8.4's refusal rather than
+reopening it.
+
+### 9.3 Six corpora, before and after
+
+| hint state | build | runs ≥3 whole | split-with-short-piece | split-into-word-sized |
+| --- | --- | --- | --- | --- |
+| on | baseline (charge-free, `76edf85`) | 23328 | 2017 | 303 |
+| on | this tip (charge 60) | 25111 | 210 | 327 |
+| off | baseline (charge-free, `76edf85`) | 17598 | 7573 | 477 |
+| off | this tip (charge 60) | 22434 | 2646 | 568 |
+
+Every row sums to 25,648 — the total count of katakana runs of three or more
+characters across the six corpora (§1.1), unchanged by the charge in either
+state, since the charge only moves runs between these three buckets.
+
+Split-with-short-piece falls 9.6x hints-on (2017 → 210) and 2.9x hints-off
+(7573 → 2646). The hints-on side clears §5's "at least an order of
+magnitude" bar; hints-off — the state the fix is actually aimed at, and the
+"draining population" per the four-corpora handoff §11 — does not, and its
+ratio here (2.9x) matches design §8.2's own finding on its two-corpus subset
+(4148 → 1651, 2.5x) closely enough that six corpora do not change the
+conclusion.
+
+Split-into-word-sized also grew: 303 → 327 hints-on, 477 → 568 hints-off.
+This is the same reclassification design §8.2 found on its two-corpus
+subset: blocking a short-piece split does not always fall back to leaving a
+run whole; sometimes a different, all-≥3 tiling exists and the run lands in
+a row the charge was never meant to touch, since nothing under three
+characters is a candidate there. It is a second-order effect, not a gate
+failure — §5 gates gold, not this row.
+
+Fresh gold dumps at this tip (rebuilt for this task, not reused from Task 3)
+give: katakana gold spans ≥3 missed, hints-on 8 of 54 (baseline 7 — the new
+`ラスト` casualty, §9.4), hints-off 19 of 54 (baseline 26 — 7 recovered).
+These match design §8.1/§8.2's already-recorded value-60 figures exactly.
+
+### 9.4 The `ラストラン` cause
+
+The one hints-on casualty is gold sentence `b:wn21710-1`, traced in full in
+design §8.3. Gold annotates `ラスト` (start 32, len 3) and `ラン` (start 35,
+len 2) as two spans; at this tip the engine returns `ラストラン` (start 32,
+len 5) as one matched span in both hint states, because `ラストラン` is
+itself a JMdict entry (ent_seq 2843587,
+`crates/jparser/tests/fixtures/gold_jmdict_subset.xml:136897`) and any
+charge above zero makes that cheap matched whole-run candidate beat the
+split. Task 2's fixture test,
+`a_five_character_compound_keeps_its_cut_at_a_short_piece`, cannot see this:
+`KATAKANA_FIXTURE` defines `ラスト` and `ラン` as entries but never defines
+`ラストラン`, so inside the fixture the whole run really is an unmatched
+150-point fallback and the test passes for a reason that does not hold
+against the installed dictionary.
+
+### 9.5 Why gold cannot show the hints-on win
+
+There is no hints-on win for gold to show. Gold's own hints-on katakana
+misses (7 of them at baseline, present before this charge existed) are not
+the short-piece failure this charge targets — they are the opposite shape,
+cases like `タイムリー`/`ヒット` where gold's annotation wants two words and
+the engine already prefers the single merged JMdict entry, charge or no
+charge. Since none of gold's existing hints-on katakana problems are runs
+shattered into short pieces, no value of `KATAKANA_FRAGMENT` can turn one of
+those misses into a hit; and on the one gold sentence where the charge does
+cross a genuine word/dictionary-entry boundary (`ラストラン`, §9.4), the only
+direction available is to cost a cell, never gain one. Hints-off gold moves
+in both directions instead (§9.2: strict and tolerant rise, entry top-1
+falls), but that is a mixed, noisier signal and not itself evidence for or
+against the run-charge mechanism.
+
+### 9.6 What this does not fix
+
+Three things, all named out of scope in design §1: `イ|って` (109
+occurrences hints-on) — the katakana run there is one character, so there is
+no run to charge; the `INEXACT` fold penalty, which is still why
+`キツク締め付け` parses worse than `きつく締め付け`; and proper-noun
+recognition — `ユリナス` still comes out unglossed, the honest answer for a
+word the dictionary does not have, not a gloss.
+
+### 9.7 Latency
+
+`jparser-cli bench` was run against `gen-3` on
+`crates/jparser/tests/fixtures/gold.jsonl`, hints-on, four interleaved
+rounds — baseline, candidate, baseline, candidate, ... — alternating
+`$SCR/baseline/jparser-cli.exe` (built from `76edf85`, before the cost term
+existed) with a release build of this tip, to cancel the roughly 10% drift a
+single machine shows across a session. At the short paste (1,005 chars) the
+candidate/baseline ratio across the four rounds was 0.944, 0.963, 1.000,
+1.098 (median 0.981); at the long paste (10,040 chars) it was 0.991, 1.002,
+1.011, 1.023 (median 1.007). Both medians sit inside session noise with no
+trend against length, so the charge's once-per-sentence run scan is not
+visible, as design §5 expected.
+
+### 9.8 State of the branch
+
+`KATAKANA_FRAGMENT` is live at 60 on this branch and costs the three gold
+cells named in §9.2 (on strict, on entry top-1, off entry top-1) for a
+six-corpus hints-off improvement that gold, by construction (§9.5), cannot
+register as a win. The refusal recorded in design §8.4 stands unchanged.
+Whether to ship this trade anyway or revert `KATAKANA_FRAGMENT` to 0 is an
+open decision for the human partner, not settled by this task.
