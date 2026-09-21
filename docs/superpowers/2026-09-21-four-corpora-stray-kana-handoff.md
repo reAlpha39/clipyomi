@@ -117,6 +117,18 @@ The register matters. These are eroge scripts and the gold corpus has almost
 none of this shape, so **no gate in the repository moves when this class moves**.
 That is the first thing whoever takes it has to build.
 
+**What the 16.5% is not.** It counts segments, not moments a reader was hurt,
+and the two numbers are not close. A quarter of the class has no correct merge
+at all, and a large part of the remainder is `ちゅ`, `ごきゅ`, `んぅ` — a reader
+scrolling past a moan does not need it lemmatised, and a one-character span
+there costs them nothing they would notice. The defensible core is the rest:
+`だらっと` (a JMdict adverb cut in half), `ですぅ`, `よぉ` — a real word, or a
+real word plus a lengthening, severed. **Anyone pricing a fix should price that
+core, not the headline**, and should weigh the cheapest candidate first: never
+segment inside a run of kana that carries no word, and show the run as one
+unglossed span. That takes most of the value without a cost-model change, and
+it leaves the 26% alone by construction.
+
 ## 4. 〜てくる, measured at last, and bigger than 〜ていく was
 
 The predecessor's §7 shipped the `ていく` / `でいく` rows and named 〜てくる, 〜ておく
@@ -199,6 +211,13 @@ a class can be real and still be rare in the text a given reader is parsing.
 - **`span_dump` plus a literal window gives the denominator the probe cannot.**
   "Of the 3,232 `てくる` in this corpus, 2,368 are cut" is a claim the probe's
   per-region counts cannot make, and it is the number a decision needs.
+- **A literal window is noisy and the noise is one-directional**, so read the
+  rates in §4 and §9 as approximations rather than to the decimal. `てみな`
+  matches inside `てみない`, which is correct Japanese, and `ておか` inside
+  `すぎておかしく`, which is not the auxiliary at all — both were caught only by
+  reading examples, and both inflate a count. The direction of every figure
+  here survives the noise (73.3% → 1.6% is not a rounding question); the second
+  digit does not. Read the examples, always, before believing a rate.
 - **The `matched` flag on a one-character segment is worth auditing on its own.**
   It found the `ぇ` → `ェ` gloss, which no reading- or cover-based signal reports.
 - On this shell, Python needs `PYTHONIOENCODING=utf-8` or every Japanese column
@@ -268,3 +287,90 @@ latency unmoved on an interleaved A/B.
 
 Residue named rather than fixed: `待っておいで` (5) and one `守りぬいてみせます`
 whose span now ends at `てみ`.
+
+## 10. The gate cannot score this class, and that is measurable
+
+§9's change improved the parse on 75,782 sentences and **every gold cell it
+moved, moved down**. That is the second change in this family in a row to do
+that, and the pattern is not noise — it is the gold corpus's annotation policy.
+
+| change | strict on | tolerant on | entry on | strict off | tolerant off | compounds |
+| --- | --- | --- | --- | --- | --- | --- |
+| `てる`/`でる` | 1745 → **1746** | 1932 → **1935** | → 0.9507 | 1633 → **1634** | 1775 → **1778** | 152 / 113 |
+| `ている`/`でいる` | 1746 → 1714 | 1935 → **1948** | → **0.9534** | 1634 → 1610 | 1778 → **1791** | 113 → **118** |
+| `ていく`/`でいく` | 1714 → 1698 | 1948 → 1948 | → 0.9528 | 1610 → 1593 | 1791 → 1786 | 152 / 118 |
+| `てくる`+2 (§9) | 1698 → 1694 | 1948 → 1948 | → 0.9527 | 1593 → 1588 | 1786 → 1785 | 152 / 118 |
+
+The first bought a gain on every column it touched. The second traded strict
+for tolerant, entry and compounds. **The last two have no positive cell at
+all.**
+
+**The mechanism, measured rather than assumed: of the 34 〜て+auxiliary sites in
+`gold.jsonl`, 34 are annotated as two spans and 0 as one** — `引きずって`|`いった`,
+`沈みこんで`|`いく`, `頬張って`|`いる`. So an auxiliary-merge row is a strict loss
+**by construction**: it takes two gold spans and returns one. Tolerant can only
+be neutral, because it credits the merge as coarsening rather than rewarding it.
+The compound metric contains no auxiliaries at all. Entry top-1 moves on a
+denominator that the merge itself changes. There is no cell in `score` that can
+say "the auxiliary is attached to its verb now", and there never was.
+
+That is not an argument that the gold corpus is wrong. Its short-unit policy is
+deliberate and everything else in the engine is scored against it. It is an
+argument that **this class of change has been running without a gate for four
+commits**, and that the corpus evidence has quietly been doing the gate's job —
+which is exactly the position §3's stray-kana class is in, arrived at from the
+other direction.
+
+The two honest ways out, and the first is cheap because the pattern already
+exists: **an adjudicated auxiliary file in the shape of `compound_gold.jsonl`**,
+listing 〜て+auxiliary sites with the expected whole-span reading, scored as its
+own line. Or: state in the master plan that for auxiliary attachment the corpus
+is the gate and `score` is only a regression check. Doing neither means the next
+row in this family is argued the way these four were — on a table where every
+number is worse.
+
+## 11. The hints-off premise, audited
+
+The `LEN_GAIN` refusal and the largest open class in §4 of the predecessor both
+lean on hints-off being the state users are in. `fdbbb61` changed that on
+2026-09-21 and the audit is worth writing down, because the answer is not the
+simple one.
+
+**What actually changed.** `mecab_hints` still defaults to `false`, deliberately
+— it records whether the 7.7 MB Vibrato dictionary was ever acquired, not a
+preference. What the commit added is an acquisition on the download screen,
+armed only when that screen's own button started the download, no hints
+dictionary is published (`hints_available`), and no `hints-status` has arrived
+since.
+
+**So the hints-off column is now a draining population, not a default.** A
+fresh install that downloads a dictionary lands hints-on. An established user
+who never acquired hints publishes no dictionary either, so `hints_available`
+is false for them too — and `state::is_missing_dictionary` routes
+`ConjugationMismatch` and `VersionMismatch` to the same screen, which means
+**the next index-format bump arms the acquisition for them as well**. What
+stays hints-off after that is three groups: users who acquired hints and turned
+them off (correctly excluded by the guard), users whose fetch failed — GitHub
+blocked where EDRDG is not is the realistic case — and installs that have not
+yet met a rebuild.
+
+**No refusal reverses.** Each was checked against its own reasoning rather than
+its framing:
+
+- **`LEN_GAIN`** was already re-argued after the acquisition, in
+  `2026-09-18-len-gain-resample-handoff.md` §11b: it stays gated on the severing
+  class (`それならいい` → `それな` | `らいい`, once a sentence), and that argument
+  never used the fresh-install premise. Unaffected.
+- **The residue term** is refused on separability — `ながら` and `ように` are
+  flag-identical — which is a property of JMdict, not of a hint state.
+- **`nf`-band grading** is refused for shattering inflections. Same.
+
+**What changes is priority, and two documents now read wrong.** The three-corpus
+handoff's §8 says "the broken state is the one a fresh install runs in"; that
+sentence is stale and should be read against `fdbbb61`. And the hints-off-only
+half of §5 above — `のも` 472 and `のかな` 148 — plus the ~1,640-per-10k
+atomisation class describe a shrinking audience rather than the default one.
+They are still real defects for the three groups named above; they are no
+longer the first thing a new user meets. **Before another session is spent on
+the hints-off column, that is the number to ask for: how many users are in it,
+and for how long.**
