@@ -1623,6 +1623,188 @@ fn kuru_in_kanji_leaves_an_unmatched_tail_alone() {
     assert!(tail.entries.is_empty());
 }
 
+// 来る's *compounds*, which the bare-来る tests above cannot reach. JMdict
+// spells this class both ways -- 出てくる and 出て来る are one entry, and
+// `vk` maps to カ変・来ル (kanji stem 来, empty suffixes) as well as
+// カ変・クル (kana suffixes over an empty stem). Over 38 vk entries the
+// spellings partition exactly: 65 headwords end 来る/來る, 82 end くる/クる,
+// none does neither. The two tests below are the two halves of that
+// partition going wrong before 2026-09-21.
+//
+// A private fixture for the same reason `KURU_FIXTURE` is one: the extractor
+// that regenerates `jmdict_subset.xml` would drop hand-added entries.
+const KURU_COMPOUND_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY vk "Kuru verb - special class">
+<!ENTITY v1 "Ichidan verb">
+<!ENTITY v1-s "Ichidan verb - kureru special class">
+<!ENTITY v5r "Godan verb with ru ending">
+]>
+<JMdict>
+<entry>
+<ent_seq>1000040</ent_seq>
+<k_ele><keb>来る</keb></k_ele>
+<k_ele><keb>來る</keb></k_ele>
+<r_ele><reb>くる</reb></r_ele>
+<sense><pos>&vk;</pos><gloss>to come</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1338240</ent_seq>
+<k_ele><keb>出てくる</keb></k_ele>
+<k_ele><keb>出て来る</keb></k_ele>
+<r_ele><reb>でてくる</reb></r_ele>
+<sense><pos>&vk;</pos><gloss>to come out</gloss></sense>
+</entry>
+<entry>
+<ent_seq>2789750</ent_seq>
+<k_ele><keb>取ってくる</keb></k_ele>
+<r_ele><reb>とってくる</reb></r_ele>
+<sense><pos>&vk;</pos><gloss>to fetch</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1269130</ent_seq>
+<k_ele><keb>呉れる</keb></k_ele>
+<r_ele><reb>くれる</reb></r_ele>
+<sense><pos>&v1-s;</pos><gloss>to give</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1326980</ent_seq>
+<k_ele><keb>取る</keb></k_ele>
+<r_ele><reb>とる</reb></r_ele>
+<sense><pos>&v5r;</pos><gloss>to take</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1338180</ent_seq>
+<k_ele><keb>出る</keb></k_ele>
+<r_ele><reb>でる</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to exit</gloss></sense>
+</entry>
+</JMdict>
+"#;
+
+fn build_kuru_compound(dir: &Path) {
+    jparser::engine::build::build_from_reader(
+        BufReader::new(KURU_COMPOUND_FIXTURE.as_bytes()),
+        dir,
+    )
+    .expect("v2 build");
+}
+
+fn parse_kuru_compound(name: &str, text: &str) -> jparser::ParseResult {
+    let dir = scratch(name);
+    build_kuru_compound(&dir);
+    parse_v2_over(&dir, text)
+}
+
+/// A kana headword ends in る too, so it satisfies カ変・来ル's remove-suffix
+/// by accident and deinflects over a stem that is not one: 取ってく + れる.
+///
+/// The surface that produces is not Japanese, and it collides exactly with
+/// くれる, the benefactive — so `舐め取ってくれる` was glossed 取ってくる, "to
+/// fetch", with the meaning inverted from "did it for me" to "went and got".
+/// Measured over six visual-novel corpora, 56,065 sentences: 30 occurrences
+/// hints-on and 22 hints-off (`docs/superpowers/2026-09-21-six-corpora-handoff.md`
+/// §4a).
+///
+/// Asserted over candidates rather than segments: the bogus candidate loses
+/// the ranking in isolation and wins in a sentence, so a segment-level test
+/// would pass today for the wrong reason. What the fix removes is the
+/// candidate.
+#[test]
+fn kuru_in_kana_does_not_deinflect_over_the_kanji_stem() {
+    let dir = scratch("kuru-kana-benefactive");
+    build_kuru_compound(&dir);
+    let c = cands(&dir, "取ってくれる");
+    let from_kuru = |list: &[jparser::engine::lex::Candidate], len: usize| {
+        list.iter()
+            .any(|x| x.headword == "取ってくる" && x.len == len)
+    };
+    assert!(
+        !from_kuru(&c[0], 6),
+        "取ってく is not a stem: 取ってくれる is 取って + くれる, the benefactive: {:?}",
+        c[0]
+    );
+    // The two カ変・クル forms in the same text that must survive: 仮定形
+    // 取ってくれ (the ば of 取ってくれば) and 体言接続特殊２ 取ってく.
+    assert!(from_kuru(&c[0], 5), "取ってくれ(ば) is カ変・クル's 仮定形");
+    assert!(
+        from_kuru(&c[0], 4),
+        "取ってく is カ変・クル's 体言接続特殊２"
+    );
+    assert!(c[3].iter().any(|x| x.headword == "くれる" && x.len == 3));
+}
+
+/// The same defect where no real word collides, which is why it never
+/// surfaced in a corpus: 連れてくさせる and 取ってくさせる are matched and
+/// glossed today, and neither is a word. The causative of 取ってくる is
+/// 取ってこさせる.
+#[test]
+fn kuru_in_kana_does_not_invent_a_causative_stem() {
+    let dir = scratch("kuru-kana-causative");
+    build_kuru_compound(&dir);
+    let c = cands(&dir, "取ってくさせる");
+    let bogus: Vec<usize> = c[0]
+        .iter()
+        .filter(|x| x.headword == "取ってくる" && x.len > 4)
+        .map(|x| x.len)
+        .collect();
+    assert!(
+        bogus.is_empty(),
+        "取ってく is not a stem of 取ってくる; spans {bogus:?} were built on it"
+    );
+}
+
+/// カ変・来ル's reading is rebuilt from the kana class's same-named form, and
+/// it was rebuilt from that form *alone* — so a compound lost everything
+/// before the 来. 連れて来い read こい, not つれてこい, and the reading is what
+/// the furigana renders.
+#[test]
+fn kuru_in_kanji_compound_keeps_the_prefix_in_its_reading() {
+    let r = parse_kuru_compound("kuru-kanji-compound", "出て来た");
+    assert_eq!(r.segments.len(), 1, "{:?}", r.segments);
+    let s = &r.segments[0];
+    assert!(s.matched);
+    assert_eq!(s.reading.as_deref(), Some("でてきた"));
+    let e = &s.entries[0];
+    assert_eq!(e.headword, "出て来る");
+    assert_eq!(e.conjugation.as_deref(), Some("Past"));
+}
+
+/// The control the prefix rule needs: bare 来る has nothing before the 来, so
+/// its reading must come out exactly as it did before — きた, not the empty
+/// prefix rule's failure mode of くた or こた.
+#[test]
+fn kuru_in_kanji_bare_is_unchanged_by_the_compound_rule() {
+    let r = parse_kuru_compound("kuru-kanji-bare", "来た");
+    assert_eq!(r.segments.len(), 1, "{:?}", r.segments);
+    assert_eq!(r.segments[0].reading.as_deref(), Some("きた"));
+    assert_eq!(r.segments[0].entries[0].headword, "来る");
+}
+
+/// What the kana hole had been covering by accident, and the reason closing
+/// it needs `v1-s` mapped in the same change: くれる's past is くれた, and
+/// without a class for `v1-s` the entry matched uninflected only.
+#[test]
+fn the_benefactive_conjugates_through_its_own_class() {
+    let r = parse_kuru_compound("kureru-past", "取ってくれた");
+    assert_eq!(r.segments.len(), 2, "取って + くれた: {:?}", r.segments);
+    assert_eq!(r.segments[1].surface, "くれた");
+    let e = &r.segments[1].entries[0];
+    assert_eq!(e.headword, "くれる");
+    assert_eq!(e.conjugation.as_deref(), Some("Past"));
+}
+
+/// 來る is the other half of the class's kanji leg — JMdict carries it as a
+/// second headword of the same entry, and it is the one spelling a rule
+/// written as "ends in 来る" would silently drop.
+#[test]
+fn kuru_in_the_old_kanji_still_deinflects() {
+    let r = parse_kuru_compound("kuru-kanji-old", "來た");
+    assert_eq!(r.segments.len(), 1, "{:?}", r.segments);
+    assert!(r.segments[0].matched);
+    assert_eq!(r.segments[0].reading.as_deref(), Some("きた"));
+}
+
 #[test]
 fn empty_text_parses_into_no_segments() {
     let r = parse_kuru("kuru-empty", "");

@@ -24,7 +24,9 @@ use std::collections::HashMap;
 
 use crate::engine::flags::WordFlags;
 use crate::engine::kana;
-use crate::engine::table::{classes_for_pos, ChainHit, Table, CLASSES};
+use crate::engine::table::{
+    classes_for_pos, is_kuru_kanji_headword, ChainHit, Table, CLASSES, KURU_KANJI_CLASS,
+};
 use crate::engine::{ClassId, ConjStep};
 use crate::index::load::Index;
 use crate::index::{EntryData, IndexError, StoredRecord};
@@ -540,6 +542,14 @@ fn allows_chain(
     let Some(class) = stem_class else {
         return Ok(true);
     };
+    // Before the entry's own POS is consulted, because this one is settled by
+    // the headword alone: カ変・来ル removes る, so a kana `vk` headword
+    // satisfies it by accident and deinflects over 取ってく rather than
+    // 取ってこ. See `table::is_kuru_kanji_headword`.
+    if CLASSES[class as usize].name == KURU_KANJI_CLASS && !is_kuru_kanji_headword(&record.surface)
+    {
+        return Ok(false);
+    }
     if let Some(classes) = cache.get(&record.entry_id) {
         return Ok(classes.contains(&class));
     }

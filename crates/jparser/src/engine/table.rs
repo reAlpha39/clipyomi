@@ -48,6 +48,14 @@ pub struct Form {
 /// codes deliberately left out — `POS_WITHOUT_A_CLASS` below names them).
 pub const JMDICT_POS_CLASS: &[(&str, &str)] = &[
     ("v1", "一段"),
+    // IPADIC carries くれる's own class, and JMdict carries its own code for
+    // it: `v1-s` is four entries (呉れる, 出してくれる, 眼くれる, 鞭をくれる),
+    // every one ending in れる, which is exactly what 一段・クレル removes.
+    // The code was in neither table until 2026-09-21 — not a documented gap,
+    // an omission — so くれる matched uninflected only, and くれた/くれて/
+    // くれない were reached by accident through カ変・来ル's kana hole (see
+    // `is_kuru_kanji_headword`) with the gloss くる, "to come", instead.
+    ("v1-s", "一段・クレル"),
     ("v5k", "五段・カ行イ音便"),
     ("v5k-s", "五段・カ行促音便"),
     ("v5g", "五段・ガ行"),
@@ -210,14 +218,38 @@ pub const POS_WITHOUT_A_CLASS: &[&str] = &[
 ///
 /// Usually zero or one. `vk` is the one code with two, because 来る's kanji
 /// and kana spellings conjugate over different stems (`カ変・来ル`, `カ変・クル`)
-/// and a headword can only match through the class whose remove-suffix it
-/// ends in — so the entry's own headword picks between them at match time.
+/// — so the entry's own headword picks between them at match time, through
+/// [`is_kuru_kanji_headword`] rather than through the remove-suffix alone.
+/// The remove-suffix cannot do it: `カ変・来ル` removes る, which *every*
+/// kana headword ends in too.
 pub fn classes_for_pos(pos: &str) -> impl Iterator<Item = ClassId> + '_ {
     JMDICT_POS_CLASS
         .iter()
         .filter(move |(p, _)| *p == pos)
         .filter_map(|(_, name)| CLASSES.iter().position(|c| c.name == *name))
         .map(|i| i as ClassId)
+}
+
+/// 来る written with its kanji: stem 来, and every suffix in the class is what
+/// follows it (empty for 未然形 and 連用形, る for 基本形).
+pub const KURU_KANJI_CLASS: &str = "カ変・来ル";
+
+/// Whether `headword` is the spelling [`KURU_KANJI_CLASS`] is for.
+///
+/// The class removes る, so a *kana* `vk` headword — 出てくる, 取ってくる,
+/// 持ってくる — satisfies it by accident and then deinflects over a stem that
+/// is not one: 取ってく + れる, 連れてく + させる. Neither is Japanese, and
+/// 取ってくれる collides exactly with くれる, the benefactive, so the merge
+/// inverts the meaning of a very common form (six corpora, 56,065 sentences:
+/// 30 occurrences hints-on, 22 hints-off — see
+/// `docs/superpowers/2026-09-21-six-corpora-handoff.md` §4a).
+///
+/// The two spellings partition the whole dictionary with nothing left over:
+/// over JMdict's 38 `vk` entries, 65 headwords end 来る or 來る and 82 end
+/// くる or クる. 來る is the old form of the same entry and is why this is not
+/// a single `ends_with`.
+pub fn is_kuru_kanji_headword(headword: &str) -> bool {
+    headword.ends_with("来る") || headword.ends_with("來る")
 }
 
 /// Forms that are never a word on their own — they exist only as the
@@ -1195,14 +1227,19 @@ mod tests {
         // the two empty-suffix forms every later auxiliary attaches to).
         // Depth-2 carries the growth, as it did for every row before these --
         // each new auxiliary's own forms become attachment sites in turn.
+        // 140,947 -> 145,482 on 2026-09-21, and this one is not an auxiliary:
+        // `v1-s` gained a row in JMDICT_POS_CLASS, so 一段・クレル is a 22nd
+        // *class* in the mapped set. Its ten forms are the +10 in depth-0
+        // (180 -> 190); none of them has an empty suffix, the stem being く,
+        // so it grows depth-2 by less than an auxiliary row of the same size.
         assert_eq!(
-            chains, 140_947,
-            "the walk reached {chains} chains, not 140,947 -- the conjugation table's \
+            chains, 145_482,
+            "the walk reached {chains} chains, not 145,482 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 140,947 is {depth0_chains} depth-0 chains plus {depth1_chains} \
-             depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
-             maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
-             constant, rather than loosening the assertion"
+             deliberate: 145,482 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             depth-1 plus {depth2_chains} depth-2, over the 22 classes JMDICT_POS_CLASS \
+             maps (カ変・来ル per Phase 1b-ii, 一段・クレル with the v1-s row). \
+             Re-derive it and update this constant, rather than loosening the assertion"
         );
     }
 

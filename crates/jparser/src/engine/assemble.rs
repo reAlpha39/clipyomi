@@ -22,7 +22,7 @@ use crate::engine::kana;
 use crate::engine::label;
 use crate::engine::lattice::Step;
 use crate::engine::lex::Candidate;
-use crate::engine::table::CLASSES;
+use crate::engine::table::{Class, CLASSES, KURU_KANJI_CLASS};
 use crate::index::load::Index;
 use crate::index::{EntryData, IndexError, SenseData};
 use crate::{Entry, Segment};
@@ -240,23 +240,25 @@ fn union_pos(senses: &[SenseData]) -> Vec<String> {
     pos
 }
 
-/// The kanji spelling of 来る. Its stem's reading alternates with the form
-/// (来た = きた, 来ない = こない, 来る = くる), so stripping the class's
+/// The kana spelling's class, and the reason [`KURU_KANJI_CLASS`] needs
+/// special handling here: 来's stem reading alternates with the form (来た =
+/// きた, 来ない = こない, 来る = くる), so stripping the kanji class's
 /// remove-suffix from the dictionary reading -- right for every other class
-/// -- would produce くた.
-const KURU_KANJI_CLASS: &str = "カ変・来ル";
-/// The kana spelling's class. It conjugates the same ten form names over an
-/// empty stem, so each form's suffix *is* the kanji stem's reading in that
+/// -- would produce くた. This class conjugates the same ten form names over
+/// an empty stem, so each form's suffix *is* the kanji stem's reading in that
 /// form.
 const KURU_KANA_CLASS: &str = "カ変・クル";
+
+/// The kana spelling's class itself, for its `remove` as well as its forms.
+fn kuru_kana_class() -> Option<&'static Class> {
+    CLASSES.iter().find(|c| c.name == KURU_KANA_CLASS)
+}
 
 /// `カ変・クル`'s suffix for the form named `form`: the reading of 来's stem
 /// in that form. `None` only if the two classes' form sets have drifted
 /// apart, which `kuru_classes_share_every_form_name` guards against.
 fn kuru_stem_reading(form: &str) -> Option<&'static str> {
-    CLASSES
-        .iter()
-        .find(|c| c.name == KURU_KANA_CLASS)?
+    kuru_kana_class()?
         .forms
         .iter()
         .find(|f| f.name == form)
@@ -300,11 +302,18 @@ fn reading_for(entry: &EntryData, cand: &Candidate, chars: &[char]) -> Option<St
     if class.name == KURU_KANJI_CLASS {
         let form = class.forms[first_step.form as usize].name;
         let stem = kuru_stem_reading(form)?;
+        // Everything before the 来, which the kana class's suffix does not
+        // carry: 出て来た is でてきた, not きた, and the reading is what the
+        // furigana renders. Bare 来る's own reading is the suffix and nothing
+        // else, so its prefix is empty and its output is unchanged.
+        let prefix = kuru_kana_class()
+            .and_then(|c| dict_reading.strip_suffix(c.remove))
+            .unwrap_or("");
         // The step's own range is the kanji form's suffix (empty for 連用形,
         // れ for 仮定形), already accounted for by the kana form's suffix; the
         // auxiliaries after it are kana as written.
         let tail: String = chars[first_step.range.end..end].iter().collect();
-        return Some(format!("{stem}{tail}"));
+        return Some(format!("{prefix}{stem}{tail}"));
     }
     let stem = dict_reading.strip_suffix(class.remove)?;
     let tail: String = chars[first_step.range.start..end].iter().collect();
