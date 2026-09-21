@@ -230,6 +230,7 @@ mod tests {
             steps: Vec::new(),
             exact: true,
             all_katakana: false,
+            inside_katakana_run: false,
             function_stack: false,
             grammatical_stack: false,
             digit_counter: false,

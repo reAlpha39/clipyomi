@@ -1805,6 +1805,111 @@ fn kuru_in_the_old_kanji_still_deinflects() {
     assert_eq!(r.segments[0].reading.as_deref(), Some("きた"));
 }
 
+// A katakana run cut into pieces that are not words: ユリナス, a character's
+// name, reads ユリ ("lily") + ナス ("eggplant") 1,721 times over six corpora.
+// See docs/superpowers/specs/2026-09-21-katakana-run-integrity-design.md.
+//
+// A private fixture for the reason `KURU_FIXTURE` is one: the extractor that
+// regenerates `jmdict_subset.xml` would drop hand-added entries.
+const KATAKANA_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+]>
+<JMdict>
+<entry>
+<ent_seq>1000010</ent_seq>
+<k_ele><keb>ユリ</keb></k_ele>
+<r_ele><reb>ゆり</reb></r_ele>
+<sense><pos>&n;</pos><gloss>lily</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000020</ent_seq>
+<k_ele><keb>ナス</keb></k_ele>
+<r_ele><reb>なす</reb></r_ele>
+<sense><pos>&n;</pos><gloss>eggplant</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000030</ent_seq>
+<r_ele><reb>ソロ</reb></r_ele>
+<sense><pos>&n;</pos><gloss>solo</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000040</ent_seq>
+<r_ele><reb>ホームラン</reb></r_ele>
+<sense><pos>&n;</pos><gloss>home run</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000050</ent_seq>
+<r_ele><reb>ラスト</reb></r_ele>
+<sense><pos>&n;</pos><gloss>last</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000060</ent_seq>
+<r_ele><reb>ラン</reb></r_ele>
+<sense><pos>&n;</pos><gloss>run</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000070</ent_seq>
+<r_ele><reb>ランニング</reb></r_ele>
+<sense><pos>&n;</pos><gloss>running</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000080</ent_seq>
+<r_ele><reb>ウェア</reb></r_ele>
+<sense><pos>&n;</pos><gloss>wear</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000090</ent_seq>
+<k_ele><keb>キツい</keb></k_ele>
+<r_ele><reb>きつい</reb></r_ele>
+<sense><pos>&n;</pos><gloss>tight</gloss></sense>
+</entry>
+</JMdict>
+"#;
+
+fn build_katakana(dir: &Path) {
+    jparser::engine::build::build_from_reader(BufReader::new(KATAKANA_FIXTURE.as_bytes()), dir)
+        .expect("v2 build");
+}
+
+/// The geometry the charge keys on, asserted on the flag rather than on a
+/// parse: a two-character piece of a four-character run is a fragment, the
+/// whole run is not, and a span that leaves the run is not either.
+#[test]
+fn a_piece_of_a_longer_katakana_run_is_marked_as_one() {
+    let dir = scratch("katakana-fragment-flag");
+    build_katakana(&dir);
+    let c = cands(&dir, "ユリナス");
+    let piece = c[0]
+        .iter()
+        .find(|x| x.len == 2 && x.headword == "ユリ")
+        .expect("ユリ is a candidate at 0");
+    assert!(piece.inside_katakana_run, "ユリ is a piece of ユリナス");
+
+    let tail = c[2]
+        .iter()
+        .find(|x| x.len == 2 && x.headword == "ナス")
+        .expect("ナス is a candidate at 2");
+    assert!(tail.inside_katakana_run, "ナス is a piece of ユリナス");
+}
+
+/// The converse, and the case a charge must never reach: a span that starts
+/// inside a katakana run and ends outside it is not a piece of that run.
+#[test]
+fn a_span_that_leaves_the_katakana_run_is_not_a_piece_of_it() {
+    let dir = scratch("katakana-fragment-crossing");
+    build_katakana(&dir);
+    let c = cands(&dir, "キツい");
+    let crossing = c[0]
+        .iter()
+        .find(|x| x.len == 3)
+        .expect("キツい is a candidate at 0");
+    assert!(
+        !crossing.inside_katakana_run,
+        "キツい ends in hiragana, so it is not inside a katakana run"
+    );
+}
+
 #[test]
 fn empty_text_parses_into_no_segments() {
     let r = parse_kuru("kuru-empty", "");
