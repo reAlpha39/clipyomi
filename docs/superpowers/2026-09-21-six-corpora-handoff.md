@@ -12,9 +12,11 @@ because the engine moved rather than because the writers changed, a **held-out
 replication** of `640074c` against a pre-fix binary, and **three defect classes
 that no previous session named**.
 
-Measurement only. No code changed, no gate was re-run, and every artifact —
-the v1 index, the dumps, the pre-fix worktree — is gone with the session
-scratchpad.
+§1 to §7 are the measurement, written before anything was changed: no code, no
+gate, and every artifact throwaway — the v1 index, the dumps and the pre-fix
+worktree are gone with the session scratchpad. §8 is the one change the
+measurement justified, shipped the same day — `4bc74b4`, §4a's class, which
+turned out to be a class assignment rather than the gloss it looked like.
 
 ## 1. The corpora, and how to rebuild the run
 
@@ -124,6 +126,9 @@ auxiliary rather than the window's noise.
 
 ### 4a. `〜てくれる` read as `〜てくる`
 
+**Fixed in `4bc74b4`, and the cause was not what this section guessed — see
+§8.** What follows is the measurement as it was taken.
+
 `舐め取ってくれる` is emitted as one span glossed **`取ってくる`**, "to fetch".
 The word is `取って` + `くれる`, the benefactive — somebody did it *for* the
 speaker. The gloss does not merely coarsen the span, it inverts the meaning.
@@ -139,7 +144,9 @@ literal `てくれ` occurrences, so ~1.7% of the family. Hints-on, by surface:
 to the current one — same twelve surfaces, same counts — which is the
 predecessor §9's "byte-identical" claim confirmed on text it never saw. The
 deinflector reaches `くる` from `くれる` as a passive/potential, and that path
-predates the `ATTACHES_TO` rows.
+predates the `ATTACHES_TO` rows. **The half-sentence after that is wrong**: the
+passive/potential is the *label*, not the cause. The cause is which class the
+entry was conjugating in at all, and §8 has it.
 
 Two shapes in the same window are **correct** and a fix must not touch them:
 the JMdict headword `出してくれる` (9 occurrences, "to pay for; to foot the
@@ -227,9 +234,11 @@ carries the name.
 
 ## 7. Not done
 
-- **The three new rows.** `達した` is the cheapest — one lexeme, deterministic,
-  66 occurrences — and the only one of the three with a plausible gold-corpus
-  cell, since `達する` is ordinary prose rather than eroge register.
+- ~~**§4a's `〜てくれる`**~~ — **fixed the same day**, and it was a deeper
+  defect than §4a could see. See §8.
+- **The other two new rows.** `達した` is the cheaper — one lexeme,
+  deterministic, 66 occurrences — though gold contains no `達` at all, so
+  neither of them has a cell that can move.
 - **The pre-fix binary was run hints-on only**, so §4a's "not `640074c`'s" claim
   is a hints-on claim. The hints-off column was never compared against it.
 - **The stray-kana class still has no gate**, which the predecessor's §8 already
@@ -242,3 +251,83 @@ carries the name.
   the particle → godan family, the hints-off atomisation class, `やだ`, the
   heavier auxiliary metric, `BOUND_FORMS` for an auxiliary's own 連用タ接続, and
   the six darwin screenshot baselines.
+
+## 8. Postscript: §4a fixed, and what it was covering
+
+`4bc74b4`, the same day. §4a named a wrong gloss; the cause under it was a
+class assignment, and closing it exposed a missing one.
+
+**The class.** `カ変・来ル` is 来る written with its kanji — stem 来, and every
+suffix in the class is what follows it (empty for 未然形 and 連用形, る for
+基本形). It removes る, so **every kana `vk` headword satisfied it by accident**
+and deinflected over a stem that is not one: 取ってく + れる, 連れてく + させる.
+`連れてくさせる` was matched and glossed, with the reading `こさせる`; the word
+is 連れてこさせる. Nothing in text produces most of these, which is why only the
+one that collides with a real word — `取ってくれる` against the benefactive
+くれる — ever reached a corpus count.
+
+The headword settles it, and the dictionary partitions with nothing left over:
+over JMdict's 38 `vk` entries, **65 headwords end 来る or 來る and 82 end くる
+or クる**. One early return in `lex::allows_chain`, before the entry's own POS
+is consulted.
+
+**What the hole was covering.** くれる carries POS **`v1-s`**, which was in
+neither `JMDICT_POS_CLASS` nor `POS_WITHOUT_A_CLASS` — an omission rather than
+a documented gap. So the benefactive matched uninflected only, and
+`くれた`/`くれて`/`くれない` were reached *through the hole*, with the gloss くる.
+Remove the hole alone and they fragment: `言ってくれた` becomes
+`言って`|`くれ`|`た`, 1,159 sentences changed and **+1,264 spans net**. With
+`v1-s` mapped to IPADIC's own `一段・クレル`, the same 1,159 sentences change
+**span for span** — 251 out, 255 in — and only the gloss moves, くる to くれる.
+Four JMdict entries carry `v1-s`, every one ending in れる.
+
+**The reading had the same premise.** `reading_for`'s 来ル branch rebuilt the
+reading from the kana class's suffix *alone*, so a compound lost everything
+before the 来: `連れて来い` read `こい`, not `つれてこい`, and the reading is
+what the furigana renders. It now prefixes the dictionary reading minus its
+trailing くる; bare 来る strips to empty and is unchanged by construction.
+
+| class | before | after |
+| --- | --- | --- |
+| `〜てくれ` wrong glosses, hints-on | 30 | **1** |
+| correct merges in the same shape, on | 13 | **36** |
+| `〜てくれ` wrong glosses, hints-off | 22 | **10** |
+| `連れて来い` | こい | **つれてこい** |
+| `連れてくさせる` | one matched span | **not matched** |
+
+**Every other measured class is unchanged** — stray kana 18,270 segments and
+16.0% of sentences, the four auxiliary cut rates (15 / 6 / 4 / 12 hints-on),
+the particle → godan family (97 / 67 / 123 / 0 / 1), `やだ` 0 of 191, the
+hints-off atomisation class. The change is confined to the くる family.
+
+Gold is byte-identical in both states — 1694 / 1948 / 0.9527 / 152 hints-on and
+1588 / 1785 / 0.9504 / 118 off. That is a damage check and not a win: **gold
+carries no 来る, 来た, て来 or くれる at all**, which is why this class needed
+a unit gate rather than a score cell. Five tests in `engine_v2.rs`, over a
+private fixture carrying 来る/來る, 出てくる/出て来る, 取ってくる and 呉れる:
+the two bogus stems must not be candidates, the two カ変・クル forms in the
+same text (`取ってくれ`, `取ってく`) must survive, `出て来た` must read
+でてきた, `来た` must still read きた, and `取ってくれた` must gloss くれる.
+Suite 666 passed, 0 failed, 1 ignored (a pre-existing doc-test); fmt and
+clippy clean; the table fingerprint moved deliberately, 140,947 → 145,482, for
+the 22nd mapped class.
+
+**Two things it does not fix, both stated rather than hidden.**
+
+- **The 仮定形 residue.** What is left of `〜てくれ` is bare `やってくれ` (7) and
+  `持ってくれ` (3) hints-off, matched as 持ってくる's own 仮定形 — a real form
+  of a real entry (`持ってくれば`), so no headword rule separates it. The
+  auxiliary chain already blocks this through `AUX_FORM_BLOCK`; the *entry*
+  cannot be blocked the same way without losing 〜てくれば.
+- **One wash, 115 occurrences, hints-off katakana.** `キツク` was `キツ` +
+  `ク` (キツい plus a bogus クる) and is now `キ` + `ツク` (a bogus キる plus
+  つく). Both are wrong. The right answer is one span, `きつく`, and it loses
+  on the katakana penalty in both builds — `きつく締め付け` parses correctly and
+  `キツク締め付け` does not, before this change and after it.
+
+Against that, hints-off gains outside the くれる family that §4a never
+predicted, because the hole was eating adjective 連用形 wherever one met an
+auxiliary: `気持ちよ`|`くないです` glossed "to come" is now
+`気持ちよく`|`ないです`, `全くない` reads `くない` instead of くる, and
+`気持ちよ`|`くさせたい` is now `気持ちよく`|`させたい`. 1,868 sentences change
+hints-off in total.
