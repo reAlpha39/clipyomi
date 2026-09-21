@@ -95,6 +95,23 @@ fn main() {
             }
             app.manage(state::SettingsWarning(settings_warning.unwrap_or_default()));
             if let Some(main_window) = app.get_webview_window("main") {
+                // Closing `main` destroys only `main`. The hidden `popover` and
+                // `settings` windows created further down are never destroyed —
+                // `settings` even prevents its own close — so the last window never
+                // closes and Tauri, which exits on that event, never exits. The
+                // release build has no console to notice the orphan in (see
+                // `windows_subsystem` at the top of this file), so it surfaces only
+                // as a process left behind in the task manager.
+                //
+                // `Window::close` fires `CloseRequested`, so this one handler answers
+                // for both the webview's close button (`commands::close_window`) and
+                // the native titlebar X.
+                let on_close = app.handle().clone();
+                main_window.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        on_close.exit(0);
+                    }
+                });
                 if loaded.always_on_top {
                     // Not fatal: the window exists, it just is not pinned, and
                     // the toggle can retry.
