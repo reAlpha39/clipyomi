@@ -382,6 +382,88 @@
 遊んでいっ	五段・バ行:連用タ接続 でいく:連用タ接続	Directional
 遊んでいき	五段・バ行:連用タ接続 でいく:連用形	Directional
 #
+# てくる/でくる, ておく/でおく and てみる/でみる are the three 〜て auxiliaries
+# the ていく note above names as still split, added 2026-09-21. Measured over
+# four further visual-novel corpora, 75,782 sentences: of the literal windows
+# in the text, the engine cut 2,368 of 3,232 〜てくる (73.3%), 223 of 241
+# 〜ておく (92.5%) and 422 of 425 〜てみる (99.3%), hints on. 〜てくる alone is
+# twice the rate 〜ていく was fixed at.
+#
+# カ変・クル is 来る's own class, 五段・カ行イ音便 is 置く's and 一段 is 見る's,
+# so each pair needs one row per voicing plus the second attachment site the
+# ていく note explains. でくる/でおく/でみる follow an onbin stem only.
+#
+# "Approaching", "Preparatory" and "Tentative" are the FOURTH, FIFTH and SIXTH
+# words in this file the header's Wikipedia terminology list does not carry.
+# Preparatory and Tentative are the standard grammatical terms for those two
+# aspects and need no more defence than Completive did. Approaching is the one
+# that was chosen rather than found: the note above reserved a second word for
+# 〜てくる precisely because it is the same directional concept as 〜ていく in
+# the opposite direction and label.rs would drop a repeat, so it cannot also be
+# "Directional". It is plain English in this file's learner register rather
+# than the linguists' "venitive", and the cost is that the pair no longer reads
+# as a pair.
+#
+# **Three forms of てくる/でくる are blocked in AUX_FORM_BLOCK and so have no
+# rows here**, which is why this block is shorter than the class's form list.
+# カ変's 仮定形 is くれ, its 体言接続特殊 くん and its 体言接続特殊２ く, and in
+# real text all three of those surfaces belong to something else: 〜てくれ is
+# くれる, the giving auxiliary (2,455 occurrences against 7 of 〜てくれば),
+# 〜てくん is its contraction, and 919 of the bare 〜てく are 〜てください. See
+# table.rs for the ledger.
+#
+# 待っておいで (5 occurrences) can still merge as ておい + で and is left
+# standing: too rare to buy a block of its own, and the shape is named here so
+# that whoever meets it knows it was seen.
+待ってくりゃ	五段・タ行:連用タ接続 てくる:仮定縮約１	Approaching Conditional
+待ってこい	五段・タ行:連用タ接続 てくる:命令ｉ	Approaching Imperative
+待ってこよ	五段・タ行:連用タ接続 てくる:命令ｙｏ	Approaching Imperative
+待ってくる	五段・タ行:連用タ接続 てくる:基本形	Approaching
+待ってこよ	五段・タ行:連用タ接続 てくる:未然ウ接続	Approaching
+待ってこ	五段・タ行:連用タ接続 てくる:未然形	Approaching
+待ってき	五段・タ行:連用タ接続 てくる:連用形	Approaching
+遊んでくりゃ	五段・バ行:連用タ接続 でくる:仮定縮約１	Approaching Conditional
+遊んでこい	五段・バ行:連用タ接続 でくる:命令ｉ	Approaching Imperative
+遊んでこよ	五段・バ行:連用タ接続 でくる:命令ｙｏ	Approaching Imperative
+遊んでくる	五段・バ行:連用タ接続 でくる:基本形	Approaching
+遊んでこよ	五段・バ行:連用タ接続 でくる:未然ウ接続	Approaching
+遊んでこ	五段・バ行:連用タ接続 でくる:未然形	Approaching
+遊んでき	五段・バ行:連用タ接続 でくる:連用形	Approaching
+待っておけ	五段・タ行:連用タ接続 ておく:仮定形	Preparatory Conditional
+待っておきゃ	五段・タ行:連用タ接続 ておく:仮定縮約１	Preparatory Conditional
+待っておけ	五段・タ行:連用タ接続 ておく:命令ｅ	Preparatory Imperative
+待っておく	五段・タ行:連用タ接続 ておく:基本形	Preparatory
+待っておこ	五段・タ行:連用タ接続 ておく:未然ウ接続	Preparatory
+待っておか	五段・タ行:連用タ接続 ておく:未然形	Preparatory
+待っておい	五段・タ行:連用タ接続 ておく:連用タ接続	Preparatory
+待っておき	五段・タ行:連用タ接続 ておく:連用形	Preparatory
+遊んでおけ	五段・バ行:連用タ接続 でおく:仮定形	Preparatory Conditional
+遊んでおきゃ	五段・バ行:連用タ接続 でおく:仮定縮約１	Preparatory Conditional
+遊んでおけ	五段・バ行:連用タ接続 でおく:命令ｅ	Preparatory Imperative
+遊んでおく	五段・バ行:連用タ接続 でおく:基本形	Preparatory
+遊んでおこ	五段・バ行:連用タ接続 でおく:未然ウ接続	Preparatory
+遊んでおか	五段・バ行:連用タ接続 でおく:未然形	Preparatory
+遊んでおい	五段・バ行:連用タ接続 でおく:連用タ接続	Preparatory
+遊んでおき	五段・バ行:連用タ接続 でおく:連用形	Preparatory
+待ってみれ	五段・タ行:連用タ接続 てみる:仮定形	Tentative Conditional
+待ってみりゃ	五段・タ行:連用タ接続 てみる:仮定縮約１	Tentative Conditional
+待ってみん	五段・タ行:連用タ接続 てみる:体言接続特殊	Tentative
+待ってみろ	五段・タ行:連用タ接続 てみる:命令ｒｏ	Tentative Imperative
+待ってみよ	五段・タ行:連用タ接続 てみる:命令ｙｏ	Tentative Imperative
+待ってみる	五段・タ行:連用タ接続 てみる:基本形	Tentative
+待ってみよ	五段・タ行:連用タ接続 てみる:未然ウ接続	Tentative
+待ってみ	五段・タ行:連用タ接続 てみる:未然形	Tentative
+待ってみ	五段・タ行:連用タ接続 てみる:連用形	Tentative
+遊んでみれ	五段・バ行:連用タ接続 でみる:仮定形	Tentative Conditional
+遊んでみりゃ	五段・バ行:連用タ接続 でみる:仮定縮約１	Tentative Conditional
+遊んでみん	五段・バ行:連用タ接続 でみる:体言接続特殊	Tentative
+遊んでみろ	五段・バ行:連用タ接続 でみる:命令ｒｏ	Tentative Imperative
+遊んでみよ	五段・バ行:連用タ接続 でみる:命令ｙｏ	Tentative Imperative
+遊んでみる	五段・バ行:連用タ接続 でみる:基本形	Tentative
+遊んでみよ	五段・バ行:連用タ接続 でみる:未然ウ接続	Tentative
+遊んでみ	五段・バ行:連用タ接続 でみる:未然形	Tentative
+遊んでみ	五段・バ行:連用タ接続 でみる:連用形	Tentative
+#
 # てる/でる are the ている/でいる contraction, the colloquial progressive:
 # 思ってる, 遊んでる, 食べてる. table.rs gives them their own ATTACHES_TO
 # rows for the same reason ちゃう has them -- IPADIC tokenizes the

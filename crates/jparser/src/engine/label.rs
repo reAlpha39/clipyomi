@@ -31,11 +31,16 @@ use crate::engine::ConjStep;
 /// spells it (design §3.1). れる/られる are ambiguous between passive,
 /// potential and honorific and the parser cannot tell, so the label says so.
 /// だ here is the voiced た of 読んだ, not the copula. じゃ/や are
-/// `ATTACHES_TO`'s placeholder rows. "Completive", "Progressive" and
-/// "Directional" are the three words here that the fixture's Wikipedia
-/// terminology list does not carry — see `tests/fixtures/conjugation_labels.txt`'s
-/// notes on ちゃう, てる and ていく for where each came from and why none is
-/// qualified.
+/// `ATTACHES_TO`'s placeholder rows. "Completive", "Progressive",
+/// "Directional", "Approaching", "Preparatory" and "Tentative" are the six
+/// words here that the fixture's Wikipedia terminology list does not carry —
+/// see `tests/fixtures/conjugation_labels.txt`'s notes on ちゃう, てる, ていく
+/// and てくる for where each came from and why none is qualified.
+///
+/// **`てくる` is "Approaching" and not "Directional" on purpose.** It is the
+/// same concept as `ていく` in the opposite direction, and rule 1's dedup would
+/// print one word for a chain carrying both, so the pair needs two words. The
+/// fixture's ていく note reserved the second one before these rows existed.
 const AUX_WORD: &[(&str, &str)] = &[
     ("せる", "Causative"),
     ("させる", "Causative"),
@@ -59,6 +64,12 @@ const AUX_WORD: &[(&str, &str)] = &[
     ("でる", "Progressive"),
     ("ていく", "Directional"),
     ("でいく", "Directional"),
+    ("てくる", "Approaching"),
+    ("でくる", "Approaching"),
+    ("ておく", "Preparatory"),
+    ("でおく", "Preparatory"),
+    ("てみる", "Tentative"),
+    ("でみる", "Tentative"),
     ("ちゃう", "Completive"),
     ("じゃう", "Completive"),
     ("ちまう", "Completive"),
