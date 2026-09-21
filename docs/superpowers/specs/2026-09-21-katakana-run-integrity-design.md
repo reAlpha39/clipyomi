@@ -218,3 +218,97 @@ they double as the sweep's own regression check.
   §11), so the gate that scores this phase measures the state fewest users
   will be in. The hints-on win is real and corpus-only; whoever ships this
   should say so in the commit rather than quoting the gold delta alone.
+
+## 8. Measured 2026-09-21: the sweep, and refused
+
+Six values — 40, 50, 60, 80, 100, 130 — were built and measured against §5's
+protocol. Baseline (the charge absent, `KATAKANA_FRAGMENT = 0`) was
+re-confirmed to match §5 exactly before the sweep ran: on strict 1694/2163,
+tolerant 1948/2163, entry top-1 1188/1247 (0.9527), compounds 152/186; off
+strict 1588/2163, tolerant 1785/2163, entry top-1 1169/1230 (0.9504),
+compounds 118/186. Two of the "four parses" in §6 — `ラストラン` and the
+all-≥3 compound — have no `katakana` substring in their test names, so
+`cargo test ... katakana` does not run them; they were run by exact name
+alongside the filtered set at every value.
+
+### 8.1 Gold, all eight cells
+
+`↓` marks a cell that fell below baseline — §5's gate.
+
+| value | on strict | on tolerant | on entry top-1 | on compounds | off strict | off tolerant | off entry top-1 | off compounds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline | 1694 | 1948 | 0.9527 (1188/1247) | 152 | 1588 | 1785 | 0.9504 (1169/1230) | 118 |
+| 40 | 1692 ↓ | 1948 | 0.9526 ↓ (1186/1245) | 153 | 1582 ↓ | 1783 ↓ | 0.9501 ↓ (1161/1222) | 120 |
+| 50 | 1692 ↓ | 1948 | 0.9526 ↓ (1186/1245) | 153 | 1582 ↓ | 1783 ↓ | 0.9501 ↓ (1161/1222) | 120 |
+| 60 | 1692 ↓ | 1948 | 0.9526 ↓ (1186/1245) | 153 | 1590 | 1791 | 0.9493 ↓ (1160/1222) | 120 |
+| 80 | 1692 ↓ | 1948 | 0.9518 ↓ (1185/1245) | 153 | 1590 | 1791 | 0.9493 ↓ (1160/1222) | 120 |
+| 100 | 1692 ↓ | 1948 | 0.9518 ↓ (1185/1245) | 153 | 1590 | 1791 | 0.9493 ↓ (1160/1222) | 120 |
+| 130 | 1692 ↓ | 1948 | 0.9518 ↓ (1185/1245) | 153 | 1590 | 1791 | 0.9493 ↓ (1160/1222) | 120 |
+
+Every value falls on-strict and on-entry-top-1. 60 and above additionally
+recover off-strict and off-tolerant but still fall off-entry-top-1; 40 and 50
+fall off-strict and off-tolerant too, on top of the two cells every value
+loses. Nothing swept holds all eight.
+
+### 8.2 Tests, katakana misses, and the corpus
+
+| value | `katakana`-filtered tests | the 2 tests outside that filter | on misses (of 7) | off misses (of 26) | 2-corpus on: whole / short / ≥3 | 2-corpus off: whole / short / ≥3 |
+| --- | --- | --- | --- | --- | --- | --- |
+| baseline | — | — | 7 | 26 | 9094 / 1918 / 79 | 6830 / 4148 / 113 |
+| 40 | 5/6 — `a_katakana_name_is_one_run_not_two_words` fails (too low, per §6, not a stop) | pass, pass | 8 | 27 | 9095 / 1915 / 81 | 7390 / 3578 / 123 |
+| 50 | 5/6 — same failure | pass, pass | 8 | 27 | 9095 / 1915 / 81 | 7400 / 3568 / 123 |
+| 60 | 6/6 | pass, pass | 8 | 19 | 10843 / 167 / 81 | 9276 / 1651 / 164 |
+| 80 | 6/6 | pass, pass | 8 | 19 | 10843 / 167 / 81 | 9276 / 1651 / 164 |
+| 100 | 6/6 | pass, pass | 8 | 19 | 10843 / 167 / 81 | 9276 / 1651 / 164 |
+| 130 | 6/6 | pass, pass | 8 | 19 | 10843 / 167 / 81 | 9276 / 1651 / 164 |
+
+40 and 50 recover none of the 26 hints-off katakana misses — the short-piece
+corpus row barely moves (1918 → 1915, 4148 → 3568/3578) because the charge is
+below the ユリナス end of §2.1's window and does not flip enough tilings to
+matter. 60 through 130 are identical on every cell in both tables: once the
+charge clears whatever local margin each decision needs, more of it changes
+nothing further, all the way to the window's own upper edge. They recover 8
+of the 26 — short of §5's "at least 20" bar on its own, before the gold gate
+is even considered.
+
+**The new casualty, every value.** `ラスト` is a genuine, isolated gold span
+(not part of ラストラン, which is a separate sentence and is unaffected) that
+is matched at baseline and missed at every swept value, hints-on and
+hints-off alike. It is the reason on-strict and on-entry-top-1 fall even at
+the lowest value tried; nothing in this sweep found a magnitude below it.
+
+**A row that was expected not to move, moved.** §2.2's ≥3 ("word-sized") row
+was expected to hold, and at 60 and above it does not: 79 → 81 hints-on,
+113 → 164 hints-off. The mechanism is visible in the whole-run row moving in
+step (9094 → 10843 hints-on, 6830 → 9276 hints-off): a run that used to split
+at a short piece does not only fall back to unmatched when the charge blocks
+that split — a few runs find a *different*, all-≥3 tiling instead, and get
+reclassified into the row the charge should not have been able to touch,
+since nothing under 3 characters is ever a candidate there. The class
+boundary in §2.2 is real but not perfectly clean under the charge; it is a
+second-order effect and not itself a gate failure, since §5 gates gold, not
+this row.
+
+### 8.3 The refusal
+
+No value clears §5. Every one of the six loses hints-on strict span accuracy
+and hints-on entry top-1 to the new `ラスト` casualty; 60 and above also lose
+hints-off entry top-1, and 40/50 lose hints-off strict and tolerant besides.
+Even the three cells that do recover at 60 and above — off-strict,
+off-tolerant, and 8 of the 26 katakana misses — fall short of the "at least
+20" bar §5 sets for the phase to have done its job. §4 named this outcome in
+advance: *"If no value in the window clears §5, the phase is refused and says
+so — the same way `LEN_GAIN` and the residue term were refused."* This is
+that outcome.
+
+`KATAKANA_FRAGMENT` is left at **60**, the least damaged of the six swept
+values (three gold cells fall, against five at 40 and 50, and a smaller
+entry-top-1 drop than 80/100/130's), but as an unvalidated placeholder, not a
+shipped magnitude — see `cost.rs`'s doc comment. 80, 100 and 130 were not
+chosen over 60 because they are identical to it on every cell above except a
+strictly worse on-entry-top-1 (0.9518 against 0.9526); 40 and 50 were not
+chosen because they recover nothing while damaging two more cells than 60
+does. Tasks 1 and 2's mechanism — the `inside_katakana_run` marking and the
+cost term itself — is unaffected; what is refused is trusting any value in
+the §2.1 window to fix the hints-off katakana defect without a cost this
+gate can see.

@@ -587,9 +587,19 @@ const KATAKANA_MIN_PIECE: usize = 3;
 /// four-character name and 210 for ソロホームラン, so the same flat charge
 /// flips the first and not the second.
 ///
-/// **Magnitude.** Swept against a zero-gold-damage gate; see the plan's Task
-/// 3 and the design's §4. The value shipped is the lowest that recovers the
-/// hints-off katakana spans without moving a gold cell.
+/// **Magnitude — measured 2026-09-21 and refused.** Swept over 40, 50, 60,
+/// 80, 100, 130 against a zero-gold-damage gate; see the design's §8 for the
+/// full table. No value clears it: every one drops hints-on strict span
+/// accuracy (1694 → 1692) and hints-on entry top-1 (1188/1247 → at best
+/// 1186/1245), and every one from 60 up also drops hints-off entry top-1
+/// (1169/1230 → 1160/1222) and turns one hints-on *and* hints-off katakana
+/// gold span (`ラスト`) from matched to missed — a casualty the charge-free
+/// build does not have. 60 and above recover 8 of the 26 hints-off katakana
+/// misses this charge exists for; 40 and 50 recover none and additionally
+/// drop hints-off strict and tolerant. 60 is kept — the least damaged of the
+/// six swept values, not a validated magnitude; 0 was Step 2's zero-charge
+/// reference rather than a candidate in this sweep, and no swept value
+/// improves on 60.
 const KATAKANA_FRAGMENT: i32 = 60;
 
 /// Penalty for a match whose source characters differ from the stored surface
