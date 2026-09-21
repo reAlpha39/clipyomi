@@ -92,6 +92,12 @@ pub fn is_hiragana(c: char) -> bool {
 /// Katakana (U+30A1..=U+30FA), the prolonged sound mark (U+30FC) and
 /// halfwidth katakana (U+FF66..=U+FF9D): the katakana leg of [`is_kana`] on
 /// its own, and the definition `lex`'s run scan and `all_katakana` share.
+///
+/// Pre-existing hole: the halfwidth voiced/semi-voiced sound marks U+FF9E and
+/// U+FF9F are not in `is_kana`'s halfwidth range, so a halfwidth string like
+/// `ｶﾞｯｷ` scans as several short runs instead of one. Conservative direction
+/// — a piece then looks like a whole run and goes uncharged — and present in
+/// `all_katakana` too; not fixed here.
 pub fn is_katakana(c: char) -> bool {
     is_kana(c) && !is_hiragana(c)
 }
