@@ -568,48 +568,6 @@ const DIGIT_COUNTER: i32 = -3;
 /// (`タッとい`) is not an all-katakana run, so no row can reach this clause.
 const KATAKANA_MIN_PIECE: usize = 3;
 
-/// What a span pays for being a piece shorter than [`KATAKANA_MIN_PIECE`] of
-/// a longer katakana run (`lex::Candidate::inside_katakana_run`).
-///
-/// **The defect.** A run is cut wherever its pieces happen to be dictionary
-/// words, whether or not the run is one: `ユリナス`, a character's name,
-/// reads `ユリ` ("lily") + `ナス` ("eggplant") 1,721 times over six corpora
-/// and `アジュラ` reads `ア` + `ジュ` + `ラ` 663 times hints-off. 2,320 runs
-/// of three or more characters are split hints-on and 8,050 hints-off, and
-/// the shortest piece is under three in 87% and 94% of them.
-///
-/// **Why a charge and not a rule.** Gold cuts five of its 58 katakana runs
-/// and two of those leave a short piece — `ソロ` in ソロホームラン, `ラン` in
-/// ラストラン — both of which the engine gets right today. Forbidding a short
-/// piece deletes those tilings and costs four gold spans. A charge does not,
-/// because the alternative to a split is leaving the run unmatched at
-/// [`UNMATCHED`] **per character**: the whole-run option costs 120 for a
-/// four-character name and 210 for ソロホームラン, so the same flat charge
-/// flips the first and not the second.
-///
-/// **Magnitude — measured 2026-09-21 and refused.** Swept over 40, 50, 60,
-/// 80, 100, 130 against a zero-gold-damage gate; see the design's §8 for the
-/// full table. No value clears it: every one drops hints-on strict span
-/// accuracy (1694 → 1692), hints-on entry top-1 (1188/1247 → at best
-/// 1186/1245) and hints-off entry top-1 (1169/1230 → at best 1161/1222); 60
-/// and above drop hints-off entry top-1 further still (1161/1222 →
-/// 1160/1222). Every value also turns one hints-on *and* hints-off katakana
-/// gold span (`ラスト`) from matched to missed — a casualty the charge-free
-/// build does not have. 60 and above recover 7 of the 26 hints-off katakana
-/// misses this charge exists for; 40 and 50 recover none and additionally
-/// drop hints-off strict and tolerant. 60 is kept — the least damaged of the
-/// six swept values, not a validated magnitude; 0 was Step 2's zero-charge
-/// reference rather than a candidate in this sweep, and no swept value
-/// improves on 60.
-///
-/// **Interacts with `PRONOUNCE_CROSS`.** That filter's `KATAKANA_MIN_PIECE`
-/// exemption clause (below, in the `PRONOUNCE`-flagged branch of `cost()`)
-/// withholds a charge from a *merge* across a short piece of the same kind of
-/// run this charge prices a *split* for. The two never charge the same
-/// candidate, but hints-on they pull the same direction — retune one without
-/// checking the other and its effect will be masked or double-counted.
-const KATAKANA_FRAGMENT: i32 = 60;
-
 /// Penalty for a match whose source characters differ from the stored surface
 /// before folding.
 ///
@@ -698,9 +656,6 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     }
     if cand.after_digit_noncounter {
         total += DIGIT_NONCOUNTER;
-    }
-    if cand.inside_katakana_run && cand.len < KATAKANA_MIN_PIECE {
-        total += KATAKANA_FRAGMENT;
     }
 
     if let Some(bounds) = bounds {
@@ -863,27 +818,6 @@ mod tests {
             cost(&conjugated, None),
             cost(&plain, None),
             "a conjugated match pays nothing, however its span decomposes"
-        );
-    }
-
-    #[test]
-    fn a_short_piece_of_a_katakana_run_is_charged_and_a_long_one_is_not() {
-        let plain = cand(0, 2, WordFlags::PRIMARY, true);
-        let mut fragment = cand(0, 2, WordFlags::PRIMARY, true);
-        fragment.inside_katakana_run = true;
-        assert_eq!(
-            cost(&fragment, None) - cost(&plain, None),
-            KATAKANA_FRAGMENT,
-            "a two-character piece pays the charge"
-        );
-
-        let long_plain = cand(0, 3, WordFlags::PRIMARY, true);
-        let mut long_piece = cand(0, 3, WordFlags::PRIMARY, true);
-        long_piece.inside_katakana_run = true;
-        assert_eq!(
-            cost(&long_piece, None),
-            cost(&long_plain, None),
-            "three characters is KATAKANA_MIN_PIECE, so it is a word-sized piece"
         );
     }
 

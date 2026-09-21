@@ -487,3 +487,15 @@ six-corpus hints-off improvement that gold, by construction (§9.5), cannot
 register as a win. The refusal recorded in design §8.4 stands unchanged.
 Whether to ship this trade anyway or revert `KATAKANA_FRAGMENT` to 0 is an
 open decision for the human partner, not settled by this task.
+
+**Reverted 2026-09-22.** The human partner decided against the trade and the
+charge was reverted: `KATAKANA_FRAGMENT`, its `if` in `cost()`, its unit
+test, and the four parse tests in `engine_v2.rs` are gone from the tree. The
+implementation is recoverable from `4007a45`, the commit that introduced it,
+and every measurement in this postscript and in design §8 still describes
+that commit accurately. Task 1's geometry — `kana::is_katakana`, `lex.rs`'s
+`katakana_runs` run table, and the `Candidate.inside_katakana_run` field and
+its assignment — was not touched by the revert and remains in the tree, read
+by nothing for now, so a later attempt at this problem starts from the
+geometry rather than from nothing. Gold is back at baseline: on-strict 1692
+→ 1694, on-entry-top-1 0.9526 → 0.9527, off-entry-top-1 0.9493 → 0.9504.
