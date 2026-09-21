@@ -414,6 +414,48 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("ていく", "五段・カ行促音便", "連用タ接続"),
     ("ていく", "五段・カ行促音便", "連用形"),
     ("でいく", "五段・カ行促音便", "連用タ接続"),
+    // 〜てくる, 〜ておく and 〜てみる, the three the note above named as still
+    // split. Measured over four further corpora, 75,782 sentences, hints on:
+    // the engine cut 2,368 of the 3,232 〜てくる windows (73.3%), 223 of 241
+    // 〜ておく (92.5%) and 422 of 425 〜てみる (99.3%) -- `寄せて` | `くる`,
+    // `して` | `おく`, `探して` | `みる`. 〜てくる is twice the rate 〜ていく
+    // was fixed at, and the same measurement puts 〜ていく's residue at 2.6%,
+    // so the rows above hold on corpora they were not written against.
+    //
+    // Classes are the auxiliary verbs' own: カ変・クル for くる,
+    // 五段・カ行イ音便 for おく (置いた, not 置った) and 一段 for みる. Both
+    // attachment sites for the て-forms and 連用タ接続 alone for the で-forms,
+    // for the reason the `ていく` note above gives.
+    //
+    // **Three of `てくる`'s own forms are blocked** -- see `AUX_FORM_BLOCK`,
+    // which carries the ledger. カ変 gives 仮定形 `くれ`, 体言接続特殊 `くん`
+    // and 体言接続特殊２ `く`, and in running text those three surfaces belong
+    // to something else entirely: くれる and ください, not 来る.
+    //
+    // `てみる` is 一段 and so has the empty 未然形 and 連用形 that
+    // `CHAIN_BLOCK` exists for, but it is **not** blocked there. The two
+    // auxiliaries that table refuses on `てる` produce a single kana that is
+    // commoner as a particle -- `ぬ` at 仮定形 is `ね`, `ない` at ガル接続 is
+    // `な` -- and on `てみ` those give `てみね` and `てみな`, which are not
+    // particle absorptions: `待ってみ` is not a standalone word the way
+    // `待って` is, so `してね`'s argument does not transfer. 14 occurrences of
+    // `てみな` and 0 of `てみね` over the four corpora, against the 34
+    // `してね`/`待ってな` the existing rows were measured on.
+    //
+    // What `てみ` does reach is `せる`: `やってみせる` (100 occurrences) can
+    // read Tentative Causative where the word is 見せる. It was left unblocked
+    // rather than guessed at -- `CHAIN_BLOCK` is keyed per outer form and
+    // would want a row for each of せる's nine, which is a bigger change than
+    // the defect -- and measured after these rows landed instead.
+    ("てくる", "カ変・クル", "連用タ接続"),
+    ("てくる", "カ変・クル", "連用形"),
+    ("でくる", "カ変・クル", "連用タ接続"),
+    ("ておく", "五段・カ行イ音便", "連用タ接続"),
+    ("ておく", "五段・カ行イ音便", "連用形"),
+    ("でおく", "五段・カ行イ音便", "連用タ接続"),
+    ("てみる", "一段", "連用タ接続"),
+    ("てみる", "一段", "連用形"),
+    ("でみる", "一段", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
     ("じゃ", "特殊・ジャ", "基本形"),
     ("や", "特殊・ヤ", "基本形"),
@@ -490,13 +532,72 @@ const CHAIN_BLOCK: &[(&str, &str, &str)] = &[
     ("ない", "ガル接続", "でる"),
     ("ない", "ガル接続", "ている"),
     ("ない", "ガル接続", "でいる"),
+    // `てみる`/`でみる` are 一段 too, so the same two auxiliaries reach the
+    // same empty-suffix stem: `やってみな` read やる Tentative **Negative**
+    // where the な is the shortened なさい, 14 occurrences over four corpora,
+    // and `てみね` 0 -- the ぬ row is the pair the doc above asks for rather
+    // than a measured defect of its own.
+    ("ぬ", "仮定形", "てみる"),
+    ("ぬ", "仮定形", "でみる"),
+    ("ない", "ガル接続", "てみる"),
+    ("ない", "ガル接続", "でみる"),
+    // **`せる` may not stack on `てみ` in any form**, which is what the `*`
+    // is for. The collision is not a particle this time: 一段's empty 未然形
+    // gives the surface `てみ`, `せる` attaches to a 未然形, and the result
+    // swallows 見せる -- `揉んでみせる` read 揉む Tentative Causative,
+    // `やってみせる` read やる Tentative Causative, 99 occurrences over the
+    // four corpora and every one of them 〜て + 見せる. Every せる form
+    // produces it (てみせる, てみせて, てみせた, てみせろ), so keying the
+    // nine rows individually would leave the block one IPADIC revision away
+    // from leaking. What it costs is `〜てみさせる`, which has 0 occurrences
+    // and is barely Japanese.
+    ("せる", "*", "てみる"),
+    ("せる", "*", "でみる"),
 ];
+
+/// Whether [`CHAIN_BLOCK`] refuses this pair. `*` in a row's form matches
+/// every form of that outer auxiliary.
+fn chain_blocked(lemma: &str, outer_form: &str, inner: &str) -> bool {
+    CHAIN_BLOCK
+        .iter()
+        .any(|&(l, f, i)| l == lemma && (f == "*" || f == outer_form) && i == inner)
+}
 
 const AUX_FORM_BLOCK: &[(&str, &str)] = &[
     ("てる", "命令ｙｏ"),
     ("てる", "未然ウ接続"),
     ("でる", "命令ｙｏ"),
     ("でる", "未然ウ接続"),
+    // `てくる`/`でくる`, and a different collision from the てる rows above:
+    // not a particle, but another auxiliary this table does not carry. カ変's
+    // three surfaces here all belong to it in running text, counted over four
+    // visual-novel corpora, 75,782 sentences.
+    //
+    // - 仮定形 is `くれ`, so the surface is `てくれ` -- which is くれる, the
+    //   giving auxiliary, in almost every occurrence: **2,455 `てくれ` against
+    //   7 `てくれば`**. Unblocked, `教えてくれ` reads 教える Approaching
+    //   Conditional, a confident wrong word on a very common request form.
+    // - 体言接続特殊 is `くん`, and `〜てくん` is that same くれる contracted
+    //   (`やってくんない`). 6 occurrences, every one of them くれる.
+    // - 体言接続特殊２ is a bare `く`, and **919 of the bare `〜てく` are
+    //   `〜てください`** (806 plus 113 voiced). Unblocked, `行ってください`
+    //   can read `行ってく` + `ださい`, and ださい is a JMdict headword, so
+    //   the split would be confidently glossed "uncool". What is left of
+    //   `〜てく` is the 〜ていく contraction, which is the *other* direction
+    //   and would be mislabelled too.
+    //
+    // The cost is the 8 `てくれば`/`でくれば` in those corpora, which stay
+    // split. `おく` and `みる` need nothing here: 五段・カ行イ音便 and 一段
+    // give `ておけ`, `ておい`, `てみろ`, `てみよ` and the rest, and none of
+    // those decomposes as [standalone word] + [particle] or collides with an
+    // auxiliary. The one shape that comes close is `待っておいで` (5
+    // occurrences), which can merge as `ておい` + `で`; too rare to buy a row.
+    ("てくる", "仮定形"),
+    ("てくる", "体言接続特殊"),
+    ("てくる", "体言接続特殊２"),
+    ("でくる", "仮定形"),
+    ("でくる", "体言接続特殊"),
+    ("でくる", "体言接続特殊２"),
 ];
 
 /// A hit recorded at one node of [`Table`]'s reverse trie.
@@ -733,7 +834,7 @@ impl Table {
                             // inflection, which CHAIN_BLOCK never refuses --
                             // that is what keeps `食べな` and `行かねば` alive.
                             if let Some(inner) = sub.steps.last().and_then(|s| s.aux) {
-                                if CHAIN_BLOCK.contains(&(lemma, outer_form, inner)) {
+                                if chain_blocked(lemma, outer_form, inner) {
                                     continue;
                                 }
                             }
@@ -1087,12 +1188,18 @@ mod tests {
         // its second attachment site, 連用形 -- the row this comment's own
         // ATTACHES_TO doc predicts for た/て, because IPADIC names 連用タ接続
         // only where it differs from 連用形, so either row alone leaves half
-        // the classes unreachable.
+        // the classes unreachable. 90,359 -> 140,947 on 2026-09-21 for the
+        // other three 〜て auxiliaries, nine rows: てくる/でくる (カ変・クル,
+        // ten forms less the three blocked below), ておく/でおく
+        // (五段・カ行イ音便, eight) and てみる/でみる (一段, nine, including
+        // the two empty-suffix forms every later auxiliary attaches to).
+        // Depth-2 carries the growth, as it did for every row before these --
+        // each new auxiliary's own forms become attachment sites in turn.
         assert_eq!(
-            chains, 90_359,
-            "the walk reached {chains} chains, not 90,359 -- the conjugation table's \
+            chains, 140_947,
+            "the walk reached {chains} chains, not 140,947 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 90,359 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 140,947 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
              maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
              constant, rather than loosening the assertion"
