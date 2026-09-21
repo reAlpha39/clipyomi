@@ -1,7 +1,7 @@
 # The LEN_GAIN refusal, resampled — handoff
 
-**Date:** 2026-09-18
-**Branch:** `feat/corpus-disagree`
+**Date:** 2026-09-18 (phases 0–4) and 2026-09-21 (phase 5)
+**Branch:** `feat/corpus-disagree`, tip `fdbbb61`, six commits off `26bd425`
 **Predecessor:** [`2026-09-18-three-corpus-adjudication-handoff.md`](2026-09-18-three-corpus-adjudication-handoff.md)
 
 The previous session refused ungating `LEN_GAIN` hints-off on a corpus-scale
