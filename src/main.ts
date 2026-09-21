@@ -179,6 +179,61 @@ const PHASE_LABELS: Record<string, string> = {
   building: 'Building index…',
 };
 
+/**
+ * Whether the `ready` now in flight belongs to a download this screen started
+ * on a machine that has never had hints, and should therefore acquire them.
+ *
+ * **Why a fresh install needs this at all.** `mecab_hints` defaults to `false`
+ * and that is not a preference — it records whether the 7.7 MB Vibrato
+ * dictionary has been fetched (see `settings.rs`'s own comment on the field).
+ * `load_hints` never downloads; `set_mecab_hints` is the only code path that
+ * does. So without this, every fresh install runs the weaker engine forever
+ * unless the user finds the toggle: on the gold corpus, hints off reads span
+ * accuracy 1593 against 1698, tolerant 1786 against 1948 and 118 compound
+ * windows against 152.
+ *
+ * **Why a flag and not `.then()` on the invoke.** `download_dictionary`
+ * resolves `Ok` as soon as the work is *started* — every outcome including
+ * failure arrives as a `dictionary-status` event, which is the command's
+ * documented contract. Chaining off the promise would fetch hints after a
+ * failed index download. The `ready` event is the only signal that the
+ * dictionary actually landed, and `emit_status(.., "ready")` has exactly one
+ * call site, in that success branch. (`hints-status` carries a `"ready"` of its
+ * own; it is a different channel and this listener never sees it.)
+ *
+ * **Three things have to be true, and a click is only one of them.**
+ *
+ * 1. *This screen started the download.* The listener is global and outlives
+ *    the screen, so an unrelated `ready` must not arm anything.
+ * 2. *No hints dictionary exists yet* — [`hintsNeverAcquired`]. The download
+ *    screen is **not** the first-run screen it looks like:
+ *    `state::is_missing_dictionary` deliberately routes `ConjugationMismatch`
+ *    and `VersionMismatch` to it as well, which are the expected states after
+ *    an application upgrade. Without this condition, an established user who
+ *    had switched hints off would have them switched silently back on by the
+ *    rebuild they had no choice but to run.
+ * 3. *The user has not engaged the toggle themselves since clicking.* An index
+ *    download and build take a while, and the settings window is reachable
+ *    throughout. `emit_hints_status` is called only from `set_mecab_hints`, so
+ *    **any** payload on that channel — `downloading`, `unpacking`, `ready`,
+ *    `off`, or an error — means they are answering the question and this screen
+ *    must not answer it for them. It disarms on all five rather than reading
+ *    the payload, because a started acquisition and a failed one both mean the
+ *    same thing here.
+ */
+let acquireHintsOnReady = false;
+
+/**
+ * Whether this machine has no published Vibrato dictionary, so hints have never
+ * been acquired and the question has never been put to the user.
+ *
+ * Resolved once, when the download screen is about to be shown, rather than in
+ * the click handler — the handler is synchronous and a `ready` can in principle
+ * beat an `invoke` it fired, which on a fast local rebuild is not hypothetical.
+ * `false` until answered, so the unanswered state arms nothing.
+ */
+let hintsNeverAcquired = false;
+
 function renderDictionary(status: string | null): void {
   // Read before any DOM mutation below: `replaceChildren` on a parent whose
   // descendant currently has focus moves focus straight to `<body>` the
@@ -228,7 +283,14 @@ function renderDictionary(status: string | null): void {
   const message = document.createElement('p');
   message.textContent =
     status === null
-      ? 'No dictionary yet. JMdict and KANJIDIC2 are a one-time download of roughly twelve megabytes from EDRDG.'
+      ? // Names both downloads on purpose. This is the one screen that tells
+        // the user what is about to be fetched, and since the first run also
+        // acquires the hint dictionary the old "roughly twelve megabytes from
+        // EDRDG" named one of the two hosts and understated the total by
+        // `vibrato_source::ASSET_BYTES`, 7.7 MB — about twenty megabytes, not
+        // twelve, which is 64% more than it said. That matters on a metered
+        // connection and behind a proxy that allows EDRDG but not GitHub.
+        'No dictionary yet. JMdict and KANJIDIC2 are a one-time download of roughly twelve megabytes from EDRDG, plus an eight-megabyte IPADIC dictionary from GitHub that improves word splitting.'
       : status;
 
   const button = document.createElement('button');
@@ -249,6 +311,12 @@ function renderDictionary(status: string | null): void {
   button.addEventListener('click', () => {
     if (pending) return;
     pending = true;
+    // Armed here rather than at the `ready` that consumes it — see
+    // `acquireHintsOnReady` for all three conditions. A Retry after a failed
+    // attempt re-arms from `hintsNeverAcquired`, which is why the `hints-status`
+    // listener has to clear *that* too: re-arming is free only while the user
+    // has not answered in the meantime.
+    acquireHintsOnReady = hintsNeverAcquired;
     renderDictionary('downloading');
     void invoke('download_dictionary')
       .catch((e) => renderDictionary(String(e)))
@@ -266,6 +334,13 @@ function renderDictionary(status: string | null): void {
 // directly rather than racing the fire-and-forget call at the bottom.
 export async function showDictionaryScreen(): Promise<void> {
   if (!(await invoke<boolean>('needs_dictionary'))) return;
+  // Asked before the screen exists, so the click handler can stay synchronous
+  // and still know the answer — see `hintsNeverAcquired`. A failure here leaves
+  // it false, which only means this download does not also acquire hints; the
+  // settings toggle still does, so the degradation is the pre-change behaviour.
+  hintsNeverAcquired = await invoke<boolean>('hints_available')
+    .then((available) => !available)
+    .catch(() => false);
   // Parsing cannot succeed until an index exists; `renderDictionary` shows the
   // download/build screen in place of `#dictionary`'s idle state until a
   // `ready` event clears it.
@@ -1437,7 +1512,42 @@ void Promise.all([
   // A failure replaces only the message, never the result: the previous
   // parse stays readable while the user works out what went wrong.
   listen<string>('parse-error', (e) => parseError.replaceChildren(errorBlock(e.payload))),
-  listen<string>('dictionary-status', (e) => renderDictionary(e.payload)),
+  // Not rendered anywhere in this window — the settings window owns the hints
+  // status line. Listened to for one reason: `emit_hints_status` is called only
+  // from `set_mecab_hints`, so any event here means the user has engaged the
+  // hints toggle themselves, and this screen must not re-answer a question they
+  // are already answering. Condition 3 of `acquireHintsOnReady`.
+  //
+  // **Both flags, and the second one is the one that bites.** Clearing only
+  // `acquireHintsOnReady` disarms the download in flight and leaves
+  // `hintsNeverAcquired` stale, so a Retry after a failed index download re-arms
+  // from it and overrides the answer the user just gave: turn hints on then off
+  // mid-download, have the download fail, press Retry, and the `ready` switches
+  // them back on. Once any hints event has been seen, the premise of condition 2
+  // is gone for the rest of this window's life.
+  listen<string>('hints-status', () => {
+    acquireHintsOnReady = false;
+    hintsNeverAcquired = false;
+  }),
+  listen<string>('dictionary-status', (e) => {
+    renderDictionary(e.payload);
+    if (e.payload !== 'ready' || !acquireHintsOnReady) return;
+    acquireHintsOnReady = false;
+    // Deliberately after `ready` has already cleared the screen, and
+    // deliberately not awaited. The index is what makes the app usable and
+    // hints only make it parse better, so holding the download screen up for
+    // a second 7.7 MB fetch would delay the first thing the user came for.
+    //
+    // Failure is swallowed on purpose, and degrades to exactly today's
+    // behaviour: `set_mecab_hints` persists the setting only on success, so a
+    // fetch that fails leaves hints off, leaves `mecab_hints` false, and
+    // leaves the toggle in the settings window for a second try. It reports
+    // through `hints-status`, which this window listens to only to disarm the
+    // flags above, and which the settings window renders. The alternative, an
+    // error on the screen the user has just been told is ready, buys nothing
+    // they can act on here.
+    void invoke('set_mecab_hints', { enabled: true }).catch(() => {});
+  }),
   listen<{ width: number; height: number }>('popover-measured', (e) => {
     // `pendingChip` is deliberately NOT cleared here — `closePopover` owns its
     // lifetime. Clearing it dropped the second of two interleaved

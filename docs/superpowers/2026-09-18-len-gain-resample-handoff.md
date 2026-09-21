@@ -24,7 +24,9 @@ the rest of it readable.
 | Phase 0 | why `mecab_hints` defaults off | `ac2bd53` |
 | Phase 1 | resample: 4 corpora × (head-4000, tail-4000, random-4000) + 3 control pools | — |
 | Phase 2 | control, then the 2 × 3 × 4 table, then sixty sentences read by eye | — |
-| Phase 4 | verdict | this document |
+| Phase 3 | the kana third of the gains, adjudicated | §7.1 |
+| Phase 4 | verdict, plus every gate and a held-out check | §10, §10a, §11 |
+| Phase 5 | the residue term built three ways and refused; the first run acquires hints instead | §11a, §11b |
 
 ## 2. Phase 0 — `mecab_hints` defaults off, and a bare flip makes it worse
 
@@ -350,12 +352,16 @@ roughly what §9 predicted, but it cannot be *aimed*: the words it must protect
 `くせに`, `ように`) carry identical JMdict flags, so no predicate over the
 dictionary separates them. The discriminator has to come from outside it.
 
-That leaves the decision where §10 puts it. Bare ungating is net-positive on
-the target register and ships a visible defect with no available fix; the
-alternative is to leave `LEN_GAIN` gated and spend the next phase on the
-signal — the tokenizer's POS, or the hand adjudication `gold_local.jsonl` was
-reserved for. **Nothing in this branch changes the engine**; every cell above
-is `HEAD`'s, re-measured.
+That decided it, and §11b records the call: **`LEN_GAIN` stays gated**, because
+a defect the user sees once a sentence is not worth a ratio they never see when
+the fix for it is refused rather than merely pending. The old refusal's
+*reasoning* is still withdrawn — it rested on a corpus number that was wrong —
+and what holds the gate now is the severing class itself.
+
+**The engine is unchanged by this branch.** Every cell above is `HEAD`'s,
+re-measured. What shipped is the acquisition fix in §11b, which moves a fresh
+install from the hints-off column to the hints-on one without touching the
+cost model at all.
 
 ## 10a. Held out: three corpora the change was never measured against
 
@@ -471,6 +477,107 @@ Formulation 2 is the one worth reviving if anything is. It is a net gain on the
 corpus and a small loss on gold, it is twenty lines in `lattice.rs`, and it is
 recorded here rather than committed because it buys a ratio and not a defect.
 
+## 11b. The decision: `LEN_GAIN` stays gated, and the first run acquires hints
+
+Both paths were fully priced and the call was made on the visible defect.
+**`LEN_GAIN` is not ungated.** `それならいい` reading `それな` \| `らいい`, once a
+sentence, is not worth 2.79:1 on a metric the user never sees — and with the
+residue term refused on separability (§11a) that defect would have had no fix
+in front of it, only behind it. The refusal recorded in `cost.rs` is
+nonetheless **withdrawn as stated**: it was argued on a corpus number that was
+wrong. What holds it gated now is the severing class, not the ledger.
+
+What shipped instead is the fix §2 identified and left alone: **the first run
+now acquires the hint dictionary.** It is the larger improvement of the two and
+it costs nothing in the cost model, because it closes an *acquisition* gap
+rather than a scoring one. A fresh install moves from the hints-off column to
+the hints-on one:
+
+| a fresh install | before | after |
+| --- | --- | --- |
+| strict | 1593 | **1698** |
+| tolerant | 1786 | **1948** |
+| compounds | 118 | **152** |
+| `lexical` | 56 | **82** |
+| `false-match` | 23 | **30** |
+| `transparent` | 39 | **40** |
+
+Every class improves, nothing regresses, and the engine is untouched — these
+are the two columns the engine already had.
+
+**The mechanism, and why each guard is there.** `src/main.ts` arms a
+module-level `acquireHintsOnReady` when the download screen's button is
+clicked, and the `dictionary-status` listener calls `set_mecab_hints(true)` on
+a `ready` that finds the flag set. **Three conditions have to hold, and a click
+is only one of them** — the first draft had only the click and a review caught
+that it was not enough.
+
+- **Gated on `ready`, not on the invoke's promise.** `download_dictionary`
+  resolves `Ok` as soon as the work *starts*; every outcome including failure
+  arrives as an event. Chaining off the promise would fetch hints after a
+  *failed* index download. `emit_status(.., "ready")` has exactly one call
+  site, in the success branch. (`hints-status` carries a `"ready"` of its own;
+  it is a different channel and this listener never sees it.)
+- **Gated on no dictionary being published yet** — the new `hints_available`
+  command. **The download screen is not the first-run screen it looks like**:
+  `state::is_missing_dictionary` deliberately routes `ConjugationMismatch` and
+  `VersionMismatch` to it as well, which are the expected states after an
+  application upgrade. Without this, an established user who had switched hints
+  off would have them switched silently back on by a rebuild they had no choice
+  but to run. `mecab_hints` is a plain `bool` and cannot tell "never chosen"
+  from "chosen off"; a published dictionary can.
+- **Disarmed by any `hints-status`.** An index download and build take a while
+  and the settings window is reachable throughout, so the user can settle the
+  question themselves in between. Any event on that channel means they did, and
+  their answer outranks this screen's.
+- **Not awaited, and its rejection is swallowed.** The index is what makes the
+  app usable; holding the download screen open for a second 7.7 MB fetch would
+  delay the thing the user came for. `set_mecab_hints` persists the setting
+  only on success, so a failed fetch leaves hints off, leaves `mecab_hints`
+  `false`, and leaves the toggle for a second try — **and that is very nearly,
+  but not exactly, the old behaviour**: the failure message travels on
+  `hints-status`, whose listener in the settings window is live from startup,
+  so the next time that window is opened its hints status line carries an error
+  about a control the user never touched. Truthful, and worth knowing before
+  someone reports it as a bug.
+- **`Settings::default()` is unchanged and must be.** `false` is still the
+  honest value before an acquisition, and it is what a failed fetch correctly
+  leaves behind. The flip is a consequence of acquiring, never a substitute —
+  which is what §2 found and what the field's own comment now records.
+
+**The download screen's copy had to change, and it costs two baselines.** The
+offer read *"JMdict and KANJIDIC2 are a one-time download of roughly twelve
+megabytes from EDRDG"*. That stays literally true and becomes materially
+incomplete: the button now also fetches 7.7 MB of IPADIC from GitHub. Telling
+someone twelve megabytes and spending twenty is not a thing to ship quietly on
+a metered connection, so the sentence discloses both.
+
+The cost is that four screenshot baselines pin that sentence —
+`panes-download-offer-{light,dark}-{darwin,win32}.png`. The two `win32` ones
+were regenerated here; **the two `darwin` ones are owed**, and join the six
+already outstanding. This was a deliberate trade: an accurate first-run promise
+against two PNGs that need a macOS run.
+
+**Known limitations, both deliberate.**
+
+1. This reaches a fresh install, and — because of the same dual role that made
+   the published-dictionary condition necessary — **any install with no hints
+   whose index a `ConjugationMismatch` or `VersionMismatch` rebuild sends to the
+   download screen.** What it does not reach is an existing user with a *valid*
+   index and no hints: they never see the screen, so they keep the weaker engine
+   until they find the toggle. Reaching them means an unsolicited 7.7 MB
+   download on an already-working install, which is a different decision and was
+   not taken here.
+2. The settings window's hints checkbox stays **enabled and unchecked** during
+   a main-window acquisition, under the note "Downloading the dictionary…". It
+   disables itself only for an acquisition its own `change` handler started,
+   which was the only kind that existed when it was written. Clicking it in
+   that window is refused by the shared `HintsInFlight` slot with "hints are
+   already being installed" — recoverable and self-correcting, but it reads as
+   the app blaming the user. The window is the length of one 7.7 MB fetch and
+   closing it needs the settings window to track a phase it does not own, so it
+   was left.
+
 ## 12. Also measured, and not previously on record
 
 **`〜てくる` is 2.5× `〜ていく`**, the auxiliary the previous session spent two
@@ -543,8 +650,14 @@ measurement that decides this question compares two v2 builds.
 
 ## 14. Not done
 
-- **`LEN_GAIN` hints-off itself.** Reopened, not shipped. The refusal that
-  closed it is withdrawn; the decision to ship is open.
+- **`LEN_GAIN` hints-off itself.** Reopened and measured in full, then **left
+  gated** on the severing class — §11b. Reopen it the day the severing has a
+  fix, not before; the ledger is settled and re-deriving it is waste.
+- **Existing installs with a valid index and no hints.** §11b reaches a fresh
+  install and any rebuild routed to the download screen, but not these.
+- **Two more darwin screenshot baselines**, `panes-download-offer-{light,dark}-darwin.png`,
+  owed by §11b's copy change and regenerable only on macOS. The `win32` pair
+  was regenerated here. That makes eight darwin baselines outstanding, not six.
 - **The signal the residue term needs.** §11a. Not in the dictionary, so it is
   the tokenizer's POS or hand adjudication, and that is the next phase.
 - **`〜てくる` / `〜ておく` / `〜てみる` rows.** Rate measured here for the first
@@ -552,6 +665,6 @@ measurement that decides this question compares two v2 builds.
 - The zero-signal tail is still truncated by `--top 2000` and still unread.
 - Everything §10 of the predecessor left open: the `からな` family, criterion 2
   on the split parts, `BOUND_FORMS`' nine fixture rows, the quotative
-  `と言った`, `gold_local.jsonl`, the six darwin baselines, gate 6's eighteen
-  sentences, `忍` reading `しのび`, the `[noun]達` class, and the romanizer's
-  `icchi`.
+  `と言った`, `gold_local.jsonl`, its six darwin baselines (**now eight**, with
+  the two this session added above), gate 6's eighteen sentences, `忍` reading
+  `しのび`, the `[noun]達` class, and the romanizer's `icchi`.
