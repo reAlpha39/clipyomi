@@ -11,8 +11,10 @@ of those classes are Japanese and which were one writer's habits, and found one
 class that is larger than everything on the list and that the probe's ranking
 cannot show.
 
-Nothing shipped. This is a measurement session: no code changed, no gate moved,
-and every artifact it produced is throwaway.
+§1 to §8 are the measurement, written before anything was changed: no code, no
+gate, and every artifact throwaway. §9 is the one change the measurement
+justified, shipped the same day — `640074c`, the 〜てくる / 〜ておく / 〜てみる
+rows §4 priced.
 
 ## 1. The corpora, and how to rebuild the run
 
