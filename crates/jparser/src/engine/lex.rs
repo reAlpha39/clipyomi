@@ -82,6 +82,15 @@ pub struct Candidate {
     /// by `cost::cost` to decide whether a tokenizer boundary *inside* the
     /// span is evidence of anything; see `KATAKANA_MIN_PIECE`.
     pub all_katakana: bool,
+    /// Every character of the span is katakana **and** a longer katakana run
+    /// encloses it — the span is a proper piece of that run, on at least one
+    /// side.
+    ///
+    /// Geometry only: how short a piece has to be before it is charged is
+    /// `cost::KATAKANA_MIN_PIECE`'s business, so the threshold lives there
+    /// with the constant it shares. `ユリナス` tiles into two such pieces and
+    /// reads "lily eggplant"; `ソロ|ホームラン` tiles into one and is right.
+    pub inside_katakana_run: bool,
     /// Whether this span also partitions into two or more candidates that
     /// each carry both `COMMON` and `PARTICLE` -- `には` as `に` + `は`.
     ///
@@ -95,6 +104,32 @@ pub struct Candidate {
     /// withhold the length gain. Set by the same second pass.
     pub grammatical_stack: bool,
     pub headword: String,
+}
+
+/// The maximal katakana run containing each character, or `None` where the
+/// character is not katakana.
+///
+/// Computed once per sentence so the per-candidate test in [`candidates`] is
+/// O(1) rather than O(len): `jparser-cli bench`'s scaling cell is what a
+/// per-candidate scan would show up in, and Phase 2c exists because an
+/// earlier version of this module was superlinear in input length.
+fn katakana_runs(chars: &[char]) -> Vec<Option<(usize, usize)>> {
+    let mut runs = vec![None; chars.len()];
+    let mut i = 0;
+    while i < chars.len() {
+        if !kana::is_katakana(chars[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len() && kana::is_katakana(chars[i]) {
+            i += 1;
+        }
+        for slot in &mut runs[start..i] {
+            *slot = Some((start, i));
+        }
+    }
+    runs
 }
 
 /// Every candidate covering some span of `chars`, indexed by start position.
@@ -160,6 +195,8 @@ pub fn candidates(
 
     let mut class_cache: HashMap<u32, Vec<ClassId>> = HashMap::new();
 
+    let runs = katakana_runs(chars);
+
     for start in 0..len {
         // Collected as the walk finds them -- stem-end ascending -- and
         // emitted longest span first below, which is the order the old
@@ -213,9 +250,17 @@ pub fn candidates(
                             flags: WordFlags(record.flags),
                             steps: hit.steps.clone(),
                             exact: record.surface == key,
-                            all_katakana: chars[start..end]
-                                .iter()
-                                .all(|c| kana::is_kana(*c) && !kana::is_hiragana(*c)),
+                            all_katakana: chars[start..end].iter().all(|&c| kana::is_katakana(c)),
+                            inside_katakana_run: match runs[start] {
+                                // `end <= run_end` puts the whole span in the
+                                // same run: runs are maximal and contiguous,
+                                // so a span that starts in one and ends
+                                // within its end never leaves it.
+                                Some((run_start, run_end)) if end <= run_end => {
+                                    run_start < start || run_end > end
+                                }
+                                _ => false,
+                            },
                             // Filled from `chars` below, where the span is
                             // known; the walk here has only the record.
                             digit_counter: false,
@@ -604,6 +649,7 @@ mod tests {
             steps: Vec::new(),
             exact: true,
             all_katakana: false,
+            inside_katakana_run: false,
             digit_counter: false,
             after_digit_noncounter: false,
             function_stack: false,
@@ -665,6 +711,7 @@ mod tests {
             ],
             exact,
             all_katakana: false,
+            inside_katakana_run: false,
             function_stack: false,
             grammatical_stack: false,
             digit_counter: false,
@@ -708,5 +755,22 @@ mod tests {
         ]);
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].steps.len(), 0, "the shallow one survives");
+    }
+
+    #[test]
+    fn a_katakana_run_is_the_maximal_span_around_each_of_its_characters() {
+        let chars: Vec<char> = "をユリナスが".chars().collect();
+        let runs = super::katakana_runs(&chars);
+        assert_eq!(runs[0], None, "を is not katakana");
+        assert_eq!(runs[1], Some((1, 5)), "ユ opens the run");
+        assert_eq!(runs[4], Some((1, 5)), "ス closes it");
+        assert_eq!(runs[5], None, "が is not katakana");
+    }
+
+    #[test]
+    fn the_prolonged_sound_mark_stays_inside_the_run() {
+        let chars: Vec<char> = "コーヒー".chars().collect();
+        let runs = super::katakana_runs(&chars);
+        assert_eq!(runs[1], Some((0, 4)), "ー does not break the run");
     }
 }

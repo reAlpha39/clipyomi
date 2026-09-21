@@ -89,6 +89,13 @@ pub fn is_hiragana(c: char) -> bool {
     matches!(c, '\u{3041}'..='\u{3096}')
 }
 
+/// Katakana (U+30A1..=U+30FA), the prolonged sound mark (U+30FC) and
+/// halfwidth katakana (U+FF66..=U+FF9D): the katakana leg of [`is_kana`] on
+/// its own, and the definition `lex`'s run scan and `all_katakana` share.
+pub fn is_katakana(c: char) -> bool {
+    is_kana(c) && !is_hiragana(c)
+}
+
 /// ASCII digit or fullwidth digit (U+FF10..=U+FF19).
 pub fn is_digit(c: char) -> bool {
     c.is_ascii_digit() || matches!(c, '\u{FF10}'..='\u{FF19}')
