@@ -265,11 +265,18 @@ mod tests {
     /// span merging back the way it did before, gold and snapshot identical.
     /// The cap is a measured number, not a budget -- a row that repairs
     /// another row is still a row, and still costs an A/B.
+    ///
+    /// **94 -> 111** on 2026-09-22, from the re-run against the ta-old port
+    /// over the same ten corpora: thirteen rows for the defect and four
+    /// protective. 545 of 131,847 sentences change (0.41%), 591 occurrences
+    /// recovered against 8 lost, gold identical to the digit in both hint
+    /// states and the snapshot with it. The CSV's own comment block carries
+    /// the per-row counts and names the 8.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 94,
-            "94 is the largest list measured against every gold cell"
+            user_lexicon_body().lines().count() <= 111,
+            "111 is the largest list measured against every gold cell"
         );
     }
 

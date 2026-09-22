@@ -255,3 +255,54 @@
 できず,1,1,-3200,名詞,一般,*,*,*,*,できず,できず
 よさそう,1,1,-5878,名詞,一般,*,*,*,*,よさそう,よさそう
 もったいない,1,1,-5878,名詞,一般,*,*,*,*,もったいない,もったいない
+#
+# **94 -> 111**, the 2026-09-22 re-run against the ta-old port over the same
+# ten corpora. `examples/corpus_disagree`'s ranked head held no defect for a
+# fourth session, so these came from a sweep that counts, per occurrence, where
+# the ta-old port emits a word whole and this engine does not. Thirteen are the
+# defect and four are protective. Ten corpora, hints-on, against the tip:
+# **545 of 131,847 sentences change (0.41%)**, 591 occurrences recovered
+# against 8 lost. Every gold cell in both hint states is identical to the
+# digit, and the curated snapshot with it.
+#
+# The recovered, by row: やだ 224, イって 107 (with イった 17, イったら 4,
+# イっている 3, イってる 3, イっていない 2, イってない 1), 達した 84,
+# マズい 27, ありえない 23, わかりやすい 21, おかわり 16, シゴく 15,
+# こやつ 11, ちきしょう 9, ふともも 8, よだれ 6.
+#
+# やだ is the largest single row measured here: 275 occurrences in the ten
+# corpora and **0 of them emitted whole** before it. 達した is the one row
+# with a kanji surface; it is here because `達し`(official notice) is a real
+# JMdict entry, so `達し|た` is a false gloss rather than an over-split.
+#
+# **The four protective rows**, each cancelling a collateral of the thirteen,
+# measured as their own A/B (44 of 131,847 sentences change, 0.03%):
+#   - いやだ -- やだ steals the い out of `もういやだ` -> `も|うい|やだ`.
+#   - カワイイ and マズイ -- イって steals the katakana イ out of
+#     `カワイイって` and `マズイって`.
+#   - 熟達した -- 達した severs `熟達`. 上達 and 発達 come back for free at
+#     -1500 rather than -3200; -1500 costs 17 of the bare 達した merges and
+#     saves 8 severed compounds, which is the trade taken here because a
+#     severed compound is a new defect and a missed merge is an old one.
+#
+# The price that stands, 8 occurrences: `さや` (a character name) reads
+# `さ|やだ` 5 times, `上達した` still severs twice, and `ヤバイって` reads
+# `ヤバ|イって` once. No protective row for those: one is a name, and the
+# other two are one occurrence per row.
+やだ,1,1,-3200,名詞,一般,*,*,*,*,やだ,やだ
+イって,1,1,-3200,名詞,一般,*,*,*,*,イって,イって
+イった,1,1,-3200,名詞,一般,*,*,*,*,イった,イった
+達した,1,1,-1500,名詞,一般,*,*,*,*,達した,タッシタ
+マズい,1,1,-3200,名詞,一般,*,*,*,*,マズい,マズい
+ありえない,1,1,-3200,名詞,一般,*,*,*,*,ありえない,ありえない
+わかりやすい,1,1,-3200,名詞,一般,*,*,*,*,わかりやすい,わかりやすい
+おかわり,1,1,-3200,名詞,一般,*,*,*,*,おかわり,おかわり
+シゴく,1,1,-3200,名詞,一般,*,*,*,*,シゴく,シゴく
+こやつ,1,1,-3200,名詞,一般,*,*,*,*,こやつ,こやつ
+ちきしょう,1,1,-3200,名詞,一般,*,*,*,*,ちきしょう,ちきしょう
+ふともも,1,1,-3200,名詞,一般,*,*,*,*,ふともも,ふともも
+よだれ,1,1,-3200,名詞,一般,*,*,*,*,よだれ,よだれ
+いやだ,1,1,-5878,名詞,一般,*,*,*,*,いやだ,いやだ
+カワイイ,1,1,-5878,名詞,一般,*,*,*,*,カワイイ,カワイイ
+マズイ,1,1,-5878,名詞,一般,*,*,*,*,マズイ,マズイ
+熟達した,1,1,-5878,名詞,一般,*,*,*,*,熟達した,ジュクタツシタ
