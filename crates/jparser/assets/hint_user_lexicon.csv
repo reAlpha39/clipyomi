@@ -227,9 +227,18 @@
 # The price is about a dozen occurrences: `もったいないでしょ` becomes
 # `もった|いないでしょ` 3 times, `のに` splits twice beside もったいない, the
 # open `イっていない` row splits twice, and `気持ちよさそうなお顔` reads
-# `なお|顔` twice. A protective もったいない row fixes the first and is *not*
-# here, because it was not measured on the corpus and this list's rule is that
-# every row is.
+# `なお|顔` twice.
+#
+# **もったいない is the sixth row and it is protective**, measured separately
+# the same day: it exists only to cancel what いない does to it. Ten corpora,
+# hints-on, against the five rows above: **8 sentences change (0.01%)**. Three
+# are the repair -- `もった|いないでしょ` becomes whole again and the `のに`
+# beside もったいない stops splitting twice -- and five are `もったいないです`
+# ×4 and `もったいないじゃ` ×1 merging back into the polite span the engine
+# emitted before today, which is the shipped auxiliary policy rather than a
+# defect. Every gold cell in both hint states is identical, and the curated
+# snapshot with it. Its own gain is 3 occurrences; it is here because a row
+# that repairs another row's collateral for that footprint is worth its place.
 #
 # The hazard to know about: いない forced as a token breaks a kana な-adjective
 # ending in い before a word starting with い -- `きれいないろ` reads
@@ -245,3 +254,4 @@
 できなかった,1,1,-3200,名詞,一般,*,*,*,*,できなかった,できなかった
 できず,1,1,-3200,名詞,一般,*,*,*,*,できず,できず
 よさそう,1,1,-5878,名詞,一般,*,*,*,*,よさそう,よさそう
+もったいない,1,1,-5878,名詞,一般,*,*,*,*,もったいない,もったいない
