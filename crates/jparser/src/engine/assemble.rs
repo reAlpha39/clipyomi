@@ -317,11 +317,21 @@ fn reading_for(entry: &EntryData, cand: &Candidate, chars: &[char]) -> Option<St
         // The step's own range is the kanji form's suffix (empty for 連用形,
         // れ for 仮定形), already accounted for by the kana form's suffix; the
         // auxiliaries after it are kana as written.
-        let tail: String = chars[first_step.range.end..end].iter().collect();
+        let tail: String = chars[first_step.range.end..end]
+            .iter()
+            .copied()
+            .map(kana::to_hiragana)
+            .collect();
         return Some(format!("{prefix}{stem}{tail}"));
     }
     let stem = dict_reading.strip_suffix(class.remove)?;
-    let tail: String = chars[first_step.range.start..end].iter().collect();
+    // Hiragana, whatever the input wrote: a reading is spelled in hiragana and
+    // `table::search` no longer requires the tail to be. See `kana::to_hiragana`.
+    let tail: String = chars[first_step.range.start..end]
+        .iter()
+        .copied()
+        .map(kana::to_hiragana)
+        .collect();
     Some(format!("{stem}{tail}"))
 }
 

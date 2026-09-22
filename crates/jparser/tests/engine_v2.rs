@@ -738,6 +738,42 @@ fn a_conjugated_katakana_verb_loses_to_its_shorter_parts() {
         "control: the past form is reached through a real conjugation step"
     );
 
+    // The same control with the sokuon written in katakana. Until 2026-09-22
+    // this span came back unmatched: `Table::search` walked the trie with raw
+    // characters, the trie held the hiragana っ, and the katakana ッ found no
+    // child -- so 行ッた, ワラッた and this verb all stopped dead one character
+    // into the tail while their hiragana twins parsed. 1,860 occurrences of
+    // the shape in the ten-corpus probe pool.
+    let katakana_sokuon = parse_v2_over(&lone, "ミスッた");
+    assert_eq!(
+        katakana_sokuon.segments.len(),
+        1,
+        "katakana sokuon: {:?}",
+        katakana_sokuon.segments
+    );
+    assert_eq!(katakana_sokuon.segments[0].surface, "ミスッた");
+    assert_eq!(
+        katakana_sokuon.segments[0].entries[0]
+            .conjugation
+            .as_deref(),
+        Some("Past"),
+    );
+
+    // And a conjugated reading comes back in hiragana. `reading_for` pastes
+    // the inflected tail on as the input wrote it, so the same change that
+    // let the katakana sokuon through made 行ッた read いッた -- which
+    // `src/render/furigana.ts` renders verbatim in its hiragana mode.
+    // `kana::to_hiragana` is what puts it back.
+    let reading_dir = scratch("katakana-sokuon-reading");
+    build_v2(&reading_dir);
+    let kanji_sokuon = parse_v2_over(&reading_dir, "行ッた");
+    assert_eq!(kanji_sokuon.segments[0].surface, "行ッた");
+    assert_eq!(
+        kanji_sokuon.segments[0].reading.as_deref(),
+        Some("いった"),
+        "a reading is hiragana whatever script the tail was written in"
+    );
+
     // The defect: the same word, the same entry present, against a fixture
     // that also holds ミス and ったい.
     let dir = scratch("katakana-verb-split");
@@ -1309,16 +1345,21 @@ fn the_ranges_are_absolute_not_relative_to_the_spans_start() {
 #[test]
 fn katakana_conjugation_is_not_deinflected_yet() {
     // Deliberate gap, not a bug, kept for Phase 1a: `Table`'s conjugation
-    // trie is hiragana-keyed with no folding in `Table::search`, so a fully
-    // katakana surface can never reach a Terminal/Continuation node through
-    // an actual suffix match. Folding the trie too would fix that, but it
-    // would also turn every katakana loanword ending in タ (データ, メーター,
-    // カルタ) into a spurious past-tense candidate -- exactly the
-    // kana-unified false-match class handoff §9.5 already measured as this
-    // engine's worst defect. Handoff §8's deferred katakana-deinflection
-    // item is what would reopen this trade-off: Tier D's 8 sentences / 169
-    // spans showed no visible penalty from leaving it unfolded, but that
-    // sample is too thin to call it settled either way.
+    // trie is hiragana-keyed and `Table::search` folds only the sokuon, so a
+    // fully katakana surface still cannot reach a Terminal/Continuation node
+    // through an actual suffix match. Folding the trie with `kana::fold`
+    // would, and it would also turn every katakana loanword ending in タ
+    // (データ, メーター, カルタ) into a spurious past-tense candidate --
+    // exactly the kana-unified false-match class handoff §9.5 already measured
+    // as this engine's worst defect. Tier D's 8 sentences / 169 spans could
+    // not price that trade, and this comment said so until 2026-09-22.
+    //
+    // **It is priced now and the answer was no.** The full fold was built and
+    // run over the ten-corpus probe pool, 131,847 sentences: against the
+    // sokuon-only fold that shipped it changes another 1,076 sentences and
+    // the 1,149 spans it gains there are about one good to one bad --
+    // `イケナイ` 130 and `キツク` 107 read correctly, `タツヤ` glossed 立つ
+    // 104 times and `ズン` glossed ずる 48. See `table::hiragana_sokuon`.
     //
     // `chains_ending_at` separately always offers a zero-consumption
     // substitution for any class whose own form has an empty suffix (an
