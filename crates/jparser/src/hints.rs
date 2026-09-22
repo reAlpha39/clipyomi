@@ -257,14 +257,19 @@ mod tests {
     /// rows to move a gold cell rather than hold it: hints-on strict 1694 ->
     /// 1696 and tolerant 1948 -> 1950, hints-off identical, snapshot identical.
     /// The ten-corpus A/B reads 832 occurrences recovered against about a dozen
-    /// lost. The cap is still a measured number, not a budget: the sixth row
-    /// considered (a protective `もったいない`) was left out precisely because
-    /// it had not been through that A/B.
+    /// lost.
+    ///
+    /// **93 -> 94** for the protective `もったいない`, which `いない` shatters
+    /// into `もった|いないでしょ`. Put through the same A/B rather than waved
+    /// in: 8 of 131,847 sentences change, three the repair and five a polite
+    /// span merging back the way it did before, gold and snapshot identical.
+    /// The cap is a measured number, not a budget -- a row that repairs
+    /// another row is still a row, and still costs an A/B.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 93,
-            "93 is the largest list measured against every gold cell"
+            user_lexicon_body().lines().count() <= 94,
+            "94 is the largest list measured against every gold cell"
         );
     }
 
