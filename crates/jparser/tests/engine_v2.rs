@@ -529,6 +529,21 @@ fn the_user_lexicon_keeps_a_word_ipadic_splits() {
         "いちゃいちゃ | する"
     );
 
+    // The three もしか* adverbs, added 2026-09-22 for the same reason and
+    // measured the same way. `もしかしたら` is the row that was 100% split
+    // without the lexicon -- IPADIC cuts もしか off the front of all three.
+    let moshika = boundaries_over("もしかしたら、");
+    for p in 1..6 {
+        assert!(
+            !jparser::engine::Boundaries::is_boundary(&moshika, p),
+            "position {p} is interior to もしかしたら and must not be a cut"
+        );
+    }
+    assert!(
+        jparser::engine::Boundaries::is_boundary(&moshika, 6),
+        "もしかしたら | 、"
+    );
+
     // Deliberately no parse assertion. The word is JMdict's, so checking the
     // segmentation would need the real 218k index, which CI does not have --
     // and the boundary set above *is* the mechanism: `cost::is_allowed` will
