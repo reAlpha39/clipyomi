@@ -1,7 +1,7 @@
 # The residue, adjudicated — handoff
 
 **Date:** 2026-09-22
-**Branch:** `feat/corpus-disagree`, tip `1798a9f`
+**Branch:** `feat/corpus-disagree`, tip `06e9158`
 **Predecessor:** [`2026-09-22-uk-kana-shatter-handoff.md`](2026-09-22-uk-kana-shatter-handoff.md)
 
 The predecessor shipped the `uk` exemption and left a named residue it had not
@@ -11,8 +11,10 @@ session re-ran the whole probe at the current tip, adjudicated that residue
 surface by surface, shipped the half that is fixable, and **refused** the
 hints-off half on a measurement that the gold corpus alone would have passed.
 
-One commit: `1798a9f` adds three rows to the user lexicon. The hints-off
-candidate was built, measured and reverted; §5 is its record.
+Two commits, both of them user-lexicon rows: `1798a9f` adds three, `06e9158`
+five more for the family §6 had called blocked — §10 is that correction, and it
+is the larger of the two changes. The hints-off candidate was built, measured
+and reverted; §5 is its record.
 
 ## 1. Controls first
 
@@ -151,7 +153,9 @@ and its 16 swallowed particles).
 that separates a word from a 連用形 + auxiliary, which is the same missing
 discriminator §6 names.
 
-## 6. `できる` and `はいない` are one defect, and it is blocked
+## 6. `できる` and `はいない` are one defect — blocked in the cost model, fixed in the tokenizer
+
+**Read §10 first: this section's "blocked" is true only of `cost.rs`.**
 
 The predecessor listed them apart. They are the same arithmetic: a `uk` entry's
 **inflected** form is PRONOUNCE-only, the chain condition excludes it from the
@@ -172,7 +176,8 @@ Extending the exemption to inflected forms is the widening refused on
 **not** rescue it: `ももう`→揉む, `はもう`→食む, `のか`→退く, `とかな`→解く
 and `たまん`→溜まる are all `uk`, all inflected, and all three characters, so
 neither the flag nor `UK_MIN_LEN` separates them from `いない`. Not attempted;
-the separation is not in the dictionary.
+the separation is not in the dictionary — **and it is not needed, because the
+tokenizer does not have to separate anything. See §10.**
 
 ## 7. The shipped `uk` fix, audited from the other side
 
@@ -204,10 +209,58 @@ rebuild.
   rows, but the cap is a measured number and four more rows is a fourth A/B;
   the family shipped here was worth its measurement at 153 occurrences and
   these are not, individually.
-- The 1,970 hints-off, per §5, and the 589 of §6.
+- ~~The 589 of §6~~ — **fixed in §10.**
+- The 1,970 hints-off, per §5.
 - Everything the predecessor left: the particle → godan family, the
   hints-off atomisation class, `やだ`, the stray-kana gate, `達した`, `イって`,
   and the six darwin screenshot baselines.
 - **`vn-text` is exhausted, and this session did not need a new corpus** — the
   ranked head was already policy. What the next unknown needs is a different
   register, or a different instrument, not a thirteenth script.
+
+## 10. Postscript: the tokenizer route, and 832 occurrences
+
+`06e9158`, the same day, after §6 had already called the class blocked.
+
+**The mistake §6 made was reaching for the cost model.** The class is a
+tokenizer artifact: IPADIC holds `いる` whole and splits `い|ない`, which is why
+`は|いる` is cut correctly 35 times in 38 while `はい`(yes) wins 82 times in 83.
+Nothing about that asymmetry is linguistic, and the user lexicon is exactly the
+tool for it — the same tool `いちゃいちゃ` needed, applied for the first time to
+an inflected form.
+
+Five rows: `いない`, `できない`, `できなかった`, `できず`, `よさそう`.
+`できなくて` was tried and dropped — the forced token did not survive the
+engine's own `て` split. `よさそう` is at `-5878` because `-3200` loses
+`気持ちよさそう`, which IPADIC cuts `気持ちよ|さ|そう`.
+
+| | |
+| --- | --- |
+| gold hints-on | strict 1694 → **1696**, tolerant 1948 → **1950**, entry top-1 0.9527 → **0.9528**, compounds 152 |
+| gold hints-off | identical, by construction |
+| snapshot | byte-identical |
+| ten corpora, hints-on | 847 of 131,847 sentences change (0.64%), **832 occurrences recovered** |
+
+`いない` 333, `できない` 295, `よさそう` 122, `できなかった` 60, `できず` 22,
+and `はい` is gone from all 83 of its swallows. **These are the first lexicon
+rows to move a gold cell rather than hold it**, which is worth noticing: the
+class was large enough to reach a 150-sentence corpus.
+
+The price is about a dozen occurrences — `もったいないでしょ` → `もった|いない
+でしょ` 3, `のに` split twice beside it, `イっていない` twice, `気持ちよさそうな
+お顔` → `なお|顔` twice. A protective `もったいない` row fixes the first three
+and was **left out**, because it had not been through the A/B and this list's
+rule is that every row has.
+
+**The hazard worth carrying forward:** `いない` as a forced token breaks a kana
+な-adjective ending in い before a word starting with い — `きれいないろ` reads
+`きれ|いない|ろ`. It occurs **zero times in 131,847 sentences** of this
+register, and `けんめいないのり` and `しずかないい人` both stay correct, but a
+different register could carry it.
+
+**And the probe inputs were purged mid-session** — the temp tree holding the
+corpora, the v1 dumps and every span dump was reaped for disk space. The pool
+was re-dumped from `D:\Code\oss\vn-text` with §1's recipe and **every one of
+the ten counts reproduced exactly** (131,847 total), which validates that
+recipe a fourth time. The v1 side was not rebuilt: a control-against-candidate
+A/B does not need it, and the adjudication above is by reading contexts.
