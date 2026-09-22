@@ -385,7 +385,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let Some(entry) = index.entry(c.entry_id)? else {
                             continue;
                         };
-                        if !entry.senses.iter().any(|s| s.misc.iter().any(|m| m == "uk")) {
+                        if !entry
+                            .senses
+                            .iter()
+                            .any(|s| s.misc.iter().any(|m| m == "uk"))
+                        {
                             continue;
                         }
                         // **The entry's own POS decides, not the surface.**
