@@ -84,6 +84,11 @@ struct Region {
     /// The headword of the single entry covering the whole region, if one
     /// does, with its reading.
     covered_by: Option<(String, String)>,
+    /// The cover was reached through the `uk` exemption rather than as a
+    /// PRIMARY headword — the entry's everyday spelling is the kana one and
+    /// its PRONOUNCE record is the only thing that can match it. Printed so a
+    /// reader can tell the two routes apart in the cover column.
+    uk_cover: bool,
     alt: bool,
     alt_is_v1: bool,
     reading_differs: bool,
@@ -350,18 +355,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // a way the word is written: `はは` finds 義母 (ぎぼ), `誰が` finds
             // 誰が (たが), `みた` finds 蒙(むた). Taking those as covers is
             // `shatter_sweep.rs`'s own §9.5 absurdity, so PRIMARY is required.
-            let cover = by_start
+            //
+            // **`uk` is the one exemption to PRIMARY** (2026-09-22). An entry
+            // JMdict tags `uk` is normally *written* in kana, and such an
+            // entry keeps its kanji headword, so its everyday spelling reaches
+            // the lattice as a PRONOUNCE-only record and the clause above
+            // refuses it as a cover. `おねだり` (お強請り), `もしかして`
+            // (若しかして) and `よさそう` (良さそう) are covered entries the
+            // engine splits, and every one of them printed `-` here: 918
+            // occurrences over ten corpora the signal could not see.
+            // `assemble::order` already carries this exemption for the same
+            // reason. The noise PRIMARY is there to keep out survives it:
+            // `はは`→義母, `ことし`→今年, `どうし`→同士, `誰が`(たが) and
+            // `みた`→蒙 are none of them `uk`.
+            let same_span = |c: &lex::Candidate| c.len == hi - lo && c.exact && c.steps.is_empty();
+            let primary = by_start
                 .get(lo)
                 .into_iter()
                 .flatten()
-                .find(|c| {
-                    c.len == hi - lo
-                        && c.exact
-                        && c.steps.is_empty()
-                        && c.flags.contains(WordFlags::PRIMARY)
-                })
-                .map(|c| (c.entry_id, c.headword.clone(), c.grammatical_stack));
-            if let Some((id, headword, stack)) = cover {
+                .find(|c| same_span(c) && c.flags.contains(WordFlags::PRIMARY));
+            let cover = match primary {
+                Some(c) => Some((c.entry_id, c.headword.clone(), c.grammatical_stack, false)),
+                None => {
+                    let mut found = None;
+                    for c in by_start.get(lo).into_iter().flatten() {
+                        if !(same_span(c) && c.flags.contains(WordFlags::PRONOUNCE)) {
+                            continue;
+                        }
+                        let Some(entry) = index.entry(c.entry_id)? else {
+                            continue;
+                        };
+                        if !entry.senses.iter().any(|s| s.misc.iter().any(|m| m == "uk")) {
+                            continue;
+                        }
+                        // **The entry's own POS decides, not the surface.**
+                        // `lex::is_grammatical_stack` asks whether the span
+                        // tiles into COMMON pieces of at most two characters,
+                        // which is the only question the engine can ask with
+                        // no part of speech to hand — and every kana adverb
+                        // answers yes: `もしかして` tiles `もし|か|し|て`.
+                        // Partitioning those away buries exactly the rows this
+                        // exemption exists to show (measured: `もしかして`
+                        // ranked 163 before the exemption and vanished after).
+                        // A probe holding the assembled entry can ask the
+                        // sharper question. `かな`(prt), `ように`(exp),
+                        // `それに`(conj) and `ございます`(aux-v,exp) are
+                        // refused by criterion 3 and carry a grammatical POS;
+                        // `もしかして`(adv), `おさらい`(n,vs), `すぐそば`(n)
+                        // and `なくなる`(v5r) are words and do not.
+                        let grammatical = entry.senses.iter().any(|s| {
+                            s.pos.iter().any(|p| {
+                                matches!(p.as_str(), "exp" | "prt" | "conj" | "cop" | "int")
+                                    || p.starts_with("aux")
+                            })
+                        });
+                        found = Some((c.entry_id, c.headword.clone(), grammatical, true));
+                        break;
+                    }
+                    found
+                }
+            };
+            if let Some((id, headword, stack, uk_cover)) = cover {
                 // A region whose last piece is a COMMON particle is the same
                 // refusal as a grammatical stack, and `is_grammatical_stack`
                 // does not catch it because it asks about *every* piece.
@@ -394,6 +448,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     readings
                 };
                 r.covered_by = Some((headword, whole[0].clone()));
+                r.uk_cover = uk_cover;
                 if !c2.is_empty() {
                     r.shattered = true;
                 }
@@ -515,6 +570,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     for (i, (surface, r)) in ranked.iter().take(top).enumerate() {
         let cover = match &r.covered_by {
+            Some((h, rd)) if r.uk_cover => format!("{h} ({rd}) [uk]"),
             Some((h, rd)) => format!("{h} ({rd})"),
             None => "-".into(),
         };
