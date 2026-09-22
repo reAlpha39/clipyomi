@@ -28,7 +28,7 @@ use crate::index::load::Index;
 /// 6 (Phase 3b): `KanjiData` gained `grade`, `strokes`, `freq` and `jlpt`, so
 /// `kanji.bin`'s record layout changed. The header is still untouched — see
 /// `a_v5_header_is_refused_with_a_version_mismatch`.
-pub const INDEX_FORMAT_VERSION: u32 = 6;
+pub const INDEX_FORMAT_VERSION: u32 = 7;
 
 pub const HEADER_FILE: &str = "header.bin";
 pub const FST_FILE: &str = "keys.fst";

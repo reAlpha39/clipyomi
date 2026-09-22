@@ -2295,3 +2295,116 @@ fn no_candidate_has_zero_length() {
         }
     }
 }
+
+/// `uk` entries and the pieces that compete with them, small enough that the
+/// whole lattice is readable.
+///
+/// The three entries are the three outcomes: `お強請り` is vocabulary JMdict
+/// says is written in kana, `出汁` is the same thing two kana long, and `様に`
+/// is grammar. Each competing piece is present as its own entry, so a split
+/// is a tiling of matched spans rather than a fallback — without `お` and
+/// `ねだり` here the merge would win for the wrong reason, which is how
+/// `a_five_character_katakana_compound_keeps_its_cut` passed against a
+/// fixture that lacked `ラストラン`.
+const UK_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+<!ENTITY pref "prefix">
+<!ENTITY prt "particle">
+<!ENTITY cop "copula">
+<!ENTITY exp "expressions (phrases, clauses, etc.)">
+<!ENTITY uk "word usually written using kana alone">
+]>
+<JMdict>
+<entry><ent_seq>3000010</ent_seq>
+<k_ele><keb>お強請り</keb></k_ele><r_ele><reb>おねだり</reb></r_ele>
+<sense><pos>&n;</pos><misc>&uk;</misc><gloss>begging</gloss></sense></entry>
+<entry><ent_seq>3000020</ent_seq>
+<r_ele><reb>お</reb></r_ele>
+<sense><pos>&pref;</pos><gloss>honorific prefix</gloss></sense></entry>
+<entry><ent_seq>3000030</ent_seq>
+<r_ele><reb>ねだり</reb></r_ele>
+<sense><pos>&n;</pos><gloss>pestering</gloss></sense></entry>
+<entry><ent_seq>3000040</ent_seq>
+<k_ele><keb>出汁</keb></k_ele><r_ele><reb>だし</reb></r_ele>
+<sense><pos>&n;</pos><misc>&uk;</misc><gloss>soup stock</gloss></sense></entry>
+<entry><ent_seq>3000050</ent_seq>
+<r_ele><reb>だ</reb></r_ele>
+<sense><pos>&cop;</pos><gloss>be</gloss></sense></entry>
+<entry><ent_seq>3000060</ent_seq>
+<r_ele><reb>し</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>and</gloss></sense></entry>
+<entry><ent_seq>3000070</ent_seq>
+<k_ele><keb>様に</keb></k_ele><r_ele><reb>ように</reb></r_ele>
+<sense><pos>&exp;</pos><misc>&uk;</misc><gloss>so that</gloss></sense></entry>
+<entry><ent_seq>3000080</ent_seq>
+<k_ele><keb>様</keb></k_ele><r_ele><reb>よう</reb></r_ele>
+<sense><pos>&n;</pos><gloss>appearance</gloss></sense></entry>
+<entry><ent_seq>3000090</ent_seq>
+<r_ele><reb>に</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>to</gloss></sense></entry>
+</JMdict>
+"#;
+
+/// Cuts at exactly the given positions, so a test can put a tokenizer
+/// boundary where it needs one without the 47 MB Vibrato dictionary.
+struct CutsAt(&'static [usize]);
+
+impl jparser::engine::Boundaries for CutsAt {
+    fn is_boundary(&self, pos: usize) -> bool {
+        self.0.contains(&pos)
+    }
+}
+
+/// `cost`'s `uk` exemption, end to end: the spelling JMdict calls normal
+/// survives a tokenizer cut inside it, and the two shapes that must keep
+/// paying still split.
+///
+/// Measured on ten corpora before this existed: `おねだり` came out
+/// `お|ねだり` 115 times of 116, and `corpus_disagree` could not even report
+/// it as a covered region, because a `uk` entry's kana spelling is
+/// PRONOUNCE-only and the probe required PRIMARY. The two negative halves are
+/// the ones that cost gold spans when they were missing —
+/// `flags::GRAMMATICAL_POS` (16 spans, every one a swallowed particle) and
+/// `cost::UK_MIN_LEN` (`冬|だ|し` glossed 出汁 333 times).
+#[cfg(feature = "mecab")]
+#[test]
+fn a_uk_spelling_survives_a_cut_inside_it_and_grammar_still_splits() {
+    let dir = scratch("uk-exemption");
+    jparser::engine::build::build_from_reader(BufReader::new(UK_FIXTURE.as_bytes()), &dir)
+        .expect("uk fixture build");
+
+    // お|ねだり: the cut IPADIC makes inside the word.
+    let parsed = parse_v2_with_bounds(&dir, "おねだり", Some(&CutsAt(&[0, 1, 4])));
+    let spans: Vec<(usize, usize)> = parsed.segments.iter().map(|s| (s.start, s.len)).collect();
+    assert_eq!(
+        spans,
+        vec![(0, 4)],
+        "a uk noun of word length is one span across the cut"
+    );
+    let shown = parsed.segments[0]
+        .entries
+        .first()
+        .expect("the span matched an entry rather than falling back");
+    assert_eq!(
+        (shown.headword.as_str(), shown.senses[0].glosses[0].as_str()),
+        ("おねだり", "begging"),
+        "it is the entry, and `assemble::order`'s own uk clause shows the kana          spelling rather than お強請り"
+    );
+
+    // だ|し: two kana, so the exemption is withheld and the pieces win.
+    let parsed = parse_v2_with_bounds(&dir, "だし", Some(&CutsAt(&[0, 1, 2])));
+    assert_eq!(
+        parsed.segments.len(),
+        2,
+        "under UK_MIN_LEN the copula keeps its particle: だ|し, never 出汁"
+    );
+
+    // よう|に: uk, exact, uninflected and long enough — but grammar.
+    let parsed = parse_v2_with_bounds(&dir, "ように", Some(&CutsAt(&[0, 2, 3])));
+    assert_eq!(
+        parsed.segments.len(),
+        2,
+        "an exp entry is criterion 3's business however JMdict spells it"
+    );
+}

@@ -23,9 +23,27 @@ const COUNTER_POS: &[&str] = &["ctr", "suf"];
 /// Misc code that disqualifies a counter.
 const ARCHAIC_MISC: &str = "arch";
 
+/// JMdict's "word usually written using kana alone"; see [`WordFlags::UK`].
+const USUALLY_KANA_MISC: &str = "uk";
+
+/// POS codes that make an entry grammar rather than vocabulary, and so
+/// disqualify it from [`WordFlags::UK`] however JMdict spells it.
+///
+/// `uk` is common among the entries criterion 3 exists to keep apart —
+/// `様に`(exp), `其れに`(conj), `様だ`(aux-v,cop), `御座います`(aux-v,exp),
+/// `これ迄`(adj-no,exp) are all tagged `uk` and all of them must keep paying
+/// `cost::PRONOUNCE_CROSS`, or the engine absorbs the particle. Measured on
+/// the full dictionary without this test: 16 gold spans lost hints-on, every
+/// one of them a `に`, `と`, `よう` or `だ` swallowed into a merge. The
+/// fixture-sized gate could not see it — `spurious_merges.txt` stayed 26 of
+/// 26 throughout.
+const GRAMMATICAL_POS: &[&str] = &[
+    "exp", "prt", "conj", "cop", "int", "aux", "aux-v", "aux-adj",
+];
+
 /// Per-record flags the cost model and the webview read.
 ///
-/// A `u16` newtype with eight named bits. The eight **names** are the
+/// A `u16` newtype with nine named bits. The nine **names** are the
 /// contract: they are the strings `Entry::flags` serialises and
 /// `src/types.ts`'s `FlagName` declares, and the webview picks a chip's
 /// content class by them. The bit **values** are arbitrary — an index stores
@@ -46,9 +64,22 @@ impl WordFlags {
     pub const TOP: WordFlags = WordFlags(1 << 6);
     /// Reserved for JMnedict; set by nothing (Phase 1a design §8).
     pub const IS_NAME: WordFlags = WordFlags(1 << 7);
+    /// JMdict tags some sense `uk`, "word usually written using kana alone",
+    /// **and no sense makes the entry grammar** ([`GRAMMATICAL_POS`]).
+    ///
+    /// A property of the entry, so every headword it produces carries it —
+    /// the kanji form as much as the reading. What reads it is
+    /// `cost::PRONOUNCE_CROSS`, and only where the distinction bites: such an
+    /// entry keeps its kanji headword, so the spelling JMdict itself calls
+    /// normal reaches the lattice as a PRONOUNCE-only record and pays the
+    /// crossing charge meant for `はは`→義母.
+    ///
+    /// The POS half of the test lives here, at build time, because that is
+    /// the only place the senses are in hand; `cost` sees flags and a span.
+    pub const UK: WordFlags = WordFlags(1 << 8);
 
     /// Every flag with its wire name, in bit order.
-    const NAMES: [(WordFlags, &'static str); 8] = [
+    const NAMES: [(WordFlags, &'static str); 9] = [
         (Self::PRIMARY, "primary"),
         (Self::PRONOUNCE, "pronounce"),
         (Self::COMMON_LINE, "common_line"),
@@ -57,6 +88,7 @@ impl WordFlags {
         (Self::COUNTER, "counter"),
         (Self::TOP, "top"),
         (Self::IS_NAME, "is_name"),
+        (Self::UK, "uk"),
     ];
 
     pub fn contains(self, other: WordFlags) -> bool {
@@ -142,6 +174,11 @@ fn shared_flags(raw: &RawEntry) -> WordFlags {
         raw.kanji.iter().any(|k| k.has_priority) || raw.readings.iter().any(|r| r.has_priority);
     if any_priority {
         flags.insert(WordFlags::COMMON_LINE);
+    }
+
+    let usually_kana = all_misc(raw).any(|m| m == USUALLY_KANA_MISC);
+    if usually_kana && !all_pos(raw).any(|p| GRAMMATICAL_POS.contains(&p)) {
+        flags.insert(WordFlags::UK);
     }
 
     flags
@@ -298,7 +335,7 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&f).unwrap(),
             r#"["primary","common"]"#,
-            "the eight names are what src/types.ts's FlagName declares"
+            "the nine names are what src/types.ts's FlagName declares"
         );
         assert_eq!(serde_json::to_string(&WordFlags::default()).unwrap(), "[]");
     }
@@ -314,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn the_eight_wire_names_are_exactly_types_ts_flagname() {
+    fn the_nine_wire_names_are_exactly_types_ts_flagname() {
         let names: Vec<&str> = WordFlags(u16::MAX).names().collect();
         assert_eq!(
             names,
@@ -326,9 +363,57 @@ mod tests {
                 "particle",
                 "counter",
                 "top",
-                "is_name"
+                "is_name",
+                "uk"
             ]
         );
+    }
+
+    /// `UK` is `uk` **and** vocabulary, because `cost::PRONOUNCE_CROSS` reads
+    /// it and a boundary moves. JMdict tags 様に(exp), 其れに(conj) and
+    /// 様だ(aux-v,cop) `uk` as readily as お強請り(n), and exempting the first
+    /// three cost 16 gold spans hints-on, every one a swallowed particle.
+    #[test]
+    fn uk_is_set_for_vocabulary_and_withheld_from_grammar() {
+        let word = headwords(&entry(
+            &[("お強請り", false)],
+            &[("おねだり", false)],
+            &["n"],
+            &["uk"],
+        ));
+        assert!(
+            word.iter().all(|h| h.flags.contains(WordFlags::UK)),
+            "a uk noun carries the bit on every headword it produces"
+        );
+
+        for pos in ["exp", "prt", "conj", "cop", "int", "aux-v"] {
+            let grammar = headwords(&entry(
+                &[("様に", false)],
+                &[("ように", false)],
+                &[pos],
+                &["uk"],
+            ));
+            assert!(
+                grammar.iter().all(|h| !h.flags.contains(WordFlags::UK)),
+                "`{pos}` is grammar, so the bit is withheld however JMdict tags the entry"
+            );
+        }
+
+        let untagged = headwords(&entry(&[("尻", false)], &[("しり", false)], &["n"], &[]));
+        assert!(
+            untagged.iter().all(|h| !h.flags.contains(WordFlags::UK)),
+            "no uk misc, no bit"
+        );
+
+        // A word whose senses mix the two keeps paying: one grammatical sense
+        // is enough to make the kana spelling ambiguous with a stack.
+        let mixed = headwords(&entry(
+            &[("御座います", false)],
+            &[("ございます", false)],
+            &["aux-v", "exp"],
+            &["uk"],
+        ));
+        assert!(mixed.iter().all(|h| !h.flags.contains(WordFlags::UK)));
     }
 
     #[test]

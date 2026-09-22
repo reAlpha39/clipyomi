@@ -108,13 +108,18 @@ pub fn to_segment(
 /// Whether JMdict tags the entry `uk`, "word usually written using kana
 /// alone".
 ///
-/// Read off the senses rather than a flag bit on purpose. `order` already has
-/// the assembled [`Entry`] and `SenseData::misc` is already stored, so this
-/// costs nothing; putting `uk` into [`WordFlags`] would carry it into
-/// `cost::PRONOUNCE_CROSS` as well, which was measured and refused — it takes
-/// the 26-row `spurious_merges.txt` gate to 25 by letting `ことになって`
-/// swallow its `に`, because `なる` is `uk` too. The ordering half is free of
-/// that: it runs after the DP and moves no boundary.
+/// Read off the senses rather than [`WordFlags::UK`] on purpose, and the two
+/// are deliberately not the same question. `order` already has the assembled
+/// [`Entry`] and `SenseData::misc` is already stored, so this costs nothing,
+/// and this half wants the plain JMdict tag: it runs after the DP and moves no
+/// boundary, so `様に` and `其れに` being `uk` is harmless here.
+///
+/// The flag bit is narrower — `uk` **and** no grammatical POS — because
+/// `cost::PRONOUNCE_CROSS` reads it and a boundary moves. The earlier refusal
+/// recorded here, that a `uk` bit takes the 26-row `spurious_merges.txt` gate
+/// to 25 by letting `ことになって` swallow its `に`, was of the plain tag; see
+/// `flags::GRAMMATICAL_POS` and `cost::UK_MIN_LEN` for what the conjunction
+/// had to add before the gates held.
 fn usually_kana(entry: &Entry) -> bool {
     entry
         .senses
