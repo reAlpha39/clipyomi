@@ -370,6 +370,22 @@ const CROSS: i32 = 0;
 /// well.
 const PRONOUNCE_CROSS: i32 = 25;
 
+/// Shortest `uk` kana spelling the exemption above trusts.
+///
+/// Two characters is where the reading collisions live — `はは`→義母,
+/// `がい`→甲斐, `みた`→蒙, `とが`, `のか` are every one of them two — and the
+/// `uk` tag does not separate them, because a two-kana word that is normally
+/// written in kana is also the likeliest thing for two grammatical morphemes
+/// to spell. Measured over ten corpora at no floor: `冬|だ|し` became
+/// `冬|だし` glossed 出汁 "soup stock" 105 times and `愛おし|げ|に` became
+/// `愛おし|げに` glossed 実に 32 times, both of them a copula or a suffix
+/// swallowing the particle after it, and neither caught by
+/// `grammatical_stack`, whose one-character pieces must be PARTICLE and
+/// `だ`(cop) and `げ`(suf) are not. Three loses `いつ`(何時) and `あだ` and
+/// keeps every longer win. `KATAKANA_MIN_PIECE` draws its floor in the same
+/// place for the same reason.
+const UK_MIN_LEN: usize = 3;
+
 /// Discount per character for a match whose entry carries a priority marker.
 ///
 /// A frequency signal JMdict supplies directly, and the only evidence
@@ -693,7 +709,32 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
         // 40 → 37, breaking `はこう`, `はいた`, `いたから`, `とが` and `のか` ×3,
         // with entry top-1 0.9400 → 0.9314. The engine has no term here that
         // separates a stem from a particle; see the handoff for the `uk` route.
-        if cand.flags.contains(WordFlags::PRONOUNCE) {
+        //
+        // **The `uk` exemption (2026-09-22, experimental).** An entry JMdict
+        // tags `uk` is normally written in kana, and it keeps its kanji
+        // headword, so the spelling JMdict itself calls normal is a
+        // PRONOUNCE-only record and pays this charge. Measured over ten
+        // corpora: 918 occurrences hints-on where the ta-old port emits such a
+        // word whole and this engine shatters it — `おねだり` into `お|ねだり`
+        // 115 times, against `お尻` merging across the same boundary because
+        // 尻 is kanji.
+        //
+        // The exemption is a conjunction, and the other two terms are what
+        // make it safe. Every false match this charge exists to refuse is
+        // either not `uk` — `はこう`→履く, `になって`→荷なう, `ことし`→今年,
+        // `どうし`→同士, `してい`→指定, `がい`→甲斐, `はは`→義母 — or
+        // reached through a deinflection chain: `ももう`→揉む, `はもう`→食む,
+        // `のか`→退く, `とかな`→解く, `たまん`→溜まる are all `uk` and all
+        // inflected. `assemble.rs`'s refusal of a `uk` bit in `WordFlags`
+        // names `ことになって` swallowing its `に` through `なる`, and that is
+        // the same shape: `なって` is a chain, so the conjunction never fires
+        // on it.
+        let uk_spelling = cand.flags.contains(WordFlags::UK)
+            && cand.len >= UK_MIN_LEN
+            && cand.exact
+            && cand.steps.is_empty()
+            && !cand.grammatical_stack;
+        if cand.flags.contains(WordFlags::PRONOUNCE) && !uk_spelling {
             let chain = cand
                 .steps
                 .iter()
@@ -924,6 +965,75 @@ mod tests {
             split - whole,
             per_span,
             "and the only difference is one match"
+        );
+    }
+
+    /// The `uk` exemption's four conditions, as an arithmetic contract.
+    ///
+    /// Each one is a measured refusal rather than a taste: without the POS
+    /// half of `WordFlags::UK` the engine lost 16 gold spans hints-on, every
+    /// one a particle swallowed (`様に`, `様だ`, `其れに` are all `uk`);
+    /// without `UK_MIN_LEN` it merged `冬|だ|し` into 出汁 333 times over ten
+    /// corpora; `exact` and an empty chain are what keep `ももう`→揉む and
+    /// `のか`→退く paying, since those entries are `uk` too and reached
+    /// through a deinflection chain.
+    #[test]
+    fn only_an_uninflected_uk_spelling_of_word_length_crosses_free() {
+        let b = At(&[0, 2, 5]);
+        let pronounce = WordFlags(WordFlags::PRONOUNCE.0 | WordFlags::UK.0);
+        // `おねだり`-shaped: the kana spelling of a kanji headword, crossing
+        // the one boundary IPADIC puts inside it.
+        let free = cand(0, 5, pronounce, true);
+        let charged = cand(0, 5, WordFlags::PRONOUNCE, true);
+        assert_eq!(
+            cost(&charged, Some(&b)) - cost(&free, Some(&b)),
+            PRONOUNCE_CROSS,
+            "a uk spelling crosses free; the same span without the bit pays"
+        );
+
+        let short = cand(0, 2, pronounce, true);
+        let mut short_charged = short.clone();
+        short_charged.flags = WordFlags::PRONOUNCE;
+        let b2 = At(&[0, 1, 2]);
+        assert_eq!(
+            cost(&short, Some(&b2)),
+            cost(&short_charged, Some(&b2)),
+            "under UK_MIN_LEN the bit buys nothing -- `だし` keeps paying"
+        );
+
+        let mut inflected = free.clone();
+        inflected.steps = vec![ConjStep {
+            class: 0,
+            form: 0,
+            range: 3..5,
+            aux: None,
+        }];
+        let mut inflected_charged = charged.clone();
+        inflected_charged.steps = inflected.steps.clone();
+        assert_eq!(
+            cost(&inflected, Some(&b)),
+            cost(&inflected_charged, Some(&b)),
+            "a deinflected uk match pays as before"
+        );
+
+        let mut stacked = free.clone();
+        stacked.grammatical_stack = true;
+        let mut stacked_charged = charged.clone();
+        stacked_charged.grammatical_stack = true;
+        assert_eq!(
+            cost(&stacked, Some(&b)),
+            cost(&stacked_charged, Some(&b)),
+            "a grammatical stack pays as before, whatever JMdict tags it"
+        );
+
+        let mut folded = free.clone();
+        folded.exact = false;
+        let mut folded_charged = charged.clone();
+        folded_charged.exact = false;
+        assert_eq!(
+            cost(&folded, Some(&b)),
+            cost(&folded_charged, Some(&b)),
+            "a kana-folded match is not the spelling JMdict called normal"
         );
     }
 
