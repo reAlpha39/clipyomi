@@ -681,6 +681,40 @@ fn insert(nodes: &mut Vec<Node>, suffix: &str, hit: TrieHit) {
     nodes[node].hits.push(hit);
 }
 
+/// The katakana small `ッ` read as the hiragana `っ` the conjugation table is
+/// written in; every other character unchanged.
+///
+/// The table's suffixes come from IPADIC and are hiragana, and `search`
+/// compared raw characters against them until 2026-09-22, so `イッた`,
+/// `行ッた` and `ワラッた` found no child one character into the tail and
+/// the whole word went unmatched, while `イった` with the hiragana one parsed.
+/// 1,860 occurrences of the shape in the ten-corpus probe pool.
+///
+/// Only the sokuon, and deliberately not [`crate::engine::kana::fold`]: the
+/// gemination mark takes the script of the character it geminates rather than
+/// of the suffix it belongs to, which is why it is the one character that
+/// leaks across the boundary -- `イッちゃう` writes the sokuon in katakana and
+/// leaves `ちゃう` in hiragana. Folding the whole trie was built and measured
+/// against the same ten corpora on the same day: over this one it changes
+/// another 1,076 sentences, and the 1,149 spans it gains there come out
+/// roughly one good to one bad. It reads `イケナイ` 130, `キツク` 107,
+/// `イカせて` 102 and `シて` 29 correctly -- and it also hands every katakana
+/// name and loanword a verb gloss it folded its way into: `タツヤ` as 立つ 104
+/// times, `ズン` as ずる 48, `トコ` as とく 31, `コレ` as 来る 28, `ネロ` as
+/// 寝る 11, `ユリナスです` severed into `ユリ` + `ナスです` 14. A confident
+/// wrong gloss on a character's name is worse than no gloss, and the spans
+/// below were already whole and merely unmatched. That is the exact trade
+/// Phase 1a's `katakana_conjugation_is_not_deinflected_yet` refused on 8
+/// sentences and could not price; it is priced now, and refused again on
+/// 131,847.
+fn hiragana_sokuon(c: char) -> char {
+    if c == 'ッ' {
+        'っ'
+    } else {
+        c
+    }
+}
+
 fn form_named(required: Option<&str>, class: ClassId, form: FormId) -> bool {
     match required {
         None => true,
@@ -813,6 +847,9 @@ impl Table {
     /// Walks one character at a time so every suffix length in between is
     /// tried, not just the longest match — 高かった's "かっ" and a bare
     /// "っ" terminate at different classes, and both are valid candidates.
+    ///
+    /// Each input character goes through [`hiragana_sokuon`] first; see that
+    /// function for why the sokuon alone, and not [`crate::engine::kana::fold`].
     fn search(
         &self,
         chars: &[char],
@@ -885,7 +922,10 @@ impl Table {
             if len >= budget || len >= end {
                 break;
             }
-            let Some(&next) = self.nodes[node].children.get(&chars[end - len - 1]) else {
+            let Some(&next) = self.nodes[node]
+                .children
+                .get(&hiragana_sokuon(chars[end - len - 1]))
+            else {
                 break;
             };
             node = next;

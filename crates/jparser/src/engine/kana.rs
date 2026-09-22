@@ -69,6 +69,27 @@ pub fn fold_str(s: &str) -> String {
     s.chars().map(fold).collect()
 }
 
+/// Fold `c` toward hiragana: [`fold`]'s target script inverted, for kana whose
+/// canonical spelling is hiragana.
+///
+/// A reading is hiragana by convention, and `assemble::reading_for` builds a
+/// conjugated one by concatenating a dictionary stem with the inflected tail
+/// **as the input wrote it**. Once `table::search` stopped caring which script
+/// the tail is written in, that tail can arrive in katakana -- 行ッた read as
+/// いッた -- and the furigana layer renders a reading verbatim in its hiragana
+/// mode. This puts the tail back in the script a reading is spelled in.
+///
+/// Identity on hiragana, on the prolonged sound mark and on everything that is
+/// not kana, so it cannot move a reading that was already right: the katakana
+/// range inverted here is exactly [`fold`]'s image of the hiragana block, and
+/// U+30F7..U+30FA and U+30FC sit outside it.
+pub fn to_hiragana(c: char) -> char {
+    match fold(c) {
+        k @ 'ァ'..='ヶ' => char::from_u32(k as u32 - 0x60).unwrap_or(k),
+        other => other,
+    }
+}
+
 /// CJK Unified Ideographs (U+4E00..=U+9FFF) or CJK Extension A
 /// (U+3400..=U+4DBF).
 pub fn is_kanji(c: char) -> bool {
@@ -146,6 +167,21 @@ mod tests {
     #[test]
     fn fullwidth_digits_fold_to_ascii() {
         assert_eq!(fold('２'), '2');
+    }
+
+    #[test]
+    fn to_hiragana_inverts_the_fold_and_leaves_the_rest_alone() {
+        assert_eq!(to_hiragana('ッ'), 'っ');
+        assert_eq!(to_hiragana('タ'), 'た');
+        assert_eq!(to_hiragana('ｯ'), 'っ', "halfwidth too, through fold");
+        assert_eq!(to_hiragana('っ'), 'っ', "identity on hiragana");
+        assert_eq!(
+            to_hiragana('ー'),
+            'ー',
+            "the prolonged mark is not a kana letter"
+        );
+        assert_eq!(to_hiragana('東'), '東');
+        assert_eq!(to_hiragana('a'), 'a');
     }
 
     #[test]
