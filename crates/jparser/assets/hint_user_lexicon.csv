@@ -180,3 +180,23 @@
 その日,1,1,-2078,名詞,一般,*,*,*,*,その日,その日
 なのに,1,1,-3200,名詞,一般,*,*,*,*,なのに,なのに
 へへ,1,1,-1131,名詞,一般,*,*,*,*,へへ,へへ
+#
+# もしかして, もしかしたら and もしかすると were added on 2026-09-22, from the
+# residue the `uk` cover exposed (2026-09-22 handoff). All three are `adv,uk`
+# entries JMdict holds whole; IPADIC cuts もしか off the front, and the engine
+# then reads もしか(若しか) + して. They are not the `[primary]` shape above --
+# the refusal is `lex::is_grammatical_stack`, which sees short COMMON pieces
+# and cannot see that the whole is an adverb, so no cost-model term reaches
+# them either. Measured over the ten corpora hints-on: 153 occurrences the
+# ta-old port emits whole and this engine split (もしかして 77 of 334,
+# もしかしたら 59 of 59, もしかすると 17 of 17); every gold cell in both hint
+# states identical to the digit; -4472 and -2078 both measured, identical but
+# for one もしかして occurrence.
+#
+# The price is 3 occurrences in 131,847 sentences, each of them a name beside
+# the new token: ナスカ becomes ナ|スカ twice and 早百合 becomes 早|百合 once,
+# because Vibrato's Viterbi is global -- the same effect the cap below exists
+# for. 153 against 3 is the trade なのに took.
+もしかして,83,71,-4472,副詞,一般,*,*,*,*,もしかして,もしかして
+もしかしたら,83,71,-4472,副詞,一般,*,*,*,*,もしかしたら,もしかしたら
+もしかすると,83,71,-4472,副詞,一般,*,*,*,*,もしかすると,もしかすると

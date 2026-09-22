@@ -244,11 +244,18 @@ mod tests {
     /// *particles* and that is exactly the tiling the surcharge is withheld
     /// from. A dead row is not free: the cap below exists because Vibrato's
     /// Viterbi is global.
+    ///
+    /// **85 -> 88 on 2026-09-22** for `もしかして`, `もしかしたら` and
+    /// `もしかすると`, the residue the `uk` cover exposed. Gates re-run: every
+    /// gold cell in both hint states identical to the digit, and the ten-corpus
+    /// A/B reads 153 occurrences recovered against 3 lost, all three a name
+    /// beside the new token. The globality this cap exists for is what those
+    /// three are.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 87,
-            "87 is the largest list measured to leave every gold cell alone"
+            user_lexicon_body().lines().count() <= 88,
+            "88 is the largest list measured to leave every gold cell alone"
         );
     }
 
