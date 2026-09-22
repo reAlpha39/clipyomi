@@ -251,11 +251,20 @@ mod tests {
     /// A/B reads 153 occurrences recovered against 3 lost, all three a name
     /// beside the new token. The globality this cap exists for is what those
     /// three are.
+    ///
+    /// **88 -> 93 the same day** for `いない`, `できない`, `できなかった`,
+    /// `できず` and `よさそう` -- the first inflected forms here, and the first
+    /// rows to move a gold cell rather than hold it: hints-on strict 1694 ->
+    /// 1696 and tolerant 1948 -> 1950, hints-off identical, snapshot identical.
+    /// The ten-corpus A/B reads 832 occurrences recovered against about a dozen
+    /// lost. The cap is still a measured number, not a budget: the sixth row
+    /// considered (a protective `もったいない`) was left out precisely because
+    /// it had not been through that A/B.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 88,
-            "88 is the largest list measured to leave every gold cell alone"
+            user_lexicon_body().lines().count() <= 93,
+            "93 is the largest list measured against every gold cell"
         );
     }
 

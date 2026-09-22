@@ -544,6 +544,22 @@ fn the_user_lexicon_keeps_a_word_ipadic_splits() {
         "もしかしたら | 、"
     );
 
+    // `いない`, added the same day, is the row with a mechanism of its own:
+    // IPADIC holds いる whole but splits い|ない, so `はい`("yes") could end
+    // inside the negative and swallow the topic particle. Holding いない whole
+    // is what makes `cost::is_allowed` refuse that span.
+    let inai = boundaries_over("俺はいない");
+    assert!(
+        jparser::engine::Boundaries::is_boundary(&inai, 2),
+        "俺 | は"
+    );
+    for p in 3..5 {
+        assert!(
+            !jparser::engine::Boundaries::is_boundary(&inai, p),
+            "position {p} is interior to いない and must not be a cut"
+        );
+    }
+
     // Deliberately no parse assertion. The word is JMdict's, so checking the
     // segmentation would need the real 218k index, which CI does not have --
     // and the boundary set above *is* the mechanism: `cost::is_allowed` will

@@ -200,3 +200,48 @@
 もしかして,83,71,-4472,副詞,一般,*,*,*,*,もしかして,もしかして
 もしかしたら,83,71,-4472,副詞,一般,*,*,*,*,もしかしたら,もしかしたら
 もしかすると,83,71,-4472,副詞,一般,*,*,*,*,もしかすると,もしかすると
+#
+# The five below are the first *inflected* forms on this list, added 2026-09-22
+# after the もしか rows, and they are here because `cost.rs` provably cannot
+# reach them. A `uk` entry written in kana is PRONOUNCE-only, so every
+# tokenizer cut interior to it costs `PRONOUNCE_CROSS`; the exemption that
+# waives it requires an empty deinflection chain, and these all have one.
+# Widening the exemption to inflected forms was measured and refused on
+# 2026-09-18 (`はこう`→履く, `ことし`→今年), and gating that widening on `uk`
+# does not separate it either -- `ももう`→揉む, `のか`→退く and `たまん`→溜まる
+# are all `uk`, all inflected and all three characters.
+#
+# IPADIC is the asymmetry. It holds いる whole, so `は`+`いる` is cut correctly
+# 35 times in 38; it splits `い`+`ない`, so `はい`(yes)+`ない` wins 82 times in
+# 83 and the reader is shown "yes" for a topic particle. Teaching it いない
+# makes the negative behave like the positive. Gold merges 一段+ない (食べない,
+# いない), so this is the project's own standard, not TA's.
+#
+# Measured over ten corpora, 131,847 sentences, hints-on: 847 sentences change
+# (0.64%), 832 occurrences recovered -- いない 333, できない 295, よさそう 122,
+# できなかった 60, できず 22 -- and `はい` is gone from all 83 of its swallows.
+# Gold *gains*: strict 1694 -> 1696, tolerant 1948 -> 1950, entry top-1 0.9527
+# -> 0.9528, compounds and every hints-off cell identical. The curated snapshot
+# is byte-identical.
+#
+# The price is about a dozen occurrences: `もったいないでしょ` becomes
+# `もった|いないでしょ` 3 times, `のに` splits twice beside もったいない, the
+# open `イっていない` row splits twice, and `気持ちよさそうなお顔` reads
+# `なお|顔` twice. A protective もったいない row fixes the first and is *not*
+# here, because it was not measured on the corpus and this list's rule is that
+# every row is.
+#
+# The hazard to know about: いない forced as a token breaks a kana な-adjective
+# ending in い before a word starting with い -- `きれいないろ` reads
+# `きれ|いない|ろ`. Zero occurrences in 131,847 sentences of this register, and
+# `けんめいないのり` and `しずかないい人` both stay correct, but the shape is
+# real and a different register could carry it.
+#
+# よさそう is at -5878 rather than -3200 because -3200 loses `気持ちよさそう`,
+# which IPADIC cuts `気持ちよ|さ|そう`; the stronger cost wins the whole
+# 122 occurrences including that shape.
+いない,1,1,-3200,名詞,一般,*,*,*,*,いない,いない
+できない,1,1,-3200,名詞,一般,*,*,*,*,できない,できない
+できなかった,1,1,-3200,名詞,一般,*,*,*,*,できなかった,できなかった
+できず,1,1,-3200,名詞,一般,*,*,*,*,できず,できず
+よさそう,1,1,-5878,名詞,一般,*,*,*,*,よさそう,よさそう
