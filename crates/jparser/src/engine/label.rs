@@ -75,6 +75,11 @@ const AUX_WORD: &[(&str, &str)] = &[
     ("じゃう", "Completive"),
     ("ちまう", "Completive"),
     ("じまう", "Completive"),
+    // The godan potential (`読めた`), whose `ATTACHES_TO` lemma is a bare `る`
+    // over the godan's own 仮定形 -- see that row. Not "Passive/Potential":
+    // 読める cannot be a passive, which is exactly what れる/られる cannot rule
+    // out and this can.
+    ("る", "Potential"),
 ];
 
 /// One word from the outermost step's 活用形 (design §3.2). A form not
