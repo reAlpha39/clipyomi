@@ -26,7 +26,7 @@
 
 use crate::engine::flags::WordFlags;
 use crate::engine::kana;
-use crate::engine::lex::Candidate;
+use crate::engine::lex::{is_copula_desu_chain, Candidate};
 use crate::engine::Boundaries;
 
 /// Cost of using a match at all, charged once per span regardless of length.
@@ -620,10 +620,23 @@ const INEXACT: i32 = 8;
 ///
 /// With `bounds == None` every constraint lifts: the engine must still work
 /// with no tokenizer at all.
+///
+/// **One exception needs the tokenizer rather than being lifted by its
+/// absence: the copula conjugating as its own headword** (`でした`, see
+/// `lex::is_copula_desu_chain`). `で` + `した` is also the particle and する's
+/// past -- `ここでした`, "did it here" -- and nothing in the dictionary tells
+/// them apart, but IPADIC does: over twelve corpora it keeps `でし` one token in
+/// 504 `でした` and cuts `で|し` in 20, and those 20 are the particle. So the
+/// chain is allowed only where a tokenizer ran and did not cut there, and
+/// hints-off it never exists.
 pub fn is_allowed(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> bool {
+    let copula = is_copula_desu_chain(cand);
     let Some(bounds) = bounds else {
-        return true;
+        return !copula;
     };
+    if copula && bounds.is_boundary(cand.start + 1) {
+        return false;
+    }
     bounds.is_usable_endpoint(cand.start) && bounds.is_usable_endpoint(cand.start + cand.len)
 }
 
@@ -1147,6 +1160,53 @@ mod tests {
     #[test]
     fn every_constraint_lifts_when_there_is_no_tokenizer() {
         assert!(is_allowed(&cand(1, 2, WordFlags::PRIMARY, true), None));
+    }
+
+    /// `雨でした`: the copula's own chain exists only where a tokenizer ran
+    /// and kept でし one token -- IPADIC's call between the copula and
+    /// `で` + する, which nothing in the dictionary can make.
+    #[test]
+    fn the_copula_chain_needs_the_tokenizer_to_keep_deshi_whole() {
+        use crate::engine::table::CLASSES;
+        let class = |name: &str| {
+            CLASSES.iter().position(|c| c.name == name).expect("class") as crate::engine::ClassId
+        };
+        let form = |c: crate::engine::ClassId, name: &str| {
+            CLASSES[c as usize]
+                .forms
+                .iter()
+                .position(|f| f.name == name)
+                .expect("form") as crate::engine::FormId
+        };
+        let (desu, ta) = (class("特殊・デス"), class("特殊・タ"));
+        let mut copula = cand(1, 3, WordFlags::PRIMARY, true);
+        copula.steps = vec![
+            ConjStep {
+                class: desu,
+                form: form(desu, "連用形"),
+                range: 2..3,
+                aux: None,
+            },
+            ConjStep {
+                class: ta,
+                form: form(ta, "基本形"),
+                range: 3..4,
+                aux: Some("た"),
+            },
+        ];
+        assert!(
+            is_allowed(&copula, Some(&At(&[0, 1, 3, 4]))),
+            "雨|でし|た: IPADIC kept でし whole, the copula"
+        );
+        assert!(
+            !is_allowed(&copula, Some(&At(&[0, 1, 2, 3, 4]))),
+            "雨|で|し|た: the particle and する"
+        );
+        assert!(!is_allowed(&copula, None), "no tokenizer, no copula chain");
+        assert!(
+            is_allowed(&cand(1, 3, WordFlags::PRIMARY, true), None),
+            "every other candidate still lifts without one"
+        );
     }
 
     #[test]
