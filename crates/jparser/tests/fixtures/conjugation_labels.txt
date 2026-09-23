@@ -191,21 +191,19 @@
 読んだろ	五段・マ行:連用タ接続 だ:未然形	Past
 書いて	五段・カ行イ音便:連用タ接続 て:基本形	Te-form
 読んで	五段・マ行:連用タ接続 で:基本形	Te-form
-# です/じゃ/や attach to 基本形, so their depth-1 surfaces read as nonstandard
-# Japanese (食べるです, 食べるじゃ). They are the chains the table generates for
-# these lemmas; table.rs's ATTACHES_TO doc records that the じゃ/や rows never
-# fire on real text at all.
+# です attaches to 基本形, so its depth-1 surfaces read as nonstandard
+# Japanese on an ichidan verb (食べるです). They are the chains the table
+# generates for the lemma.
 # 食べるでしょ (です:未然形) was a row here until 2026-09-23, when table.rs
 # blocked that form: nothing could follow it, so it only ever left a lone う
 # behind 〜でしょう. Removed with the block, not quietly.
 食べるです	一段:基本形 です:基本形	Polite
 食べるでし	一段:基本形 です:連用形	Polite
-食べるじゃ	一段:基本形 じゃ:基本形	Copula
-食べるじゃろ	一段:基本形 じゃ:未然形	Copula
-食べるじゃっ	一段:基本形 じゃ:連用形	Copula
-食べるや	一段:基本形 や:基本形	Copula
-食べるやろ	一段:基本形 や:未然形	Copula
-食べるやっ	一段:基本形 や:連用形	Copula
+# The six じゃ/や rows that followed (食べるじゃ, 食べるじゃろ, 食べるじゃっ,
+# 食べるや, 食べるやろ, 食べるやっ) went with those ATTACHES_TO rows on
+# 2026-09-23: they fired on real text after every 基本形, the te-form's て
+# included (そうやって as 沿う Copula Te-form), so they were removed, not
+# quietly.
 
 # --- Part C: curated, depth 2-6. Every override and the Polite dedup, the
 # --- corpus's deepest chain, and one row per remaining mapped class. An
