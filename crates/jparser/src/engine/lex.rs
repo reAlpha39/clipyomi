@@ -237,7 +237,7 @@ pub fn candidates(
                     .chain(remove.chars())
                     .collect();
                 for record in &records {
-                    if !allows_chain(index, &mut class_cache, record, hit.stem_class)? {
+                    if !allows_chain(index, &mut class_cache, record, hit)? {
                         continue;
                     }
                     found.push((
@@ -582,11 +582,20 @@ fn allows_chain(
     index: &Index,
     cache: &mut HashMap<u32, Vec<ClassId>>,
     record: &StoredRecord,
-    stem_class: Option<ClassId>,
+    hit: &ChainHit,
 ) -> Result<bool, IndexError> {
-    let Some(class) = stem_class else {
+    let Some(class) = hit.stem_class else {
         return Ok(true);
     };
+    // The copula conjugates in no class its POS names (`cop` maps to none, see
+    // `table::POS_WITHOUT_A_CLASS`), so this is settled by the lemma instead.
+    if CLASSES[class as usize].name == COPULA_DESU_CLASS {
+        return Ok(record.surface == "です"
+            && is_desu_past(&hit.steps)
+            && index
+                .entry(record.entry_id)?
+                .is_some_and(|e| e.senses.iter().any(|s| s.pos.iter().any(|p| p == "cop"))));
+    }
     // Before the entry's own POS is consulted, because this one is settled by
     // the headword alone: カ変・来ル removes る, so a kana `vk` headword
     // satisfies it by accident and deinflects over 取ってく rather than
@@ -608,6 +617,34 @@ fn allows_chain(
     let allowed = classes.contains(&class);
     cache.insert(record.entry_id, classes);
     Ok(allowed)
+}
+
+/// The copula's own class. A noun has no conjugation, so `雨でした` has no
+/// chain to reach through the `です` auxiliary row (which follows a 基本形);
+/// until 2026-09-23 it read 雨 | でし | た, glossed "pupil; disciple" and "want
+/// to do" -- 231 spans over twelve visual-novel corpora, hints on.
+const COPULA_DESU_CLASS: &str = "特殊・デス";
+
+/// Whether `steps` is the copula's 連用形 with the past `た` on it and nothing
+/// else -- でした, でしたら, でしたろ. Every other auxiliary on でし is refused,
+/// because `で` + `し` is far more often the particle and する: IPADIC itself
+/// tokenizes `みんなでしたい` as the copula, and the want-to form of です is
+/// not Japanese. `でして` is refused for the same reason on the corpus, where
+/// `口でして` and `奥底でしている` are the particle in half the IPADIC-copula
+/// readings.
+fn is_desu_past(steps: &[ConjStep]) -> bool {
+    matches!(steps, [own, past]
+        if CLASSES[own.class as usize].forms[own.form as usize].name == "連用形"
+            && past.aux == Some("た"))
+}
+
+/// Whether `cand` is the copula conjugating as its own headword -- the one
+/// chain [`allows_chain`] admits through [`COPULA_DESU_CLASS`]. `cost` gates
+/// it on the tokenizer: see `cost::is_allowed`.
+pub fn is_copula_desu_chain(cand: &Candidate) -> bool {
+    cand.steps
+        .first()
+        .is_some_and(|s| CLASSES[s.class as usize].name == COPULA_DESU_CLASS)
 }
 
 /// Every conjugation class any sense of `entry` maps to, deduplicated. Mirrors
@@ -718,6 +755,46 @@ mod tests {
             after_digit_noncounter: false,
             headword: headword.to_string(),
         }
+    }
+
+    /// The copula conjugates as its own headword only as でし + た; the rest
+    /// of what IPADIC would let follow でし is far more often `で` + する.
+    #[test]
+    fn only_the_copulas_past_reaches_desu() {
+        let class =
+            |name: &str| CLASSES.iter().position(|c| c.name == name).expect("class") as ClassId;
+        let form = |c: ClassId, name: &str| {
+            CLASSES[c as usize]
+                .forms
+                .iter()
+                .position(|f| f.name == name)
+                .expect("form") as crate::engine::FormId
+        };
+        let desu = class("特殊・デス");
+        let step = |class: ClassId, form_name: &str, aux: Option<&'static str>| ConjStep {
+            class,
+            form: form(class, form_name),
+            range: 0..0,
+            aux,
+        };
+        let deshi = step(desu, "連用形", None);
+        let ta = step(class("特殊・タ"), "基本形", Some("た"));
+        let te = step(class("不変化型"), "基本形", Some("て"));
+        let tai = step(class("特殊・タイ"), "基本形", Some("たい"));
+        assert!(is_desu_past(&[deshi.clone(), ta.clone()]), "でした");
+        assert!(
+            !is_desu_past(&[deshi.clone(), te]),
+            "口でして is the particle"
+        );
+        assert!(
+            !is_desu_past(&[deshi.clone(), tai]),
+            "みんなでしたい is the particle"
+        );
+        assert!(!is_desu_past(std::slice::from_ref(&deshi)), "a bare でし");
+        assert!(
+            !is_desu_past(&[step(desu, "未然形", None), ta]),
+            "でしょ + た"
+        );
     }
 
     /// One entry, two kana headwords, one span: `イチャイチャ` and
