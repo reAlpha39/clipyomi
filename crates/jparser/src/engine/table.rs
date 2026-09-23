@@ -595,6 +595,38 @@ fn chain_blocked(lemma: &str, outer_form: &str, inner: &str) -> bool {
         .any(|&(l, f, i)| l == lemma && (f == "*" || f == outer_form) && i == inner)
 }
 
+/// The classes whose 連用タ接続 onbin voices the auxiliary after it: 泳いだ,
+/// 死んで, 遊んだ, 読んで. Every other class with a 連用タ接続 takes it
+/// unvoiced -- 書いた, 行った, 待って, 買った, 問うた, 高かった, なかった.
+///
+/// `ATTACHES_TO` names the attachment site by form alone, so until 2026-09-23
+/// `で` and `だ` attached to *any* 連用タ接続, and 五段・カ行イ音便's is a bare
+/// `い`. `ない` is な + い, and な + く is JMdict's 泣く/鳴く/無く, so
+/// `しないでください` read `ないで` as 泣く **Te-form** and `わけないだろう` read
+/// `ないだろ` as 泣く **Past** -- a confident wrong verb on two of the commonest
+/// phrases in dialogue. Twelve visual-novel corpora, 151,225 sentences,
+/// hints on: 645 such spans in 641 sentences, 317 `ないで` and 226 `ないだろ`,
+/// then `せいだ` as せく "to hurry" (26) and `おいで` as 置く (23). The unvoiced
+/// half is the same rule read the other way: `ないた` is not 凪ぐ's past.
+const VOICED_ONBIN: &[&str] = &["五段・ガ行", "五段・ナ行", "五段・バ行", "五段・マ行"];
+
+/// Whether an auxiliary attaching at 連用タ接続 agrees in voicing with the
+/// class it attaches to. Keyed on the auxiliary's first kana, which is where
+/// the voicing is written: だ, で, でる, でいる, じゃう, じまう and the other
+/// `で`-auxiliaries against た, て, てる, ている, ちゃう, ちまう and theirs. Any
+/// other attachment site, or any lemma starting elsewhere, is unconstrained.
+fn onbin_voicing_agrees(lemma: &str, requires: &str, inner_class: ClassId) -> bool {
+    if requires != "連用タ接続" {
+        return true;
+    }
+    let voiced = match lemma.chars().next() {
+        Some('だ' | 'で' | 'じ') => true,
+        Some('た' | 'て' | 'ち') => false,
+        _ => return true,
+    };
+    voiced == VOICED_ONBIN.contains(&CLASSES[inner_class as usize].name)
+}
+
 const AUX_FORM_BLOCK: &[(&str, &str)] = &[
     ("てる", "命令ｙｏ"),
     ("てる", "未然ウ接続"),
@@ -904,6 +936,14 @@ impl Table {
                             // that is what keeps `食べな` and `行かねば` alive.
                             if let Some(inner) = sub.steps.last().and_then(|s| s.aux) {
                                 if chain_blocked(lemma, outer_form, inner) {
+                                    continue;
+                                }
+                            }
+                            // Every sub-chain carries at least the step that
+                            // satisfied `requires`, whether a headword's own
+                            // form or another auxiliary's.
+                            if let Some(inner) = sub.steps.last() {
+                                if !onbin_voicing_agrees(lemma, requires, inner.class) {
                                     continue;
                                 }
                             }
@@ -1327,6 +1367,43 @@ mod tests {
         let c = chars("書いた");
         let hits = table().chains_ending_at(&c, 3, 8);
         assert!(hits.iter().any(|h| key(&c, h) == "書く"), "書いた -> 書く");
+    }
+
+    #[test]
+    fn an_onbin_takes_the_auxiliary_voicing_its_class_demands() {
+        let reaches = |surface: &str, lemma: &str| {
+            let c = chars(surface);
+            table()
+                .chains_ending_at(&c, c.len(), 8)
+                .iter()
+                .any(|h| key(&c, h) == lemma)
+        };
+        // The defect: な + い is 泣く's 連用タ接続, which takes た and て, so
+        // neither of these is 泣く.
+        assert!(
+            !reaches("ないで", "なく"),
+            "しないでください is not 泣く Te-form"
+        );
+        assert!(
+            !reaches("ないだろ", "なく"),
+            "わけないだろう is not 泣く Past"
+        );
+        // The other direction: an unvoiced auxiliary on a voiced onbin.
+        assert!(!reaches("泳いた", "泳ぐ"), "泳ぐ's past is 泳いだ");
+        assert!(!reaches("読んた", "読む"), "読む's past is 読んだ");
+        // Controls: every pairing the language does have still deinflects.
+        for (surface, lemma) in [
+            ("泳いで", "泳ぐ"),
+            ("読んだ", "読む"),
+            ("遊んでる", "遊ぶ"),
+            ("死んじゃう", "死ぬ"),
+            ("書いて", "書く"),
+            ("泣いた", "泣く"),
+            ("行っちゃった", "行く"),
+            ("高かった", "高い"),
+        ] {
+            assert!(reaches(surface, lemma), "{surface} -> {lemma}");
+        }
     }
 
     #[test]
