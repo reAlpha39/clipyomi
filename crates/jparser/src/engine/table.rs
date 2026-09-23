@@ -670,6 +670,34 @@ pub fn is_godan_potential(steps: &[ConjStep]) -> bool {
     steps.get(1).is_some_and(|s| s.aux == Some(POTENTIAL))
 }
 
+/// The potential's zero-width 連用形 on `inner`, the step [`Table::search`]
+/// pushes under an auxiliary, or `None` where the potential cannot attach:
+/// `inner` must be a headword's own godan 仮定形.
+///
+/// `search` never ends a chain on a zero-width step, so `帰れ|そう` reaches
+/// 帰る only as its bare 仮定形, "Conditional"; the text after the span is
+/// what says the e-row kana is the potential's stem, and only
+/// `assemble::to_segment` has it. See `assemble::attaches_to_a_masu_stem`.
+pub fn potential_stem_on(inner: &ConjStep) -> Option<ConjStep> {
+    if CLASSES[inner.class as usize].forms[inner.form as usize].name != "仮定形"
+        || !potential_attaches(POTENTIAL, inner)
+    {
+        return None;
+    }
+    let (class, form) = CLASSES.iter().enumerate().find_map(|(c, class)| {
+        (class.name == "一段")
+            .then(|| class.forms.iter().position(|f| f.name == "連用形"))
+            .flatten()
+            .map(|f| (c as ClassId, f as FormId))
+    })?;
+    Some(ConjStep {
+        class,
+        form,
+        range: inner.range.end..inner.range.end,
+        aux: Some(POTENTIAL),
+    })
+}
+
 /// Whether `lemma` may attach to `inner`: anything but the potential may, and
 /// the potential only to a headword's own godan 仮定形 -- never カ変's `くれ`,
 /// never an auxiliary's 仮定形.

@@ -21,8 +21,11 @@ use crate::engine::flags::WordFlags;
 use crate::engine::kana;
 use crate::engine::label;
 use crate::engine::lattice::Step;
-use crate::engine::lex::Candidate;
-use crate::engine::table::{classes_for_pos, is_godan_potential, Class, CLASSES, KURU_KANJI_CLASS};
+use crate::engine::lex::{potential_allowed, Candidate};
+use crate::engine::table::{
+    classes_for_pos, is_godan_potential, potential_stem_on, Class, CLASSES, KURU_KANJI_CLASS,
+};
+use crate::engine::ConjStep;
 use crate::index::load::Index;
 use crate::index::{EntryData, IndexError, SenseData};
 use crate::{Entry, Segment};
@@ -88,17 +91,28 @@ pub fn to_segment(
     // 太る, 重る and 鈍る are no better a gloss than the adjective.
     let stem_attached =
         attaches_to_a_stem(&chars[start + len..]) || !kana::is_kana(chars[start + len - 1]);
+    // `帰れ|そう`: see `attaches_to_a_masu_stem`.
+    let masu_stem_next = attaches_to_a_masu_stem(&chars[start + len..]);
 
     // Entries are resolved *before* ordering, because the last clause of the
     // key is the entry's own sense count and every candidate in the group was
     // going to be resolved anyway -- so this costs nothing it did not already
     // pay.
     let mut built: Vec<(Candidate, Entry)> = Vec::with_capacity(group.len());
-    for c in group {
-        let entry = build_entry(index, chars, &c)?;
+    for mut c in group {
+        let mut entry = build_entry(index, chars, &c)?;
+        if masu_stem_next {
+            // The steps and the label change; the reading is rebuilt from the
+            // first step, which does not, so it needs no second look-up.
+            if let Some(stem) = potential_stem(&c, &entry) {
+                c.steps.push(stem);
+                entry.steps = chain::steps_for(&c);
+                entry.conjugation = label::fmt(&entry.steps);
+            }
+        }
         built.push((c, entry));
     }
-    order(&mut built, prev_is_digit, stem_attached);
+    order(&mut built, prev_is_digit, stem_attached, masu_stem_next);
     let entries: Vec<Entry> = built.into_iter().map(|(_, e)| e).collect();
 
     let reading = entries[0].reading.clone();
@@ -140,7 +154,9 @@ fn usually_kana(entry: &Entry) -> bool {
 ///
 /// In sequence: an exact surface match before one only reached by folding
 /// kana together; any other reading before a godan potential, with one
-/// exception (see [`potential_yields`]); a `COMMON`-priority headword before
+/// exception (see [`potential_yields`]) -- and, **when the text after the span
+/// is what a 連用形 takes**, any verb before a potential and any reading
+/// before a bare 仮定形 (see [`stem_yields`]); a `COMMON`-priority headword before
 /// a rarer one; a
 /// `COUNTER` entry before the rest **when the character before the span is a
 /// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
@@ -207,14 +223,28 @@ fn usually_kana(entry: &Entry) -> bool {
 /// candidates with the same entry but *different* chains -- and therefore
 /// different `Entry::conjugation` labels -- could tie on every key above and
 /// still be visibly different in the output.
-pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool, stem_attached: bool) {
+pub fn order(
+    built: &mut [(Candidate, Entry)],
+    prev_is_digit: bool,
+    stem_attached: bool,
+    masu_stem_next: bool,
+) {
     let non_verb_here = built
         .iter()
         .any(|(c, e)| !is_godan_potential(&c.steps) && !is_verb(e));
+    // Asked only where `stem_yields` reads it: `is_verb` walks every sense.
+    let verb_here = masu_stem_next
+        && built
+            .iter()
+            .any(|(c, e)| !is_godan_potential(&c.steps) && !is_bare_conditional(c) && is_verb(e));
     built.sort_unstable_by_key(|(c, e)| {
         (
             !c.exact,
-            potential_yields(c, e, non_verb_here),
+            if masu_stem_next {
+                stem_yields(c, e, verb_here)
+            } else {
+                potential_yields(c, e, non_verb_here)
+            },
             !c.flags.contains(WordFlags::COMMON),
             !(prev_is_digit && c.flags.contains(WordFlags::COUNTER)),
             !c.flags.contains(WordFlags::PARTICLE),
@@ -247,9 +277,103 @@ pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool, stem_attache
 /// as とく (55 spans) and `捲れる` as 捲る Potential. Every other potential
 /// yields: とけた is 溶ける before 解く Potential.
 fn potential_yields(c: &Candidate, e: &Entry, non_verb_here: bool) -> bool {
-    let aux_verb = e.senses.iter().any(|s| s.pos.iter().any(|p| p == "aux-v"));
-    is_godan_potential(&c.steps)
-        && (non_verb_here || !aux_verb || !c.flags.contains(WordFlags::PRONOUNCE))
+    is_godan_potential(&c.steps) && (non_verb_here || !is_kana_aux_verb(c, e))
+}
+
+/// [`potential_yields`] for a span before text that only a 連用形 or 未然形
+/// takes ([`attaches_to_a_masu_stem`]), where two things differ.
+///
+/// A bare 仮定形 is no reading there at all -- it stands only before ば -- so
+/// it yields to everything, whichever class it is: `くれ|そう` is くれる, not
+/// 来る "Conditional". Its godan siblings have become the potential's stem
+/// ([`potential_stem`]) and are ranked as potentials. And a word that is not a
+/// verb cannot take そう or ながら either, so there a potential yields only to
+/// another verb: `帰れ|そう` is 帰る Potential rather than JMdict's `帰れ`,
+/// "go home", which `potential_yields` would put first, while `赤らめ|ながら`
+/// is still 赤らめる and not 赤らむ Potential. The `aux-v` exception stands.
+fn stem_yields(c: &Candidate, e: &Entry, verb_here: bool) -> bool {
+    is_bare_conditional(c) || (is_godan_potential(&c.steps) && verb_here && !is_kana_aux_verb(c, e))
+}
+
+/// The kana reading of a JMdict `aux-v` verb: [`potential_yields`]' exception.
+fn is_kana_aux_verb(c: &Candidate, e: &Entry) -> bool {
+    c.flags.contains(WordFlags::PRONOUNCE)
+        && e.senses.iter().any(|s| s.pos.iter().any(|p| p == "aux-v"))
+}
+
+/// Whether `cand`'s whole chain is one bare 仮定形, the form that stands
+/// only before ば.
+///
+/// Not the imperative, although a godan's shares its kana: `lex` keeps one
+/// chain per `(len, entry_id)`, and where a 連用形 and an imperative spell the
+/// same kana the survivor can be the imperative -- 呉れる's `くれ` is 一段・クレル
+/// 命令ｅ -- so demoting it demoted the only reading くれる had, and `くれ|そう`
+/// read 暮れ "sunset" first. A godan's 命令ｅ never survives over its 仮定形.
+fn is_bare_conditional(cand: &Candidate) -> bool {
+    matches!(cand.steps.as_slice(), [only]
+        if only.aux.is_none()
+            && CLASSES[only.class as usize].forms[only.form as usize].name == "仮定形")
+}
+
+/// The potential's zero-width 連用形, to push onto `cand` when it is a bare
+/// godan 仮定形 whose entry `lex` would let the potential reach
+/// ([`potential_allowed`]); `None` otherwise.
+fn potential_stem(cand: &Candidate, entry: &Entry) -> Option<ConjStep> {
+    let [only] = cand.steps.as_slice() else {
+        return None;
+    };
+    if !potential_allowed(&entry.senses, cand.flags) {
+        return None;
+    }
+    potential_stem_on(only)
+}
+
+/// What follows a verb's 連用形 or 未然形 and never its 仮定形, by the text
+/// right after the span, among what the table does not chain: 様態 そう, ながら,
+/// つつ, すぎる, まくる, 始める and 続ける, the particle たり, ちゃ (ては), and
+/// なく where なくなる is a span of its own.
+///
+/// The godan potential's 連用形 and 未然形 are empty, and `table::search` never
+/// ends a chain on an empty step, so `帰れそう` reaches 帰る only as its bare
+/// 仮定形 and read "Conditional". Before this text the e-row kana is the
+/// potential's stem and nothing else. The same span is where JMdict's 一段
+/// verbs were shown *after* a godan homograph's bare 仮定形 -- `赤らめ|ながら`
+/// read 赤らむ "Conditional" and `照れ|ながら` 照る -- because the two tied on
+/// every clause down to the sense count.
+///
+/// **Why here and not in the table.** Admitting the bound chain -- letting
+/// `search` end on the zero-width step when this text follows -- was the
+/// other way, and it would change nothing but the label: the chain has the
+/// same span, the same flags and the same interior as the bare 仮定形, so
+/// `cost` prices the two identically and no boundary can move. It would also
+/// collapse into the bare 仮定形 in `lex::dedup_shallowest`, which keeps the
+/// shallower chain for a `(len, entry_id)`, so it needs an exception there
+/// too, and it still could not reorder the 一段 readings above. The judgment
+/// is one about display, keyed on the text after the span, which is
+/// [`is_bare_stem`]'s shape.
+///
+/// **Measured 2026-09-23** over twelve visual-novel corpora (151,225
+/// sentences): no span moves in either state; 440 sentences change their first
+/// entry or label hints on and 494 hints off. Adjudicated by key, 379 spans
+/// are repaired hints on and 398 hints off, against 14 and 23 newly wrong --
+/// each a potential giving way to another verb's chain or a noun where the
+/// potential was meant: `出せ|そう` as 出る "Causative" (the table lets せる
+/// attach to 一段's empty 未然形, which the language does not do), `止まれ` as
+/// 止む, `擦れ|まくって` as the noun 擦れ.
+fn attaches_to_a_masu_stem(rest: &[char]) -> bool {
+    matches!(
+        rest,
+        ['そ', 'う', ..]
+            | ['な', 'が', 'ら', ..]
+            | ['つ', 'つ', ..]
+            | ['す' | '過', 'ぎ', ..]
+            | ['ま', 'く', ..]
+            | ['始', 'め', ..]
+            | ['続', 'け', ..]
+            | ['た', 'り', ..]
+            | ['ち', 'ゃ', ..]
+            | ['な', 'く', ..]
+    )
 }
 
 /// Whether some sense of `e` is a verb: a POS that conjugates in a class that
@@ -700,7 +824,7 @@ mod tests {
             order_candidate(1, false, WordFlags::PRIMARY, 0),
             order_candidate(2, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the exact match sorts first despite the higher entry_id"
@@ -724,7 +848,7 @@ mod tests {
 
         // `1969|年`: the digit is there, so the counter wins despite its id.
         let mut after_digit = build();
-        order(&mut after_digit, true, false);
+        order(&mut after_digit, true, false, false);
         assert_eq!(
             after_digit[0].0.entry_id, 2,
             "after a digit the counter sorts first"
@@ -732,7 +856,7 @@ mod tests {
 
         // `去|年`: no digit, so the clause must not fire and the id decides.
         let mut elsewhere = build();
-        order(&mut elsewhere, false, false);
+        order(&mut elsewhere, false, false, false);
         assert_eq!(
             elsewhere[0].0.entry_id, 1,
             "without the digit the counter has no claim and entry_id decides"
@@ -750,7 +874,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not a particle, smaller id
             order_candidate(2, true, particle, 0),           // particle, larger id
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the particle sorts first despite the higher entry_id"
@@ -770,7 +894,7 @@ mod tests {
             order_candidate(9, true, counter, 0), // counter *and* particle, not COMMON
             order_candidate(1, true, common, 0),  // COMMON only
         ];
-        order(&mut cands, true, false);
+        order(&mut cands, true, false, false);
         assert_eq!(
             cands[0].0.entry_id, 1,
             "a COMMON headword outranks a counter even after a digit"
@@ -797,7 +921,7 @@ mod tests {
             with_senses(1391500, true, WordFlags::PRONOUNCE, 2, 1),
             with_senses(1578850, true, WordFlags::PRONOUNCE, 2, 12),
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 1578850,
             "the 12-sense entry sorts first despite the higher entry_id"
@@ -811,7 +935,7 @@ mod tests {
             with_senses(2, true, WordFlags::PRONOUNCE, 0, 12),
             with_senses(1, true, common, 0, 1),
         ];
-        order(&mut mixed, false, false);
+        order(&mut mixed, false, false, false);
         assert_eq!(
             mixed[0].0.entry_id, 1,
             "COMMON still outranks the sense count"
@@ -851,7 +975,7 @@ mod tests {
         // to be visible one clause further down: the `uk` entry carries more
         // senses, which is only ever consulted once PRONOUNCE has tied.
         let mut cands = vec![with_senses(1, true, WordFlags::PRIMARY, 0, 1), uk(2, 2)];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "a `uk` reading is not a fallback, so the clause ties and the sense count decides"
@@ -863,7 +987,7 @@ mod tests {
             with_senses(1, true, WordFlags::PRIMARY, 0, 1),
             with_senses(2, true, WordFlags::PRONOUNCE, 0, 2),
         ];
-        order(&mut plain, false, false);
+        order(&mut plain, false, false, false);
         assert_eq!(
             plain[0].0.entry_id, 1,
             "without `uk` the clause still demotes the reading"
@@ -878,7 +1002,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not COMMON, smaller id
             order_candidate(2, true, common, 0),             // COMMON, larger id
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the COMMON match sorts first despite the higher entry_id"
@@ -891,7 +1015,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRONOUNCE, 0), // smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0),   // larger id
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the PRIMARY match sorts first despite the higher entry_id"
@@ -930,14 +1054,14 @@ mod tests {
             (stem.clone(), stem_entry.clone()),
             (past.clone(), past_entry.clone()),
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "する Past sorts before したい's bare stem despite the deeper chain and higher id"
         );
         // したそう / したがる: the stem is the word, and the clause stands down.
         let mut attached = vec![(past, past_entry), (stem, stem_entry)];
-        order(&mut attached, false, true);
+        order(&mut attached, false, true, false);
         assert_eq!(
             attached[0].0.entry_id, 1,
             "before そう the bare stem is the reading"
@@ -1006,7 +1130,7 @@ mod tests {
         };
         let common = |f: WordFlags| WordFlags(f.0 | WordFlags::COMMON.0);
         let winner = |mut cands: Vec<(Candidate, Entry)>| {
-            order(&mut cands, false, false);
+            order(&mut cands, false, false, false);
             cands[0].0.entry_id
         };
 
@@ -1063,13 +1187,197 @@ mod tests {
         );
     }
 
+    /// `帰れ|そう`. Before text only a 連用形 takes, a godan's bare 仮定形
+    /// becomes the potential's stem wherever `lex` would allow the potential,
+    /// a bare 仮定形 of any class yields to every other reading, and a
+    /// potential yields only to a verb. Each trap gives the wrong candidate
+    /// the lower `entry_id` and, where it matters, the only `COMMON`.
+    #[test]
+    fn before_a_masu_stem_the_e_row_kana_is_the_potentials_stem() {
+        let class_id = |name: &str| {
+            CLASSES.iter().position(|c| c.name == name).expect("class") as crate::engine::ClassId
+        };
+        let step = |class: &str, form: &str| ConjStep {
+            class: class_id(class),
+            form: CLASSES[class_id(class) as usize]
+                .forms
+                .iter()
+                .position(|f| f.name == form)
+                .expect("form") as crate::engine::FormId,
+            range: 0..0,
+            aux: None,
+        };
+        let reading = |id: u32, flags: WordFlags, steps: &[ConjStep], pos: &[&str], uk: bool| {
+            let (mut c, mut e) = order_candidate(id, true, flags, 0);
+            c.steps = steps.to_vec();
+            e.senses[0].pos = pos.iter().map(|p| p.to_string()).collect();
+            if uk {
+                e.senses[0].misc = vec!["uk".to_string()];
+            }
+            (c, e)
+        };
+        let common = |f: WordFlags| WordFlags(f.0 | WordFlags::COMMON.0);
+        let winner = |mut cands: Vec<(Candidate, Entry)>, masu_stem_next: bool| {
+            order(&mut cands, false, false, masu_stem_next);
+            cands[0].0.entry_id
+        };
+        let kateikei = step("五段・ラ行", "仮定形");
+
+        // The relabel, and the refusal it shares with `lex`: 帰る in kanji takes
+        // the potential; the kana reading of a verb JMdict writes in kanji does
+        // not, and stays a bare 仮定形.
+        let (kaeru, kaeru_entry) = reading(
+            3,
+            common(WordFlags::PRIMARY),
+            std::slice::from_ref(&kateikei),
+            &["v5r"],
+            false,
+        );
+        let stem = potential_stem(&kaeru, &kaeru_entry).expect("帰れ|そう is 帰る's potential");
+        let potential = vec![kateikei.clone(), stem];
+        assert_eq!(label::fmt(&potential).as_deref(), Some("Potential"));
+        let (kana, kana_entry) = reading(
+            3,
+            WordFlags::PRONOUNCE,
+            std::slice::from_ref(&kateikei),
+            &["v5r"],
+            false,
+        );
+        assert!(
+            potential_stem(&kana, &kana_entry).is_none(),
+            "no uk, no potential"
+        );
+
+        // 帰れ|そう: JMdict's `帰れ` "go home" is not a verb and cannot take そう,
+        // so the potential does not yield to it there -- and still does
+        // anywhere else.
+        let kaeru_potential = reading(3, common(WordFlags::PRIMARY), &potential, &["v5r"], false);
+        let kaere = reading(1, WordFlags::PRIMARY, &[], &["exp"], false);
+        assert_eq!(
+            winner(vec![kaere.clone(), kaeru_potential.clone()], true),
+            3,
+            "帰れそう is 帰る"
+        );
+        assert_eq!(
+            winner(vec![kaere, kaeru_potential], false),
+            1,
+            "elsewhere the potential yields"
+        );
+
+        // 赤らめ|ながら: a verb is there, so the potential yields to it.
+        let akaramu = reading(1, common(WordFlags::PRIMARY), &potential, &["v5m"], false);
+        let akarameru = reading(
+            2,
+            WordFlags::PRIMARY,
+            &[step("一段", "連用形")],
+            &["v1"],
+            false,
+        );
+        assert_eq!(
+            winner(vec![akaramu, akarameru.clone()], true),
+            2,
+            "赤らめながら is 赤らめる"
+        );
+
+        // くれ|そう: カ変's 仮定形 takes no potential, and yields as it is.
+        let kuru = reading(
+            1,
+            common(WordFlags::PRONOUNCE),
+            &[step("カ変・クル", "仮定形")],
+            &["vk"],
+            true,
+        );
+        assert!(
+            potential_stem(&kuru.0, &kuru.1).is_none(),
+            "カ変's くれ takes none"
+        );
+        let kureru = reading(
+            2,
+            WordFlags::PRONOUNCE,
+            &[step("一段", "連用形")],
+            &["v1"],
+            true,
+        );
+        assert_eq!(
+            winner(vec![kuru.clone(), kureru.clone()], true),
+            2,
+            "くれそう is くれる"
+        );
+        assert_eq!(
+            winner(vec![kuru, kureru], false),
+            1,
+            "elsewhere nothing moves"
+        );
+        // 呉れる's くれ can survive `lex`'s dedup as 一段・クレル 命令ｅ. It is a
+        // verb, not a bare 仮定形, and must not yield to 暮れ "sunset".
+        let kureru_imperative = reading(
+            2,
+            common(WordFlags::PRONOUNCE),
+            &[step("一段・クレル", "命令ｅ")],
+            &["v1-s"],
+            true,
+        );
+        let kure = reading(1, common(WordFlags::PRONOUNCE), &[], &["n"], false);
+        assert_eq!(
+            winner(vec![kure, kureru_imperative], true),
+            2,
+            "くれそう is not 暮れ"
+        );
+
+        // なれ|そう: the kana potential of an `aux-v` verb keeps its exception.
+        let naru = reading(
+            3,
+            common(WordFlags::PRONOUNCE),
+            &potential,
+            &["v5r", "aux-v"],
+            true,
+        );
+        let nareru = reading(
+            2,
+            common(WordFlags::PRONOUNCE),
+            &[step("一段", "連用形")],
+            &["v1"],
+            false,
+        );
+        assert_eq!(
+            winner(vec![nareru, naru], true),
+            3,
+            "なれそう is 成る Potential"
+        );
+    }
+
+    #[test]
+    fn only_what_a_masu_stem_takes_counts() {
+        let c = |s: &str| s.chars().collect::<Vec<char>>();
+        for yes in [
+            "そうだ",
+            "ながら",
+            "つつ",
+            "すぎる",
+            "過ぎた",
+            "まくって",
+            "始めた",
+            "続ける",
+            "たり",
+            "ちゃう",
+            "なくなる",
+        ] {
+            assert!(attaches_to_a_masu_stem(&c(yes)), "{yes}");
+        }
+        // ば is the conditional's own, よ and って follow an imperative, and
+        // what the table chains (ない, た, ます) never reaches here as text.
+        for no in ["ば", "よ", "って", "そ", "な", "ない", ""] {
+            assert!(!attaches_to_a_masu_stem(&c(no)), "{no:?}");
+        }
+    }
+
     #[test]
     fn order_puts_a_shorter_chain_before_a_longer_one_regardless_of_id() {
         let mut cands = vec![
             order_candidate(1, true, WordFlags::PRIMARY, 2), // two-step chain, smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0), // uninflected, larger id
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the shallower chain sorts first despite the higher entry_id"
@@ -1086,7 +1394,7 @@ mod tests {
             order_candidate(10, true, WordFlags::PRIMARY, 0),
             order_candidate(20, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands, false, false);
+        order(&mut cands, false, false, false);
         let ids: Vec<u32> = cands.iter().map(|(c, _)| c.entry_id).collect();
         assert_eq!(ids, vec![10, 20, 30]);
     }

@@ -2705,3 +2705,29 @@ fn the_godan_potential_reaches_its_lemma_and_not_its_collisions() {
     // and as its Potential now.
     assert_eq!(first("イカせて"), [pair("イカす", "Potential Te-form")]);
 }
+
+/// `会え|そう`: before そう a godan's bare 仮定形 is the potential's stem, the
+/// dictionary's 一段 word still goes first where it spells the span, and a
+/// bare 仮定形 of any class yields. Without そう nothing changes.
+#[test]
+fn before_sou_the_e_row_kana_is_the_potentials_stem() {
+    let dir = scratch("potential-stem");
+    jparser::engine::build::build_from_reader(BufReader::new(POTENTIAL_FIXTURE.as_bytes()), &dir)
+        .expect("potential fixture build");
+    let head = |text: &str| -> (String, Option<String>) {
+        potential_readings(&dir, text)
+            .into_iter()
+            .next()
+            .and_then(|entries| entries.into_iter().next())
+            .expect("a matched first segment")
+    };
+    let pair = |h: &str, c: &str| (h.to_string(), Some(c.to_string()));
+    assert_eq!(head("会えそう"), pair("会う", "Potential"));
+    assert_eq!(
+        head("会え"),
+        pair("会う", "Conditional"),
+        "no そう, no change"
+    );
+    assert_eq!(head("弾けそう").0, "弾ける", "the dictionary's word first");
+    assert_eq!(head("くれそう").0, "くれる", "カ変's くれ yields");
+}
