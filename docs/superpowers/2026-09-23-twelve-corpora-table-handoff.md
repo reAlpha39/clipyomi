@@ -170,8 +170,9 @@ hints-off byte-identical.
 | **now, hints-off** | **1589** | **1786** | **0.9569 (1178/1231)** | 118 |
 
 `cargo test --workspace --features mecab`: **680 passed, 0 failed, 1 ignored**
-(the pre-existing `jmdict_source` doc-test; 674 before, six new tests, one per
-engine change); `cargo fmt --all --check`, `cargo
+(the pre-existing `jmdict_source` doc-test; 674 before, plus six new: the
+voicing rule, the でしょ block, two for the bare-stem clause and two for the
+copula gate); `cargo fmt --all --check`, `cargo
 clippy --workspace --features mecab --all-targets` and `cargo check -p jparser
 --no-default-features` clean. The curated snapshot moved in one line:
 `からい` "spicy" leaves the top five of `東京から`'s `から`, whose first entry is
