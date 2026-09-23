@@ -30,8 +30,9 @@ use crate::engine::ConjStep;
 /// One word per auxiliary lemma, spelled as `table.rs`'s `ATTACHES_TO`
 /// spells it (design §3.1). れる/られる are ambiguous between passive,
 /// potential and honorific and the parser cannot tell, so the label says so.
-/// だ here is the voiced た of 読んだ, not the copula. じゃ/や are
-/// `ATTACHES_TO`'s placeholder rows. "Completive", "Progressive",
+/// だ here is the voiced た of 読んだ, not the copula. じゃ/や and their
+/// "Copula" word went on 2026-09-23 with the placeholder rows that were their
+/// only source -- see `ATTACHES_TO`'s doc. "Completive", "Progressive",
 /// "Directional", "Approaching", "Preparatory" and "Tentative" are the six
 /// words here that the fixture's Wikipedia terminology list does not carry —
 /// see `tests/fixtures/conjugation_labels.txt`'s notes on ちゃう, てる, ていく
@@ -74,8 +75,6 @@ const AUX_WORD: &[(&str, &str)] = &[
     ("じゃう", "Completive"),
     ("ちまう", "Completive"),
     ("じまう", "Completive"),
-    ("じゃ", "Copula"),
-    ("や", "Copula"),
 ];
 
 /// One word from the outermost step's 活用形 (design §3.2). A form not

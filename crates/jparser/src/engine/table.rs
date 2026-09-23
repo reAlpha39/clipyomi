@@ -303,13 +303,17 @@ const BOUND_FORMS: &[&str] = &["連用タ接続"];
 /// IPADIC only names 連用タ接続 where the two forms actually differ, so
 /// either row alone leaves half the classes unreachable.
 ///
-/// じゃ/や are IPADIC's dialectal だ variants; in real text they follow a
-/// bare noun or な-adjective, neither of which is a conjugation class this
-/// table can name a form of, so there is no verb-conjugation attachment
-/// site to point them at. 基本形 (だ/です's slot) is a placeholder — it
-/// keeps the coverage test below honest about which class it is claiming
-/// for, without pretending either row will ever actually fire in the
-/// chain search.
+/// じゃ/や, IPADIC's dialectal だ variants, have **no** row, and had two until
+/// 2026-09-23. In real text they follow a bare noun or な-adjective, neither
+/// of which is a conjugation class this table can name a form of, so there is
+/// no attachment site to point them at; the rows named 基本形 as a
+/// placeholder for the coverage test, on the stated assumption that neither
+/// would ever fire. Both fired on every 基本形 there is, the te-form's `て`
+/// included: `そうやって` read 沿う **Copula Te-form** and `こうやって` 請う
+/// the same way (224 spans over twelve corpora, hints on), `みたいじゃない`
+/// read 見る Want-to Copula, `臭いやベトつき` swallowed the particle `や`
+/// into 臭い, and `ましてや` read ます. The coverage test exempts the two
+/// classes instead, as it does 特殊・ダ.
 ///
 /// Row order is load-bearing where two rows produce the same surface at
 /// the same node — see the たい row.
@@ -496,8 +500,6 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("てみる", "一段", "連用形"),
     ("でみる", "一段", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
-    ("じゃ", "特殊・ジャ", "基本形"),
-    ("や", "特殊・ヤ", "基本形"),
 ];
 
 /// Forms an [`ATTACHES_TO`] lemma does **not** generate, by `(lemma, form)`.
@@ -1134,13 +1136,15 @@ mod tests {
         // A future regeneration that adds a 特殊・ class silently can't
         // chain through it -- this is the check that would fail instead.
         //
-        // 特殊・ダ is the one exception, and it is the copula's own class:
-        // nothing that conjugates precedes the copula (it follows a noun or a
-        // な-adjective stem), and the voiced past it used to stand in for is
-        // 特殊・タ in IPADIC -- see the `だ` row in ATTACHES_TO.
+        // The three copulas are the exception -- 特殊・ダ and its dialect
+        // variants 特殊・ジャ and 特殊・ヤ. Nothing that conjugates precedes a
+        // copula (it follows a noun or a な-adjective stem); the voiced past
+        // 特殊・ダ used to stand in for is 特殊・タ in IPADIC, and the じゃ/や
+        // placeholder rows fired on real text -- see ATTACHES_TO's doc.
+        const COPULAS: &[&str] = &["特殊・ダ", "特殊・ジャ", "特殊・ヤ"];
         for class in CLASSES
             .iter()
-            .filter(|c| c.name.starts_with("特殊・") && c.name != "特殊・ダ")
+            .filter(|c| c.name.starts_with("特殊・") && !COPULAS.contains(&c.name))
         {
             assert!(
                 ATTACHES_TO.iter().any(|(_, name, _)| *name == class.name),
@@ -1352,11 +1356,14 @@ mod tests {
         // 141,334 -> 139,260 the same day when `です`'s 未然形 でしょ joined
         // AUX_FORM_BLOCK: -22 depth-1, one per mapped class (every one has the
         // 基本形 the row attaches to), and -2,052 depth-2 that stood on でしょ.
+        // 139,260 -> 127,432 the same day for the じゃ/や placeholder rows:
+        // -132 depth-1, their six surfaces at each of 22 classes' 基本形, and
+        // -11,696 depth-2 behind them.
         assert_eq!(
-            chains, 139_260,
-            "the walk reached {chains} chains, not 139,260 -- the conjugation table's \
+            chains, 127_432,
+            "the walk reached {chains} chains, not 127,432 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 139,260 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 127,432 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 22 classes JMDICT_POS_CLASS \
              maps (カ変・来ル per Phase 1b-ii, 一段・クレル with the v1-s row). \
              Re-derive it and update this constant, rather than loosening the assertion"
