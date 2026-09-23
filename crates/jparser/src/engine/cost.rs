@@ -27,6 +27,7 @@
 use crate::engine::flags::WordFlags;
 use crate::engine::kana;
 use crate::engine::lex::{is_copula_desu_chain, Candidate};
+use crate::engine::table::CLASSES;
 use crate::engine::Boundaries;
 
 /// Cost of using a match at all, charged once per span regardless of length.
@@ -723,6 +724,36 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
         // with entry top-1 0.9400 → 0.9314. The engine has no term here that
         // separates a stem from a particle; see the handoff for the `uk` route.
         //
+        // **The narrow form, shipped 2026-09-23: an empty stem of a word JMdict
+        // writes in kana.** Every one of those five breaks has a *non-empty*
+        // innermost step (は|こう is 履く's 未然ウ接続 こ, の|か 退く's 未然形 か).
+        // A 一段 verb's 連用形 and 未然形 are empty, so for `やめて` the chain
+        // starts exactly where IPADIC cuts `やめ|て`, the cut is not strictly
+        // inside it, and the kana verb split at the stem with the lone て glossed
+        // "you said": `やめ|て`, `でき|た`, `あげ|ます`, `い|た`, about 4,000
+        // spans over twelve visual-novel corpora hints on. So the cut is exempt
+        // where the innermost step is zero-length, and only for an entry JMdict
+        // tags `uk` on a sense that is not `aux-v` (`Candidate::usually_kana`,
+        // the test `lex` applies to the potential). Without that second half the
+        // one-kana stems collide with particles: `ことにな`, `滅多にない`,
+        // `気にせず` read as 似る, `完璧でない` and `だけでなく` as 出る, and
+        // `わけない` as 分ける -- none of them `uk`, while 居る, 止める, 出来る,
+        // 上げる and 過ぎる are. And not for a chain that ends at ガル接続, the
+        // bound form さ and そう attach to, or at `ぬ`'s 仮定形: `ない` there is
+        // `な` and `ぬ` is `ね`, the one-kana pair `table.rs`'s CHAIN_BLOCK
+        // refuses on every empty stem it names, because both are commoner as a
+        // sentence-final particle. `それな`, `エロいな` and `やめな` (やめなさい)
+        // read as 逸れる, 居る and やめる **Negative**, and `それね` as 逸れる
+        // Negative Conditional.
+        //
+        // Measured hints on over twelve corpora (151,225 sentences): 3,641
+        // change, and adjudicated by key 3,837 spans are repaired, 20 neutral,
+        // 74 wrong for wrong and 40 newly wrong, among them a katakana stem
+        // severed (`シゴ|いて`, 30) and `〜たから` read as the want-to form (5).
+        // The five sentences above are unmoved, gold's one mover is `やめて`,
+        // and hints off nothing can change, since this charge needs a
+        // tokenizer.
+        //
         // **The `uk` exemption (2026-09-22, experimental).** An entry JMdict
         // tags `uk` is normally written in kana, and it keeps its kanji
         // headword, so the spelling JMdict itself calls normal is a
@@ -757,6 +788,17 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
                         Some((a, b)) => (a.min(s.range.start), b.max(s.range.end)),
                     })
                 });
+            // See the narrow form above.
+            let ends_bound = |s: &crate::engine::ConjStep| {
+                let form = CLASSES[s.class as usize].forms[s.form as usize].name;
+                form == "ガル接続" || (s.aux == Some("ぬ") && form == "仮定形")
+            };
+            let empty_stem_end = cand
+                .steps
+                .first()
+                .filter(|s| cand.usually_kana && s.range.is_empty())
+                .filter(|_| !cand.steps.last().is_some_and(ends_bound))
+                .map(|s| s.range.start);
             let charged = ((cand.start + 1)..(cand.start + cand.len))
                 .filter(|&p| bounds.is_boundary(p))
                 // See `KATAKANA_MIN_PIECE`.
@@ -766,6 +808,7 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
                             || cand.start + cand.len - p < KATAKANA_MIN_PIECE))
                 })
                 .filter(|&p| !matches!(chain, Some((a, b)) if a < p && p < b))
+                .filter(|&p| empty_stem_end != Some(p))
                 .count() as i32;
             total += charged * PRONOUNCE_CROSS;
         }
@@ -840,9 +883,92 @@ mod tests {
             inside_katakana_run: false,
             function_stack: false,
             grammatical_stack: false,
+            usually_kana: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: String::new(),
+        }
+    }
+
+    /// The narrow exemption on `PRONOUNCE_CROSS`, one row per half of it.
+    /// IPADIC cuts `やめ|て` where the chain starts, because 一段's 連用形 is
+    /// empty; the cut is the inflection's only for a stem that is empty, of a
+    /// word JMdict writes in kana, whose chain does not end at ガル接続 or at
+    /// ぬ's 仮定形. Spans start at 4, so every position is absolute.
+    #[test]
+    fn a_cut_at_an_empty_stem_of_a_kana_word_is_its_inflections() {
+        let step = |class: &str, form: &str, range: std::ops::Range<usize>, aux| {
+            let c = CLASSES.iter().position(|c| c.name == class).expect("class");
+            ConjStep {
+                class: c as crate::engine::ClassId,
+                form: CLASSES[c]
+                    .forms
+                    .iter()
+                    .position(|f| f.name == form)
+                    .expect("form") as crate::engine::FormId,
+                range,
+                aux,
+            }
+        };
+        let none = At(&[]);
+        let charge = |c: &Candidate, at: &At| cost(c, Some(at)) - cost(c, Some(&none));
+
+        // やめて at 4: 止める, `uk`, over an empty 連用形 at 6.
+        let mut yamete = cand(4, 3, WordFlags::PRONOUNCE, true);
+        yamete.steps = vec![
+            step("一段", "連用形", 6..6, None),
+            step("不変化型", "基本形", 6..7, Some("て")),
+        ];
+        yamete.usually_kana = true;
+        assert_eq!(
+            charge(&yamete, &At(&[6])),
+            CROSS,
+            "やめ|て is the inflection's cut"
+        );
+        // A cut inside the stem is no inflection's.
+        assert_eq!(
+            charge(&yamete, &At(&[5])),
+            CROSS + PRONOUNCE_CROSS,
+            "や|めて still pays"
+        );
+
+        // The same chain for an entry JMdict writes in kanji: 出る's で is also
+        // the copula, 似る's に the particle.
+        let mut kanji_word = yamete.clone();
+        kanji_word.usually_kana = false;
+        assert_eq!(
+            charge(&kanji_word, &At(&[6])),
+            CROSS + PRONOUNCE_CROSS,
+            "で|ない still pays"
+        );
+
+        // はこう: 履く's stem は and its 未然ウ接続 こ, not empty. `usually_kana`
+        // is set, although 履く is not `uk`, so that only the empty-stem half
+        // can refuse it.
+        let mut hakou = cand(4, 3, WordFlags::PRONOUNCE, true);
+        hakou.steps = vec![
+            step("五段・カ行イ音便", "未然ウ接続", 5..6, None),
+            step("不変化型", "基本形", 6..7, Some("う")),
+        ];
+        hakou.usually_kana = true;
+        assert_eq!(
+            charge(&hakou, &At(&[5])),
+            CROSS + PRONOUNCE_CROSS,
+            "は|こう still pays"
+        );
+
+        // それな and それね: a chain ending at ガル接続 is a stem waiting for さ or
+        // そう, and ぬ's 仮定形 is the particle ね.
+        for (form, aux, class, what) in [
+            ("ガル接続", "ない", "特殊・ナイ", "それ|な still pays"),
+            ("仮定形", "ぬ", "特殊・ヌ", "それ|ね still pays"),
+        ] {
+            let mut sore = yamete.clone();
+            sore.steps = vec![
+                step("一段", "未然形", 6..6, None),
+                step(class, form, 6..7, Some(aux)),
+            ];
+            assert_eq!(charge(&sore, &At(&[6])), CROSS + PRONOUNCE_CROSS, "{what}");
         }
     }
 

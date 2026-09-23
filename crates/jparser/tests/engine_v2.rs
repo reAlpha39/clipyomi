@@ -2602,6 +2602,38 @@ fn potential_readings(dir: &Path, text: &str) -> Vec<Vec<(String, Option<String>
         .collect()
 }
 
+/// A kana 一段 verb is not split at its empty stem where JMdict writes it in
+/// kana (止める, gold `c1:elo-08`), and the particle a one-kana stem collides
+/// with stays a particle where JMdict writes the verb in kanji: `にない` is
+/// に + ない, not 似る Negative, and `わけない` is 訳 + ない, not 分ける. Where
+/// it writes the verb in kana, a chain ending in な or ね is still refused:
+/// `それな` and `それね` are それ + a particle, not 逸れる Negative.
+#[cfg(feature = "mecab")]
+#[test]
+fn a_kana_ichidan_verb_keeps_its_stem_and_a_particle_keeps_its_own() {
+    let dir = scratch("kana-ichidan-stem");
+    build_gold_v2(&dir);
+    let surfaces = |text: &str| -> Vec<String> {
+        let bounds = boundaries_over(text);
+        parse_v2_with_bounds(&dir, text, Some(&bounds))
+            .segments
+            .into_iter()
+            .map(|s| s.surface)
+            .collect()
+    };
+    let yamete = surfaces("やめてぇぇぇ、痛いってば");
+    assert!(yamete.iter().any(|s| s == "やめて"), "{yamete:?}");
+    for (text, merge) in [
+        ("ここにないよ", "にない"),
+        ("そんなわけないだろう", "わけない"),
+        ("ああ、それね", "それね"),
+        ("そう、それな", "それな"),
+    ] {
+        let cuts = surfaces(text);
+        assert!(!cuts.iter().any(|s| s == merge), "{text}: {cuts:?}");
+    }
+}
+
 /// The godan potential reaches the godan lemma, and each collision the phase
 /// predicted comes out the way it was measured to: the dictionary's own word
 /// first where it spells the span, no potential where one would be false.

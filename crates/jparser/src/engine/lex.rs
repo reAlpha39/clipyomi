@@ -105,6 +105,13 @@ pub struct Candidate {
     /// [`is_grammatical_stack`] defines. Read only by `cost::cost`, to
     /// withhold the length gain. Set by the same second pass.
     pub grammatical_stack: bool,
+    /// JMdict says the entry is usually written in kana: some sense that is
+    /// not `aux-v` is tagged `uk`, the test [`EntryFacts`] applies to the
+    /// potential as well. Filled only for a deinflected match through a kana
+    /// reading (`PRONOUNCE`), where [`allows_chain`] has already read the
+    /// entry's facts; false everywhere else. Read by `cost::cost`, for the cut
+    /// at an empty stem, and only under that flag.
+    pub usually_kana: bool,
     pub headword: String,
 }
 
@@ -242,6 +249,11 @@ pub fn candidates(
                     if !allows_chain(index, &mut class_cache, record, hit)? {
                         continue;
                     }
+                    // Only `cost`'s PRONOUNCE charge reads it, so a kanji
+                    // headword never pays the look-up.
+                    let usually_kana = hit.stem_class.is_some()
+                        && WordFlags(record.flags).contains(WordFlags::PRONOUNCE)
+                        && facts(index, &mut class_cache, record.entry_id)?.usually_kana;
                     found.push((
                         end,
                         chain_index,
@@ -272,6 +284,7 @@ pub fn candidates(
                             // exist yet.
                             function_stack: false,
                             grammatical_stack: false,
+                            usually_kana,
                             headword: record.surface.clone(),
                         },
                     ));
@@ -606,23 +619,33 @@ fn allows_chain(
     {
         return Ok(false);
     }
-    let facts = match cache.entry(record.entry_id) {
-        Entry::Occupied(known) => known.into_mut(),
-        Entry::Vacant(slot) => slot.insert(match index.entry(record.entry_id)? {
-            Some(entry) => EntryFacts::of(&entry),
-            // A record whose entry is missing has no classes to check against;
-            // treated as disqualifying rather than trusted, since a well-formed
-            // index never produces this.
-            None => EntryFacts::default(),
-        }),
-    };
+    let facts = facts(index, cache, record.entry_id)?;
     if is_godan_potential(&hit.steps) && !facts.takes_a_potential(WordFlags(record.flags)) {
         return Ok(false);
     }
     Ok(facts.classes.contains(&class))
 }
 
-/// What [`allows_chain`] needs from an entry, memoized per `entry_id`.
+/// `entry_id`'s [`EntryFacts`], read through `index` once and memoized.
+fn facts<'a>(
+    index: &Index,
+    cache: &'a mut HashMap<u32, EntryFacts>,
+    entry_id: u32,
+) -> Result<&'a EntryFacts, IndexError> {
+    Ok(match cache.entry(entry_id) {
+        Entry::Occupied(known) => known.into_mut(),
+        Entry::Vacant(slot) => slot.insert(match index.entry(entry_id)? {
+            Some(entry) => EntryFacts::of(&entry),
+            // A record whose entry is missing has no classes to check against;
+            // treated as disqualifying rather than trusted, since a well-formed
+            // index never produces this.
+            None => EntryFacts::default(),
+        }),
+    })
+}
+
+/// What [`allows_chain`] and `Candidate::usually_kana` need from an entry,
+/// memoized per `entry_id`.
 #[derive(Default)]
 struct EntryFacts {
     classes: Vec<ClassId>,
@@ -766,6 +789,7 @@ mod tests {
             after_digit_noncounter: false,
             function_stack: false,
             grammatical_stack: false,
+            usually_kana: false,
             headword: String::new(),
         };
 
@@ -826,6 +850,7 @@ mod tests {
             inside_katakana_run: false,
             function_stack: false,
             grammatical_stack: false,
+            usually_kana: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: headword.to_string(),
