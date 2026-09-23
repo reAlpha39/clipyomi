@@ -78,9 +78,16 @@ pub fn to_segment(
             group.push(sibling.clone());
         }
     }
-    // `1969|年`: the one piece of context the ordering uses. Computed here
-    // because this is where the span's neighbours are in hand.
+    // `1969|年` and `楽し|そう`: the two pieces of context the ordering uses,
+    // one character either side. Computed here because this is where the
+    // span's neighbours are in hand.
     let prev_is_digit = start > 0 && kana::is_digit(chars[start - 1]);
+    // A stem that ends in kanji is left alone: every repair `is_bare_stem`
+    // exists for ends in kana (した, 愛し, 欲し), and hints-off the kanji ones
+    // are compounds already cut (内太|腿, 重|低音, 鈍|痛), 220 spans where
+    // 太る, 重る and 鈍る are no better a gloss than the adjective.
+    let stem_attached =
+        attaches_to_a_stem(&chars[start + len..]) || !kana::is_kana(chars[start + len - 1]);
 
     // Entries are resolved *before* ordering, because the last clause of the
     // key is the entry's own sense count and every candidate in the group was
@@ -91,7 +98,7 @@ pub fn to_segment(
         let entry = build_entry(index, chars, &c)?;
         built.push((c, entry));
     }
-    order(&mut built, prev_is_digit);
+    order(&mut built, prev_is_digit, stem_attached);
     let entries: Vec<Entry> = built.into_iter().map(|(_, e)| e).collect();
 
     let reading = entries[0].reading.clone();
@@ -135,7 +142,9 @@ fn usually_kana(entry: &Entry) -> bool {
 /// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
 /// word itself) before a `PRONOUNCE` one (a kanji entry's own reading,
 /// offered only as a fallback) **unless JMdict tags the entry `uk`**, where
-/// the kana spelling is the normal one and demoting it is simply wrong; a
+/// the kana spelling is the normal one and demoting it is simply wrong; any
+/// reading before an adjective's bare ガル接続 stem **unless the text after
+/// the span is what attaches to one** (see [`is_bare_stem`]); a
 /// shallower deinflection chain before a
 /// deeper one, since an uninflected reading of the same surface is the
 /// likelier one; and, last, ascending `entry_id` -- JMdict's own `ent_seq` --
@@ -183,7 +192,7 @@ fn usually_kana(entry: &Entry) -> bool {
 /// candidates with the same entry but *different* chains -- and therefore
 /// different `Entry::conjugation` labels -- could tie on every key above and
 /// still be visibly different in the output.
-pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool) {
+pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool, stem_attached: bool) {
     built.sort_unstable_by_key(|(c, e)| {
         (
             !c.exact,
@@ -191,6 +200,7 @@ pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool) {
             !(prev_is_digit && c.flags.contains(WordFlags::COUNTER)),
             !c.flags.contains(WordFlags::PARTICLE),
             c.flags.contains(WordFlags::PRONOUNCE) && !usually_kana(e),
+            !stem_attached && is_bare_stem(c),
             c.steps.len(),
             // More senses first. JMdict's own editorial content, not a corpus
             // count -- and placed last, where `entry_id` was about to decide
@@ -199,6 +209,51 @@ pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool) {
             c.entry_id,
         )
     });
+}
+
+/// Whether `cand`'s whole chain is one adjective's bare ガル接続 stem.
+///
+/// IPADIC gives an adjective that form only as the site がる, さ and そう
+/// attach to (楽し|そう, 寂し|さ), so on its own it is a stem rather than a
+/// word, and `order`'s shallower-chain clause, which reads one step as the
+/// likelier parse, gets it backwards. `したい` is an `adj-i` headword whose
+/// stem is `した`, so every standalone `した` -- 承諾|した, 後悔|した -- led with
+/// "want to do" instead of する Past: **3,942 spans of 3,942** over twelve
+/// visual-novel corpora, hints on, and `愛し続けて`'s `愛し` led with 愛しい
+/// rather than 愛する. Where the stem is the only reading -- 恥ずかし|そう,
+/// 楽し|そう -- there is nothing for it to lose to and nothing moves.
+///
+/// **Only demoted when nothing attaches to it** ([`attaches_to_a_stem`]). The
+/// unconditional clause was measured first and it is wrong in the other
+/// direction: where a stem *is* the word, the one it loses to is a stranger
+/// that happens to share the surface -- 苦し|そう read 苦い 82 times,
+/// くすぐった|さ read くすぐる 38, 太|さ 太る 24, 重|そう 重る 18, 難し|そう
+/// 難い 11 -- about 220 spans against 4,000 repaired.
+fn is_bare_stem(cand: &Candidate) -> bool {
+    matches!(cand.steps.as_slice(), [only]
+        if only.aux.is_none()
+            && CLASSES[only.class as usize].forms[only.form as usize].name == "ガル接続")
+}
+
+/// What IPADIC attaches to an adjective's ガル接続 stem, by the text right
+/// after the span: the nominal さ (高さ), 様態 そう (高そう), げ (楽しげ),
+/// すぎる (高すぎ), め and み (高め, 甘み), and がる in its own forms -- が
+/// followed by る, っ, ら, り, れ or ろ, so that the particle `が` after a past
+/// (`したが`) does not count.
+///
+/// Plus the adjective's own `い` and `かっ`: a span that stops at the stem
+/// with those next is the adjective cut in two (鈍|い, 難し|かった), which
+/// happens hints-off, and there too the stem is the word. Every entry here
+/// can only hand a span back to the order it had before the clause existed.
+fn attaches_to_a_stem(rest: &[char]) -> bool {
+    matches!(
+        rest,
+        ['さ' | 'げ' | 'め' | 'み' | 'い', ..]
+            | ['そ', 'う', ..]
+            | ['す', 'ぎ', ..]
+            | ['か', 'っ', ..]
+            | ['が', 'る' | 'っ' | 'ら' | 'り' | 'れ' | 'ろ', ..]
+    )
 }
 
 /// One [`Entry`] for `cand`: its dictionary data resolved through `index`,
@@ -500,7 +555,7 @@ mod tests {
         }
     }
 
-    // `order`'s seven clauses, isolated one at a time against hand-built
+    // `order`'s clauses, isolated one at a time against hand-built
     // candidates rather than against whatever a fixture's FST happens to
     // hand back. This matters concretely for the lowest-priority clause:
     // `engine_v2.rs`'s `ties_break_on_entry_id_ascending` integration test
@@ -592,7 +647,7 @@ mod tests {
             order_candidate(1, false, WordFlags::PRIMARY, 0),
             order_candidate(2, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the exact match sorts first despite the higher entry_id"
@@ -616,7 +671,7 @@ mod tests {
 
         // `1969|年`: the digit is there, so the counter wins despite its id.
         let mut after_digit = build();
-        order(&mut after_digit, true);
+        order(&mut after_digit, true, false);
         assert_eq!(
             after_digit[0].0.entry_id, 2,
             "after a digit the counter sorts first"
@@ -624,7 +679,7 @@ mod tests {
 
         // `去|年`: no digit, so the clause must not fire and the id decides.
         let mut elsewhere = build();
-        order(&mut elsewhere, false);
+        order(&mut elsewhere, false, false);
         assert_eq!(
             elsewhere[0].0.entry_id, 1,
             "without the digit the counter has no claim and entry_id decides"
@@ -642,7 +697,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not a particle, smaller id
             order_candidate(2, true, particle, 0),           // particle, larger id
         ];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the particle sorts first despite the higher entry_id"
@@ -662,7 +717,7 @@ mod tests {
             order_candidate(9, true, counter, 0), // counter *and* particle, not COMMON
             order_candidate(1, true, common, 0),  // COMMON only
         ];
-        order(&mut cands, true);
+        order(&mut cands, true, false);
         assert_eq!(
             cands[0].0.entry_id, 1,
             "a COMMON headword outranks a counter even after a digit"
@@ -689,7 +744,7 @@ mod tests {
             with_senses(1391500, true, WordFlags::PRONOUNCE, 2, 1),
             with_senses(1578850, true, WordFlags::PRONOUNCE, 2, 12),
         ];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         assert_eq!(
             cands[0].0.entry_id, 1578850,
             "the 12-sense entry sorts first despite the higher entry_id"
@@ -703,7 +758,7 @@ mod tests {
             with_senses(2, true, WordFlags::PRONOUNCE, 0, 12),
             with_senses(1, true, common, 0, 1),
         ];
-        order(&mut mixed, false);
+        order(&mut mixed, false, false);
         assert_eq!(
             mixed[0].0.entry_id, 1,
             "COMMON still outranks the sense count"
@@ -743,7 +798,7 @@ mod tests {
         // to be visible one clause further down: the `uk` entry carries more
         // senses, which is only ever consulted once PRONOUNCE has tied.
         let mut cands = vec![with_senses(1, true, WordFlags::PRIMARY, 0, 1), uk(2, 2)];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "a `uk` reading is not a fallback, so the clause ties and the sense count decides"
@@ -755,7 +810,7 @@ mod tests {
             with_senses(1, true, WordFlags::PRIMARY, 0, 1),
             with_senses(2, true, WordFlags::PRONOUNCE, 0, 2),
         ];
-        order(&mut plain, false);
+        order(&mut plain, false, false);
         assert_eq!(
             plain[0].0.entry_id, 1,
             "without `uk` the clause still demotes the reading"
@@ -770,7 +825,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not COMMON, smaller id
             order_candidate(2, true, common, 0),             // COMMON, larger id
         ];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the COMMON match sorts first despite the higher entry_id"
@@ -783,11 +838,80 @@ mod tests {
             order_candidate(1, true, WordFlags::PRONOUNCE, 0), // smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0),   // larger id
         ];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the PRIMARY match sorts first despite the higher entry_id"
         );
+    }
+
+    /// `した`: したい's bare ガル接続 stem (one step) against する Past (two).
+    /// The shallower-chain clause alone would pick the stem, and entry_id
+    /// agrees with it, so this passes only if the bare-stem clause fires.
+    #[test]
+    fn order_puts_a_real_reading_before_a_bare_adjective_stem() {
+        let class_id = |name: &str| {
+            CLASSES.iter().position(|c| c.name == name).expect("class") as crate::engine::ClassId
+        };
+        let form_id = |class: &str, form: &str| {
+            CLASSES[class_id(class) as usize]
+                .forms
+                .iter()
+                .position(|f| f.name == form)
+                .expect("form") as crate::engine::FormId
+        };
+        let step = |class: &str, form: &str, aux: Option<&'static str>| ConjStep {
+            class: class_id(class),
+            form: form_id(class, form),
+            range: 0..0,
+            aux,
+        };
+        let (mut stem, stem_entry) = order_candidate(1, true, WordFlags::COMMON, 0);
+        stem.steps = vec![step("形容詞・アウオ段", "ガル接続", None)];
+        let (mut past, past_entry) = order_candidate(2, true, WordFlags::COMMON, 0);
+        past.steps = vec![
+            step("サ変・スル", "連用形", None),
+            step("特殊・タ", "基本形", Some("た")),
+        ];
+        let mut cands = vec![
+            (stem.clone(), stem_entry.clone()),
+            (past.clone(), past_entry.clone()),
+        ];
+        order(&mut cands, false, false);
+        assert_eq!(
+            cands[0].0.entry_id, 2,
+            "する Past sorts before したい's bare stem despite the deeper chain and higher id"
+        );
+        // したそう / したがる: the stem is the word, and the clause stands down.
+        let mut attached = vec![(past, past_entry), (stem, stem_entry)];
+        order(&mut attached, false, true);
+        assert_eq!(
+            attached[0].0.entry_id, 1,
+            "before そう the bare stem is the reading"
+        );
+    }
+
+    #[test]
+    fn only_what_ipadic_attaches_to_a_stem_counts() {
+        let c = |s: &str| s.chars().collect::<Vec<char>>();
+        for yes in [
+            "さ",
+            "そうだ",
+            "げに",
+            "すぎる",
+            "め",
+            "み",
+            "がる",
+            "がって",
+            "い",
+            "かった",
+        ] {
+            assert!(attaches_to_a_stem(&c(yes)), "{yes}");
+        }
+        // The particle が after a past, その after した, and the end of text.
+        for no in ["が", "がいい", "その", "す", "と", ""] {
+            assert!(!attaches_to_a_stem(&c(no)), "{no:?}");
+        }
     }
 
     #[test]
@@ -796,7 +920,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 2), // two-step chain, smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0), // uninflected, larger id
         ];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the shallower chain sorts first despite the higher entry_id"
@@ -813,7 +937,7 @@ mod tests {
             order_candidate(10, true, WordFlags::PRIMARY, 0),
             order_candidate(20, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands, false);
+        order(&mut cands, false, false);
         let ids: Vec<u32> = cands.iter().map(|(c, _)| c.entry_id).collect();
         assert_eq!(ids, vec![10, 20, 30]);
     }
