@@ -500,6 +500,39 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("てみる", "一段", "連用形"),
     ("でみる", "一段", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
+    // The godan potential: 読め|る, 読め|た, 書け|ない, 会え|なかった. IPADIC
+    // files 可能動詞 as 一段 lexemes of their own (読める, 書ける), so nothing
+    // in the table reached the godan lemma, and `読めた` parsed 読め
+    // "Conditional" + た glossed たい. JMdict carries some of those lexemes
+    // and not others -- 読める is there and lost anyway, 会える is not. Over
+    // twelve visual-novel corpora (151,225 sentences, hints on) the split
+    // shape stood 3,403 times; with this row, `lex`'s two refusals and
+    // `assemble::order`'s potential clause it stands 752 times, and what is
+    // left is mostly not a potential (おれ|たち, イ|かせ) or a potential stem
+    // before そう, which the zero-width step cannot end a chain to reach.
+    //
+    // The lemma is a bare `る` in 一段 because the e-row kana is already the
+    // godan's own 仮定形 (読め), so what the potential adds on top conjugates
+    // exactly like 一段 over an empty stem: `る`, `れ`, `りゃ`, and **an empty
+    // 未然形 and 連用形**. Those two are the ones that matter -- 読め + ∅ + た,
+    // 読め + ∅ + ない -- and they are why this cannot be an ordinary row: an
+    // empty surface is a step that consumes nothing. `Table::new` inserts it
+    // at the trie's root as a zero-width hit and `search` takes one only under
+    // an auxiliary that asked for it, never at a chain's end and never twice
+    // in a row; see `search`.
+    //
+    // **Godan only**, which `potential_attaches` enforces and `ATTACHES_TO`
+    // cannot, since it names an attachment site by form alone: カ変's 仮定形 is
+    // `くれ`, so an unrestricted row reads every くれる as 来る Potential, and
+    // any auxiliary's own 仮定形 (書かせれ, 書かれれ) would take it too.
+    //
+    // Why a table row and not a fallback in `lex` from a 一段 key ending in
+    // e-row + る to the godan lemma: the chain is what `label.rs` reads, what
+    // `cost` exempts an inflection-internal cut by, and what the fixture walk
+    // below enumerates. A fallback in `lex` would produce a godan entry under
+    // 一段 steps -- a candidate `allows_chain` refuses by construction -- and
+    // every downstream reader would need a special case for it.
+    ("る", "一段", "仮定形"),
 ];
 
 /// Forms an [`ATTACHES_TO`] lemma does **not** generate, by `(lemma, form)`.
@@ -594,7 +627,56 @@ const CHAIN_BLOCK: &[(&str, &str, &str)] = &[
     // and is barely Japanese.
     ("せる", "*", "てみる"),
     ("せる", "*", "でみる"),
+    // The godan potential's empty 未然形 and 連用形 (`ATTACHES_TO`'s `る` row)
+    // are the same shape as `てる`'s, so the same two particle collisions
+    // follow: `待てね` is 待て + ね, and `これなら` would read 凝る Potential
+    // Negative + ら. A potential verb takes no causative, passive or want-to
+    // either -- `読めさせる`, `読められる`, `読めたい` are not Japanese -- so
+    // those are refused outright rather than left for the corpus to find.
+    ("ぬ", "仮定形", POTENTIAL),
+    ("ない", "ガル接続", POTENTIAL),
+    ("せる", "*", POTENTIAL),
+    ("させる", "*", POTENTIAL),
+    ("れる", "*", POTENTIAL),
+    ("られる", "*", POTENTIAL),
+    ("たい", "*", POTENTIAL),
 ];
+
+/// [`ATTACHES_TO`]'s godan-potential lemma.
+const POTENTIAL: &str = "る";
+
+/// The classes whose 仮定形 the potential attaches to: every 五段 class
+/// `JMDICT_POS_CLASS` maps except two. 五段・ラ行アル is ある alone, whose
+/// `あれ` + た is 荒れた, never "could be"; 五段・ラ行特殊 is なさる, くださる,
+/// いらっしゃる, おっしゃる and ござる, and `なされた` is なさる + the honorific
+/// れる, not a potential.
+const GODAN_POTENTIAL: &[&str] = &[
+    "五段・カ行イ音便",
+    "五段・カ行促音便",
+    "五段・ガ行",
+    "五段・サ行",
+    "五段・タ行",
+    "五段・ナ行",
+    "五段・バ行",
+    "五段・マ行",
+    "五段・ラ行",
+    "五段・ワ行促音便",
+    "五段・ワ行ウ音便",
+];
+
+/// Whether `steps` reach their headword through the godan potential -- the
+/// `る` step sits directly on the headword's own 仮定形.
+pub fn is_godan_potential(steps: &[ConjStep]) -> bool {
+    steps.get(1).is_some_and(|s| s.aux == Some(POTENTIAL))
+}
+
+/// Whether `lemma` may attach to `inner`: anything but the potential may, and
+/// the potential only to a headword's own godan 仮定形 -- never カ変's `くれ`,
+/// never an auxiliary's 仮定形.
+fn potential_attaches(lemma: &str, inner: &ConjStep) -> bool {
+    lemma != POTENTIAL
+        || (inner.aux.is_none() && GODAN_POTENTIAL.contains(&CLASSES[inner.class as usize].name))
+}
 
 /// Whether [`CHAIN_BLOCK`] refuses this pair. `*` in a row's form matches
 /// every form of that outer auxiliary.
@@ -686,6 +768,18 @@ const AUX_FORM_BLOCK: &[(&str, &str)] = &[
     ("でくる", "仮定形"),
     ("でくる", "体言接続特殊"),
     ("でくる", "体言接続特殊２"),
+    // The godan potential's four forms that are not Japanese or not its own.
+    // 命令ｙｏ and 未然ウ接続 are both `よ`, and `待てよ`, `言えよ`, `書けよ` are
+    // an imperative and the particle よ -- the collision the `てる` rows above
+    // were blocked for, far commoner here because every godan imperative is
+    // the same e-row kana as the potential. 命令ｒｏ `ろ` is the potential's
+    // own imperative, which the language does not have. 体言接続特殊 `ん` is
+    // `読めるんだ` contracted, and left in it would tie with `読めん` through
+    // the negative `ん` and win on depth, labelling "can't read" as "can".
+    (POTENTIAL, "命令ｒｏ"),
+    (POTENTIAL, "命令ｙｏ"),
+    (POTENTIAL, "未然ウ接続"),
+    (POTENTIAL, "体言接続特殊"),
 ];
 
 /// A hit recorded at one node of [`Table`]'s reverse trie.
@@ -845,18 +939,10 @@ impl Table {
                 if AUX_FORM_BLOCK.contains(&(lemma, form.name)) {
                     continue;
                 }
+                // An empty surface -- only the potential's 未然形 and 連用形
+                // produce one -- lands at the root as a zero-width hit.
+                // `search` is what keeps it from recursing forever.
                 let surface = format!("{stem}{}", form.suffix);
-                if surface.is_empty() {
-                    // No current row produces this — every ATTACHES_TO
-                    // lemma leaves at least one character after its
-                    // class's `remove` is stripped, or supplies a
-                    // non-empty form suffix to make up for it — but an
-                    // empty surface would let `search` consume zero
-                    // characters and recurse at the same position forever.
-                    // Refuse it outright rather than trust that a future
-                    // row can't introduce one.
-                    continue;
-                }
                 insert(
                     &mut nodes,
                     &surface,
@@ -888,7 +974,7 @@ impl Table {
             steps: Vec::new(),
             stem_class: None,
         }];
-        hits.extend(self.search(chars, end, max_consumed, None));
+        hits.extend(self.search(chars, end, max_consumed, None, true));
         hits
     }
 
@@ -906,12 +992,21 @@ impl Table {
     ///
     /// Each input character goes through [`hiragana_sokuon`] first; see that
     /// function for why the sokuon alone, and not [`crate::engine::kana::fold`].
+    ///
+    /// A zero-width continuation (the potential's empty 未然形 and 連用形, at
+    /// the root) consumes nothing, so it is taken only when `required` is set
+    /// -- an auxiliary asked for it, so it is never a chain's outermost step --
+    /// and only when `zero_width` allows it, which the recursion it starts
+    /// passes as false. Every level therefore either consumes a character or
+    /// is one zero-width hop that cannot be followed by another, and the walk
+    /// terminates whatever rows are added.
     fn search(
         &self,
         chars: &[char],
         end: usize,
         budget: usize,
         required: Option<&str>,
+        zero_width: bool,
     ) -> Vec<ChainHit> {
         let mut out = Vec::new();
         let mut node = 0;
@@ -942,16 +1037,16 @@ impl Table {
                         requires,
                         lemma,
                     } => {
-                        // len == 0 is the loop-prevention guard: a
-                        // zero-length auxiliary match would recurse at this
-                        // same `end` forever (see `Table::new`'s comment —
-                        // no current row can produce one, but this is the
-                        // check that keeps it true regardless).
-                        if len == 0 || !form_named(required, class, form) {
+                        // The loop-prevention guard; see this function's doc.
+                        if (len == 0 && (required.is_none() || !zero_width))
+                            || !form_named(required, class, form)
+                        {
                             continue;
                         }
                         let outer_form = CLASSES[class as usize].forms[form as usize].name;
-                        for mut sub in self.search(chars, end - len, budget - len, Some(requires)) {
+                        let subs =
+                            self.search(chars, end - len, budget - len, Some(requires), len > 0);
+                        for mut sub in subs {
                             // `steps` is innermost-first and each recursion
                             // level pushes at the end, so `last()` is the step
                             // immediately inside this one. `aux` is `None`
@@ -967,7 +1062,9 @@ impl Table {
                             // satisfied `requires`, whether a headword's own
                             // form or another auxiliary's.
                             if let Some(inner) = sub.steps.last() {
-                                if !onbin_voicing_agrees(lemma, requires, inner.class) {
+                                if !onbin_voicing_agrees(lemma, requires, inner.class)
+                                    || !potential_attaches(lemma, inner)
+                                {
                                     continue;
                                 }
                             }
@@ -1198,20 +1295,18 @@ mod tests {
     }
 
     /// The auxiliary's conjugated surfaces, the way `Table::new` builds them:
-    /// its lemma minus its class's `remove`, plus each form's suffix, empty
-    /// surfaces skipped.
+    /// its lemma minus its class's `remove`, plus each form's suffix. An
+    /// empty surface is kept -- the table emits it as a zero-width hit.
     fn aux_forms(lemma: &str, class_name: &str) -> Vec<(FormId, String)> {
         let c = class(class_name);
         let stem = lemma.strip_suffix(c.remove).unwrap_or(lemma);
         c.forms
             .iter()
             .enumerate()
-            // The same two exclusions `Table::new` applies, so the coverage
-            // walk asks for a fixture row only where the table really emits
-            // a surface: an empty one, and an `AUX_FORM_BLOCK` row.
+            // The exclusion `Table::new` applies, so the coverage walk asks
+            // for a fixture row only where the table really emits a surface.
             .filter(|(_, f)| !AUX_FORM_BLOCK.contains(&(lemma, f.name)))
             .map(|(id, f)| (id as FormId, format!("{stem}{}", f.suffix)))
-            .filter(|(_, surface)| !surface.is_empty())
             .collect()
     }
 
@@ -1290,13 +1385,18 @@ mod tests {
                 for &(lemma1, ac1, _req1) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form0.name)
                 {
                     let c1 = class_id_of(ac1);
-                    for (f1, _) in aux_forms(lemma1, ac1) {
+                    for (f1, surface1) in aux_forms(lemma1, ac1) {
                         let form1 = CLASSES[c1 as usize].forms[f1 as usize].name;
                         let s1 = step(c1, f1, Some(lemma1));
                         chains += 1;
                         depth1_chains += 1;
                         check_fmt(&[s0.clone(), s1.clone()]);
-                        if !depth1.contains(&(lemma1.to_string(), form1.to_string())) {
+                        // A zero-width step is bound the way a BOUND_FORMS
+                        // form is: `search` takes it only under an auxiliary,
+                        // so it never ends a chain and has no row to have.
+                        if !surface1.is_empty()
+                            && !depth1.contains(&(lemma1.to_string(), form1.to_string()))
+                        {
                             missing.push(format!("depth 1: {lemma1}:{form1}"));
                         }
                         for &(lemma2, ac2, _) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form1)
@@ -1359,11 +1459,17 @@ mod tests {
         // 139,260 -> 127,432 the same day for the じゃ/や placeholder rows:
         // -132 depth-1, their six surfaces at each of 22 classes' 基本形, and
         // -11,696 depth-2 behind them.
+        // 127,432 -> 133,802 for the godan potential's `る` row, which attaches
+        // at 仮定形: +105 depth-1, its five surfaces (the two zero-width forms,
+        // る, れ, りゃ) at each of the 21 mapped classes that have a 仮定形, and
+        // +6,265 depth-2 behind them. The walk counts all 21 because it is
+        // class-agnostic by construction; `potential_attaches` restricts the
+        // row to 五段 in `search`, the way CHAIN_BLOCK and the voicing rule do.
         assert_eq!(
-            chains, 127_432,
-            "the walk reached {chains} chains, not 127,432 -- the conjugation table's \
+            chains, 133_802,
+            "the walk reached {chains} chains, not 133,802 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 127,432 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 133,802 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 22 classes JMDICT_POS_CLASS \
              maps (カ変・来ル per Phase 1b-ii, 一段・クレル with the v1-s row). \
              Re-derive it and update this constant, rather than loosening the assertion"
@@ -1476,6 +1582,110 @@ mod tests {
         assert!(reaches("楽しいです", "楽しい"));
         assert!(reaches("楽しかったです", "楽しい"));
         assert!(reaches("食べませんでした", "食べる"));
+    }
+
+    /// Whether some chain over the whole of `surface` reaches `lemma` through
+    /// the godan potential.
+    fn reaches_potential(surface: &str, lemma: &str) -> bool {
+        let c = chars(surface);
+        table()
+            .chains_ending_at(&c, c.len(), 12)
+            .iter()
+            .any(|h| is_godan_potential(&h.steps) && key(&c, h) == lemma)
+    }
+
+    /// Whether any chain over the whole of `surface` puts the potential on
+    /// something other than a 五段 headword's own 仮定形.
+    fn potential_misattached(surface: &str) -> bool {
+        let c = chars(surface);
+        table().chains_ending_at(&c, c.len(), 12).iter().any(|h| {
+            h.steps.windows(2).any(|w| {
+                w[1].aux == Some(POTENTIAL)
+                    && (w[0].aux.is_some()
+                        || !GODAN_POTENTIAL.contains(&CLASSES[w[0].class as usize].name)
+                        || CLASSES[w[0].class as usize].forms[w[0].form as usize].name != "仮定形")
+            })
+        })
+    }
+
+    #[test]
+    fn the_godan_potential_reaches_the_godan_lemma() {
+        for (surface, lemma) in [
+            ("読める", "読む"),
+            ("読めた", "読む"),
+            ("書けない", "書く"),
+            ("会えなかった", "会う"),
+            ("行けます", "行く"),
+            ("待てず", "待つ"),
+            ("帰れて", "帰る"),
+            ("死ねれ", "死ぬ"),
+            ("泳げちゃう", "泳ぐ"),
+            ("話せてる", "話す"),
+        ] {
+            assert!(reaches_potential(surface, lemma), "{surface} -> {lemma}");
+        }
+        // The zero-width step sits between the 仮定形 and the auxiliary and
+        // consumes nothing.
+        let c = chars("読めた");
+        let hit = table()
+            .chains_ending_at(&c, 3, 12)
+            .into_iter()
+            .find(|h| is_godan_potential(&h.steps) && key(&c, h) == "読む")
+            .expect("読めた has a potential chain to 読む");
+        let ranges: Vec<_> = hit.steps.iter().map(|s| s.range.clone()).collect();
+        assert_eq!(ranges, [1..2, 2..2, 2..3]);
+    }
+
+    /// The table knows no dictionary, so `くれた` legitimately reaches 繰る
+    /// (五段・ラ行) Potential and `lex` decides whether that entry exists. What
+    /// the table must never do is put the potential on カ変's `くれ` -- every
+    /// くれる would read 来る Potential -- or on 一段's or an auxiliary's own
+    /// 仮定形.
+    #[test]
+    fn the_potential_attaches_to_a_godan_headword_and_nothing_else() {
+        for surface in [
+            "くれた",
+            "くれない",
+            "くれる",
+            "食べれた",
+            "書かせれる",
+            "書かれれない",
+            "書けれた",
+        ] {
+            assert!(!potential_misattached(surface), "{surface}");
+        }
+        // Nor does the zero-width step ever end a chain: 読め on its own is
+        // the 仮定形 or the imperative, never a bare potential stem.
+        assert!(!reaches_potential("読め", "読む"));
+    }
+
+    #[test]
+    fn the_potential_leaves_particles_and_impossible_stacks_alone() {
+        // 待てよ and 言えよ are an imperative and the particle よ; 待てね the
+        // same with ね; これな is これ + な, not 凝る Potential Negative.
+        for (surface, lemma) in [
+            ("待てよ", "待つ"),
+            ("言えよ", "言う"),
+            ("待てね", "待つ"),
+            ("これな", "こる"),
+        ] {
+            assert!(!reaches_potential(surface, lemma), "{surface}");
+        }
+        // No imperative, causative, passive or want-to of a potential.
+        for surface in ["読めろ", "読めさせる", "読められる", "読めれる", "読めたい"]
+        {
+            assert!(!reaches_potential(surface, "読む"), "{surface}");
+        }
+        // 読めん is the negative ん, not the contracted 読めるん -- which would
+        // win on depth and read "can't" as "can".
+        let c = chars("読めん");
+        let potential: Vec<_> = table()
+            .chains_ending_at(&c, 3, 12)
+            .iter()
+            .filter(|h| is_godan_potential(&h.steps) && key(&c, h) == "読む")
+            .map(|h| h.steps.iter().map(|s| s.aux).collect::<Vec<_>>())
+            .collect();
+        assert_eq!(potential, [vec![None, Some("る"), Some("ん")]]);
     }
 
     #[test]

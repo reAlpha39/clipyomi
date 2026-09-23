@@ -2480,3 +2480,196 @@ fn a_uk_spelling_survives_a_cut_inside_it_and_grammar_still_splits() {
         "an exp entry is criterion 3's business however JMdict spells it"
     );
 }
+
+/// The godan potential's fixture: each verb beside the word its potential
+/// would collide with. Hand-written, ids of its own, glosses written here; the
+/// point is the *pairs*, which a shared extracted fixture could lose or gain.
+const POTENTIAL_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+<!ENTITY adj-i "adjective (keiyoushi)">
+<!ENTITY adj-f "noun or verb acting prenominally">
+<!ENTITY exp "expressions (phrases, clauses, etc.)">
+<!ENTITY prt "particle">
+<!ENTITY aux-v "auxiliary verb">
+<!ENTITY v1 "Ichidan verb">
+<!ENTITY v1-s "Ichidan verb - kureru special class">
+<!ENTITY vk "Kuru verb - special class">
+<!ENTITY v5k "Godan verb with ku ending">
+<!ENTITY v5k-s "Godan verb - Iku/Yuku special class">
+<!ENTITY v5m "Godan verb with mu ending">
+<!ENTITY v5r "Godan verb with ru ending">
+<!ENTITY v5s "Godan verb with su ending">
+<!ENTITY v5u "Godan verb with u ending">
+<!ENTITY uk "word usually written using kana alone">
+<!ENTITY col "colloquial">
+]>
+<JMdict>
+<entry><ent_seq>3100010</ent_seq>
+<k_ele><keb>読む</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>よむ</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5m;</pos><gloss>to read</gloss></sense></entry>
+<entry><ent_seq>3100020</ent_seq>
+<k_ele><keb>会う</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>あう</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5u;</pos><gloss>to meet</gloss></sense></entry>
+<entry><ent_seq>3100030</ent_seq>
+<k_ele><keb>弾く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>はじく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><gloss>to flick</gloss></sense></entry>
+<entry><ent_seq>3100040</ent_seq>
+<k_ele><keb>弾ける</keb></k_ele><r_ele><reb>はじける</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to burst open</gloss></sense></entry>
+<entry><ent_seq>3100050</ent_seq>
+<k_ele><keb>来る</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>くる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&vk;</pos><gloss>to come</gloss></sense></entry>
+<entry><ent_seq>3100060</ent_seq>
+<r_ele><reb>くれる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1-s;</pos><gloss>to give (to me)</gloss></sense></entry>
+<entry><ent_seq>3100070</ent_seq>
+<k_ele><keb>湧く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>わく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><gloss>to gush</gloss></sense></entry>
+<entry><ent_seq>3100080</ent_seq>
+<k_ele><keb>訳</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>わけ</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&n;</pos><gloss>reason</gloss></sense></entry>
+<entry><ent_seq>3100090</ent_seq>
+<r_ele><reb>ない</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&adj-i;</pos><gloss>nonexistent</gloss></sense></entry>
+<entry><ent_seq>3100100</ent_seq>
+<k_ele><keb>口を開く</keb></k_ele><r_ele><reb>くちをひらく</reb></r_ele>
+<sense><pos>&exp;</pos><pos>&v5k;</pos><gloss>to begin to speak</gloss></sense></entry>
+<entry><ent_seq>3100110</ent_seq>
+<k_ele><keb>口</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>くち</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&n;</pos><gloss>mouth</gloss></sense></entry>
+<entry><ent_seq>3100120</ent_seq>
+<r_ele><reb>を</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&prt;</pos><gloss>object marker</gloss></sense></entry>
+<entry><ent_seq>3100130</ent_seq>
+<k_ele><keb>開ける</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>あける</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to open</gloss></sense></entry>
+<entry><ent_seq>3100140</ent_seq>
+<k_ele><keb>行く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>いく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k-s;</pos><misc>&uk;</misc><gloss>to go</gloss></sense>
+<sense><pos>&aux-v;</pos><misc>&uk;</misc><gloss>to continue ...ing</gloss></sense></entry>
+<entry><ent_seq>3100150</ent_seq>
+<k_ele><keb>行けない</keb></k_ele><r_ele><reb>いけない</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&adj-i;</pos><pos>&exp;</pos><gloss>must not</gloss></sense></entry>
+<entry><ent_seq>3100160</ent_seq>
+<k_ele><keb>成る</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>なる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5r;</pos><misc>&uk;</misc><gloss>to become</gloss></sense>
+<sense><pos>&aux-v;</pos><misc>&uk;</misc><gloss>to do (honorific)</gloss></sense></entry>
+<entry><ent_seq>3100170</ent_seq>
+<k_ele><keb>慣れる</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>なれる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to get used to</gloss></sense></entry>
+<entry><ent_seq>3100175</ent_seq>
+<k_ele><keb>慣れた</keb></k_ele><r_ele><reb>なれた</reb></r_ele>
+<sense><pos>&adj-f;</pos><gloss>experienced</gloss></sense></entry>
+<entry><ent_seq>3100176</ent_seq>
+<r_ele><reb>とく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><pos>&aux-v;</pos><gloss>to do in advance (contraction of ておく)</gloss></sense></entry>
+<entry><ent_seq>3100180</ent_seq>
+<k_ele><keb>解く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>とく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><misc>&uk;</misc><gloss>to untie</gloss></sense></entry>
+<entry><ent_seq>3100190</ent_seq>
+<k_ele><keb>溶ける</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>とける</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to melt</gloss></sense></entry>
+<entry><ent_seq>3100200</ent_seq>
+<r_ele><reb>イカす</reb></r_ele><r_ele><reb>いかす</reb></r_ele>
+<sense><pos>&v5s;</pos><misc>&col;</misc><gloss>to be cool</gloss></sense></entry>
+<entry><ent_seq>3100210</ent_seq>
+<k_ele><keb>擦る</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>こする</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5r;</pos><gloss>to rub</gloss></sense></entry>
+<entry><ent_seq>3100220</ent_seq>
+<k_ele><keb>擦れる</keb></k_ele><r_ele><reb>すれる</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to rub against</gloss></sense></entry>
+<entry><ent_seq>3100230</ent_seq>
+<k_ele><keb>変える</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>かえる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to change</gloss></sense></entry>
+<entry><ent_seq>3100240</ent_seq>
+<k_ele><keb>買う</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>かう</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5u;</pos><gloss>to buy</gloss></sense></entry>
+</JMdict>
+"#;
+
+/// `(headword, conjugation)` of every entry on every segment of `text`.
+fn potential_readings(dir: &Path, text: &str) -> Vec<Vec<(String, Option<String>)>> {
+    parse_v2_over(dir, text)
+        .segments
+        .iter()
+        .map(|s| {
+            s.entries
+                .iter()
+                .map(|e| (e.headword.clone(), e.conjugation.clone()))
+                .collect()
+        })
+        .collect()
+}
+
+/// The godan potential reaches the godan lemma, and each collision the phase
+/// predicted comes out the way it was measured to: the dictionary's own word
+/// first where it spells the span, no potential where one would be false.
+#[test]
+fn the_godan_potential_reaches_its_lemma_and_not_its_collisions() {
+    let dir = scratch("godan-potential");
+    jparser::engine::build::build_from_reader(BufReader::new(POTENTIAL_FIXTURE.as_bytes()), &dir)
+        .expect("potential fixture build");
+    let first = |text: &str| -> Vec<(String, Option<String>)> {
+        potential_readings(&dir, text)
+            .into_iter()
+            .map(|entries| entries.into_iter().next().expect("a matched segment"))
+            .collect()
+    };
+    let pair = |h: &str, c: &str| (h.to_string(), Some(c.to_string()));
+    let bare = |h: &str| (h.to_string(), None);
+
+    // The class: one span, the godan lemma, labelled Potential.
+    assert_eq!(first("読めた"), [pair("読む", "Potential Past")]);
+    assert_eq!(
+        first("会えなかった"),
+        [pair("会う", "Potential Negative Past")]
+    );
+
+    // A potential never on カ変's くれ.
+    for entries in potential_readings(&dir, "くれた") {
+        assert!(
+            entries
+                .iter()
+                .all(|(_, c)| !c.as_deref().unwrap_or("").contains("Potential")),
+            "くれた is くれる, never 来る Potential: {entries:?}"
+        );
+    }
+    // Nor on the kana reading of a verb JMdict writes in kanji: わけない is
+    // 訳 + ない, not 湧く Potential Negative.
+    assert_eq!(first("わけない"), [bare("わけ"), bare("ない")]);
+    // Nor on an expression: 口を開けて is 口 + を + 開けて.
+    assert_eq!(
+        first("口を開けて"),
+        [bare("口"), bare("を"), pair("開ける", "Te-form")]
+    );
+    // Hints on is where the expression's length gain would buy the span, so
+    // the refusal is checked there too, cut the way IPADIC cuts it.
+    let on = parse_v2_with_bounds(&dir, "口を開けて", Some(&CutsAt(&[0, 1, 2, 4, 5])));
+    let heads: Vec<&str> = on
+        .segments
+        .iter()
+        .map(|s| s.entries[0].headword.as_str())
+        .collect();
+    assert_eq!(heads, ["口", "を", "開ける"], "hints on");
+    // かえた is 変える; 買う is written in kanji and is not reached through かえ.
+    assert_eq!(first("かえた"), [pair("かえる", "Past")]);
+
+    // Where the dictionary spells the span, its word comes first: 弾ける and
+    // 擦れる in kanji, いけない and 溶ける in kana.
+    assert_eq!(first("弾ける"), [bare("弾ける")]);
+    assert_eq!(first("擦れて"), [pair("擦れる", "Te-form")]);
+    assert_eq!(first("いけない"), [bare("いけない")]);
+    assert_eq!(first("とける"), [bare("とける")]);
+    // Except against the kana potential of an `aux-v` verb, where another
+    // verb does not outrank it -- `adj-f` 慣れた counting as one: なれた is
+    // 成る Potential, not 慣れる. The kana-only `aux-v` とく (the ておく
+    // contraction) is spelled as its own headword and yields: とける above.
+    assert_eq!(first("なれた"), [pair("なる", "Potential Past")]);
+
+    // Known and not fixed: イカせて is イク's causative, which a katakana stem
+    // cannot reach (the table is hiragana), so the one verb the span can find
+    // is JMdict's イカす "cool" -- read as its Conditional before this phase
+    // and as its Potential now.
+    assert_eq!(first("イカせて"), [pair("イカす", "Potential Te-form")]);
+}

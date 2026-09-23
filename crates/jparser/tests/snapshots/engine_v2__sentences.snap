@@ -225,16 +225,9 @@ start=0 len=3 日本語 matched reading=にほんご
     日本語 (-) [にほんご] Japanese (language)
 start=3 len=1 を matched reading=-
     を (-) [-] indicates direct object of action
-start=4 len=2 話せ matched reading=はなせ
-    話す (Conditional) [はなせ] to talk
-    話せる (-) [はなせ] to be able to speak
-start=6 len=2 ます matched reading=-
-    ます (-) [-] measuring container
-    ます (-) [-] to increase
-    ます (-) [-] trout
-    ます (-) [-] expresses politeness towards the listener (or reader)
-    ます (-) [-] to be
-    ... 3 more
+start=4 len=4 話せます matched reading=はなせます
+    話せる (Polite) [はなせます] to be able to speak
+    話す (Potential Polite) [はなせます] to talk
 start=8 len=1 か matched reading=-
     か (-) [-] indicates a question
     か (-) [-] acceptable
@@ -323,6 +316,8 @@ start=3 len=3 開けて matched reading=あけて
     開ける (Te-form) [あけて] to open (a door, etc.)
     開ける (Te-form) [ひらけて] to open out (of a view, scenery, etc.)
     開ける (Te-form) [はだけて] to open (e.g. one's robe)
+    開く (Potential Te-form) [ひらけて] to open
+    開く (Potential Te-form) [あけて] to open (e.g. doors)
 start=6 len=4 ください matched reading=-
     ください (-) [-] please (give me)
 start=10 len=1 。 unmatched

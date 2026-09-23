@@ -20,12 +20,14 @@
 //! every `(start, end)` pair and built a key per pair, which was superlinear
 //! in input length.
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 use crate::engine::flags::WordFlags;
 use crate::engine::kana;
 use crate::engine::table::{
-    classes_for_pos, is_kuru_kanji_headword, ChainHit, Table, CLASSES, KURU_KANJI_CLASS,
+    classes_for_pos, is_godan_potential, is_kuru_kanji_headword, ChainHit, Table, CLASSES,
+    KURU_KANJI_CLASS,
 };
 use crate::engine::{ClassId, ConjStep};
 use crate::index::load::Index;
@@ -193,7 +195,7 @@ pub fn candidates(
         }
     }
 
-    let mut class_cache: HashMap<u32, Vec<ClassId>> = HashMap::new();
+    let mut class_cache: HashMap<u32, EntryFacts> = HashMap::new();
 
     let runs = katakana_runs(chars);
 
@@ -580,7 +582,7 @@ fn dedup_shallowest(bucket: Vec<Candidate>) -> Vec<Candidate> {
 /// recurs across many spans.
 fn allows_chain(
     index: &Index,
-    cache: &mut HashMap<u32, Vec<ClassId>>,
+    cache: &mut HashMap<u32, EntryFacts>,
     record: &StoredRecord,
     hit: &ChainHit,
 ) -> Result<bool, IndexError> {
@@ -604,19 +606,92 @@ fn allows_chain(
     {
         return Ok(false);
     }
-    if let Some(classes) = cache.get(&record.entry_id) {
-        return Ok(classes.contains(&class));
-    }
-    let classes = match index.entry(record.entry_id)? {
-        Some(entry) => entry_classes(&entry),
-        // A record whose entry is missing has no classes to check against;
-        // treated as disqualifying rather than trusted, since a well-formed
-        // index never produces this.
-        None => Vec::new(),
+    let facts = match cache.entry(record.entry_id) {
+        Entry::Occupied(known) => known.into_mut(),
+        Entry::Vacant(slot) => slot.insert(match index.entry(record.entry_id)? {
+            Some(entry) => EntryFacts::of(&entry),
+            // A record whose entry is missing has no classes to check against;
+            // treated as disqualifying rather than trusted, since a well-formed
+            // index never produces this.
+            None => EntryFacts::default(),
+        }),
     };
-    let allowed = classes.contains(&class);
-    cache.insert(record.entry_id, classes);
-    Ok(allowed)
+    if is_godan_potential(&hit.steps) && !facts.takes_a_potential(WordFlags(record.flags)) {
+        return Ok(false);
+    }
+    Ok(facts.classes.contains(&class))
+}
+
+/// What [`allows_chain`] needs from an entry, memoized per `entry_id`.
+#[derive(Default)]
+struct EntryFacts {
+    classes: Vec<ClassId>,
+    /// Some sense that is not `aux-v` is tagged `uk`, "usually written using
+    /// kana alone" -- the plain JMdict tag, not `WordFlags::UK`, which drops
+    /// every entry with an `aux-v` sense and so would drop 貰う, 行く and 成る.
+    /// An `aux-v` sense does not count: 腐る's only `uk` sense is the 〜くさる
+    /// suffix, whose potential nobody writes, and counting it read hints-off
+    /// `良くされる` as 良 + 腐る Potential (about 40 sentences). What it costs
+    /// is 置く, whose `uk` senses are all 〜ておく: `放っておけない` goes back
+    /// to the split it had, 4 sentences hints on.
+    usually_kana: bool,
+    /// Some sense is `exp`: a multi-word expression.
+    expression: bool,
+}
+
+impl EntryFacts {
+    fn of(entry: &EntryData) -> EntryFacts {
+        EntryFacts {
+            classes: entry_classes(entry),
+            usually_kana: entry
+                .senses
+                .iter()
+                .any(|s| s.misc.iter().any(|m| m == "uk") && !s.pos.iter().any(|p| p == "aux-v")),
+            expression: entry
+                .senses
+                .iter()
+                .any(|s| s.pos.iter().any(|p| p == "exp")),
+        }
+    }
+
+    /// Whether the godan potential may reach this entry through a record
+    /// carrying `flags` (`table::is_godan_potential`). Two refusals, both
+    /// measured over twelve visual-novel corpora (151,225 sentences) against
+    /// the same build without them, and both of them the shape `LEN_GAIN` and
+    /// `cost`'s inflection-internal exemption reward: a long span that crosses
+    /// IPADIC's cut between the e-row kana and the auxiliary for nothing.
+    ///
+    /// **Not an expression.** `口を開けて` is 口 + を + 開けて, "open one's
+    /// mouth", and 口を開く's potential only happens to spell it; so do
+    /// `腰を浮かせて` (31 spans hints on), `口を開け-` (22), `目を開け-` (10)
+    /// and `頭を悩ませる` (4), each a 一段 verb that an expression's godan
+    /// swallows whole under a "Potential" label. What it costs is the handful
+    /// that really are potentials -- `目を離せない`, `好きになれる`,
+    /// `一緒になれて`, `役に立てる` -- which go back to the split they had.
+    ///
+    /// **Not the kana reading of a word JMdict says is written in kanji.** A
+    /// potential nobody spelled, of a verb matched only through its reading,
+    /// is two inferences deep, and that is where the false chains were:
+    /// `わけない` read as 湧く Potential Negative where it is 訳 + ない (122
+    /// hints on, where the split had been right), `していただけませんか` cut
+    /// `いた|だけません` and read as 抱く (19), `イ|かせて` as 貸す (91); and
+    /// hints off `ありません` as 増す (317), `眉をひそめる` as 潜む,
+    /// `あるけれども` as 歩く, `抱きすくめた` as 汲む. The kana verbs whose
+    /// potential is common in running text -- 貰う, 行く, 成る, 頂く, 遣る --
+    /// are the ones JMdict tags `uk`, and keep it. The plain tag is read, not
+    /// `WordFlags::UK`, because that flag also drops every entry with an
+    /// `aux-v` sense, and those five are exactly such entries.
+    ///
+    /// What this refusal gives back is not only false chains. Without it, the
+    /// potential of 止む crossed `やめ|て` for free and so kept the 一段 verb
+    /// やめる whole -- about 400 spans of kana 一段 verbs (`やめて`, `ふるえて`,
+    /// `つづけて`) that `PRONOUNCE_CROSS` splits at the stem, repaired by a
+    /// candidate nobody displays. They go back to the split they had at the
+    /// tip; the defect is `cost`'s, and is recorded in the phase's handoff
+    /// rather than patched here through a side door.
+    fn takes_a_potential(&self, flags: WordFlags) -> bool {
+        !self.expression && (self.usually_kana || !flags.contains(WordFlags::PRONOUNCE))
+    }
 }
 
 /// The copula's own class. A noun has no conjugation, so `雨でした` has no
@@ -794,6 +869,51 @@ mod tests {
         assert!(
             !is_desu_past(&[step(desu, "未然形", None), ta]),
             "でしょ + た"
+        );
+    }
+
+    /// Which entries the godan potential may reach through a kana reading:
+    /// `uk` on a lexical sense (貰う), never on an `aux-v` sense alone (腐る's
+    /// 〜くさる), never an expression, and a kanji spelling always.
+    #[test]
+    fn a_potential_reaches_a_kana_reading_only_where_jmdict_writes_it_in_kana() {
+        let sense = |pos: &[&str], uk: bool| crate::index::SenseData {
+            pos: pos.iter().map(|p| p.to_string()).collect(),
+            glosses: Vec::new(),
+            xrefs: Vec::new(),
+            misc: if uk {
+                vec!["uk".to_string()]
+            } else {
+                Vec::new()
+            },
+            info: Vec::new(),
+        };
+        let facts = |senses: Vec<crate::index::SenseData>| {
+            EntryFacts::of(&EntryData {
+                id: 1,
+                readings: Vec::new(),
+                senses,
+            })
+        };
+        let kana = WordFlags::PRONOUNCE;
+        let kanji = WordFlags::PRIMARY;
+        let morau = facts(vec![sense(&["v5u"], true), sense(&["aux-v", "v5u"], true)]);
+        assert!(morau.takes_a_potential(kana), "もらえる is 貰う Potential");
+        let kusaru = facts(vec![sense(&["v5r"], false), sense(&["aux-v", "v5r"], true)]);
+        assert!(
+            !kusaru.takes_a_potential(kana),
+            "くされる is not 腐る Potential"
+        );
+        assert!(kusaru.takes_a_potential(kanji), "腐れる in kanji still is");
+        let waku = facts(vec![sense(&["v5k"], false)]);
+        assert!(
+            !waku.takes_a_potential(kana),
+            "わけない is not 湧く Potential"
+        );
+        let kuchi = facts(vec![sense(&["exp", "v5k"], false)]);
+        assert!(
+            !kuchi.takes_a_potential(kanji),
+            "口を開けて is not 口を開く Potential"
         );
     }
 

@@ -22,7 +22,7 @@ use crate::engine::kana;
 use crate::engine::label;
 use crate::engine::lattice::Step;
 use crate::engine::lex::Candidate;
-use crate::engine::table::{Class, CLASSES, KURU_KANJI_CLASS};
+use crate::engine::table::{classes_for_pos, is_godan_potential, Class, CLASSES, KURU_KANJI_CLASS};
 use crate::index::load::Index;
 use crate::index::{EntryData, IndexError, SenseData};
 use crate::{Entry, Segment};
@@ -137,7 +137,9 @@ fn usually_kana(entry: &Entry) -> bool {
 /// Decide which same-span candidate a caller sees first.
 ///
 /// In sequence: an exact surface match before one only reached by folding
-/// kana together; a `COMMON`-priority headword before a rarer one; a
+/// kana together; any other reading before a godan potential, with one
+/// exception (see [`potential_yields`]); a `COMMON`-priority headword before
+/// a rarer one; a
 /// `COUNTER` entry before the rest **when the character before the span is a
 /// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
 /// word itself) before a `PRONOUNCE` one (a kanji entry's own reading,
@@ -171,6 +173,17 @@ fn usually_kana(entry: &Entry) -> bool {
 /// costs nothing** in both hint states, since it only ever separates
 /// candidates that were about to be decided by ascending `entry_id`.
 ///
+/// **The potential clause sits above `COMMON`, and every position below it
+/// was measured first** over twelve visual-novel corpora (151,225 sentences).
+/// A potential is derived, and the words it collides with are JMdict's own:
+/// with no clause, `弾ける` read 弾く Potential, `擦れて` 擦る, `塗れた` 塗る,
+/// `解れている` 解る, `いけない` 行く Potential Negative (about 400 times) and
+/// `とけちゃう` 解く -- each because the godan is `COMMON` and the other word
+/// is not, or is a reading `PRONOUNCE` demotes. Placed below `COMMON` it still
+/// left `こすれる`, `めくれる`, `つなげる` and `かすめる` reading as the
+/// transitive's potential. Every clause, placed anywhere, moves only
+/// potentials: in a group without one it is false throughout.
+///
 /// Together, entry top-1 goes **0.9125 -> 0.9236 hints on and 0.9093 ->
 /// 0.9215 hints off, with no span losing a hit in either state** -- which is
 /// what takes master plan §2's criterion 2 above the v1 baseline it had been
@@ -193,9 +206,13 @@ fn usually_kana(entry: &Entry) -> bool {
 /// different `Entry::conjugation` labels -- could tie on every key above and
 /// still be visibly different in the output.
 pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool, stem_attached: bool) {
+    let non_verb_here = built
+        .iter()
+        .any(|(c, e)| !is_godan_potential(&c.steps) && !is_verb(e));
     built.sort_unstable_by_key(|(c, e)| {
         (
             !c.exact,
+            potential_yields(c, e, non_verb_here),
             !c.flags.contains(WordFlags::COMMON),
             !(prev_is_digit && c.flags.contains(WordFlags::COUNTER)),
             !c.flags.contains(WordFlags::PARTICLE),
@@ -209,6 +226,39 @@ pub fn order(built: &mut [(Candidate, Entry)], prev_is_digit: bool, stem_attache
             c.entry_id,
         )
     });
+}
+
+/// Whether a godan potential yields to the span's other readings: always,
+/// with one exception. The kana spelling of a JMdict `aux-v` verb's potential
+/// -- 成る, 行く, 貰う, the grammaticalized verbs whose potential is common in
+/// running text -- does not yield to another *verb*: `なれた` as 成る
+/// Potential stays level with 慣れる, and `PRONOUNCE` then demotes 慣れる,
+/// which JMdict writes in kanji. Yielding unconditionally read about 300
+/// `なれ-` spans as 慣れる where the text says "can become".
+///
+/// The exception is narrow on both sides, and each side was measured. It
+/// still yields to a word that is not a verb -- `いけない` is the expression,
+/// not 行く Potential Negative. And it is only for the kana reading of a kanji
+/// verb: a potential spelled as its entry's own headword yields regardless,
+/// because JMdict's kana-only `とく` (the ておく contraction) and 捲る (whose
+/// まくる sense is `aux-v`) are `aux-v` too, and exempting them read `とける`
+/// as とく (55 spans) and `捲れる` as 捲る Potential. Every other potential
+/// yields: とけた is 溶ける before 解く Potential.
+fn potential_yields(c: &Candidate, e: &Entry, non_verb_here: bool) -> bool {
+    let aux_verb = e.senses.iter().any(|s| s.pos.iter().any(|p| p == "aux-v"));
+    is_godan_potential(&c.steps)
+        && (non_verb_here || !aux_verb || !c.flags.contains(WordFlags::PRONOUNCE))
+}
+
+/// Whether some sense of `e` is a verb: a POS that conjugates in a class that
+/// is not an adjective's, or `adj-f`, JMdict's tag for a verb form listed on
+/// its own to modify a noun -- `慣れた` is 慣れる's past, not a word the
+/// potential could be, and counting it a non-verb read なれた as 慣れる again.
+fn is_verb(e: &Entry) -> bool {
+    e.senses
+        .iter()
+        .flat_map(|s| &s.pos)
+        .any(|p| p == "adj-f" || classes_for_pos(p).any(|c| !CLASSES[c as usize].is_adjective))
 }
 
 /// Whether `cand`'s whole chain is one adjective's bare ガル接続 stem.
@@ -393,7 +443,6 @@ fn reading_for(entry: &EntryData, cand: &Candidate, chars: &[char]) -> Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::table::classes_for_pos;
     use crate::engine::ConjStep;
 
     fn entry(readings: &[&str]) -> EntryData {
@@ -912,6 +961,102 @@ mod tests {
         for no in ["が", "がいい", "その", "す", "と", ""] {
             assert!(!attaches_to_a_stem(&c(no)), "{no:?}");
         }
+    }
+
+    /// A godan potential against the readings it collides with, one pair per
+    /// clause. Each trap gives the wrong candidate the lower `entry_id` and,
+    /// where it matters, the only `COMMON`, so a pair passes only if the
+    /// clause under test decides it.
+    #[test]
+    fn order_puts_the_dictionarys_word_before_a_godan_potential() {
+        let class_id = |name: &str| {
+            CLASSES.iter().position(|c| c.name == name).expect("class") as crate::engine::ClassId
+        };
+        let step = |class: &str, form: &str, aux: Option<&'static str>| ConjStep {
+            class: class_id(class),
+            form: CLASSES[class_id(class) as usize]
+                .forms
+                .iter()
+                .position(|f| f.name == form)
+                .expect("form") as crate::engine::FormId,
+            range: 0..0,
+            aux,
+        };
+        let potential = vec![
+            step("五段・カ行イ音便", "仮定形", None),
+            step("一段", "連用形", Some("る")),
+            step("特殊・タ", "基本形", Some("た")),
+        ];
+        let ichidan = vec![
+            step("一段", "連用形", None),
+            step("特殊・タ", "基本形", Some("た")),
+        ];
+        let reading = |id: u32, flags: WordFlags, steps: &[ConjStep], pos: &[&str], uk: bool| {
+            let (mut c, mut e) = order_candidate(id, true, flags, 0);
+            c.steps = steps.to_vec();
+            e.senses[0].pos = pos.iter().map(|p| p.to_string()).collect();
+            if uk {
+                e.senses[0].misc = vec!["uk".to_string()];
+            }
+            (c, e)
+        };
+        let common = |f: WordFlags| WordFlags(f.0 | WordFlags::COMMON.0);
+        let winner = |mut cands: Vec<(Candidate, Entry)>| {
+            order(&mut cands, false, false);
+            cands[0].0.entry_id
+        };
+
+        // 弾けた in kanji: 弾く's potential is COMMON and 弾ける is not, and the
+        // text spells 弾ける, so the dictionary's word goes first anyway.
+        let kanji_potential = reading(1, common(WordFlags::PRIMARY), &potential, &["v5k"], false);
+        let hajikeru = reading(2, WordFlags::PRIMARY, &ichidan, &["v1"], false);
+        assert_eq!(
+            winner(vec![kanji_potential, hajikeru]),
+            2,
+            "弾けた is 弾ける"
+        );
+
+        // In kana, a word that is not a verb goes first: いけない, not 行く
+        // Potential Negative, although 行く is `aux-v`.
+        let pronounce = common(WordFlags::PRONOUNCE);
+        let iku = reading(1, pronounce, &potential, &["v5k-s", "aux-v"], true);
+        let ikenai = reading(2, pronounce, &[], &["adj-i", "exp"], false);
+        assert_eq!(winner(vec![iku.clone(), ikenai]), 2, "いけない is いけない");
+
+        // Another verb, against the potential of an `aux-v` verb, is level
+        // with it, and `PRONOUNCE` then demotes the homograph JMdict writes in
+        // kanji: なれた is 成る Potential, not 慣れる.
+        let nareru = reading(2, pronounce, &ichidan, &["v1"], false);
+        assert_eq!(
+            winner(vec![nareru.clone(), iku.clone()]),
+            1,
+            "なれた is 成る Potential"
+        );
+
+        // `adj-f` is a verb form for this purpose: 慣れた is listed on its own
+        // as `adj-f`, and counted a non-verb it would make 成る yield again.
+        let nareta = reading(2, pronounce, &[], &["adj-f"], false);
+        assert_eq!(winner(vec![nareta, iku.clone()]), 1, "なれた is still 成る");
+
+        // Against any other potential the verb goes first: とけた is 溶ける,
+        // not 解く Potential, although 解く carries `uk`.
+        let toku = reading(1, pronounce, &potential, &["v5k"], true);
+        assert_eq!(winner(vec![toku, nareru.clone()]), 2, "とけた is 溶ける");
+        // And an `aux-v` verb spelled as its own headword yields too: JMdict's
+        // kana-only とく, the ておく contraction, is `aux-v`, and its potential
+        // must not read とけた where 溶ける is there.
+        let toku_contraction = reading(
+            1,
+            common(WordFlags::PRIMARY),
+            &potential,
+            &["v5k", "aux-v"],
+            false,
+        );
+        assert_eq!(
+            winner(vec![toku_contraction, nareru]),
+            2,
+            "とけた is 溶ける, not とく"
+        );
     }
 
     #[test]
