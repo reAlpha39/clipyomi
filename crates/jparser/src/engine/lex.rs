@@ -660,6 +660,9 @@ struct EntryFacts {
     usually_kana: bool,
     /// Some sense is `exp`: a multi-word expression.
     expression: bool,
+    /// Every sense is a suffix: がる (1631750, `suf` and `v5r` and nothing
+    /// else), which only ever follows a stem.
+    suffix: bool,
 }
 
 impl EntryFacts {
@@ -678,13 +681,14 @@ impl EntryFacts {
                 .iter()
                 .any(|s| s.misc.iter().any(|m| m == "uk") && !s.pos.iter().any(|p| p == "aux-v")),
             expression: senses.iter().any(|s| s.pos.iter().any(|p| p == "exp")),
+            suffix: !senses.is_empty() && senses.iter().all(|s| s.pos.iter().any(|p| p == "suf")),
         }
     }
 
     /// Whether the godan potential may reach this entry through a record
-    /// carrying `flags` (`table::is_godan_potential`). Two refusals, both
+    /// carrying `flags` (`table::is_godan_potential`). Three refusals, each
     /// measured over twelve visual-novel corpora (151,225 sentences) against
-    /// the same build without them, and both of them the shape `LEN_GAIN` and
+    /// the same build without it. The first two are the shape `LEN_GAIN` and
     /// `cost`'s inflection-internal exemption reward: a long span that crosses
     /// IPADIC's cut between the e-row kana and the auxiliary for nothing.
     ///
@@ -709,6 +713,13 @@ impl EntryFacts {
     /// `WordFlags::UK`, because that flag also drops every entry with an
     /// `aux-v` sense, and those five are exactly such entries.
     ///
+    /// **Not a suffix.** がる (1631750) is `suf` and `v5r` and nothing else, so
+    /// its potential only ever lands on a stem the tokenizer did not keep:
+    /// hints off, `焦がれる`, `削がれる` and `恋い焦がれる` read 焦 + がる
+    /// Potential (8 spans over twelve corpora). An entry with any sense that
+    /// is not a suffix -- 入る, whose suffix senses sit beside its own --
+    /// keeps the potential.
+    ///
     /// What this refusal gives back is not only false chains. Without it, the
     /// potential of 止む crossed `やめ|て` for free and so kept the 一段 verb
     /// やめる whole -- about 400 spans of kana 一段 verbs (`やめて`, `ふるえて`,
@@ -717,7 +728,9 @@ impl EntryFacts {
     /// tip; the defect is `cost`'s, and is recorded in the phase's handoff
     /// rather than patched here through a side door.
     fn takes_a_potential(&self, flags: WordFlags) -> bool {
-        !self.expression && (self.usually_kana || !flags.contains(WordFlags::PRONOUNCE))
+        !self.expression
+            && !self.suffix
+            && (self.usually_kana || !flags.contains(WordFlags::PRONOUNCE))
     }
 }
 
@@ -950,6 +963,18 @@ mod tests {
         assert!(
             !kuchi.takes_a_potential(kanji),
             "口を開けて is not 口を開く Potential"
+        );
+        // がる is a suffix and nothing else, so 焦がれる is not 焦 + がる
+        // Potential; 入る has suffix senses beside its own and keeps it.
+        let garu = facts(vec![sense(&["suf", "v5r"], false)]);
+        assert!(
+            !garu.takes_a_potential(kanji),
+            "焦がれる is not がる Potential"
+        );
+        let hairu = facts(vec![sense(&["v5r"], false), sense(&["suf", "v5r"], false)]);
+        assert!(
+            hairu.takes_a_potential(kanji),
+            "入れる is still 入る Potential"
         );
     }
 
