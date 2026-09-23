@@ -272,11 +272,18 @@ mod tests {
     /// recovered against 8 lost, gold identical to the digit in both hint
     /// states and the snapshot with it. The CSV's own comment block carries
     /// the per-row counts and names the 8.
+    ///
+    /// **111 -> 115** on 2026-09-23, from a general sweep over twelve corpora
+    /// (every JMdict content entry the ta-old port keeps whole, not only
+    /// `uk`): `きもち`, `兄様`, `姉上`, `兄上`, each a false gloss. 181 of
+    /// 151,225 sentences change, 203 occurrences recovered against 3 lost, gold
+    /// identical in both hint states. A fifth, `よさ`, was measured and refused;
+    /// the CSV says why.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 111,
-            "111 is the largest list measured against every gold cell"
+            user_lexicon_body().lines().count() <= 115,
+            "115 is the largest list measured against every gold cell"
         );
     }
 
