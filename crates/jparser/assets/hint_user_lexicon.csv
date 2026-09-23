@@ -306,3 +306,29 @@
 カワイイ,1,1,-5878,名詞,一般,*,*,*,*,カワイイ,カワイイ
 マズイ,1,1,-5878,名詞,一般,*,*,*,*,マズイ,マズイ
 熟達した,1,1,-5878,名詞,一般,*,*,*,*,熟達した,ジュクタツシタ
+#
+# 2026-09-23, four rows from the twelve-corpus re-run (the ten above plus two
+# writers no earlier session had run), found by asking where the ta-old port
+# emits a JMdict content word whole -- any entry, not only `uk` -- and this
+# engine cuts it into pieces that are not a particle stack. Each is a false
+# gloss rather than an over-split, which is what put it here:
+#
+# - きもち: き|もち, "spirit" + "rice cake", 103 of 121 occurrences, and
+#   きもちいい / きもちよく inherit it (き|もち|いい 30).
+# - よさ was measured and refused: 気持ち|よ|さ glosses よ as the sentence
+#   particle 125 times, but with the row the whole span leads with 止す "to
+#   stop" (its 未然形, and `uk`, so the PRONOUNCE clause does not demote it),
+#   which trades one wrong gloss for a confident wrong verb.
+# - 兄様, 姉上, 兄上: the honorific swallows the particle after it --
+#   お兄|様に read 様に "like; as" 44 times, 姉|上は read 上は "now that" 11.
+#   お兄様 is 783 of 兄様's 796 occurrences and stays お|兄様.
+#
+# Twelve corpora, 151,225 sentences, hints on, against the same build without
+# them: 181 sentences change (0.12%), きもち 120, 兄様 45, 姉上 17 and 兄上 21
+# recovered, and the one collateral is 不思議とお兄様 reading 不思議|とお|兄様
+# 3 times -- Viterbi's globality, beside the new token, as before. Gold is
+# identical to the digit in both hint states.
+きもち,1,1,-3200,名詞,一般,*,*,*,*,きもち,きもち
+兄様,1,1,-3200,名詞,一般,*,*,*,*,兄様,アニサマ
+姉上,1,1,-3200,名詞,一般,*,*,*,*,姉上,アネウエ
+兄上,1,1,-3200,名詞,一般,*,*,*,*,兄上,アニウエ
