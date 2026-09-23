@@ -78,12 +78,12 @@ The plan succeeds when all four hold:
    Against v1 (Phase 1a handoff §2), same corpus, same 2,163 spans, same
    harness:
 
-   | | v1 | v2 before | v2 now |
+   | | v1 | v2 before | v2 now (2026-09-23, `5194b8a`) |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7365 (1593) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7850 (1698) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9506** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9528** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7346 (1589) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7859 (1700) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9569** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9585** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
    — a 2026-09-16 reading; later changes have moved it repeatedly and the
@@ -675,20 +675,33 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7365 (1593) | 0.8257 (1786) | 0.9506 | 0.6344 (118 / 186) | 193 spans in 94 merges |
-| hints on | **0.7850 (1698)** | **0.9006 (1948)** | **0.9528** | **0.8172 (152 / 186)** | 250 spans in 116 merges |
+| hints off | 0.7346 (1589) | 0.8257 (1786) | 0.9569 (1178 / 1231) | 0.6344 (118 / 186) | 197 spans in 96 merges |
+| hints on | **0.7859 (1700)** | **0.9034 (1954)** | **0.9585 (1201 / 1253)** | **0.8172 (152 / 186)** | 254 spans in 118 merges |
 
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
 `transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 56 / 112,
-`false-match` 23 / 32, `transparent` 39 / 42. Latency at the app's ceiling
-(`jparser-cli bench`, gold index, k = 3): scaling **unmoved** — two readings
-of the same binary gave 1.00x and 1.05x hints on against the previous block's
-1.05x, and 0.98x off against 0.97x, which is this section's own ±0.1x read
-noise. Interleaved A/B on the millisecond figures agrees: three rounds each
-way read 536 / 560 / 531 ms before against 524 / 529 / 531 after hints on, and
-579 / 609 / 587 against 589 / 596 / 596 off; the spreads overlap. The `てる`
-rows below read the same way: 1.02x in both states, and interleaved 596 / 572 /
-551 ms before against 604 / 562 / 579 after.
+`false-match` 23 / 32, `transparent` 39 / 42.
+
+**Refreshed 2026-09-23 at `5194b8a`; the block had stood unchanged since
+2026-09-18** while the cells moved under it — it read 1698 / 1948 / 0.9528
+hints on and 1593 / 1786 / 0.9506 hints off. Each move is recorded in the
+handoff of the session that made it, dated 2026-09-18 to 2026-09-23 in
+`docs/superpowers/`; the last three are the twelve-corpora table fixes
+(1696 / 1950 / 0.9528 -> 1698 / 1952 / 0.9584 hints on, 1588 / 1785 /
+0.9504 -> 1589 / 1786 / 0.9569 off), the godan potential (+1 strict,
+tolerant and entry hit hints on) and the empty-stem exemption on
+`PRONOUNCE_CROSS` (+1 again, hints on only;
+[`2026-09-23-empty-stem-and-potential-stem-handoff.md`](../2026-09-23-empty-stem-and-potential-stem-handoff.md)).
+None of the three moves a compound class line.
+
+Latency at the app's ceiling (`jparser-cli bench`, gold index, k = 3, hints
+on, 10,040 characters), interleaved A/B across the three changes of
+2026-09-23: 644 / 687 / 624 ms before against 619 / 672 / 579 after the first,
+565 / 544 / 540 / 573 / 551 against 571 / 562 / 564 / 577 / 561 for the
+second, 579 / 562 / 568 against 563 / 549 / 547 for the third; scaling
+0.91-1.07x throughout. Two builds that differ by one suffix check read 3 %
+apart, which is this machine's layout noise; every figure is a reading from
+the moment it was taken.
 
 **WHAT REGISTER THESE NUMBERS SPEAK FOR, added 2026-09-18 because nothing said
 it and a refusal was argued on it.** The 150 sentences behind every cell above
@@ -729,7 +742,7 @@ hundred hand-adjudicated VN-register spans would make a VN-class change
 the largest available change of 2026-09-18. It is hand adjudication, so it is
 a phase of its own.
 
-**Last moved 2026-09-18 by `table.rs`'s `ていく`/`でいく` rows**, the
+**Moved 2026-09-18 by `table.rs`'s `ていく`/`でいく` rows** (a dated record, like the tables below; the block above is current), the
 directional auxiliary — the most frequent member of the 〜て family still
 split in *both* hint states after the `ている` work. `歩いて` | `いく` and
 `引きずって` | `いった` now read as one segment, `歩く` Directional and
