@@ -94,12 +94,16 @@ const FORM_WORD: &[(&str, &str)] = &[
 ];
 
 /// `(lemma, outermost form)` pairs whose two words collapse into one
-/// (design §3.3 rule 2). たら is a conditional, not a "Past Conditional";
-/// 読んで through the copula class's 連用形 is the te-form, not "Past".
+/// (design §3.3 rule 2). たら is a conditional, not a "Past Conditional",
+/// and so is its voiced だら.
+///
+/// A third row, `("だ", "連用形", "Te-form")`, collapsed 読んで reached through
+/// the copula class's 連用形. The voiced past moved to 特殊・タ on 2026-09-23
+/// (`table.rs`'s `だ` row), which has no 連用形, so the pair became
+/// unreachable and was removed; 読んで is the `で` row's alone.
 const OVERRIDE: &[(&str, &str, &str)] = &[
     ("た", "仮定形", "Conditional"),
     ("だ", "仮定形", "Conditional"),
-    ("だ", "連用形", "Te-form"),
 ];
 
 /// The word for an auxiliary lemma, if `AUX_WORD` knows it.

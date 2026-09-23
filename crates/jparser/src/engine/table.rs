@@ -371,11 +371,18 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     // 一段 because the contraction conjugates as one: てる/てた/てて/てない.
     // でる mirrors `で` below and takes 連用タ接続 only, for the same reason
     // `で` does -- it follows an onbin stem (遊ん, 読ん) and nothing else.
-    // It reaches 遊んでる and 遊んでない; 遊んでた and 遊んでます keep the
-    // `だ` 連用形 route that was already there and are still labelled Past,
-    // which is a pre-existing asymmetry between て and で, measured on the
-    // binary before these rows and left alone.
-    ("だ", "特殊・ダ", "連用タ接続"),
+    // It reaches 遊んでる and 遊んでない, and since 2026-09-23 遊んでた and
+    // 遊んでます too, labelled Progressive -- see the `だ` row just below.
+    //
+    // **The voiced past is 特殊・タ, the same class as `た`**, which is what
+    // IPADIC itself tags 読ん|だ and 読ん|だら as. Until 2026-09-23 this row
+    // named the copula's class 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/
+    // だっ/で: so `読んだら` was unreachable -- 読|ん|だら with 読 unmatched,
+    // and 泳いだら and 死んだら the same -- while 読んなら, 読んな, 読んなれ and
+    // 読んだっ were generated instead, and the voicing error `onbin_voicing_agrees`
+    // fixes could reach `ないなら` and `ないな` through them. The Phase 1b-i
+    // label fixture had recorded this as a "table finding" and left it.
+    ("だ", "特殊・タ", "連用タ接続"),
     ("て", "不変化型", "連用タ接続"),
     ("て", "不変化型", "連用形"),
     ("で", "不変化型", "連用タ接続"),
@@ -1111,7 +1118,15 @@ mod tests {
     fn every_tokushu_class_has_an_attaches_to_row() {
         // A future regeneration that adds a 特殊・ class silently can't
         // chain through it -- this is the check that would fail instead.
-        for class in CLASSES.iter().filter(|c| c.name.starts_with("特殊・")) {
+        //
+        // 特殊・ダ is the one exception, and it is the copula's own class:
+        // nothing that conjugates precedes the copula (it follows a noun or a
+        // な-adjective stem), and the voiced past it used to stand in for is
+        // 特殊・タ in IPADIC -- see the `だ` row in ATTACHES_TO.
+        for class in CLASSES
+            .iter()
+            .filter(|c| c.name.starts_with("特殊・") && c.name != "特殊・ダ")
+        {
             assert!(
                 ATTACHES_TO.iter().any(|(_, name, _)| *name == class.name),
                 "{} has no ATTACHES_TO row and can never chain",
@@ -1312,11 +1327,18 @@ mod tests {
         // *class* in the mapped set. Its ten forms are the +10 in depth-0
         // (180 -> 190); none of them has an empty suffix, the stem being く,
         // so it grows depth-2 by less than an auxiliary row of the same size.
+        // 145,482 -> 141,334 on 2026-09-23, and a shrink: the voiced past `だ`
+        // moved from the copula's class 特殊・ダ (seven forms) to 特殊・タ
+        // (three: だら, だ, だろ), so it offers four fewer surfaces at every
+        // 連用タ接続 this walk reaches -- five lost (なら, な, なれ, だっ, で),
+        // one gained (だら) -- and the five were attachment sites for a second
+        // auxiliary in turn. `onbin_voicing_agrees` prunes nothing here: like CHAIN_BLOCK it
+        // lives in `search`, and this walk is class-agnostic by construction.
         assert_eq!(
-            chains, 145_482,
-            "the walk reached {chains} chains, not 145,482 -- the conjugation table's \
+            chains, 141_334,
+            "the walk reached {chains} chains, not 141,334 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 145,482 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 141,334 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 22 classes JMDICT_POS_CLASS \
              maps (カ変・来ル per Phase 1b-ii, 一段・クレル with the v1-s row). \
              Re-derive it and update this constant, rather than loosening the assertion"
@@ -1391,6 +1413,9 @@ mod tests {
         // The other direction: an unvoiced auxiliary on a voiced onbin.
         assert!(!reaches("泳いた", "泳ぐ"), "泳ぐ's past is 泳いだ");
         assert!(!reaches("読んた", "読む"), "読む's past is 読んだ");
+        // The voiced past is 特殊・タ, so its conditional is reachable.
+        assert!(reaches("読んだら", "読む"), "読んだら -> 読む");
+        assert!(reaches("泳いだら", "泳ぐ"), "泳いだら -> 泳ぐ");
         // Controls: every pairing the language does have still deinflects.
         for (surface, lemma) in [
             ("泳いで", "泳ぐ"),

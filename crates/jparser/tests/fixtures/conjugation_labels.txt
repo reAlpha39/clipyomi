@@ -29,7 +29,7 @@
 # recorded in the 1b-i handoff, not fixed here.
 #
 # A surface can appear twice with different chains (書け is both 仮定形 and
-# 命令ｅ; 読んで reaches で through two rows). Each chain is its own row.
+# 命令ｅ). Each chain is its own row.
 
 # --- Part A: depth 0. One row per (adjective?, form) reachable from a class
 # --- JMDICT_POS_CLASS maps. Only Conditional, Imperative and Adverbial name a
@@ -179,17 +179,16 @@
 書いたら	五段・カ行イ音便:連用タ接続 た:仮定形	Conditional
 書いた	五段・カ行イ音便:連用タ接続 た:基本形	Past
 書いたろ	五段・カ行イ音便:連用タ接続 た:未然形	Past
-# table finding: ATTACHES_TO points the voiced past だ at the copula class
-# 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/だっ/で, so 読んだら is
-# unreachable. Of the rows below, 読んなら, 読んな, 読んなれ and 読んだっ are
-# spurious; 読んだ, 読んだろ and 読んで are real. All labelled by rule.
-読んなら	五段・マ行:連用タ接続 だ:仮定形	Conditional
-読んな	五段・マ行:連用タ接続 だ:体言接続	Past
-読んなれ	五段・マ行:連用タ接続 だ:命令ｅ	Past Imperative
+# The voiced past だ is 特殊・タ, the class of た, which is what IPADIC tags
+# 読ん|だ and 読ん|だら as. Until 2026-09-23 ATTACHES_TO pointed it at the
+# copula class 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/だっ/で, and this
+# block recorded that as a table finding: 読んだら was unreachable, and the
+# rows 読んなら, 読んな, 読んなれ, 読んだっ and a second 読んで were spurious.
+# Those five were removed with the fix, not quietly; 読んだら replaces the
+# first.
+読んだら	五段・マ行:連用タ接続 だ:仮定形	Conditional
 読んだ	五段・マ行:連用タ接続 だ:基本形	Past
 読んだろ	五段・マ行:連用タ接続 だ:未然形	Past
-読んだっ	五段・マ行:連用タ接続 だ:連用タ接続	Past
-読んで	五段・マ行:連用タ接続 だ:連用形	Te-form
 書いて	五段・カ行イ音便:連用タ接続 て:基本形	Te-form
 読んで	五段・マ行:連用タ接続 で:基本形	Te-form
 # です/じゃ/や attach to 基本形, so their depth-1 surfaces read as nonstandard
