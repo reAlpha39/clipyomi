@@ -31,7 +31,7 @@ use crate::engine::table::{
 };
 use crate::engine::{ClassId, ConjStep};
 use crate::index::load::Index;
-use crate::index::{EntryData, IndexError, StoredRecord};
+use crate::index::{EntryData, IndexError, SenseData, StoredRecord};
 
 /// Longest deinflection chain `chains_ending_at` is asked to search, in
 /// characters consumed from a span's tail. Set from the corpus's deepest
@@ -666,14 +666,18 @@ impl EntryFacts {
     fn of(entry: &EntryData) -> EntryFacts {
         EntryFacts {
             classes: entry_classes(entry),
-            usually_kana: entry
-                .senses
+            ..EntryFacts::of_senses(&entry.senses)
+        }
+    }
+
+    /// Everything but `classes`, which nothing that holds only the senses asks.
+    fn of_senses(senses: &[SenseData]) -> EntryFacts {
+        EntryFacts {
+            classes: Vec::new(),
+            usually_kana: senses
                 .iter()
                 .any(|s| s.misc.iter().any(|m| m == "uk") && !s.pos.iter().any(|p| p == "aux-v")),
-            expression: entry
-                .senses
-                .iter()
-                .any(|s| s.pos.iter().any(|p| p == "exp")),
+            expression: senses.iter().any(|s| s.pos.iter().any(|p| p == "exp")),
         }
     }
 
@@ -715,6 +719,13 @@ impl EntryFacts {
     fn takes_a_potential(&self, flags: WordFlags) -> bool {
         !self.expression && (self.usually_kana || !flags.contains(WordFlags::PRONOUNCE))
     }
+}
+
+/// [`EntryFacts::takes_a_potential`] for a caller holding an entry's senses
+/// rather than the index: `assemble::to_segment`, which reads the potential's
+/// stem off the text after a span and must refuse it wherever `lex` would.
+pub fn potential_allowed(senses: &[SenseData], flags: WordFlags) -> bool {
+    EntryFacts::of_senses(senses).takes_a_potential(flags)
 }
 
 /// The copula's own class. A noun has no conjugation, so `雨でした` has no
