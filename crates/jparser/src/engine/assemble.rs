@@ -126,7 +126,9 @@ pub fn to_segment(
 /// recorded here, that a `uk` bit takes the 26-row `spurious_merges.txt` gate
 /// to 25 by letting `ことになって` swallow its `に`, was of the plain tag; see
 /// `flags::GRAMMATICAL_POS` and `cost::UK_MIN_LEN` for what the conjunction
-/// had to add before the gates held.
+/// had to add before the gates held. `cost` reads a third form as well, for
+/// the cut at an empty stem: the tag on a sense that is not `aux-v`, which is
+/// `lex::Candidate::usually_kana`.
 fn usually_kana(entry: &Entry) -> bool {
     entry
         .senses
@@ -465,6 +467,7 @@ mod tests {
             inside_katakana_run: false,
             function_stack: false,
             grammatical_stack: false,
+            usually_kana: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: String::new(),
@@ -681,6 +684,7 @@ mod tests {
             inside_katakana_run: false,
             function_stack: false,
             grammatical_stack: false,
+            usually_kana: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: String::new(),
