@@ -635,6 +635,21 @@ fn onbin_voicing_agrees(lemma: &str, requires: &str, inner_class: ClassId) -> bo
 }
 
 const AUX_FORM_BLOCK: &[(&str, &str)] = &[
+    // `です`'s 未然形 でしょ, and not a collision this time but a dead end:
+    // IPADIC's volitional `う` attaches to 特殊・デス's 未然形 (でしょ|う), which
+    // no ATTACHES_TO row can follow, so every [verb/adjective]でしょう parsed
+    // `行くでしょ` | `う` with the lone `う` glossed 卯 "the Rabbit (zodiac)":
+    // 311 spans over twelve corpora, 151,225 sentences, hints on. Blocked, the
+    // span stops at the verb and `でしょう` is JMdict's own headword, glossed
+    // the way `だろう` after a verb already is.
+    //
+    // **Letting `う` follow instead was built and refused (2026-09-23).** It
+    // reaches 行くでしょう as one span, but a seven-character chain earns
+    // `LEN_GAIN` enough that `大変だったでしょう` became `だる` (the
+    // 〜てやる contraction) Past Polite Volitional, where the split had been
+    // right, and `わけないでしょう` became 分ける; extending it to 特殊・ダ and
+    // 特殊・タ as IPADIC does read `ないだろう` as 凪ぐ 100 times.
+    ("です", "未然形"),
     ("てる", "命令ｙｏ"),
     ("てる", "未然ウ接続"),
     ("でる", "命令ｙｏ"),
@@ -1334,11 +1349,14 @@ mod tests {
         // one gained (だら) -- and the five were attachment sites for a second
         // auxiliary in turn. `onbin_voicing_agrees` prunes nothing here: like CHAIN_BLOCK it
         // lives in `search`, and this walk is class-agnostic by construction.
+        // 141,334 -> 139,260 the same day when `です`'s 未然形 でしょ joined
+        // AUX_FORM_BLOCK: -22 depth-1, one per mapped class (every one has the
+        // 基本形 the row attaches to), and -2,052 depth-2 that stood on でしょ.
         assert_eq!(
-            chains, 141_334,
-            "the walk reached {chains} chains, not 141,334 -- the conjugation table's \
+            chains, 139_260,
+            "the walk reached {chains} chains, not 139,260 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 141,334 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 139,260 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 22 classes JMDICT_POS_CLASS \
              maps (カ変・来ル per Phase 1b-ii, 一段・クレル with the v1-s row). \
              Re-derive it and update this constant, rather than loosening the assertion"
@@ -1429,6 +1447,28 @@ mod tests {
         ] {
             assert!(reaches(surface, lemma), "{surface} -> {lemma}");
         }
+    }
+
+    #[test]
+    fn a_verb_stops_before_deshou() {
+        let reaches = |surface: &str, lemma: &str| {
+            let c = chars(surface);
+            table()
+                .chains_ending_at(&c, c.len(), 8)
+                .iter()
+                .any(|h| key(&c, h) == lemma)
+        };
+        // でしょ is blocked on the `です` row, so the verb's chain ends before
+        // it and でしょう is left to its own headword.
+        assert!(
+            !reaches("行くでしょ", "行く"),
+            "行く | でしょう, not 行くでしょ | う"
+        );
+        assert!(!reaches("楽しいでしょ", "楽しい"));
+        // The rest of the row is untouched.
+        assert!(reaches("楽しいです", "楽しい"));
+        assert!(reaches("楽しかったです", "楽しい"));
+        assert!(reaches("食べませんでした", "食べる"));
     }
 
     #[test]
