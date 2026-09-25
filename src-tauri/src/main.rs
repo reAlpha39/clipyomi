@@ -15,6 +15,8 @@ mod settings;
 mod state;
 #[cfg(test)]
 mod test_support;
+#[cfg(target_os = "windows")]
+mod topmost;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -125,6 +127,7 @@ fn main() {
                 #[cfg(target_os = "windows")]
                 {
                     commands::win32_frameless::init_window(&main_window.as_ref().window());
+                    topmost::start(&main_window);
                 }
                 // On Windows the window is a band taller than it looks: the
                 // reserved row lives above the content and the region clips it
