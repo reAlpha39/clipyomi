@@ -678,7 +678,32 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     // because `なり` and `し` are themselves COMMON particle entries. Both are
     // in `parse_sentences.txt`, so the curated snapshot caught what the gold
     // corpus's own metrics did not -- they improved through it.
-    if cand.function_stack && cand.steps.is_empty() {
+    //
+    // **Not charged, hints off, to a `uk` word of three kana or more.** The
+    // term asks whether a span tiles into COMMON particles, and ordinary
+    // adverbs JMdict writes in kana do: `とても` is と + て + も, `ともに`,
+    // `なかなか`, `かなり`, `やがて`. With no tokenizer to hold them together
+    // they shattered -- over twelve visual-novel corpora (151,225 sentences),
+    // hints off, `と|て|も` 595 times, `とも|に` 350, `なかな|か` 229, `か|なり`
+    // 202, `や|が|て` 102. Exempting them changes 1,961 sentences: about 1,900
+    // spans repaired against about 90 made worse (`もしかしたら` → `もしか|したら`
+    // 62, `もしもし` → `もしも|し` 17, `まとも|に` → `ま|ともに` 4). Gold hints
+    // off gains `やがて`, one span on every cell.
+    //
+    // The `uk` flag already refuses grammar (`flags::GRAMMATICAL_POS`), and the
+    // designed targets には and にも are particles, so neither is reached. The
+    // floor is `UK_MIN_LEN` for the reason given there: without it `もし`
+    // itself is repaired (388) but `たしか|に` becomes `たし|かに`, "crab" (175),
+    // and `ワタシ`, `ものの` and `もしもし` break hints on. Hints on the
+    // tokenizer already holds these words whole, and exempting there split
+    // `もしもし` and `信じがたい` (10 spans) for 3 repaired, so the tokenizer's
+    // absence is the gate -- `LEN_GAIN`'s, inverted.
+    let uk_word = bounds.is_none()
+        && cand.flags.contains(WordFlags::UK)
+        && !cand.flags.contains(WordFlags::PARTICLE)
+        && cand.exact
+        && cand.len >= UK_MIN_LEN;
+    if cand.function_stack && cand.steps.is_empty() && !uk_word {
         total += FUNCTION_STACK;
     }
     if cand.digit_counter {
@@ -998,6 +1023,48 @@ mod tests {
             cost(&conjugated, None),
             cost(&plain, None),
             "a conjugated match pays nothing, however its span decomposes"
+        );
+    }
+
+    /// `とても` hints off: a `uk` word of three kana that tiles into particles
+    /// does not pay `FUNCTION_STACK`. Two kana (`かに`, "crab"), a particle
+    /// (`として`), an inexact match, and any match under a tokenizer still do.
+    #[test]
+    fn a_uk_word_of_three_kana_is_not_a_function_stack_hints_off() {
+        let uk = WordFlags(WordFlags::COMMON.0 | WordFlags::UK.0);
+        let stacked = |len: usize, flags: WordFlags, exact: bool| {
+            let mut c = cand(0, len, flags, exact);
+            c.function_stack = true;
+            c
+        };
+        let charged = |c: &Candidate, bounds: Option<&dyn Boundaries>| {
+            let mut plain = c.clone();
+            plain.function_stack = false;
+            cost(c, bounds) - cost(&plain, bounds)
+        };
+        let none = At(&[]);
+
+        assert_eq!(charged(&stacked(3, uk, true), None), 0, "とても");
+        assert_eq!(
+            charged(&stacked(2, uk, true), None),
+            FUNCTION_STACK,
+            "かに is two kana"
+        );
+        let particle = WordFlags(uk.0 | WordFlags::PARTICLE.0);
+        assert_eq!(
+            charged(&stacked(3, particle, true), None),
+            FUNCTION_STACK,
+            "として is a particle"
+        );
+        assert_eq!(
+            charged(&stacked(3, uk, false), None),
+            FUNCTION_STACK,
+            "an inexact match"
+        );
+        assert_eq!(
+            charged(&stacked(3, uk, true), Some(&none)),
+            FUNCTION_STACK,
+            "the tokenizer holds it hints on"
         );
     }
 
