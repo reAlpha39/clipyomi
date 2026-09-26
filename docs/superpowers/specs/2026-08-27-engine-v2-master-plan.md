@@ -78,11 +78,11 @@ The plan succeeds when all four hold:
    Against v1 (Phase 1a handoff §2), same corpus, same 2,163 spans, same
    harness:
 
-   | | v1 | v2 before | v2 now (2026-09-23, `5194b8a`) |
+   | | v1 | v2 before | v2 now (2026-09-26, `58a8a80`) |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7346 (1589) |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7351 (1590) |
    | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7859 (1700) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9569** ✓ |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9570** ✓ |
    | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9585** ✓ |
 
    Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
@@ -675,7 +675,7 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7346 (1589) | 0.8257 (1786) | 0.9569 (1178 / 1231) | 0.6344 (118 / 186) | 197 spans in 96 merges |
+| hints off | 0.7351 (1590) | 0.8262 (1787) | 0.9570 (1179 / 1232) | 0.6344 (118 / 186) | 197 spans in 96 merges |
 | hints on | **0.7859 (1700)** | **0.9034 (1954)** | **0.9585 (1201 / 1253)** | **0.8172 (152 / 186)** | 254 spans in 118 merges |
 
 Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
@@ -693,6 +693,13 @@ tolerant and entry hit hints on) and the empty-stem exemption on
 `PRONOUNCE_CROSS` (+1 again, hints on only;
 [`2026-09-23-empty-stem-and-potential-stem-handoff.md`](../2026-09-23-empty-stem-and-potential-stem-handoff.md)).
 None of the three moves a compound class line.
+
+**Refreshed again 2026-09-26 at `58a8a80`**, for one move: `FUNCTION_STACK`
+no longer charges a `uk` word of three kana or more hints off, and gold gains
+`やがて` (1589 / 1786 / 0.9569 -> 1590 / 1787 / 0.9570 off; hints on
+unchanged, by construction). The display clause before ます committed with it
+moves no cell. See
+[`2026-09-26-reported-sentence-handoff.md`](../2026-09-26-reported-sentence-handoff.md).
 
 Latency at the app's ceiling (`jparser-cli bench`, gold index, k = 3, hints
 on, 10,040 characters), interleaved A/B across the three changes of
