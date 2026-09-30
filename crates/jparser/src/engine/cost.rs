@@ -698,12 +698,26 @@ pub fn cost(cand: &Candidate, bounds: Option<&dyn Boundaries>) -> i32 {
     // tokenizer already holds these words whole, and exempting there split
     // `もしもし` and `信じがたい` (10 spans) for 3 repaired, so the tokenizer's
     // absence is the gate -- `LEN_GAIN`'s, inverted.
-    let uk_word = bounds.is_none()
-        && cand.flags.contains(WordFlags::UK)
+    //
+    // **Nor, hints off, to an adverb of any length** (`Candidate::adverb`:
+    // every sense `adv`), which is what reaches `もし` without `かに` -- the
+    // collisions below the floor were nouns (蟹, 綿, 物, 種, 桃), and nothing in
+    // `WordFlags` could tell them apart. It also reaches expressions whose
+    // every sense is an adverb, and that is what keeps `もしかしたら` whole:
+    // the floor alone had cut it `もしか|したら`, and `もし` spared alone cuts
+    // it `もし|かしたら`, "lend". Measured 2026-09-30 against the floor alone:
+    // 732 sentences change hints off, about 740 spans repaired (`もし` 326,
+    // `なぜ` 182, `もしかしたら` 62, `それなりに` 60, `やや` 34, `たとえば` 14,
+    // `さぞ` 13) against about 37 made worse -- `もしか|しなく` now ties with
+    // `もし|かしなく` and the tie-break takes the longer last step (11, and 8
+    // more of the もしか family), `バカ|に|される` reads the adverb バカに (9),
+    // and a line cut off at `かもし` reads `か|もし` (6). Gold is identical in
+    // both hint states, and hints on nothing moves.
+    let spared = bounds.is_none()
         && !cand.flags.contains(WordFlags::PARTICLE)
         && cand.exact
-        && cand.len >= UK_MIN_LEN;
-    if cand.function_stack && cand.steps.is_empty() && !uk_word {
+        && ((cand.flags.contains(WordFlags::UK) && cand.len >= UK_MIN_LEN) || cand.adverb);
+    if cand.function_stack && cand.steps.is_empty() && !spared {
         total += FUNCTION_STACK;
     }
     if cand.digit_counter {
@@ -909,6 +923,7 @@ mod tests {
             function_stack: false,
             grammatical_stack: false,
             usually_kana: false,
+            adverb: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: String::new(),
@@ -1065,6 +1080,20 @@ mod tests {
             charged(&stacked(3, uk, true), Some(&none)),
             FUNCTION_STACK,
             "the tokenizer holds it hints on"
+        );
+
+        // `もし` and `もしかしたら`: an adverb in every sense is spared at any
+        // length and without `uk`, but still not hints on.
+        let mut moshi = stacked(2, uk, true);
+        moshi.adverb = true;
+        assert_eq!(charged(&moshi, None), 0, "もし is an adverb");
+        let mut expression = stacked(6, WordFlags::COMMON, true);
+        expression.adverb = true;
+        assert_eq!(charged(&expression, None), 0, "もしかしたら is one too");
+        assert_eq!(
+            charged(&moshi, Some(&none)),
+            FUNCTION_STACK,
+            "the tokenizer decides it hints on"
         );
     }
 
