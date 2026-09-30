@@ -180,12 +180,16 @@ pub fn to_segment(
 /// its tagged sense from 仕手's.
 fn usually_kana(entry: &Entry) -> bool {
     let uk = |s: &crate::Sense| s.misc.iter().any(|m| m == "uk");
-    let inflects = entry
-        .senses
-        .iter()
-        .flat_map(|s| &s.pos)
-        .any(|p| classes_for_pos(p).next().is_some());
-    entry.senses.first().is_some_and(uk) || (inflects && entry.senses.iter().any(uk))
+    // `order` asks this inside its sort key, so the POS walk runs only for the
+    // rare entry whose tag is on a later sense.
+    let inflects = || {
+        entry
+            .senses
+            .iter()
+            .flat_map(|s| &s.pos)
+            .any(|p| classes_for_pos(p).next().is_some())
+    };
+    entry.senses.first().is_some_and(uk) || (entry.senses.iter().any(uk) && inflects())
 }
 
 /// Decide which same-span candidate a caller sees first.
