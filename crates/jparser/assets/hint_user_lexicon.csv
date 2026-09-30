@@ -332,3 +332,21 @@
 兄様,1,1,-3200,名詞,一般,*,*,*,*,兄様,アニサマ
 姉上,1,1,-3200,名詞,一般,*,*,*,*,姉上,アネウエ
 兄上,1,1,-3200,名詞,一般,*,*,*,*,兄上,アニウエ
+#
+# 2026-09-30, two rows for a reported line: IPADIC reads それでもし良かったら
+# as それでも + し (する) + 良かっ (非自立), "even so, if it is easy to do", and
+# the engine cannot end a span inside それでも, so it showed "nevertheless"
+# and the particle し "and; besides" where the text says それで + もし. No
+# engine rule separates it: IPADIC's でも|し is right in all 51 of its cuts
+# over the twelve corpora (なんでもして, 見られでもしたら). With the phrase a
+# token, Vibrato reads それで|もし良かったら and the engine keeps the JMdict
+# expression whole, "if you like" -- the long unit, which the user accepted
+# over the short もし|良かったら nothing else could produce here.
+#
+# Twelve corpora, 151,225 sentences, hints on, against the same build without
+# them: 3 sentences change, each もし|よかったら becoming the expression, and
+# nothing else. Gold is identical to the digit in both hint states. The one
+# collateral in the reported line is IPADIC now cutting お|昼 after it, which
+# the engine merges back.
+もし良かったら,83,71,-4472,副詞,一般,*,*,*,*,もし良かったら,もしよかったら
+もしよかったら,83,71,-4472,副詞,一般,*,*,*,*,もしよかったら,もしよかったら

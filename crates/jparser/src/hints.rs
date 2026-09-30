@@ -279,11 +279,15 @@ mod tests {
     /// 151,225 sentences change, 203 occurrences recovered against 3 lost, gold
     /// identical in both hint states. A fifth, `よさ`, was measured and refused;
     /// the CSV says why.
+    ///
+    /// **115 -> 117** on 2026-09-30 for `もし良かったら` and `もしよかったら`,
+    /// from a reported line IPADIC read as `それでも|し`. 3 of 151,225 sentences
+    /// change besides it, gold identical in both hint states.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 115,
-            "115 is the largest list measured against every gold cell"
+            user_lexicon_body().lines().count() <= 117,
+            "117 is the largest list measured against every gold cell"
         );
     }
 
