@@ -120,6 +120,7 @@ pub fn to_segment(
         stem_attached,
         masu_stem_next,
         masu_next,
+        &chars[start + len..],
     );
     let entries: Vec<Entry> = built.into_iter().map(|(_, e)| e).collect();
 
@@ -166,9 +167,10 @@ fn usually_kana(entry: &Entry) -> bool {
 /// is what a 連用形 takes**, any verb before a potential and any reading
 /// before a bare 仮定形 (see [`stem_yields`]); **when the text after the span
 /// is the polite ます**, a verb before anything that is not one (see
-/// [`attaches_to_masu`]); any reading before a chain the grammar rules out,
-/// サ変's 未然形 under れる or せる (see [`sahen_shi_voice`]); a
-/// `COMMON`-priority headword before
+/// [`attaches_to_masu`]); any reading before a chain the grammar or the text
+/// rules out -- サ変's 未然形 under れる or せる (see [`sahen_shi_voice`]), or
+/// a verb left on a form whose continuation the text after the span does not
+/// supply (see [`bound_unmet`]); a `COMMON`-priority headword before
 /// a rarer one; a
 /// `COUNTER` entry before the rest **when the character before the span is a
 /// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
@@ -241,6 +243,7 @@ pub fn order(
     stem_attached: bool,
     masu_stem_next: bool,
     masu_next: bool,
+    rest: &[char],
 ) {
     let non_verb_here = built
         .iter()
@@ -261,7 +264,7 @@ pub fn order(
                 potential_yields(c, e, non_verb_here)
             },
             verb_before_masu && !masu_verb(c, e),
-            sahen_shi_voice(c),
+            bound_unmet(c, rest) || sahen_shi_voice(c),
             !c.flags.contains(WordFlags::COMMON),
             !(prev_is_digit && c.flags.contains(WordFlags::COUNTER)),
             !c.flags.contains(WordFlags::PARTICLE),
@@ -499,6 +502,86 @@ fn is_verb(e: &Entry) -> bool {
         .iter()
         .flat_map(|s| &s.pos)
         .any(|p| p == "adj-f" || classes_for_pos(p).any(|c| !CLASSES[c as usize].is_adjective))
+}
+
+/// Whether `cand` is a verb left on a bare form that stands only before a
+/// particular continuation, and the text after the span is not that
+/// continuation -- so here it is no reading at all.
+///
+/// The verb half of [`is_bare_stem`], and the generalisation of what
+/// [`stem_yields`] already does for a bare 仮定形 before そう. `table`'s
+/// `BOUND_FORMS` refuses such a chain outright, for 連用タ接続 only, because
+/// refusing deletes candidates and each form wants its own score run; this
+/// moves no boundary and only reorders the entries of a span the lattice has
+/// already chosen. Per form, and each exception was forced by a measurement:
+///
+/// - **仮定形** stands before ば (or the literary ど). For a godan it is also
+///   the imperative, since `lex::dedup_shallowest` keeps one chain per span
+///   and entry and a godan's 命令ｅ spells the same kana; so a godan's yields
+///   only before a particle an imperative cannot take (`おれ|は` is 俺, not
+///   居る "Conditional"), and `やれ」`, `行け！`, `言え、` keep their verb.
+///   Any other verb's yields unless ば, ど or the ら抜き potential's る, な,
+///   た, て or ま follows: `くれ」` is くれる, not 来る.
+/// - **A godan's 未然形** stands before ない, ず, ぬ, ん, れる, せる, the
+///   causative-passive さ (`開かされた`), ねば, ざる and the western へん:
+///   `のか？` is the particle, not 退く. Not 一段's or サ変's, whose 未然形
+///   spells their 連用形 too.
+/// - **未然特殊** is 一段・クレル's くん (くんない): before anything but な or
+///   ね, `〜くん、` is 君.
+/// - **体言接続特殊**, the ん before な, の or だ (`来るんだ` → `くんだ`):
+///   elsewhere `〜くん` is 君 again. Not 一段's, whose ん also spells the
+///   negative, which `dedup_shallowest` dropped: `できん」` is 出来る.
+///
+/// **Measured 2026-09-30** over twelve visual-novel corpora (151,225
+/// sentences), by entry id: no span moves in either state and gold is
+/// identical in both. Hints on, 5,866 spans change their first entry, about
+/// 5,500 of them repairs (`おれ` 4,124, `くん` 718, `くれ` 439, `やら` 88,
+/// `こら` 77) and about 10 newly wrong (slurred `止まん|らい`, `こそ|すれ`);
+/// the rest trade one wrong reading for another on noise or a span already
+/// cut wrong. Hints off, 10,248 change, about 8,500 repairs (`おれ` 4,029,
+/// `のか` 2,731, `くん` 818, `くれ` 452) and again about 10 newly wrong.
+///
+/// Two broader versions were refused on the way. Every 仮定形 read ~230
+/// godan imperatives (`見せてやれ`, `次、行け`) as the next noun or 一段 verb,
+/// and 五段・ラ行's empty 体言接続特殊２ read a kanji stem cut from its
+/// okurigana (`居|て`, `解|からず`, `触|った`, ~70) as the bare kanji noun,
+/// where the verb it belongs to had been shown.
+fn bound_unmet(cand: &Candidate, rest: &[char]) -> bool {
+    let [only] = cand.steps.as_slice() else {
+        return false;
+    };
+    if only.aux.is_some() {
+        return false;
+    }
+    let class = &CLASSES[only.class as usize];
+    let godan = class.name.starts_with("五段");
+    let verb = godan
+        || ["一段", "カ変", "サ変", "形容詞"]
+            .iter()
+            .any(|p| class.name.starts_with(p));
+    let next = rest.first().copied();
+    match class.forms[only.form as usize].name {
+        "仮定形" if godan => matches!(
+            next,
+            Some('は' | 'の' | 'が' | 'を' | 'に' | 'も' | 'へ' | 'や' | 'で')
+        ),
+        "仮定形" => {
+            verb && !matches!(next, Some('ば' | 'ど' | 'る' | 'な' | 'た' | 'て' | 'ま'))
+        }
+        "未然形" => {
+            godan
+                && !matches!(
+                    next,
+                    Some('な' | 'ず' | 'ぬ' | 'ん' | 'れ' | 'せ' | 'さ' | 'ね' | 'ざ' | 'へ')
+                )
+        }
+        "未然特殊" => !matches!(next, Some('な' | 'ね')),
+        "体言接続特殊" => {
+            !class.name.starts_with("一段")
+                && !matches!(next, Some('な' | 'の' | 'だ' | 'で' | 'じ' | 'ね'))
+        }
+        _ => false,
+    }
 }
 
 /// Whether `cand`'s whole chain is one adjective's bare ガル接続 stem.
@@ -940,7 +1023,7 @@ mod tests {
             order_candidate(1, false, WordFlags::PRIMARY, 0),
             order_candidate(2, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the exact match sorts first despite the higher entry_id"
@@ -964,7 +1047,7 @@ mod tests {
 
         // `1969|年`: the digit is there, so the counter wins despite its id.
         let mut after_digit = build();
-        order(&mut after_digit, true, false, false, false);
+        order(&mut after_digit, true, false, false, false, &[]);
         assert_eq!(
             after_digit[0].0.entry_id, 2,
             "after a digit the counter sorts first"
@@ -972,7 +1055,7 @@ mod tests {
 
         // `去|年`: no digit, so the clause must not fire and the id decides.
         let mut elsewhere = build();
-        order(&mut elsewhere, false, false, false, false);
+        order(&mut elsewhere, false, false, false, false, &[]);
         assert_eq!(
             elsewhere[0].0.entry_id, 1,
             "without the digit the counter has no claim and entry_id decides"
@@ -990,7 +1073,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not a particle, smaller id
             order_candidate(2, true, particle, 0),           // particle, larger id
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the particle sorts first despite the higher entry_id"
@@ -1010,7 +1093,7 @@ mod tests {
             order_candidate(9, true, counter, 0), // counter *and* particle, not COMMON
             order_candidate(1, true, common, 0),  // COMMON only
         ];
-        order(&mut cands, true, false, false, false);
+        order(&mut cands, true, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 1,
             "a COMMON headword outranks a counter even after a digit"
@@ -1037,7 +1120,7 @@ mod tests {
             with_senses(1391500, true, WordFlags::PRONOUNCE, 2, 1),
             with_senses(1578850, true, WordFlags::PRONOUNCE, 2, 12),
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 1578850,
             "the 12-sense entry sorts first despite the higher entry_id"
@@ -1051,7 +1134,7 @@ mod tests {
             with_senses(2, true, WordFlags::PRONOUNCE, 0, 12),
             with_senses(1, true, common, 0, 1),
         ];
-        order(&mut mixed, false, false, false, false);
+        order(&mut mixed, false, false, false, false, &[]);
         assert_eq!(
             mixed[0].0.entry_id, 1,
             "COMMON still outranks the sense count"
@@ -1091,7 +1174,7 @@ mod tests {
         // to be visible one clause further down: the `uk` entry carries more
         // senses, which is only ever consulted once PRONOUNCE has tied.
         let mut cands = vec![with_senses(1, true, WordFlags::PRIMARY, 0, 1), uk(2, 2)];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "a `uk` reading is not a fallback, so the clause ties and the sense count decides"
@@ -1103,7 +1186,7 @@ mod tests {
             with_senses(1, true, WordFlags::PRIMARY, 0, 1),
             with_senses(2, true, WordFlags::PRONOUNCE, 0, 2),
         ];
-        order(&mut plain, false, false, false, false);
+        order(&mut plain, false, false, false, false, &[]);
         assert_eq!(
             plain[0].0.entry_id, 1,
             "without `uk` the clause still demotes the reading"
@@ -1118,7 +1201,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 0), // not COMMON, smaller id
             order_candidate(2, true, common, 0),             // COMMON, larger id
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the COMMON match sorts first despite the higher entry_id"
@@ -1131,7 +1214,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRONOUNCE, 0), // smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0),   // larger id
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the PRIMARY match sorts first despite the higher entry_id"
@@ -1170,14 +1253,14 @@ mod tests {
             (stem.clone(), stem_entry.clone()),
             (past.clone(), past_entry.clone()),
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "する Past sorts before したい's bare stem despite the deeper chain and higher id"
         );
         // したそう / したがる: the stem is the word, and the clause stands down.
         let mut attached = vec![(past, past_entry), (stem, stem_entry)];
-        order(&mut attached, false, true, false, false);
+        order(&mut attached, false, true, false, false, &[]);
         assert_eq!(
             attached[0].0.entry_id, 1,
             "before そう the bare stem is the reading"
@@ -1264,7 +1347,7 @@ mod tests {
         suru.1.senses[0].misc = vec!["uk".to_string()];
         let winner = |masu_next: bool| {
             let mut cands = vec![particle.clone(), suru.clone()];
-            order(&mut cands, false, false, false, masu_next);
+            order(&mut cands, false, false, false, masu_next, &[]);
             cands[0].0.entry_id
         };
         assert_eq!(winner(true), 2, "し before ませんか is する");
@@ -1280,7 +1363,7 @@ mod tests {
         ] {
             let other = reading(0, WordFlags::COMMON, vec![step(class, form)], pos);
             let mut cands = vec![other, particle.clone()];
-            order(&mut cands, false, false, false, true);
+            order(&mut cands, false, false, false, true, &[]);
             assert_eq!(cands[0].0.entry_id, 1, "{form} is no reading before ます");
         }
     }
@@ -1320,13 +1403,13 @@ mod tests {
         let mut shireru = order_candidate(2, true, WordFlags::PRONOUNCE, 0);
         shireru.0.steps = vec![step("一段", "未然形", None)];
         let mut cands = vec![suru.clone(), shireru.clone()];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(cands[0].0.entry_id, 2, "しれない is 知れる");
 
         // さ+れる is する's own passive and stays where it was.
         suru.0.steps[0] = step("サ変・スル", "未然レル接続", None);
         let mut cands = vec![suru, shireru];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(cands[0].0.entry_id, 1, "される is する");
     }
 
@@ -1369,7 +1452,7 @@ mod tests {
         };
         let common = |f: WordFlags| WordFlags(f.0 | WordFlags::COMMON.0);
         let winner = |mut cands: Vec<(Candidate, Entry)>| {
-            order(&mut cands, false, false, false, false);
+            order(&mut cands, false, false, false, false, &[]);
             cands[0].0.entry_id
         };
 
@@ -1456,8 +1539,9 @@ mod tests {
             (c, e)
         };
         let common = |f: WordFlags| WordFlags(f.0 | WordFlags::COMMON.0);
-        let winner = |mut cands: Vec<(Candidate, Entry)>, masu_stem_next: bool| {
-            order(&mut cands, false, false, masu_stem_next, false);
+        let winner = |mut cands: Vec<(Candidate, Entry)>, masu_stem_next: bool, rest: &str| {
+            let rest: Vec<char> = rest.chars().collect();
+            order(&mut cands, false, false, masu_stem_next, false, &rest);
             cands[0].0.entry_id
         };
         let kateikei = step("五段・ラ行", "仮定形");
@@ -1493,12 +1577,12 @@ mod tests {
         let kaeru_potential = reading(3, common(WordFlags::PRIMARY), &potential, &["v5r"], false);
         let kaere = reading(1, WordFlags::PRIMARY, &[], &["exp"], false);
         assert_eq!(
-            winner(vec![kaere.clone(), kaeru_potential.clone()], true),
+            winner(vec![kaere.clone(), kaeru_potential.clone()], true, "そう"),
             3,
             "帰れそう is 帰る"
         );
         assert_eq!(
-            winner(vec![kaere, kaeru_potential], false),
+            winner(vec![kaere, kaeru_potential], false, "。"),
             1,
             "elsewhere the potential yields"
         );
@@ -1513,7 +1597,7 @@ mod tests {
             false,
         );
         assert_eq!(
-            winner(vec![akaramu, akarameru.clone()], true),
+            winner(vec![akaramu, akarameru.clone()], true, "ながら"),
             2,
             "赤らめながら is 赤らめる"
         );
@@ -1538,14 +1622,21 @@ mod tests {
             true,
         );
         assert_eq!(
-            winner(vec![kuru.clone(), kureru.clone()], true),
+            winner(vec![kuru.clone(), kureru.clone()], true, "そう"),
             2,
             "くれそう is くれる"
         );
+        // Before ば カ変's 仮定形 is the word; anywhere else it is no reading
+        // either -- see `bound_unmet`.
         assert_eq!(
-            winner(vec![kuru, kureru], false),
+            winner(vec![kuru.clone(), kureru.clone()], false, "ば"),
             1,
-            "elsewhere nothing moves"
+            "くれば is 来る"
+        );
+        assert_eq!(
+            winner(vec![kuru, kureru], false, "」"),
+            2,
+            "くれ at a line's end is くれる"
         );
         // 呉れる's くれ can survive `lex`'s dedup as 一段・クレル 命令ｅ. It is a
         // verb, not a bare 仮定形, and must not yield to 暮れ "sunset".
@@ -1558,7 +1649,7 @@ mod tests {
         );
         let kure = reading(1, common(WordFlags::PRONOUNCE), &[], &["n"], false);
         assert_eq!(
-            winner(vec![kure, kureru_imperative], true),
+            winner(vec![kure, kureru_imperative], true, "そう"),
             2,
             "くれそう is not 暮れ"
         );
@@ -1579,10 +1670,106 @@ mod tests {
             false,
         );
         assert_eq!(
-            winner(vec![nareru, naru], true),
+            winner(vec![nareru, naru], true, "そう"),
             3,
             "なれそう is 成る Potential"
         );
+    }
+
+    #[test]
+    fn a_bare_form_is_unmet_only_where_its_continuation_is_missing() {
+        let bare = |class_name: &str, form_name: &str| {
+            let class = CLASSES
+                .iter()
+                .position(|c| c.name == class_name)
+                .expect("class");
+            let form = CLASSES[class]
+                .forms
+                .iter()
+                .position(|f| f.name == form_name)
+                .expect("form");
+            candidate(
+                0,
+                2,
+                WordFlags::PRIMARY,
+                vec![ConjStep {
+                    class: class as crate::engine::ClassId,
+                    form: form as crate::engine::FormId,
+                    range: 0..0,
+                    aux: None,
+                }],
+            )
+        };
+        let c = |s: &str| s.chars().collect::<Vec<char>>();
+        for (class, form, unmet, met) in [
+            // おれ|は, but a godan's 仮定形 is also its imperative: やれ」.
+            ("五段・ラ行", "仮定形", "は", "」"),
+            ("五段・ラ行", "仮定形", "の", "ば"),
+            // くれ」 is くれる; くれば is 来る.
+            ("カ変・クル", "仮定形", "」", "ば"),
+            ("一段", "仮定形", "。", "る"),
+            // のか？ is the particle; 行かない and 開かされた are 行く and 開く.
+            ("五段・カ行促音便", "未然形", "？", "な"),
+            ("五段・カ行イ音便", "未然形", "、", "さ"),
+            // 〜くん、 is 君; くんない is くれる.
+            ("一段・クレル", "未然特殊", "、", "な"),
+            // 〜くん、 again; くんの is 来るの.
+            ("カ変・クル", "体言接続特殊", "、", "の"),
+        ] {
+            let cand = bare(class, form);
+            assert!(
+                bound_unmet(&cand, &c(unmet)),
+                "{class} {form} before {unmet}"
+            );
+            assert!(!bound_unmet(&cand, &c(met)), "{class} {form} before {met}");
+        }
+        // Never unmet: 一段's ん also spells its negative (できん」), 一段's
+        // 未然形 is its 連用形 too, and the empty 体言接続特殊２ was refused.
+        for (class, form) in [
+            ("一段", "体言接続特殊"),
+            ("一段", "未然形"),
+            ("五段・ラ行", "体言接続特殊２"),
+        ] {
+            assert!(!bound_unmet(&bare(class, form), &c("」")), "{class} {form}");
+        }
+        // Only a bare chain: an auxiliary on top is a word already.
+        let mut chained = bare("五段・カ行イ音便", "未然形");
+        chained.steps[0].aux = Some("ない");
+        assert!(!bound_unmet(&chained, &c("？")));
+    }
+
+    #[test]
+    fn order_puts_a_word_before_a_bound_form_the_text_does_not_continue() {
+        // おれ|は: the trap gives 居る the lower id and `uk`, so PRONOUNCE
+        // demotes only 俺, which the clause under test has to overturn.
+        let class = CLASSES
+            .iter()
+            .position(|c| c.name == "五段・ラ行")
+            .expect("class");
+        let form = CLASSES[class]
+            .forms
+            .iter()
+            .position(|f| f.name == "仮定形")
+            .expect("form");
+        let common = WordFlags(WordFlags::COMMON.0 | WordFlags::PRONOUNCE.0);
+        let mut oru = order_candidate(1, true, common, 0);
+        oru.0.steps = vec![ConjStep {
+            class: class as crate::engine::ClassId,
+            form: form as crate::engine::FormId,
+            range: 0..2,
+            aux: None,
+        }];
+        oru.1.senses[0].misc = vec!["uk".to_string()];
+        let ore = order_candidate(2, true, common, 0);
+        let winner = |rest: &str| {
+            let rest: Vec<char> = rest.chars().collect();
+            let mut cands = vec![oru.clone(), ore.clone()];
+            order(&mut cands, false, false, false, false, &rest);
+            cands[0].0.entry_id
+        };
+        assert_eq!(winner("は"), 2, "おれは is 俺");
+        assert_eq!(winner("ば"), 1, "おれば is 居る");
+        assert_eq!(winner("」"), 1, "おれ」 may be the imperative");
     }
 
     #[test]
@@ -1616,7 +1803,7 @@ mod tests {
             order_candidate(1, true, WordFlags::PRIMARY, 2), // two-step chain, smaller id
             order_candidate(2, true, WordFlags::PRIMARY, 0), // uninflected, larger id
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         assert_eq!(
             cands[0].0.entry_id, 2,
             "the shallower chain sorts first despite the higher entry_id"
@@ -1633,7 +1820,7 @@ mod tests {
             order_candidate(10, true, WordFlags::PRIMARY, 0),
             order_candidate(20, true, WordFlags::PRIMARY, 0),
         ];
-        order(&mut cands, false, false, false, false);
+        order(&mut cands, false, false, false, false, &[]);
         let ids: Vec<u32> = cands.iter().map(|(c, _)| c.entry_id).collect();
         assert_eq!(ids, vec![10, 20, 30]);
     }
