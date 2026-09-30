@@ -152,11 +152,40 @@ pub fn to_segment(
 /// had to add before the gates held. `cost` reads a third form as well, for
 /// the cut at an empty stem: the tag on a sense that is not `aux-v`, which is
 /// `lex::Candidate::usually_kana`.
+///
+/// **A word that does not inflect counts only its first sense's tag; a verb or
+/// i-adjective counts any sense's.** JMdict tags `uk` per sense, and on a noun
+/// a later sense's tag describes that sense: 仕手's is on "shite (the noh
+/// protagonist)", written シテ, and counting it let the noun "doer" lead every
+/// `して`, ahead of する's te-form. A verb's `uk` sits on the senses its kana
+/// spelling carries in running text -- 来る's on "to come back" and "to be
+/// caused by", 行く's on its auxiliary uses -- so narrowing verbs the same
+/// way read `きた` as 北 "north". The i-adjective joins the verbs because
+/// 欲しい's tag is on its auxiliary sense, and without it `ほし|い` read 星.
+///
+/// **Measured 2026-09-30** over twelve visual-novel corpora (151,225
+/// sentences), by entry id: no span moves in either state, and gold entry
+/// top-1 rises 1201 → 1205 hints on and 1179 → 1184 hints off. Hints on,
+/// 10,016 spans change their first entry, about 8,900 repairs (`して` 仕手 →
+/// する 6,747; `いや` 嫌 → 否 "no" about 1,380; `イキ` 575; `すぎ`, `かけ`,
+/// `つけ` → the verb) against about 330 newly wrong; hints off 10,282, about
+/// 9,250 against about 500.
+///
+/// **What it costs, and why no JMdict field avoids it.** 内's `uk` is on its
+/// grammatical senses, "while" and "among", so `〜うちに` now reads 家 "home"
+/// (about 150 in each state); 付き's is on "luck", so `手つき` reads 吐く,
+/// which is `uk` on its first sense (about 190 hints off); 乗り's is on
+/// "mood", so `ノリ` reads 海苔 (14); and `いやだ`/`いやそう` read 否 (about
+/// 140). None of the four carries a `stagr` or any other field that separates
+/// its tagged sense from 仕手's.
 fn usually_kana(entry: &Entry) -> bool {
-    entry
+    let uk = |s: &crate::Sense| s.misc.iter().any(|m| m == "uk");
+    let inflects = entry
         .senses
         .iter()
-        .any(|s| s.misc.iter().any(|m| m == "uk"))
+        .flat_map(|s| &s.pos)
+        .any(|p| classes_for_pos(p).next().is_some());
+    entry.senses.first().is_some_and(uk) || (inflects && entry.senses.iter().any(uk))
 }
 
 /// Decide which same-span candidate a caller sees first.
@@ -1191,6 +1220,50 @@ mod tests {
             plain[0].0.entry_id, 1,
             "without `uk` the clause still demotes the reading"
         );
+    }
+
+    #[test]
+    fn a_nouns_uk_counts_only_on_its_first_sense() {
+        let entry = |pos: &str, uk_on: usize| {
+            let (_, mut e) = with_senses(1, true, WordFlags::PRONOUNCE, 0, 3);
+            for s in &mut e.senses {
+                s.pos = vec![pos.to_string()];
+            }
+            e.senses[uk_on].misc = vec!["uk".to_string()];
+            e
+        };
+        assert!(usually_kana(&entry("n", 0)), "事: uk on the first sense");
+        assert!(
+            !usually_kana(&entry("n", 1)),
+            "仕手: uk only on a later sense"
+        );
+        assert!(
+            !usually_kana(&entry("adj-na", 2)),
+            "嫌: a na-adjective does not inflect here"
+        );
+        assert!(
+            usually_kana(&entry("vk", 1)),
+            "来る: a verb's later sense counts"
+        );
+        assert!(
+            usually_kana(&entry("adj-i", 1)),
+            "欲しい: so does an i-adjective's"
+        );
+    }
+
+    #[test]
+    fn order_puts_a_uk_verb_before_a_noun_whose_uk_is_a_later_sense() {
+        // して: 仕手 has the lower id, no steps, and `uk` on its second sense;
+        // する's te-form is `uk` on the first. Both are kana readings.
+        let common = WordFlags(WordFlags::COMMON.0 | WordFlags::PRONOUNCE.0);
+        let mut shite = with_senses(1, true, common, 0, 3);
+        shite.1.senses[1].misc = vec!["uk".to_string()];
+        let mut suru = with_senses(2, true, common, 2, 3);
+        suru.1.senses[0].misc = vec!["uk".to_string()];
+        suru.1.senses[0].pos = vec!["vs-i".to_string()];
+        let mut cands = vec![shite, suru];
+        order(&mut cands, false, false, false, false, &[]);
+        assert_eq!(cands[0].0.entry_id, 2, "して is する");
     }
 
     #[test]
