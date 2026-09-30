@@ -166,7 +166,9 @@ fn usually_kana(entry: &Entry) -> bool {
 /// is what a 連用形 takes**, any verb before a potential and any reading
 /// before a bare 仮定形 (see [`stem_yields`]); **when the text after the span
 /// is the polite ます**, a verb before anything that is not one (see
-/// [`attaches_to_masu`]); a `COMMON`-priority headword before
+/// [`attaches_to_masu`]); any reading before a chain the grammar rules out,
+/// サ変's 未然形 under れる or せる (see [`sahen_shi_voice`]); a
+/// `COMMON`-priority headword before
 /// a rarer one; a
 /// `COUNTER` entry before the rest **when the character before the span is a
 /// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
@@ -259,6 +261,7 @@ pub fn order(
                 potential_yields(c, e, non_verb_here)
             },
             verb_before_masu && !masu_verb(c, e),
+            sahen_shi_voice(c),
             !c.flags.contains(WordFlags::COMMON),
             !(prev_is_digit && c.flags.contains(WordFlags::COUNTER)),
             !c.flags.contains(WordFlags::PARTICLE),
@@ -451,6 +454,40 @@ fn takes_masu(cand: &Candidate) -> bool {
             "連用形" | "未然形"
         )
     })
+}
+
+/// Whether `cand` is サ変's 未然形 し under the passive or causative -- a chain
+/// the table builds and Japanese does not have.
+///
+/// サ変 takes れる and せる at 未然レル接続, さ (される, させる), which is why
+/// [`ATTACHES_TO`](crate::engine::table) carries a second row for it. The
+/// ordinary 未然形 row names its site by form alone, so it attaches to サ変's
+/// 未然形 し as well, and `しれない` read する "Passive/Potential Negative"
+/// ahead of 知れる, the word it is: `かもしれない`, `酔いしれる`.
+///
+/// **Here and not in the table, and the table was measured first.** Refusing
+/// the pair in `table::search` removes the chain, and hints on that cut the
+/// span in 968 sentences (`しれ|ない` 774, `しれ|ません` 107). IPADIC cuts
+/// しれ|ない; the cut falls inside する's inflection, which `PRONOUNCE_CROSS`
+/// exempts, but at the end of 知れる's stem, where it charges -- -10 against
+/// 15 on `しれない`, since 知れる is a kanji entry's reading and not `uk`. The
+/// する chain was what held the span. Kept for the lattice and ranked last
+/// here, it holds the span and shows the right entry.
+///
+/// **Measured 2026-09-30** over twelve visual-novel corpora (151,225
+/// sentences), by entry id: no span moves in either state and gold is
+/// identical in both. Hints on, 978 spans change their first entry, 945 of them
+/// to 知れる (`しれない` 774, `しれません` 107, `しれぬ` 30); 26 `しれん` go
+/// from する to 試練 "trial", one false gloss for another, because 一段's ん
+/// also spells 知れる's negative and `lex::dedup_shallowest` kept the
+/// shallower chain; 7 truncated `しれ` read 知る. Hints off, 115 change: 104
+/// to 知れる, 10 to 知る, 1 to 試練.
+fn sahen_shi_voice(cand: &Candidate) -> bool {
+    matches!(cand.steps.as_slice(), [stem, voice, ..]
+        if stem.aux.is_none()
+            && matches!(CLASSES[stem.class as usize].name, "サ変・スル" | "サ変・−スル")
+            && CLASSES[stem.class as usize].forms[stem.form as usize].name == "未然形"
+            && matches!(voice.aux, Some("れる" | "せる")))
 }
 
 /// Whether some sense of `e` is a verb: a POS that conjugates in a class that
@@ -1246,6 +1283,51 @@ mod tests {
             order(&mut cands, false, false, false, true);
             assert_eq!(cands[0].0.entry_id, 1, "{form} is no reading before ます");
         }
+    }
+
+    #[test]
+    fn a_passive_on_sahens_shi_yields_to_the_word_it_spells() {
+        let step = |class_name: &str, form_name: &str, aux: Option<&'static str>| {
+            let class = CLASSES
+                .iter()
+                .position(|c| c.name == class_name)
+                .expect("class");
+            let form = CLASSES[class]
+                .forms
+                .iter()
+                .position(|f| f.name == form_name)
+                .expect("form");
+            ConjStep {
+                class: class as crate::engine::ClassId,
+                form: form as crate::engine::FormId,
+                range: 0..0,
+                aux,
+            }
+        };
+        // `しれない`: the trap gives する the lower id, `uk` (so PRONOUNCE does
+        // not demote it) and the only COMMON; 知れる is a kanji entry's reading.
+        let mut suru = order_candidate(
+            1,
+            true,
+            WordFlags(WordFlags::COMMON.0 | WordFlags::PRONOUNCE.0),
+            0,
+        );
+        suru.0.steps = vec![
+            step("サ変・スル", "未然形", None),
+            step("一段", "未然形", Some("れる")),
+        ];
+        suru.1.senses[0].misc = vec!["uk".to_string()];
+        let mut shireru = order_candidate(2, true, WordFlags::PRONOUNCE, 0);
+        shireru.0.steps = vec![step("一段", "未然形", None)];
+        let mut cands = vec![suru.clone(), shireru.clone()];
+        order(&mut cands, false, false, false, false);
+        assert_eq!(cands[0].0.entry_id, 2, "しれない is 知れる");
+
+        // さ+れる is する's own passive and stays where it was.
+        suru.0.steps[0] = step("サ変・スル", "未然レル接続", None);
+        let mut cands = vec![suru, shireru];
+        order(&mut cands, false, false, false, false);
+        assert_eq!(cands[0].0.entry_id, 1, "される is する");
     }
 
     /// A godan potential against the readings it collides with, one pair per
