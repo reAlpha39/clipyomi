@@ -92,7 +92,7 @@ Refused on the way:
 
 ## 5. Not fixed, and why
 
-- **`それでも|し` hints on.** It happens once in 151,225 sentences. A user-lexicon row would either coarsen `もし|良かったら` against the short-unit reference or reprice `もし` everywhere IPADIC now gets it right (292 of 292). Every row costs a measured A/B under a capped list.
+- **`それでも|し` hints on** — **fixed 2026-09-30 in `aee7ad2`**, after this section first refused it. IPADIC's でも|し is right in all 51 of its corpus cuts (なんでもして, 見られでもしたら), so no engine rule can target the one wrong one. Two user-lexicon rows, `もし良かったら` and `もしよかったら`, make Vibrato read `それで|もし良かったら`, and the engine then keeps the JMdict expression whole, as the ta-old port does hints off. Over 151,225 sentences hints on, 3 others change (`もし|よかったら` → the expression) and gold is identical. That is the long unit rather than the short-unit reference, and the user accepted it; strict on the local row stays 5 of 9, trading `良かったら` for `それで`. The cap goes 115 → 117.
 - **`も|し` hints off.** `もし` is two kana. The floor that keeps `かに`, `ワタ` and `もの` from colliding keeps it out too, and nothing in `WordFlags` separates an adverb from a noun.
 - **する-noun + する.** Policy, per §2.
 - **The `し|ませんか` tie.** Both segmentations are defensible and gold has no `ませんか`. With §3 the glosses are right.
