@@ -208,8 +208,10 @@ fn usually_kana(entry: &Entry) -> bool {
 /// `COUNTER` entry before the rest **when the character before the span is a
 /// digit**; a `PARTICLE` entry before the rest; a `PRIMARY` headword (the
 /// word itself) before a `PRONOUNCE` one (a kanji entry's own reading,
-/// offered only as a fallback) **unless JMdict tags the entry `uk`**, where
-/// the kana spelling is the normal one and demoting it is simply wrong; any
+/// offered only as a fallback) **unless JMdict calls the word usually kana**
+/// -- `uk` on its first sense, or on any for a verb or i-adjective (see
+/// [`usually_kana`]) -- where the kana spelling is the normal one and demoting
+/// it is simply wrong; any
 /// reading before an adjective's bare ガル接続 stem **unless the text after
 /// the span is what attaches to one** (see [`is_bare_stem`]); a
 /// shallower deinflection chain before a
@@ -288,6 +290,8 @@ pub fn order(
             .any(|(c, e)| !is_godan_potential(&c.steps) && !is_bare_conditional(c) && is_verb(e));
     let masu_verb = |c: &Candidate, e: &Entry| takes_masu(c) && is_verb(e);
     let verb_before_masu = masu_next && built.iter().any(|(c, e)| masu_verb(c, e));
+    // Twelve fields, the most a tuple implements `Ord` for: a further clause
+    // joins an existing tier or the key becomes a struct.
     built.sort_unstable_by_key(|(c, e)| {
         (
             !c.exact,
@@ -553,7 +557,7 @@ fn is_verb(e: &Entry) -> bool {
 ///   and entry and a godan's 命令ｅ spells the same kana; so a godan's yields
 ///   only before a particle an imperative cannot take (`おれ|は` is 俺, not
 ///   居る "Conditional"), and `やれ」`, `行け！`, `言え、` keep their verb.
-///   Any other verb's yields unless ば, ど or the ら抜き potential's る, な,
+///   Any other verb's or adjective's yields unless ば, ど or the ら抜き potential's る, な,
 ///   た, て or ま follows: `くれ」` is くれる, not 来る.
 /// - **A godan's 未然形** stands before ない, ず, ぬ, ん, れる, せる, the
 ///   causative-passive さ (`開かされた`), ねば, ざる and the western へん:
@@ -573,6 +577,10 @@ fn is_verb(e: &Entry) -> bool {
 /// the rest trade one wrong reading for another on noise or a span already
 /// cut wrong. Hints off, 10,248 change, about 8,500 repairs (`おれ` 4,029,
 /// `のか` 2,731, `くん` 818, `くれ` 452) and again about 10 newly wrong.
+///
+/// The continuation is read as written, in hiragana, as `attaches_to_a_stem`
+/// reads it: a katakana verb before a katakana `ナイ` is not recognised, and
+/// keeps whatever order the rest of the key gives it.
 ///
 /// Two broader versions were refused on the way. Every 仮定形 read ~230
 /// godan imperatives (`見せてやれ`, `次、行け`) as the next noun or 一段 verb,
@@ -1485,9 +1493,21 @@ mod tests {
 
         // さ+れる is する's own passive and stays where it was.
         suru.0.steps[0] = step("サ変・スル", "未然レル接続", None);
-        let mut cands = vec![suru, shireru];
+        let mut cands = vec![suru.clone(), shireru.clone()];
         order(&mut cands, false, false, false, false, &[]);
         assert_eq!(cands[0].0.entry_id, 1, "される is する");
+
+        // せる on サ変's し is the same chain Japanese does not have; れる on a
+        // godan's 未然形 (書かれる) is an ordinary passive.
+        for (stem, voice, first) in [
+            (step("サ変・スル", "未然形", None), "せる", 2),
+            (step("五段・カ行イ音便", "未然形", None), "れる", 1),
+        ] {
+            suru.0.steps = vec![stem, step("一段", "未然形", Some(voice))];
+            let mut cands = vec![suru.clone(), shireru.clone()];
+            order(&mut cands, false, false, false, false, &[]);
+            assert_eq!(cands[0].0.entry_id, first, "{voice}");
+        }
     }
 
     /// A godan potential against the readings it collides with, one pair per
@@ -1792,6 +1812,10 @@ mod tests {
             ("一段・クレル", "未然特殊", "、", "な"),
             // 〜くん、 again; くんの is 来るの.
             ("カ変・クル", "体言接続特殊", "、", "の"),
+            ("カ変・クル", "体言接続特殊", "は", "だ"),
+            ("五段・ラ行", "仮定形", "を", "よ"),
+            ("一段", "仮定形", "、", "た"),
+            ("五段・カ行イ音便", "未然形", "…", "れ"),
         ] {
             let cand = bare(class, form);
             assert!(
