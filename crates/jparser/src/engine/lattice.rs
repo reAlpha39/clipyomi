@@ -434,6 +434,7 @@ mod tests {
             function_stack: false,
             grammatical_stack: false,
             usually_kana: false,
+            adverb: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: String::new(),

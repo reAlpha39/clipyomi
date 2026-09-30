@@ -112,6 +112,11 @@ pub struct Candidate {
     /// entry's facts; false everywhere else. Read by `cost::cost`, for the cut
     /// at an empty stem, and only under that flag.
     pub usually_kana: bool,
+    /// Every sense of the entry is an adverb (`adv`, `adv-to`). Filled only for
+    /// an uninflected function stack, the one place `cost::cost` asks --
+    /// `FUNCTION_STACK`'s exemption, which has to tell `もし` from `かに` --
+    /// because it costs an entry read; false everywhere else.
+    pub adverb: bool,
     pub headword: String,
 }
 
@@ -285,6 +290,7 @@ pub fn candidates(
                             function_stack: false,
                             grammatical_stack: false,
                             usually_kana,
+                            adverb: false,
                             headword: record.surface.clone(),
                         },
                     ));
@@ -337,10 +343,20 @@ pub fn candidates(
                 && reading_is_not_its_parts(index, &out_ro, chars, cand);
             cand.after_digit_noncounter = !cand.flags.contains(WordFlags::COUNTER)
                 && loses_to_a_counted_number(chars, &out_ro, cand);
+            cand.adverb = stack && cand.steps.is_empty() && is_adverb(index, cand.entry_id)?;
         }
     }
 
     Ok(out)
+}
+
+/// Whether every sense of the entry is an adverb. See [`Candidate::adverb`].
+fn is_adverb(index: &Index, entry_id: u32) -> Result<bool, IndexError> {
+    Ok(index.entry(entry_id)?.is_some_and(|e| {
+        e.senses
+            .iter()
+            .all(|s| s.pos.iter().any(|p| p == "adv" || p == "adv-to"))
+    }))
 }
 
 /// Whether `[start, end)` partitions into two or more candidates that each
@@ -814,6 +830,7 @@ mod tests {
             function_stack: false,
             grammatical_stack: false,
             usually_kana: false,
+            adverb: false,
             headword: String::new(),
         };
 
@@ -875,6 +892,7 @@ mod tests {
             function_stack: false,
             grammatical_stack: false,
             usually_kana: false,
+            adverb: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: headword.to_string(),
