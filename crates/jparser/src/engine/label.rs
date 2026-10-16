@@ -30,8 +30,18 @@ use crate::engine::ConjStep;
 /// One word per auxiliary lemma, spelled as `table.rs`'s `ATTACHES_TO`
 /// spells it (design §3.1). れる/られる are ambiguous between passive,
 /// potential and honorific and the parser cannot tell, so the label says so.
-/// だ here is the voiced た of 読んだ, not the copula. じゃ/や are
-/// `ATTACHES_TO`'s placeholder rows.
+/// だ here is the voiced た of 読んだ, not the copula. じゃ/や and their
+/// "Copula" word went on 2026-09-23 with the placeholder rows that were their
+/// only source -- see `ATTACHES_TO`'s doc. "Completive", "Progressive",
+/// "Directional", "Approaching", "Preparatory" and "Tentative" are the six
+/// words here that the fixture's Wikipedia terminology list does not carry —
+/// see `tests/fixtures/conjugation_labels.txt`'s notes on ちゃう, てる, ていく
+/// and てくる for where each came from and why none is qualified.
+///
+/// **`てくる` is "Approaching" and not "Directional" on purpose.** It is the
+/// same concept as `ていく` in the opposite direction, and rule 1's dedup would
+/// print one word for a chain carrying both, so the pair needs two words. The
+/// fixture's ていく note reserved the second one before these rows existed.
 const AUX_WORD: &[(&str, &str)] = &[
     ("せる", "Causative"),
     ("させる", "Causative"),
@@ -49,8 +59,27 @@ const AUX_WORD: &[(&str, &str)] = &[
     ("だ", "Past"),
     ("て", "Te-form"),
     ("で", "Te-form"),
-    ("じゃ", "Copula"),
-    ("や", "Copula"),
+    ("ている", "Progressive"),
+    ("でいる", "Progressive"),
+    ("てる", "Progressive"),
+    ("でる", "Progressive"),
+    ("ていく", "Directional"),
+    ("でいく", "Directional"),
+    ("てくる", "Approaching"),
+    ("でくる", "Approaching"),
+    ("ておく", "Preparatory"),
+    ("でおく", "Preparatory"),
+    ("てみる", "Tentative"),
+    ("でみる", "Tentative"),
+    ("ちゃう", "Completive"),
+    ("じゃう", "Completive"),
+    ("ちまう", "Completive"),
+    ("じまう", "Completive"),
+    // The godan potential (`読めた`), whose `ATTACHES_TO` lemma is a bare `る`
+    // over the godan's own 仮定形 -- see that row. Not "Passive/Potential":
+    // 読める cannot be a passive, which is exactly what れる/られる cannot rule
+    // out and this can.
+    ("る", "Potential"),
 ];
 
 /// One word from the outermost step's 活用形 (design §3.2). A form not
@@ -69,12 +98,16 @@ const FORM_WORD: &[(&str, &str)] = &[
 ];
 
 /// `(lemma, outermost form)` pairs whose two words collapse into one
-/// (design §3.3 rule 2). たら is a conditional, not a "Past Conditional";
-/// 読んで through the copula class's 連用形 is the te-form, not "Past".
+/// (design §3.3 rule 2). たら is a conditional, not a "Past Conditional",
+/// and so is its voiced だら.
+///
+/// A third row, `("だ", "連用形", "Te-form")`, collapsed 読んで reached through
+/// the copula class's 連用形. The voiced past moved to 特殊・タ on 2026-09-23
+/// (`table.rs`'s `だ` row), which has no 連用形, so the pair became
+/// unreachable and was removed; 読んで is the `で` row's alone.
 const OVERRIDE: &[(&str, &str, &str)] = &[
     ("た", "仮定形", "Conditional"),
     ("だ", "仮定形", "Conditional"),
-    ("だ", "連用形", "Te-form"),
 ];
 
 /// The word for an auxiliary lemma, if `AUX_WORD` knows it.

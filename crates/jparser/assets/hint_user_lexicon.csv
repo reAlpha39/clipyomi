@@ -19,14 +19,75 @@
 # 80 of them are the most frequent; the 81st is いちゃいちゃ, which occurs zero
 # times in the pool and is here because it is the case that prompted the work.
 #
-# The last two, ある日 and その日, are the one deliberate exception to the `exp`
-# filter above. JMdict tags them `exp,n` and the sweep drops phrases on
-# purpose -- but they are `[primary]` without `common`, which is precisely the
-# shape the cost model cannot defend: ある日 costs +3 while ある(-2) + 日(-1)
-# costs -3, so the phrase loses to its own parts. Reported from real use
-# against Translation Aggregator, which keeps both whole. Measured: every gold
-# cell identical, tolerant +6 spans, and the reported sentence goes from
+# The last six are deliberate additions the sweep did not make, all of one
+# shape: `[primary]` without `common`, which is precisely what the cost model
+# cannot defend. A COMMON span costs -1 a character and a non-COMMON one +1,
+# so such a headword always loses to its own COMMON parts. Every one of them
+# was reported from real use against Translation Aggregator, and each was
+# measured on its own: at 86 entries every gold cell is still identical to the
+# digit in both hint states.
+#
+# ある日 and その日: JMdict tags them `exp,n` and the sweep drops phrases on
+# purpose. ある日 costs +3 while ある(-2) + 日(-1) costs -3. Reported from real
+# use against Translation Aggregator, which keeps both whole. Measured: every
+# gold cell identical, tolerant +6 spans, and the reported sentence goes from
 # ranking its correct cover eighteenth to first.
+#
+# なのに: `[primary,particle]`, "and yet; despite this". It costs +5 where
+# な(+1) + のに(0) costs +1 -- both parts are COMMON and it is not -- so the
+# headword loses by 4. FUNCTION_STACK falls on whichever side wins the span
+# and cancels out of the comparison. MATCH would have to reach 6 to close the
+# gap, and 6 is refused on the compound class lines (see `cost.rs`). Reported
+# from real use against Translation Aggregator on 「見た目はギャルなのになー」,
+# where the engine had the right cover ranked second. Measured 2026-09-16:
+# every gold cell identical in both hint states.
+#
+# It is a forced token, so it also wins where なの + に is the right cut:
+# 「原因なのに気づいた」 ("noticed that it was the cause") now reads なのに.
+# The engine did not reach that cut before either -- it read な|の|に -- so
+# this trades three particles for one wrong word, on a shape far rarer than
+# the concessive. The gold corpus contains neither.
+#
+# へへ: `[primary]`, "heh-heh". Costs +4 against へ(+1) + へ(+1), and
+# FUNCTION_STACK adds 4 more because へ is a COMMON particle and the laugh is
+# therefore tileable by particles -- the one place that term charges a word it
+# should not. The split also romanized as `e e`, not `hehe`: a lone へ takes
+# the particle entry, and `furiganaFor` reads `wa`/`e` off that flag. Kana-only,
+# so the sweep did see it; it ranked below the 81-word cutoff.
+#
+# あたし達 and 唐揚げ WERE here and were removed on 2026-09-18, because
+# `cost.rs`'s `CONTENT_MATCH` closed their shape structurally and both now
+# merge unaided -- measured by deleting the rows and re-running, whole in
+# both cases with every gold cell identical to the digit in both hint states.
+# They are named rather than quietly dropped, the way conjugation_labels.txt
+# names its three deleted rows.
+#
+# あたし達 was `[primary]`, "we; us", +6 against あたし(-1) + 達(+1); the
+# kana-only sweep never saw it. The `[noun]達` class is still open (私達 is
+# its own JMdict headword, 君達 and 侺達 are others) but it is no longer this
+# file's problem unless one turns up that `CONTENT_MATCH` does not reach.
+# 唐揚げ was `[primary]`, "deep-fried food", +5 against 唐(+1) + 揚げ(0); its
+# reading is what proved it lexical, からあげ and not とう + あげ. Both are
+# the one-character-peel shape `CONTENT_MATCH` exists for.
+#
+# 無断で is in the same sentence, is also `[primary]` without `common`, and is
+# deliberately **not** here. It is compositional -- 無断 + で, and the reading
+# is the sum of its parts -- so the compound adjudication's `transparent`
+# class says split it, and the engine already does. Translation Aggregator
+# merges it; that is not a standard this project follows.
+#
+# **It converged by half.** Four reported screenshots on 2026-09-16 produced
+# four instances of one defect class, and `CONTENT_MATCH` took two of the
+# four on 2026-09-18. What is left here is the half that term cannot reach:
+# なのに and へへ are both tiled by COMMON *particles*, which is exactly the
+# tiling it withholds its surcharge from. The rest of this block is the
+# 2026-09-16 record, kept as written. The class was: a `[primary]` headword with no
+# `common` tag losing to its own COMMON parts, by exactly the arithmetic at
+# the top of this block. A row each is a patch, not a fix. The structural
+# candidate is `MATCH = 6` -- which `cost.rs` records as what ある日 needs
+# unaided -- paired with the `PARTICLE_CROSS` term that was built, measured as
+# "needed at M >= 6 and a wash at 2", and then not kept. Neither has been
+# measured with the other. That pair, not this file, is where the class ends.
 #
 # Connection ids are lifted from real IPADIC entries (副詞 83/71, 名詞 1/1) and
 # costs use MeCab's own -400*len^1.5 heuristic. They are IPADIC-specific, which
@@ -117,3 +178,175 @@
 いちゃいちゃ,83,71,-5878,副詞,一般,*,*,*,*,いちゃいちゃ,いちゃいちゃ
 ある日,1,1,-2078,名詞,一般,*,*,*,*,ある日,ある日
 その日,1,1,-2078,名詞,一般,*,*,*,*,その日,その日
+なのに,1,1,-3200,名詞,一般,*,*,*,*,なのに,なのに
+へへ,1,1,-1131,名詞,一般,*,*,*,*,へへ,へへ
+#
+# もしかして, もしかしたら and もしかすると were added on 2026-09-22, from the
+# residue the `uk` cover exposed (2026-09-22 handoff). All three are `adv,uk`
+# entries JMdict holds whole; IPADIC cuts もしか off the front, and the engine
+# then reads もしか(若しか) + して. They are not the `[primary]` shape above --
+# the refusal is `lex::is_grammatical_stack`, which sees short COMMON pieces
+# and cannot see that the whole is an adverb, so no cost-model term reaches
+# them either. Measured over the ten corpora hints-on: 153 occurrences the
+# ta-old port emits whole and this engine split (もしかして 77 of 334,
+# もしかしたら 59 of 59, もしかすると 17 of 17); every gold cell in both hint
+# states identical to the digit; -4472 and -2078 both measured, identical but
+# for one もしかして occurrence.
+#
+# The price is 3 occurrences in 131,847 sentences, each of them a name beside
+# the new token: ナスカ becomes ナ|スカ twice and 早百合 becomes 早|百合 once,
+# because Vibrato's Viterbi is global -- the same effect the cap below exists
+# for. 153 against 3 is the trade なのに took.
+もしかして,83,71,-4472,副詞,一般,*,*,*,*,もしかして,もしかして
+もしかしたら,83,71,-4472,副詞,一般,*,*,*,*,もしかしたら,もしかしたら
+もしかすると,83,71,-4472,副詞,一般,*,*,*,*,もしかすると,もしかすると
+#
+# The five below are the first *inflected* forms on this list, added 2026-09-22
+# after the もしか rows, and they are here because `cost.rs` provably cannot
+# reach them. A `uk` entry written in kana is PRONOUNCE-only, so every
+# tokenizer cut interior to it costs `PRONOUNCE_CROSS`; the exemption that
+# waives it requires an empty deinflection chain, and these all have one.
+# Widening the exemption to inflected forms was measured and refused on
+# 2026-09-18 (`はこう`→履く, `ことし`→今年), and gating that widening on `uk`
+# does not separate it either -- `ももう`→揉む, `のか`→退く and `たまん`→溜まる
+# are all `uk`, all inflected and all three characters.
+#
+# IPADIC is the asymmetry. It holds いる whole, so `は`+`いる` is cut correctly
+# 35 times in 38; it splits `い`+`ない`, so `はい`(yes)+`ない` wins 82 times in
+# 83 and the reader is shown "yes" for a topic particle. Teaching it いない
+# makes the negative behave like the positive. Gold merges 一段+ない (食べない,
+# いない), so this is the project's own standard, not TA's.
+#
+# Measured over ten corpora, 131,847 sentences, hints-on: 847 sentences change
+# (0.64%), 832 occurrences recovered -- いない 333, できない 295, よさそう 122,
+# できなかった 60, できず 22 -- and `はい` is gone from all 83 of its swallows.
+# Gold *gains*: strict 1694 -> 1696, tolerant 1948 -> 1950, entry top-1 0.9527
+# -> 0.9528, compounds and every hints-off cell identical. The curated snapshot
+# is byte-identical.
+#
+# The price is about a dozen occurrences: `もったいないでしょ` becomes
+# `もった|いないでしょ` 3 times, `のに` splits twice beside もったいない, the
+# open `イっていない` row splits twice, and `気持ちよさそうなお顔` reads
+# `なお|顔` twice.
+#
+# **もったいない is the sixth row and it is protective**, measured separately
+# the same day: it exists only to cancel what いない does to it. Ten corpora,
+# hints-on, against the five rows above: **8 sentences change (0.01%)**. Three
+# are the repair -- `もった|いないでしょ` becomes whole again and the `のに`
+# beside もったいない stops splitting twice -- and five are `もったいないです`
+# ×4 and `もったいないじゃ` ×1 merging back into the polite span the engine
+# emitted before today, which is the shipped auxiliary policy rather than a
+# defect. Every gold cell in both hint states is identical, and the curated
+# snapshot with it. Its own gain is 3 occurrences; it is here because a row
+# that repairs another row's collateral for that footprint is worth its place.
+#
+# The hazard to know about: いない forced as a token breaks a kana な-adjective
+# ending in い before a word starting with い -- `きれいないろ` reads
+# `きれ|いない|ろ`. Zero occurrences in 131,847 sentences of this register, and
+# `けんめいないのり` and `しずかないい人` both stay correct, but the shape is
+# real and a different register could carry it.
+#
+# よさそう is at -5878 rather than -3200 because -3200 loses `気持ちよさそう`,
+# which IPADIC cuts `気持ちよ|さ|そう`; the stronger cost wins the whole
+# 122 occurrences including that shape.
+いない,1,1,-3200,名詞,一般,*,*,*,*,いない,いない
+できない,1,1,-3200,名詞,一般,*,*,*,*,できない,できない
+できなかった,1,1,-3200,名詞,一般,*,*,*,*,できなかった,できなかった
+できず,1,1,-3200,名詞,一般,*,*,*,*,できず,できず
+よさそう,1,1,-5878,名詞,一般,*,*,*,*,よさそう,よさそう
+もったいない,1,1,-5878,名詞,一般,*,*,*,*,もったいない,もったいない
+#
+# **94 -> 111**, the 2026-09-22 re-run against the ta-old port over the same
+# ten corpora. `examples/corpus_disagree`'s ranked head held no defect for a
+# fourth session, so these came from a sweep that counts, per occurrence, where
+# the ta-old port emits a word whole and this engine does not. Thirteen are the
+# defect and four are protective. Ten corpora, hints-on, against the tip:
+# **545 of 131,847 sentences change (0.41%)**, 591 occurrences recovered
+# against 8 lost. Every gold cell in both hint states is identical to the
+# digit, and the curated snapshot with it.
+#
+# The recovered, by row: やだ 224, イって 107 (with イった 17, イったら 4,
+# イっている 3, イってる 3, イっていない 2, イってない 1), 達した 84,
+# マズい 27, ありえない 23, わかりやすい 21, おかわり 16, シゴく 15,
+# こやつ 11, ちきしょう 9, ふともも 8, よだれ 6.
+#
+# やだ is the largest single row measured here: 275 occurrences in the ten
+# corpora and **0 of them emitted whole** before it. 達した is the one row
+# with a kanji surface; it is here because `達し`(official notice) is a real
+# JMdict entry, so `達し|た` is a false gloss rather than an over-split.
+#
+# **The four protective rows**, each cancelling a collateral of the thirteen,
+# measured as their own A/B (44 of 131,847 sentences change, 0.03%):
+#   - いやだ -- やだ steals the い out of `もういやだ` -> `も|うい|やだ`.
+#   - カワイイ and マズイ -- イって steals the katakana イ out of
+#     `カワイイって` and `マズイって`.
+#   - 熟達した -- 達した severs `熟達`. 上達 and 発達 come back for free at
+#     -1500 rather than -3200; -1500 costs 17 of the bare 達した merges and
+#     saves 8 severed compounds, which is the trade taken here because a
+#     severed compound is a new defect and a missed merge is an old one.
+#
+# The price that stands, 8 occurrences: `さや` (a character name) reads
+# `さ|やだ` 5 times, `上達した` still severs twice, and `ヤバイって` reads
+# `ヤバ|イって` once. No protective row for those: one is a name, and the
+# other two are one occurrence per row.
+やだ,1,1,-3200,名詞,一般,*,*,*,*,やだ,やだ
+イって,1,1,-3200,名詞,一般,*,*,*,*,イって,イって
+イった,1,1,-3200,名詞,一般,*,*,*,*,イった,イった
+達した,1,1,-1500,名詞,一般,*,*,*,*,達した,タッシタ
+マズい,1,1,-3200,名詞,一般,*,*,*,*,マズい,マズい
+ありえない,1,1,-3200,名詞,一般,*,*,*,*,ありえない,ありえない
+わかりやすい,1,1,-3200,名詞,一般,*,*,*,*,わかりやすい,わかりやすい
+おかわり,1,1,-3200,名詞,一般,*,*,*,*,おかわり,おかわり
+シゴく,1,1,-3200,名詞,一般,*,*,*,*,シゴく,シゴく
+こやつ,1,1,-3200,名詞,一般,*,*,*,*,こやつ,こやつ
+ちきしょう,1,1,-3200,名詞,一般,*,*,*,*,ちきしょう,ちきしょう
+ふともも,1,1,-3200,名詞,一般,*,*,*,*,ふともも,ふともも
+よだれ,1,1,-3200,名詞,一般,*,*,*,*,よだれ,よだれ
+いやだ,1,1,-5878,名詞,一般,*,*,*,*,いやだ,いやだ
+カワイイ,1,1,-5878,名詞,一般,*,*,*,*,カワイイ,カワイイ
+マズイ,1,1,-5878,名詞,一般,*,*,*,*,マズイ,マズイ
+熟達した,1,1,-5878,名詞,一般,*,*,*,*,熟達した,ジュクタツシタ
+#
+# 2026-09-23, four rows from the twelve-corpus re-run (the ten above plus two
+# writers no earlier session had run), found by asking where the ta-old port
+# emits a JMdict content word whole -- any entry, not only `uk` -- and this
+# engine cuts it into pieces that are not a particle stack. Each is a false
+# gloss rather than an over-split, which is what put it here:
+#
+# - きもち: き|もち, "spirit" + "rice cake", 103 of 121 occurrences, and
+#   きもちいい / きもちよく inherit it (き|もち|いい 30).
+# - よさ was measured and refused: 気持ち|よ|さ glosses よ as the sentence
+#   particle 125 times, but with the row the whole span leads with 止す "to
+#   stop" (its 未然形, and `uk`, so the PRONOUNCE clause does not demote it),
+#   which trades one wrong gloss for a confident wrong verb.
+# - 兄様, 姉上, 兄上: the honorific swallows the particle after it --
+#   お兄|様に read 様に "like; as" 44 times, 姉|上は read 上は "now that" 11.
+#   お兄様 is 783 of 兄様's 796 occurrences and stays お|兄様.
+#
+# Twelve corpora, 151,225 sentences, hints on, against the same build without
+# them: 181 sentences change (0.12%), きもち 120, 兄様 45, 姉上 17 and 兄上 21
+# recovered, and the one collateral is 不思議とお兄様 reading 不思議|とお|兄様
+# 3 times -- Viterbi's globality, beside the new token, as before. Gold is
+# identical to the digit in both hint states.
+きもち,1,1,-3200,名詞,一般,*,*,*,*,きもち,きもち
+兄様,1,1,-3200,名詞,一般,*,*,*,*,兄様,アニサマ
+姉上,1,1,-3200,名詞,一般,*,*,*,*,姉上,アネウエ
+兄上,1,1,-3200,名詞,一般,*,*,*,*,兄上,アニウエ
+#
+# 2026-09-30, two rows for a reported line: IPADIC reads それでもし良かったら
+# as それでも + し (する) + 良かっ (非自立), "even so, if it is easy to do", and
+# the engine cannot end a span inside それでも, so it showed "nevertheless"
+# and the particle し "and; besides" where the text says それで + もし. No
+# engine rule separates it: IPADIC's でも|し is right in all 51 of its cuts
+# over the twelve corpora (なんでもして, 見られでもしたら). With the phrase a
+# token, Vibrato reads それで|もし良かったら and the engine keeps the JMdict
+# expression whole, "if you like" -- the long unit, which the user accepted
+# over the short もし|良かったら nothing else could produce here.
+#
+# Twelve corpora, 151,225 sentences, hints on, against the same build without
+# them: 3 sentences change, each もし|よかったら becoming the expression, and
+# nothing else. Gold is identical to the digit in both hint states. The one
+# collateral in the reported line is IPADIC now cutting お|昼 after it, which
+# the engine merges back.
+もし良かったら,83,71,-4472,副詞,一般,*,*,*,*,もし良かったら,もしよかったら
+もしよかったら,83,71,-4472,副詞,一般,*,*,*,*,もしよかったら,もしよかったら

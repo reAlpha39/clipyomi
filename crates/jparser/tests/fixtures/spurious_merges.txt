@@ -64,6 +64,18 @@
 がい	1204330	が + いった	a:053148-4
 になって	1599900	に + なる	b:wn28412-1
 になった	1599900	に + なった	a:004601-8
+# してい no longer has a cut inside it, and the row is kept and still
+# asserting (2026-09-18). ている joined table.rs's ATTACHES_TO, so
+# 予定にしている reads 予定 | に | している: the に is its own span, nothing is
+# absorbed, and the covering segment's top entry is する Progressive rather
+# than 1308000 (指定) or the kana-unified 子弟/師弟 this row exists for. The
+# test's acceptance was widened to match the row's subject instead of a
+# proxy for it: a strictly longer matched word covering the surface passes
+# **only when its top entry is not this column-2 ent_seq**, and a segment
+# sitting exactly on the surface still fails whatever it matched. Verified
+# before the change: across eight readings of that sentence 指定 never takes
+# the span, and してい parsed alone now leads with する Progressive where it
+# used to lead with 子弟 "children; sons".
 してい	1308000	して + いた	b:wn25517-3
 どうし	1451380	どう + しました	d:a:000323-3
 ことし	1579130	こと + してる	c1:cas-14

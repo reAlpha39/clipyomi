@@ -16,6 +16,17 @@ Written for [Engine v2 Phase 0](../../../../docs/superpowers/specs/2026-08-28-en
 
 Tier C2 (real `vn_data` lines) is never committed and has no rows here.
 
+**That exclusion has a measurement consequence, and it is recorded rather than
+implied.** The 150 committed sentences are 69 C1, 41 A, 32 B and 8 D — so
+**visual-novel dialogue is 0 of 150**, while README's first paragraph names
+visual novels as what this program is for. Every gate in master plan §5.2 is
+therefore measured on pastiche, pre-war literary prose and Wikinews. The
+licensing decision above is the right one and is not in question; how to weigh
+the numbers that follow from it is in
+[master plan §5.2](../../../../docs/superpowers/specs/2026-08-27-engine-v2-master-plan.md),
+"what register these numbers speak for", together with the unused
+`gold_local.jsonl` mechanism that would close the gap.
+
 ## How this corpus was adjudicated, and what that means for its numbers
 
 **Read this before quoting any score measured against `gold.jsonl`.**

@@ -52,21 +52,21 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 ### Installation & Development
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/reAlpha39/clipyomi.git
    cd clipyomi
    ```
-
 2. **Install frontend dependencies:**
+
    ```bash
    npm install
    ```
-
 3. **Run in development mode (Tauri + Vite hot-reload):**
+
    ```bash
    npm run tauri dev
    ```
-
 4. **First Run Setup:**
    On first launch, click **Download Dictionary** in the app to fetch and build the local JMDict search index. Once built, parsing is instantaneous and fully offline.
 
@@ -75,12 +75,14 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 ## Testing
 
 Run frontend unit and E2E tests:
+
 ```bash
 npm test          # Run Vitest unit tests
 npm run test:e2e  # Run Playwright E2E tests
 ```
 
 Run Rust crate tests:
+
 ```bash
 cargo test --workspace
 ```

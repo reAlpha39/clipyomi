@@ -529,6 +529,37 @@ fn the_user_lexicon_keeps_a_word_ipadic_splits() {
         "いちゃいちゃ | する"
     );
 
+    // The three もしか* adverbs, added 2026-09-22 for the same reason and
+    // measured the same way. `もしかしたら` is the row that was 100% split
+    // without the lexicon -- IPADIC cuts もしか off the front of all three.
+    let moshika = boundaries_over("もしかしたら、");
+    for p in 1..6 {
+        assert!(
+            !jparser::engine::Boundaries::is_boundary(&moshika, p),
+            "position {p} is interior to もしかしたら and must not be a cut"
+        );
+    }
+    assert!(
+        jparser::engine::Boundaries::is_boundary(&moshika, 6),
+        "もしかしたら | 、"
+    );
+
+    // `いない`, added the same day, is the row with a mechanism of its own:
+    // IPADIC holds いる whole but splits い|ない, so `はい`("yes") could end
+    // inside the negative and swallow the topic particle. Holding いない whole
+    // is what makes `cost::is_allowed` refuse that span.
+    let inai = boundaries_over("俺はいない");
+    assert!(
+        jparser::engine::Boundaries::is_boundary(&inai, 2),
+        "俺 | は"
+    );
+    for p in 3..5 {
+        assert!(
+            !jparser::engine::Boundaries::is_boundary(&inai, p),
+            "position {p} is interior to いない and must not be a cut"
+        );
+    }
+
     // Deliberately no parse assertion. The word is JMdict's, so checking the
     // segmentation would need the real 218k index, which CI does not have --
     // and the boundary set above *is* the mechanism: `cost::is_allowed` will
@@ -705,6 +736,42 @@ fn a_conjugated_katakana_verb_loses_to_its_shorter_parts() {
         whole.segments[0].entries[0].conjugation.as_deref(),
         Some("Past"),
         "control: the past form is reached through a real conjugation step"
+    );
+
+    // The same control with the sokuon written in katakana. Until 2026-09-22
+    // this span came back unmatched: `Table::search` walked the trie with raw
+    // characters, the trie held the hiragana っ, and the katakana ッ found no
+    // child -- so 行ッた, ワラッた and this verb all stopped dead one character
+    // into the tail while their hiragana twins parsed. 1,860 occurrences of
+    // the shape in the ten-corpus probe pool.
+    let katakana_sokuon = parse_v2_over(&lone, "ミスッた");
+    assert_eq!(
+        katakana_sokuon.segments.len(),
+        1,
+        "katakana sokuon: {:?}",
+        katakana_sokuon.segments
+    );
+    assert_eq!(katakana_sokuon.segments[0].surface, "ミスッた");
+    assert_eq!(
+        katakana_sokuon.segments[0].entries[0]
+            .conjugation
+            .as_deref(),
+        Some("Past"),
+    );
+
+    // And a conjugated reading comes back in hiragana. `reading_for` pastes
+    // the inflected tail on as the input wrote it, so the same change that
+    // let the katakana sokuon through made 行ッた read いッた -- which
+    // `src/render/furigana.ts` renders verbatim in its hiragana mode.
+    // `kana::to_hiragana` is what puts it back.
+    let reading_dir = scratch("katakana-sokuon-reading");
+    build_v2(&reading_dir);
+    let kanji_sokuon = parse_v2_over(&reading_dir, "行ッた");
+    assert_eq!(kanji_sokuon.segments[0].surface, "行ッた");
+    assert_eq!(
+        kanji_sokuon.segments[0].reading.as_deref(),
+        Some("いった"),
+        "a reading is hiragana whatever script the tail was written in"
     );
 
     // The defect: the same word, the same entry present, against a fixture
@@ -909,8 +976,17 @@ fn the_particle_absorbing_merges_are_gone() {
     {
         let mut cols = line.split('\t');
         let surface = cols.next().expect("column 1 is the surface");
+        // Column 2 is the `ent_seq` the spurious merge matched, and it used to
+        // be read by nothing. It is the row's actual subject -- `\u3057\u3066\u3044` is here
+        // because 1308000 (\u6307\u5b9a) and the kana-unified \u5b50\u5f1f could win that span --
+        // and the acceptance below needs it. See the fixture's own note.
+        let ent_seq: u32 = cols
+            .next()
+            .unwrap_or_else(|| panic!("{surface}: no second column naming an ent_seq"))
+            .parse()
+            .unwrap_or_else(|e| panic!("{surface}: column 2 is not an ent_seq: {e}"));
         let source = cols
-            .nth(2)
+            .nth(1)
             .unwrap_or_else(|| panic!("{surface}: no fourth column naming a gold sentence"));
         rows += 1;
 
@@ -946,12 +1022,37 @@ fn the_particle_absorbing_merges_are_gone() {
         let cuts = segment_cuts(&r.segments);
         let interior = cuts.iter().any(|&c| c > at && c < at + len);
 
-        if absorbed || !interior {
+        // **A strictly longer word covering the surface is not this class**, and
+        // saying so is what keeps the row asserting its own subject rather than
+        // a proxy for it. `\u3057\u3066\u3044` is the case: 2026-09-18's `\u3066\u3044\u308b` auxiliary
+        // makes \u4e88\u5b9a\u306b\u3057\u3066\u3044\u308b read `\u4e88\u5b9a` | `\u306b` | `\u3057\u3066\u3044\u308b`, so there is no cut
+        // inside `\u3057\u3066\u3044` any more -- and nothing is absorbed either. The `\u306b` is
+        // its own span, and the covering segment's top entry is `\u3059\u308b`
+        // Progressive, not 1308000. The defect this row exists for is a
+        // semantically absurd kana-unified headword taking the span; that is
+        // still failed, because the covering entry is checked by id. A segment
+        // sitting *exactly* on the surface stays a failure whatever it matched:
+        // that shape is the class by construction.
+        // `s.start == at`, not `<=`, and the difference is the whole class.
+        // A covering segment that starts **left** of the surface has absorbed
+        // something, which is precisely what this fixture refuses; one that
+        // starts *at* it has not. With `<=` the `になって` row passed while
+        // `ことになって` swallowed its `に` -- the exact parse the `uk`
+        // WordFlags variant was refused over -- because a 7-character segment
+        // from 37 covers 39..43 and its top entry is 事になる, not 1599900.
+        let covered_by_longer = r.segments.iter().any(|s| {
+            s.matched
+                && s.start == at
+                && at + len <= s.start + s.len
+                && s.len > len
+                && s.entries.first().is_some_and(|e| e.entry_id != ent_seq)
+        });
+        if absorbed || (!interior && !covered_by_longer) {
             let surfaces: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
             let reason = if absorbed {
                 "absorbed into one matched segment"
             } else {
-                "no segment boundary inside it"
+                "no segment boundary inside it, and no longer word covers it"
             };
             wrong.push(format!(
                 "{surface} at {at} in {source}: {reason}; gold cuts inside at \
@@ -968,6 +1069,98 @@ fn the_particle_absorbing_merges_are_gone() {
     assert!(
         wrong.is_empty(),
         "particle-absorbing merges are back:\n{}",
+        wrong.join("\n")
+    );
+}
+
+/// The mirror of the spurious-merge gate: a 〜て auxiliary must come out
+/// *inside* one span, with its label word.
+///
+/// It exists because `score` cannot say so. Every one of the 38 adjacent
+/// 〜て+auxiliary pairs in `gold.jsonl` is annotated as two spans, so merging
+/// one costs `strict` by construction and gains nothing anywhere else — the
+/// `ていく` rows and the 〜てくる/〜ておく/〜てみる rows both shipped with no
+/// positive cell in any metric while the corpus rate they were written for
+/// collapsed. `fixtures/auxiliary_merges.txt` carries the reasoning and the
+/// column contract.
+///
+/// The same context rule as the spurious gate, and for the same scar: the row
+/// is measured inside its gold sentence, never parsed as a bare surface.
+#[test]
+fn the_te_auxiliaries_stay_inside_one_span() {
+    const FIXTURE_AUX: &str = include_str!("fixtures/auxiliary_merges.txt");
+    let dir = scratch("auxiliary");
+    build_gold_v2(&dir);
+    let gold = gold_records();
+
+    let mut wrong = Vec::new();
+    let mut rows = 0;
+    for line in FIXTURE_AUX
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+    {
+        let mut cols = line.split('\t');
+        let surface = cols.next().expect("column 1 is the surface");
+        let word = cols
+            .next()
+            .unwrap_or_else(|| panic!("{surface}: no second column naming a label word"));
+        let source = cols
+            .next()
+            .unwrap_or_else(|| panic!("{surface}: no third column naming a gold sentence"));
+        rows += 1;
+
+        let record = gold.iter().find(|r| r.source == source).unwrap_or_else(|| {
+            panic!("{surface}: gold.jsonl carries no sentence with source {source}")
+        });
+        let at = char_index_of(&record.text, surface)
+            .unwrap_or_else(|| panic!("{surface} does not occur in {source}"));
+        let len = surface.chars().count();
+
+        // Re-derived, exactly as the spurious gate re-derives its own: a row
+        // whose gold boundary has moved out of the surface would be asserting
+        // that the engine agrees with gold, which is a different claim from
+        // the one this file makes.
+        let gold_inside = record.cuts.iter().any(|&c| c > at && c < at + len);
+        assert!(
+            gold_inside,
+            "{surface} at {at} in {source}: gold no longer splits it, so this row no \
+             longer records a deliberate disagreement -- repoint or retire it"
+        );
+
+        let bounds = boundaries_over(&record.text);
+        let r = parse_v2_with_bounds(&dir, &record.text, Some(&bounds));
+        let whole = r
+            .segments
+            .iter()
+            .find(|s| s.matched && s.start == at && s.len == len);
+        match whole {
+            None => {
+                let surfaces: Vec<&str> = r.segments.iter().map(|s| s.surface.as_str()).collect();
+                wrong.push(format!(
+                    "{surface} at {at} in {source}: not one matched segment; parse is {surfaces:?}"
+                ));
+            }
+            // The label is checked on the *top* entry, because that is the one
+            // the reader sees. One word, not the whole label: 刻まれていた is
+            // "Passive/Potential Progressive Past" and pinning every word here
+            // would duplicate `conjugation_labels.txt`, which owns that
+            // question and is authoritative over the code.
+            Some(s) => {
+                let label = s.entries.first().and_then(|e| e.conjugation.as_deref());
+                if !label.is_some_and(|l| l.split(' ').any(|w| w == word)) {
+                    wrong.push(format!(
+                        "{surface} in {source}: merged, but its top entry reads {label:?}, \
+                         which does not carry {word:?}"
+                    ));
+                }
+            }
+        }
+    }
+
+    assert_eq!(rows, 32, "the fixture should hold 32 rows");
+    assert!(
+        wrong.is_empty(),
+        "a 〜て auxiliary is split again, or lost its label:\n{}",
         wrong.join("\n")
     );
 }
@@ -1152,16 +1345,21 @@ fn the_ranges_are_absolute_not_relative_to_the_spans_start() {
 #[test]
 fn katakana_conjugation_is_not_deinflected_yet() {
     // Deliberate gap, not a bug, kept for Phase 1a: `Table`'s conjugation
-    // trie is hiragana-keyed with no folding in `Table::search`, so a fully
-    // katakana surface can never reach a Terminal/Continuation node through
-    // an actual suffix match. Folding the trie too would fix that, but it
-    // would also turn every katakana loanword ending in タ (データ, メーター,
-    // カルタ) into a spurious past-tense candidate -- exactly the
-    // kana-unified false-match class handoff §9.5 already measured as this
-    // engine's worst defect. Handoff §8's deferred katakana-deinflection
-    // item is what would reopen this trade-off: Tier D's 8 sentences / 169
-    // spans showed no visible penalty from leaving it unfolded, but that
-    // sample is too thin to call it settled either way.
+    // trie is hiragana-keyed and `Table::search` folds only the sokuon, so a
+    // fully katakana surface still cannot reach a Terminal/Continuation node
+    // through an actual suffix match. Folding the trie with `kana::fold`
+    // would, and it would also turn every katakana loanword ending in タ
+    // (データ, メーター, カルタ) into a spurious past-tense candidate --
+    // exactly the kana-unified false-match class handoff §9.5 already measured
+    // as this engine's worst defect. Tier D's 8 sentences / 169 spans could
+    // not price that trade, and this comment said so until 2026-09-22.
+    //
+    // **It is priced now and the answer was no.** The full fold was built and
+    // run over the ten-corpus probe pool, 131,847 sentences: against the
+    // sokuon-only fold that shipped it changes another 1,076 sentences and
+    // the 1,149 spans it gains there are about one good to one bad --
+    // `イケナイ` 130 and `キツク` 107 read correctly, `タツヤ` glossed 立つ
+    // 104 times and `ズン` glossed ずる 48. See `table::hiragana_sokuon`.
     //
     // `chains_ending_at` separately always offers a zero-consumption
     // substitution for any class whose own form has an empty suffix (an
@@ -1292,29 +1490,33 @@ fn no_two_entries_in_a_segment_share_an_entry_id() {
 }
 
 // The dedup above keys on `(len, entry_id)`, not `(start, entry_id)` alone,
-// precisely so this still holds: 書いた's onbin fragment 書い (len 2) and
-// the full chain 書いた (len 3) both reconstruct headword 書く (the same
+// precisely so this still holds: 食べた's 連用形 fragment 食べ (len 2) and
+// the full chain 食べた (len 3) both reconstruct headword 食べる (the same
 // entry_id) from the same start, and both must survive as distinct
 // candidates -- collapsing the key down to `(start, entry_id)` would drop
 // one of them silently.
+//
+// 書いた was the vehicle until `table.rs`'s BOUND_FORMS landed: 書い is
+// 連用タ接続, which is no longer a candidate on its own, so the pair this
+// test exists to protect would be a single candidate and the assertion
+// vacuous. 食べ is 連用形 -- a form that does end words -- so it is still two.
 #[test]
 fn the_same_headword_at_two_different_lengths_is_not_deduplicated_away() {
     let dir = scratch("lex-keeps-both-lengths");
     build_v2(&dir);
-    let c = cands(&dir, "書いた");
+    let c = cands(&dir, "食べた");
     let lens: Vec<usize> = c[0]
         .iter()
-        .filter(|x| x.headword == "書く")
+        .filter(|x| x.headword == "食べる")
         .map(|x| x.len)
         .collect();
-    // Asserted on the emitted order, not just membership: both 書いた's full
-    // chain (len 3) and its 書い fragment (len 2) must survive the dedup,
+    // Asserted on the emitted order, not just membership: both 食べた's full
+    // chain (len 3) and its 食べ fragment (len 2) must survive the dedup,
     // longest span first.
     assert_eq!(
         lens,
         vec![3, 2],
-        "both 書いた's full chain (len 3) and its 書い fragment (len 2) must \
-         survive the dedup in longest-first order, got lens {lens:?}"
+        "both 食べた's full chain (len 3) and its 食べ fragment (len 2) must          survive the dedup in longest-first order, got lens {lens:?}"
     );
 }
 
@@ -1491,6 +1693,293 @@ fn kuru_in_kanji_leaves_an_unmatched_tail_alone() {
     assert!(!tail.matched);
     assert_eq!(tail.reading, None);
     assert!(tail.entries.is_empty());
+}
+
+// 来る's *compounds*, which the bare-来る tests above cannot reach. JMdict
+// spells this class both ways -- 出てくる and 出て来る are one entry, and
+// `vk` maps to カ変・来ル (kanji stem 来, empty suffixes) as well as
+// カ変・クル (kana suffixes over an empty stem). Over 38 vk entries the
+// spellings partition exactly: 65 headwords end 来る/來る, 82 end くる/クる,
+// none does neither. The two tests below are the two halves of that
+// partition going wrong before 2026-09-21.
+//
+// A private fixture for the same reason `KURU_FIXTURE` is one: the extractor
+// that regenerates `jmdict_subset.xml` would drop hand-added entries.
+const KURU_COMPOUND_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY vk "Kuru verb - special class">
+<!ENTITY v1 "Ichidan verb">
+<!ENTITY v1-s "Ichidan verb - kureru special class">
+<!ENTITY v5r "Godan verb with ru ending">
+]>
+<JMdict>
+<entry>
+<ent_seq>1000040</ent_seq>
+<k_ele><keb>来る</keb></k_ele>
+<k_ele><keb>來る</keb></k_ele>
+<r_ele><reb>くる</reb></r_ele>
+<sense><pos>&vk;</pos><gloss>to come</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1338240</ent_seq>
+<k_ele><keb>出てくる</keb></k_ele>
+<k_ele><keb>出て来る</keb></k_ele>
+<r_ele><reb>でてくる</reb></r_ele>
+<sense><pos>&vk;</pos><gloss>to come out</gloss></sense>
+</entry>
+<entry>
+<ent_seq>2789750</ent_seq>
+<k_ele><keb>取ってくる</keb></k_ele>
+<r_ele><reb>とってくる</reb></r_ele>
+<sense><pos>&vk;</pos><gloss>to fetch</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1269130</ent_seq>
+<k_ele><keb>呉れる</keb></k_ele>
+<r_ele><reb>くれる</reb></r_ele>
+<sense><pos>&v1-s;</pos><gloss>to give</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1326980</ent_seq>
+<k_ele><keb>取る</keb></k_ele>
+<r_ele><reb>とる</reb></r_ele>
+<sense><pos>&v5r;</pos><gloss>to take</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1338180</ent_seq>
+<k_ele><keb>出る</keb></k_ele>
+<r_ele><reb>でる</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to exit</gloss></sense>
+</entry>
+</JMdict>
+"#;
+
+fn build_kuru_compound(dir: &Path) {
+    jparser::engine::build::build_from_reader(
+        BufReader::new(KURU_COMPOUND_FIXTURE.as_bytes()),
+        dir,
+    )
+    .expect("v2 build");
+}
+
+fn parse_kuru_compound(name: &str, text: &str) -> jparser::ParseResult {
+    let dir = scratch(name);
+    build_kuru_compound(&dir);
+    parse_v2_over(&dir, text)
+}
+
+/// A kana headword ends in る too, so it satisfies カ変・来ル's remove-suffix
+/// by accident and deinflects over a stem that is not one: 取ってく + れる.
+///
+/// The surface that produces is not Japanese, and it collides exactly with
+/// くれる, the benefactive — so `舐め取ってくれる` was glossed 取ってくる, "to
+/// fetch", with the meaning inverted from "did it for me" to "went and got".
+/// Measured over six visual-novel corpora, 56,065 sentences: 30 occurrences
+/// hints-on and 22 hints-off (`docs/superpowers/2026-09-21-six-corpora-handoff.md`
+/// §4a).
+///
+/// Asserted over candidates rather than segments: the bogus candidate loses
+/// the ranking in isolation and wins in a sentence, so a segment-level test
+/// would pass today for the wrong reason. What the fix removes is the
+/// candidate.
+#[test]
+fn kuru_in_kana_does_not_deinflect_over_the_kanji_stem() {
+    let dir = scratch("kuru-kana-benefactive");
+    build_kuru_compound(&dir);
+    let c = cands(&dir, "取ってくれる");
+    let from_kuru = |list: &[jparser::engine::lex::Candidate], len: usize| {
+        list.iter()
+            .any(|x| x.headword == "取ってくる" && x.len == len)
+    };
+    assert!(
+        !from_kuru(&c[0], 6),
+        "取ってく is not a stem: 取ってくれる is 取って + くれる, the benefactive: {:?}",
+        c[0]
+    );
+    // The two カ変・クル forms in the same text that must survive: 仮定形
+    // 取ってくれ (the ば of 取ってくれば) and 体言接続特殊２ 取ってく.
+    assert!(from_kuru(&c[0], 5), "取ってくれ(ば) is カ変・クル's 仮定形");
+    assert!(
+        from_kuru(&c[0], 4),
+        "取ってく is カ変・クル's 体言接続特殊２"
+    );
+    assert!(c[3].iter().any(|x| x.headword == "くれる" && x.len == 3));
+}
+
+/// The same defect where no real word collides, which is why it never
+/// surfaced in a corpus: 連れてくさせる and 取ってくさせる are matched and
+/// glossed today, and neither is a word. The causative of 取ってくる is
+/// 取ってこさせる.
+#[test]
+fn kuru_in_kana_does_not_invent_a_causative_stem() {
+    let dir = scratch("kuru-kana-causative");
+    build_kuru_compound(&dir);
+    let c = cands(&dir, "取ってくさせる");
+    let bogus: Vec<usize> = c[0]
+        .iter()
+        .filter(|x| x.headword == "取ってくる" && x.len > 4)
+        .map(|x| x.len)
+        .collect();
+    assert!(
+        bogus.is_empty(),
+        "取ってく is not a stem of 取ってくる; spans {bogus:?} were built on it"
+    );
+}
+
+/// カ変・来ル's reading is rebuilt from the kana class's same-named form, and
+/// it was rebuilt from that form *alone* — so a compound lost everything
+/// before the 来. 連れて来い read こい, not つれてこい, and the reading is what
+/// the furigana renders.
+#[test]
+fn kuru_in_kanji_compound_keeps_the_prefix_in_its_reading() {
+    let r = parse_kuru_compound("kuru-kanji-compound", "出て来た");
+    assert_eq!(r.segments.len(), 1, "{:?}", r.segments);
+    let s = &r.segments[0];
+    assert!(s.matched);
+    assert_eq!(s.reading.as_deref(), Some("でてきた"));
+    let e = &s.entries[0];
+    assert_eq!(e.headword, "出て来る");
+    assert_eq!(e.conjugation.as_deref(), Some("Past"));
+}
+
+/// The control the prefix rule needs: bare 来る has nothing before the 来, so
+/// its reading must come out exactly as it did before — きた, not the empty
+/// prefix rule's failure mode of くた or こた.
+#[test]
+fn kuru_in_kanji_bare_is_unchanged_by_the_compound_rule() {
+    let r = parse_kuru_compound("kuru-kanji-bare", "来た");
+    assert_eq!(r.segments.len(), 1, "{:?}", r.segments);
+    assert_eq!(r.segments[0].reading.as_deref(), Some("きた"));
+    assert_eq!(r.segments[0].entries[0].headword, "来る");
+}
+
+/// What the kana hole had been covering by accident, and the reason closing
+/// it needs `v1-s` mapped in the same change: くれる's past is くれた, and
+/// without a class for `v1-s` the entry matched uninflected only.
+#[test]
+fn the_benefactive_conjugates_through_its_own_class() {
+    let r = parse_kuru_compound("kureru-past", "取ってくれた");
+    assert_eq!(r.segments.len(), 2, "取って + くれた: {:?}", r.segments);
+    assert_eq!(r.segments[1].surface, "くれた");
+    let e = &r.segments[1].entries[0];
+    assert_eq!(e.headword, "くれる");
+    assert_eq!(e.conjugation.as_deref(), Some("Past"));
+}
+
+/// 來る is the other half of the class's kanji leg — JMdict carries it as a
+/// second headword of the same entry, and it is the one spelling a rule
+/// written as "ends in 来る" would silently drop.
+#[test]
+fn kuru_in_the_old_kanji_still_deinflects() {
+    let r = parse_kuru_compound("kuru-kanji-old", "來た");
+    assert_eq!(r.segments.len(), 1, "{:?}", r.segments);
+    assert!(r.segments[0].matched);
+    assert_eq!(r.segments[0].reading.as_deref(), Some("きた"));
+}
+
+// A katakana run cut into pieces that are not words: ユリナス, a character's
+// name, reads ユリ ("lily") + ナス ("eggplant") 1,721 times over six corpora.
+// See docs/superpowers/specs/2026-09-21-katakana-run-integrity-design.md.
+//
+// A private fixture for the reason `KURU_FIXTURE` is one: the extractor that
+// regenerates `jmdict_subset.xml` would drop hand-added entries.
+const KATAKANA_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+]>
+<JMdict>
+<entry>
+<ent_seq>1000010</ent_seq>
+<k_ele><keb>ユリ</keb></k_ele>
+<r_ele><reb>ゆり</reb></r_ele>
+<sense><pos>&n;</pos><gloss>lily</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000020</ent_seq>
+<k_ele><keb>ナス</keb></k_ele>
+<r_ele><reb>なす</reb></r_ele>
+<sense><pos>&n;</pos><gloss>eggplant</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000030</ent_seq>
+<r_ele><reb>ソロ</reb></r_ele>
+<sense><pos>&n;</pos><gloss>solo</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000040</ent_seq>
+<r_ele><reb>ホームラン</reb></r_ele>
+<sense><pos>&n;</pos><gloss>home run</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000050</ent_seq>
+<r_ele><reb>ラスト</reb></r_ele>
+<sense><pos>&n;</pos><gloss>last</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000060</ent_seq>
+<r_ele><reb>ラン</reb></r_ele>
+<sense><pos>&n;</pos><gloss>run</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000070</ent_seq>
+<r_ele><reb>ランニング</reb></r_ele>
+<sense><pos>&n;</pos><gloss>running</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000080</ent_seq>
+<r_ele><reb>ウェア</reb></r_ele>
+<sense><pos>&n;</pos><gloss>wear</gloss></sense>
+</entry>
+<entry>
+<ent_seq>1000090</ent_seq>
+<k_ele><keb>キツい</keb></k_ele>
+<r_ele><reb>きつい</reb></r_ele>
+<sense><pos>&n;</pos><gloss>tight</gloss></sense>
+</entry>
+</JMdict>
+"#;
+
+fn build_katakana(dir: &Path) {
+    jparser::engine::build::build_from_reader(BufReader::new(KATAKANA_FIXTURE.as_bytes()), dir)
+        .expect("v2 build");
+}
+
+/// The geometry the charge keys on, asserted on the flag rather than on a
+/// parse: a two-character piece of a four-character run is a fragment, the
+/// whole run is not, and a span that leaves the run is not either.
+#[test]
+fn a_piece_of_a_longer_katakana_run_is_marked_as_one() {
+    let dir = scratch("katakana-fragment-flag");
+    build_katakana(&dir);
+    let c = cands(&dir, "ユリナス");
+    let piece = c[0]
+        .iter()
+        .find(|x| x.len == 2 && x.headword == "ユリ")
+        .expect("ユリ is a candidate at 0");
+    assert!(piece.inside_katakana_run, "ユリ is a piece of ユリナス");
+
+    let tail = c[2]
+        .iter()
+        .find(|x| x.len == 2 && x.headword == "ナス")
+        .expect("ナス is a candidate at 2");
+    assert!(tail.inside_katakana_run, "ナス is a piece of ユリナス");
+}
+
+/// The converse, and the case a charge must never reach: a span that starts
+/// inside a katakana run and ends outside it is not a piece of that run.
+#[test]
+fn a_span_that_leaves_the_katakana_run_is_not_a_piece_of_it() {
+    let dir = scratch("katakana-fragment-crossing");
+    build_katakana(&dir);
+    let c = cands(&dir, "キツい");
+    let crossing = c[0]
+        .iter()
+        .find(|x| x.len == 3)
+        .expect("キツい is a candidate at 0");
+    assert!(
+        !crossing.inside_katakana_run,
+        "キツい ends in hiragana, so it is not inside a katakana run"
+    );
 }
 
 #[test]
@@ -1877,4 +2366,368 @@ fn no_candidate_has_zero_length() {
             }
         }
     }
+}
+
+/// `uk` entries and the pieces that compete with them, small enough that the
+/// whole lattice is readable.
+///
+/// The three entries are the three outcomes: `お強請り` is vocabulary JMdict
+/// says is written in kana, `出汁` is the same thing two kana long, and `様に`
+/// is grammar. Each competing piece is present as its own entry, so a split
+/// is a tiling of matched spans rather than a fallback — without `お` and
+/// `ねだり` here the merge would win for the wrong reason, which is how
+/// `a_five_character_katakana_compound_keeps_its_cut` passed against a
+/// fixture that lacked `ラストラン`.
+const UK_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+<!ENTITY pref "prefix">
+<!ENTITY prt "particle">
+<!ENTITY cop "copula">
+<!ENTITY exp "expressions (phrases, clauses, etc.)">
+<!ENTITY uk "word usually written using kana alone">
+]>
+<JMdict>
+<entry><ent_seq>3000010</ent_seq>
+<k_ele><keb>お強請り</keb></k_ele><r_ele><reb>おねだり</reb></r_ele>
+<sense><pos>&n;</pos><misc>&uk;</misc><gloss>begging</gloss></sense></entry>
+<entry><ent_seq>3000020</ent_seq>
+<r_ele><reb>お</reb></r_ele>
+<sense><pos>&pref;</pos><gloss>honorific prefix</gloss></sense></entry>
+<entry><ent_seq>3000030</ent_seq>
+<r_ele><reb>ねだり</reb></r_ele>
+<sense><pos>&n;</pos><gloss>pestering</gloss></sense></entry>
+<entry><ent_seq>3000040</ent_seq>
+<k_ele><keb>出汁</keb></k_ele><r_ele><reb>だし</reb></r_ele>
+<sense><pos>&n;</pos><misc>&uk;</misc><gloss>soup stock</gloss></sense></entry>
+<entry><ent_seq>3000050</ent_seq>
+<r_ele><reb>だ</reb></r_ele>
+<sense><pos>&cop;</pos><gloss>be</gloss></sense></entry>
+<entry><ent_seq>3000060</ent_seq>
+<r_ele><reb>し</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>and</gloss></sense></entry>
+<entry><ent_seq>3000070</ent_seq>
+<k_ele><keb>様に</keb></k_ele><r_ele><reb>ように</reb></r_ele>
+<sense><pos>&exp;</pos><misc>&uk;</misc><gloss>so that</gloss></sense></entry>
+<entry><ent_seq>3000080</ent_seq>
+<k_ele><keb>様</keb></k_ele><r_ele><reb>よう</reb></r_ele>
+<sense><pos>&n;</pos><gloss>appearance</gloss></sense></entry>
+<entry><ent_seq>3000090</ent_seq>
+<r_ele><reb>に</reb></r_ele>
+<sense><pos>&prt;</pos><gloss>to</gloss></sense></entry>
+</JMdict>
+"#;
+
+/// Cuts at exactly the given positions, so a test can put a tokenizer
+/// boundary where it needs one without the 47 MB Vibrato dictionary.
+struct CutsAt(&'static [usize]);
+
+impl jparser::engine::Boundaries for CutsAt {
+    fn is_boundary(&self, pos: usize) -> bool {
+        self.0.contains(&pos)
+    }
+}
+
+/// `cost`'s `uk` exemption, end to end: the spelling JMdict calls normal
+/// survives a tokenizer cut inside it, and the two shapes that must keep
+/// paying still split.
+///
+/// Measured on ten corpora before this existed: `おねだり` came out
+/// `お|ねだり` 115 times of 116, and `corpus_disagree` could not even report
+/// it as a covered region, because a `uk` entry's kana spelling is
+/// PRONOUNCE-only and the probe required PRIMARY. The two negative halves are
+/// the ones that cost gold spans when they were missing —
+/// `flags::GRAMMATICAL_POS` (16 spans, every one a swallowed particle) and
+/// `cost::UK_MIN_LEN` (`冬|だ|し` glossed 出汁 333 times).
+#[cfg(feature = "mecab")]
+#[test]
+fn a_uk_spelling_survives_a_cut_inside_it_and_grammar_still_splits() {
+    let dir = scratch("uk-exemption");
+    jparser::engine::build::build_from_reader(BufReader::new(UK_FIXTURE.as_bytes()), &dir)
+        .expect("uk fixture build");
+
+    // お|ねだり: the cut IPADIC makes inside the word.
+    let parsed = parse_v2_with_bounds(&dir, "おねだり", Some(&CutsAt(&[0, 1, 4])));
+    let spans: Vec<(usize, usize)> = parsed.segments.iter().map(|s| (s.start, s.len)).collect();
+    assert_eq!(
+        spans,
+        vec![(0, 4)],
+        "a uk noun of word length is one span across the cut"
+    );
+    let shown = parsed.segments[0]
+        .entries
+        .first()
+        .expect("the span matched an entry rather than falling back");
+    assert_eq!(
+        (shown.headword.as_str(), shown.senses[0].glosses[0].as_str()),
+        ("おねだり", "begging"),
+        "it is the entry, and `assemble::order`'s own uk clause shows the kana          spelling rather than お強請り"
+    );
+
+    // だ|し: two kana, so the exemption is withheld and the pieces win.
+    let parsed = parse_v2_with_bounds(&dir, "だし", Some(&CutsAt(&[0, 1, 2])));
+    assert_eq!(
+        parsed.segments.len(),
+        2,
+        "under UK_MIN_LEN the copula keeps its particle: だ|し, never 出汁"
+    );
+
+    // よう|に: uk, exact, uninflected and long enough — but grammar.
+    let parsed = parse_v2_with_bounds(&dir, "ように", Some(&CutsAt(&[0, 2, 3])));
+    assert_eq!(
+        parsed.segments.len(),
+        2,
+        "an exp entry is criterion 3's business however JMdict spells it"
+    );
+}
+
+/// The godan potential's fixture: each verb beside the word its potential
+/// would collide with. Hand-written, ids of its own, glosses written here; the
+/// point is the *pairs*, which a shared extracted fixture could lose or gain.
+const POTENTIAL_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE JMdict [
+<!ENTITY n "noun (common) (futsuumeishi)">
+<!ENTITY adj-i "adjective (keiyoushi)">
+<!ENTITY adj-f "noun or verb acting prenominally">
+<!ENTITY exp "expressions (phrases, clauses, etc.)">
+<!ENTITY prt "particle">
+<!ENTITY aux-v "auxiliary verb">
+<!ENTITY v1 "Ichidan verb">
+<!ENTITY v1-s "Ichidan verb - kureru special class">
+<!ENTITY vk "Kuru verb - special class">
+<!ENTITY v5k "Godan verb with ku ending">
+<!ENTITY v5k-s "Godan verb - Iku/Yuku special class">
+<!ENTITY v5m "Godan verb with mu ending">
+<!ENTITY v5r "Godan verb with ru ending">
+<!ENTITY v5s "Godan verb with su ending">
+<!ENTITY v5u "Godan verb with u ending">
+<!ENTITY uk "word usually written using kana alone">
+<!ENTITY col "colloquial">
+]>
+<JMdict>
+<entry><ent_seq>3100010</ent_seq>
+<k_ele><keb>読む</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>よむ</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5m;</pos><gloss>to read</gloss></sense></entry>
+<entry><ent_seq>3100020</ent_seq>
+<k_ele><keb>会う</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>あう</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5u;</pos><gloss>to meet</gloss></sense></entry>
+<entry><ent_seq>3100030</ent_seq>
+<k_ele><keb>弾く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>はじく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><gloss>to flick</gloss></sense></entry>
+<entry><ent_seq>3100040</ent_seq>
+<k_ele><keb>弾ける</keb></k_ele><r_ele><reb>はじける</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to burst open</gloss></sense></entry>
+<entry><ent_seq>3100050</ent_seq>
+<k_ele><keb>来る</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>くる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&vk;</pos><gloss>to come</gloss></sense></entry>
+<entry><ent_seq>3100060</ent_seq>
+<r_ele><reb>くれる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1-s;</pos><gloss>to give (to me)</gloss></sense></entry>
+<entry><ent_seq>3100070</ent_seq>
+<k_ele><keb>湧く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>わく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><gloss>to gush</gloss></sense></entry>
+<entry><ent_seq>3100080</ent_seq>
+<k_ele><keb>訳</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>わけ</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&n;</pos><gloss>reason</gloss></sense></entry>
+<entry><ent_seq>3100090</ent_seq>
+<r_ele><reb>ない</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&adj-i;</pos><gloss>nonexistent</gloss></sense></entry>
+<entry><ent_seq>3100100</ent_seq>
+<k_ele><keb>口を開く</keb></k_ele><r_ele><reb>くちをひらく</reb></r_ele>
+<sense><pos>&exp;</pos><pos>&v5k;</pos><gloss>to begin to speak</gloss></sense></entry>
+<entry><ent_seq>3100110</ent_seq>
+<k_ele><keb>口</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>くち</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&n;</pos><gloss>mouth</gloss></sense></entry>
+<entry><ent_seq>3100120</ent_seq>
+<r_ele><reb>を</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&prt;</pos><gloss>object marker</gloss></sense></entry>
+<entry><ent_seq>3100130</ent_seq>
+<k_ele><keb>開ける</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>あける</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to open</gloss></sense></entry>
+<entry><ent_seq>3100140</ent_seq>
+<k_ele><keb>行く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>いく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k-s;</pos><misc>&uk;</misc><gloss>to go</gloss></sense>
+<sense><pos>&aux-v;</pos><misc>&uk;</misc><gloss>to continue ...ing</gloss></sense></entry>
+<entry><ent_seq>3100150</ent_seq>
+<k_ele><keb>行けない</keb></k_ele><r_ele><reb>いけない</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&adj-i;</pos><pos>&exp;</pos><gloss>must not</gloss></sense></entry>
+<entry><ent_seq>3100160</ent_seq>
+<k_ele><keb>成る</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>なる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5r;</pos><misc>&uk;</misc><gloss>to become</gloss></sense>
+<sense><pos>&aux-v;</pos><misc>&uk;</misc><gloss>to do (honorific)</gloss></sense></entry>
+<entry><ent_seq>3100170</ent_seq>
+<k_ele><keb>慣れる</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>なれる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to get used to</gloss></sense></entry>
+<entry><ent_seq>3100175</ent_seq>
+<k_ele><keb>慣れた</keb></k_ele><r_ele><reb>なれた</reb></r_ele>
+<sense><pos>&adj-f;</pos><gloss>experienced</gloss></sense></entry>
+<entry><ent_seq>3100176</ent_seq>
+<r_ele><reb>とく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><pos>&aux-v;</pos><gloss>to do in advance (contraction of ておく)</gloss></sense></entry>
+<entry><ent_seq>3100180</ent_seq>
+<k_ele><keb>解く</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>とく</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5k;</pos><misc>&uk;</misc><gloss>to untie</gloss></sense></entry>
+<entry><ent_seq>3100190</ent_seq>
+<k_ele><keb>溶ける</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>とける</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to melt</gloss></sense></entry>
+<entry><ent_seq>3100200</ent_seq>
+<r_ele><reb>イカす</reb></r_ele><r_ele><reb>いかす</reb></r_ele>
+<sense><pos>&v5s;</pos><misc>&col;</misc><gloss>to be cool</gloss></sense></entry>
+<entry><ent_seq>3100210</ent_seq>
+<k_ele><keb>擦る</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>こする</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5r;</pos><gloss>to rub</gloss></sense></entry>
+<entry><ent_seq>3100220</ent_seq>
+<k_ele><keb>擦れる</keb></k_ele><r_ele><reb>すれる</reb></r_ele>
+<sense><pos>&v1;</pos><gloss>to rub against</gloss></sense></entry>
+<entry><ent_seq>3100230</ent_seq>
+<k_ele><keb>変える</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>かえる</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v1;</pos><gloss>to change</gloss></sense></entry>
+<entry><ent_seq>3100240</ent_seq>
+<k_ele><keb>買う</keb><ke_pri>ichi1</ke_pri></k_ele><r_ele><reb>かう</reb><re_pri>ichi1</re_pri></r_ele>
+<sense><pos>&v5u;</pos><gloss>to buy</gloss></sense></entry>
+</JMdict>
+"#;
+
+/// `(headword, conjugation)` of every entry on every segment of `text`.
+fn potential_readings(dir: &Path, text: &str) -> Vec<Vec<(String, Option<String>)>> {
+    parse_v2_over(dir, text)
+        .segments
+        .iter()
+        .map(|s| {
+            s.entries
+                .iter()
+                .map(|e| (e.headword.clone(), e.conjugation.clone()))
+                .collect()
+        })
+        .collect()
+}
+
+/// A kana 一段 verb is not split at its empty stem where JMdict writes it in
+/// kana (止める, gold `c1:elo-08`), and the particle a one-kana stem collides
+/// with stays a particle where JMdict writes the verb in kanji: `にない` is
+/// に + ない, not 似る Negative, and `わけない` is 訳 + ない, not 分ける. Where
+/// it writes the verb in kana, a chain ending in な or ね is still refused:
+/// `それな` and `それね` are それ + a particle, not 逸れる Negative.
+#[cfg(feature = "mecab")]
+#[test]
+fn a_kana_ichidan_verb_keeps_its_stem_and_a_particle_keeps_its_own() {
+    let dir = scratch("kana-ichidan-stem");
+    build_gold_v2(&dir);
+    let surfaces = |text: &str| -> Vec<String> {
+        let bounds = boundaries_over(text);
+        parse_v2_with_bounds(&dir, text, Some(&bounds))
+            .segments
+            .into_iter()
+            .map(|s| s.surface)
+            .collect()
+    };
+    let yamete = surfaces("やめてぇぇぇ、痛いってば");
+    assert!(yamete.iter().any(|s| s == "やめて"), "{yamete:?}");
+    for (text, merge) in [
+        ("ここにないよ", "にない"),
+        ("そんなわけないだろう", "わけない"),
+        ("ああ、それね", "それね"),
+        ("そう、それな", "それな"),
+    ] {
+        let cuts = surfaces(text);
+        assert!(!cuts.iter().any(|s| s == merge), "{text}: {cuts:?}");
+    }
+}
+
+/// The godan potential reaches the godan lemma, and each collision the phase
+/// predicted comes out the way it was measured to: the dictionary's own word
+/// first where it spells the span, no potential where one would be false.
+#[test]
+fn the_godan_potential_reaches_its_lemma_and_not_its_collisions() {
+    let dir = scratch("godan-potential");
+    jparser::engine::build::build_from_reader(BufReader::new(POTENTIAL_FIXTURE.as_bytes()), &dir)
+        .expect("potential fixture build");
+    let first = |text: &str| -> Vec<(String, Option<String>)> {
+        potential_readings(&dir, text)
+            .into_iter()
+            .map(|entries| entries.into_iter().next().expect("a matched segment"))
+            .collect()
+    };
+    let pair = |h: &str, c: &str| (h.to_string(), Some(c.to_string()));
+    let bare = |h: &str| (h.to_string(), None);
+
+    // The class: one span, the godan lemma, labelled Potential.
+    assert_eq!(first("読めた"), [pair("読む", "Potential Past")]);
+    assert_eq!(
+        first("会えなかった"),
+        [pair("会う", "Potential Negative Past")]
+    );
+
+    // A potential never on カ変's くれ.
+    for entries in potential_readings(&dir, "くれた") {
+        assert!(
+            entries
+                .iter()
+                .all(|(_, c)| !c.as_deref().unwrap_or("").contains("Potential")),
+            "くれた is くれる, never 来る Potential: {entries:?}"
+        );
+    }
+    // Nor on the kana reading of a verb JMdict writes in kanji: わけない is
+    // 訳 + ない, not 湧く Potential Negative.
+    assert_eq!(first("わけない"), [bare("わけ"), bare("ない")]);
+    // Nor on an expression: 口を開けて is 口 + を + 開けて.
+    assert_eq!(
+        first("口を開けて"),
+        [bare("口"), bare("を"), pair("開ける", "Te-form")]
+    );
+    // Hints on is where the expression's length gain would buy the span, so
+    // the refusal is checked there too, cut the way IPADIC cuts it.
+    let on = parse_v2_with_bounds(&dir, "口を開けて", Some(&CutsAt(&[0, 1, 2, 4, 5])));
+    let heads: Vec<&str> = on
+        .segments
+        .iter()
+        .map(|s| s.entries[0].headword.as_str())
+        .collect();
+    assert_eq!(heads, ["口", "を", "開ける"], "hints on");
+    // かえた is 変える; 買う is written in kanji and is not reached through かえ.
+    assert_eq!(first("かえた"), [pair("かえる", "Past")]);
+
+    // Where the dictionary spells the span, its word comes first: 弾ける and
+    // 擦れる in kanji, いけない and 溶ける in kana.
+    assert_eq!(first("弾ける"), [bare("弾ける")]);
+    assert_eq!(first("擦れて"), [pair("擦れる", "Te-form")]);
+    assert_eq!(first("いけない"), [bare("いけない")]);
+    assert_eq!(first("とける"), [bare("とける")]);
+    // Except against the kana potential of an `aux-v` verb, where another
+    // verb does not outrank it -- `adj-f` 慣れた counting as one: なれた is
+    // 成る Potential, not 慣れる. The kana-only `aux-v` とく (the ておく
+    // contraction) is spelled as its own headword and yields: とける above.
+    assert_eq!(first("なれた"), [pair("なる", "Potential Past")]);
+
+    // Known and not fixed: イカせて is イク's causative, which a katakana stem
+    // cannot reach (the table is hiragana), so the one verb the span can find
+    // is JMdict's イカす "cool" -- read as its Conditional before this phase
+    // and as its Potential now.
+    assert_eq!(first("イカせて"), [pair("イカす", "Potential Te-form")]);
+}
+
+/// `会え|そう`: before そう a godan's bare 仮定形 is the potential's stem, the
+/// dictionary's 一段 word still goes first where it spells the span, and a
+/// bare 仮定形 of any class yields. Without そう nothing changes.
+#[test]
+fn before_sou_the_e_row_kana_is_the_potentials_stem() {
+    let dir = scratch("potential-stem");
+    jparser::engine::build::build_from_reader(BufReader::new(POTENTIAL_FIXTURE.as_bytes()), &dir)
+        .expect("potential fixture build");
+    let head = |text: &str| -> (String, Option<String>) {
+        potential_readings(&dir, text)
+            .into_iter()
+            .next()
+            .and_then(|entries| entries.into_iter().next())
+            .expect("a matched first segment")
+    };
+    let pair = |h: &str, c: &str| (h.to_string(), Some(c.to_string()));
+    assert_eq!(head("会えそう"), pair("会う", "Potential"));
+    assert_eq!(
+        head("会え"),
+        pair("会う", "Conditional"),
+        "no そう, no change"
+    );
+    assert_eq!(head("弾けそう").0, "弾ける", "the dictionary's word first");
+    assert_eq!(head("くれそう").0, "くれる", "カ変's くれ yields");
 }

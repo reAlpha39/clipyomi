@@ -12,7 +12,8 @@ export type FlagName =
   | 'particle'
   | 'counter'
   | 'top'
-  | 'is_name';
+  | 'is_name'
+  | 'uk';
 
 export interface Sense {
   pos: string[];

@@ -48,6 +48,14 @@ pub struct Form {
 /// codes deliberately left out — `POS_WITHOUT_A_CLASS` below names them).
 pub const JMDICT_POS_CLASS: &[(&str, &str)] = &[
     ("v1", "一段"),
+    // IPADIC carries くれる's own class, and JMdict carries its own code for
+    // it: `v1-s` is four entries (呉れる, 出してくれる, 眼くれる, 鞭をくれる),
+    // every one ending in れる, which is exactly what 一段・クレル removes.
+    // The code was in neither table until 2026-09-21 — not a documented gap,
+    // an omission — so くれる matched uninflected only, and くれた/くれて/
+    // くれない were reached by accident through カ変・来ル's kana hole (see
+    // `is_kuru_kanji_headword`) with the gloss くる, "to come", instead.
+    ("v1-s", "一段・クレル"),
     ("v5k", "五段・カ行イ音便"),
     ("v5k-s", "五段・カ行促音便"),
     ("v5g", "五段・ガ行"),
@@ -210,8 +218,10 @@ pub const POS_WITHOUT_A_CLASS: &[&str] = &[
 ///
 /// Usually zero or one. `vk` is the one code with two, because 来る's kanji
 /// and kana spellings conjugate over different stems (`カ変・来ル`, `カ変・クル`)
-/// and a headword can only match through the class whose remove-suffix it
-/// ends in — so the entry's own headword picks between them at match time.
+/// — so the entry's own headword picks between them at match time, through
+/// [`is_kuru_kanji_headword`] rather than through the remove-suffix alone.
+/// The remove-suffix cannot do it: `カ変・来ル` removes る, which *every*
+/// kana headword ends in too.
 pub fn classes_for_pos(pos: &str) -> impl Iterator<Item = ClassId> + '_ {
     JMDICT_POS_CLASS
         .iter()
@@ -219,6 +229,45 @@ pub fn classes_for_pos(pos: &str) -> impl Iterator<Item = ClassId> + '_ {
         .filter_map(|(_, name)| CLASSES.iter().position(|c| c.name == *name))
         .map(|i| i as ClassId)
 }
+
+/// 来る written with its kanji: stem 来, and every suffix in the class is what
+/// follows it (empty for 未然形 and 連用形, る for 基本形).
+pub const KURU_KANJI_CLASS: &str = "カ変・来ル";
+
+/// Whether `headword` is the spelling [`KURU_KANJI_CLASS`] is for.
+///
+/// The class removes る, so a *kana* `vk` headword — 出てくる, 取ってくる,
+/// 持ってくる — satisfies it by accident and then deinflects over a stem that
+/// is not one: 取ってく + れる, 連れてく + させる. Neither is Japanese, and
+/// 取ってくれる collides exactly with くれる, the benefactive, so the merge
+/// inverts the meaning of a very common form (six corpora, 56,065 sentences:
+/// 30 occurrences hints-on, 22 hints-off — see
+/// `docs/superpowers/2026-09-21-six-corpora-handoff.md` §4a).
+///
+/// The two spellings partition the whole dictionary with nothing left over:
+/// over JMdict's 38 `vk` entries, 65 headwords end 来る or 來る and 82 end
+/// くる or クる. 來る is the old form of the same entry and is why this is not
+/// a single `ends_with`.
+pub fn is_kuru_kanji_headword(headword: &str) -> bool {
+    headword.ends_with("来る") || headword.ends_with("來る")
+}
+
+/// Forms that are never a word on their own — they exist only as the
+/// attachment site some [`ATTACHES_TO`] auxiliary demands, so a chain that
+/// *ends* at one has found a bare stem, not a headword.
+///
+/// 連用タ接続 is the 五段 onbin stem before た/て/だ/で (行っ, 取っ). Left
+/// terminal it matched a sentence-final っ as a whole word: 優しいっ parsed
+/// as 優し + いっ (a bare stem of 行く/入る/言う) rather than 優しい plus an
+/// emphatic っ, which is what the っ is in dialogue. The chain that reaches
+/// it through た/て passes `required = Some("連用タ接続")` and is unaffected,
+/// so 行った still deinflects.
+///
+/// Every other bound form (未然形, ガル接続 — see the たい row below — and
+/// the rest of the 接続 family) is the same shape and the same one-line
+/// change, but each deletes candidates of its own and wants its own score
+/// run. One at a time, cheapest defect first.
+const BOUND_FORMS: &[&str] = &["連用タ接続"];
 
 /// Which 活用形 of the preceding word each auxiliary attaches to, and which
 /// class generates the auxiliary's own conjugated surfaces.
@@ -254,13 +303,17 @@ pub fn classes_for_pos(pos: &str) -> impl Iterator<Item = ClassId> + '_ {
 /// IPADIC only names 連用タ接続 where the two forms actually differ, so
 /// either row alone leaves half the classes unreachable.
 ///
-/// じゃ/や are IPADIC's dialectal だ variants; in real text they follow a
-/// bare noun or な-adjective, neither of which is a conjugation class this
-/// table can name a form of, so there is no verb-conjugation attachment
-/// site to point them at. 基本形 (だ/です's slot) is a placeholder — it
-/// keeps the coverage test below honest about which class it is claiming
-/// for, without pretending either row will ever actually fire in the
-/// chain search.
+/// じゃ/や, IPADIC's dialectal だ variants, have **no** row, and had two until
+/// 2026-09-23. In real text they follow a bare noun or な-adjective, neither
+/// of which is a conjugation class this table can name a form of, so there is
+/// no attachment site to point them at; the rows named 基本形 as a
+/// placeholder for the coverage test, on the stated assumption that neither
+/// would ever fire. Both fired on every 基本形 there is, the te-form's `て`
+/// included: `そうやって` read 沿う **Copula Te-form** and `こうやって` 請う
+/// the same way (224 spans over twelve corpora, hints on), `みたいじゃない`
+/// read 見る Want-to Copula, `臭いやベトつき` swallowed the particle `や`
+/// into 臭い, and `ましてや` read ます. The coverage test exempts the two
+/// classes instead, as it does 特殊・ダ.
 ///
 /// Row order is load-bearing where two rows produce the same surface at
 /// the same node — see the たい row.
@@ -291,13 +344,470 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     // The principled fix, making ガル接続 non-terminal, deletes candidates and
     // is a measured Phase 1a follow-up.
     ("たい", "特殊・タイ", "連用形"),
-    ("だ", "特殊・ダ", "連用タ接続"),
+    // ちゃう/じゃう (and the ちまう/じまう they contract from) are the other
+    // consumers of 連用タ接続, and the only ones と接続 needs — without these
+    // rows 買っちゃった has no chain through 買っ at all once BOUND_FORMS stops
+    // it standing alone. All four are 五段・ワ行促音便, IPADIC's own class for
+    // them.
+    ("ちゃう", "五段・ワ行促音便", "連用タ接続"),
+    ("じゃう", "五段・ワ行促音便", "連用タ接続"),
+    ("ちまう", "五段・ワ行促音便", "連用タ接続"),
+    ("じまう", "五段・ワ行促音便", "連用タ接続"),
+    ("ちゃう", "五段・ワ行促音便", "連用形"),
+    ("じゃう", "五段・ワ行促音便", "連用形"),
+    ("ちまう", "五段・ワ行促音便", "連用形"),
+    ("じまう", "五段・ワ行促音便", "連用形"),
+    // てる/でる, the colloquial contraction of ている/でいる, and the same
+    // shape as the ちゃう rows above: a contraction IPADIC tokenizes on its
+    // own. Without them 思ってる has no chain at all -- 思っ is 連用タ接続 and
+    // BOUND_FORMS stops it standing alone, 思って ends strictly inside
+    // IPADIC's てる token so `is_allowed` refuses it, and `relax` does not
+    // reopen that token because candidates cover it. The parse was
+    // 思 | っ | てる with てる glossed 照る "to shine".
+    //
+    // **JMdict does carry てる and でる** -- `[primary]` "to be ...-ing", and
+    // they conjugate, so 思ってろ already matched `てる` Imperative. That
+    // entry cannot help here, because reaching it needs a *separate* span
+    // and the only span that could precede one is 思って, which is the span
+    // `is_allowed` refuses. An auxiliary row is what puts the contraction
+    // inside a single span instead of beside it.
+    //
+    // 一段 because the contraction conjugates as one: てる/てた/てて/てない.
+    // でる mirrors `で` below and takes 連用タ接続 only, for the same reason
+    // `で` does -- it follows an onbin stem (遊ん, 読ん) and nothing else.
+    // It reaches 遊んでる and 遊んでない, and since 2026-09-23 遊んでた and
+    // 遊んでます too, labelled Progressive -- see the `だ` row just below.
+    //
+    // **The voiced past is 特殊・タ, the same class as `た`**, which is what
+    // IPADIC itself tags 読ん|だ and 読ん|だら as. Until 2026-09-23 this row
+    // named the copula's class 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/
+    // だっ/で: so `読んだら` was unreachable -- 読|ん|だら with 読 unmatched,
+    // and 泳いだら and 死んだら the same -- while 読んなら, 読んな, 読んなれ and
+    // 読んだっ were generated instead, and the voicing error `onbin_voicing_agrees`
+    // fixes could reach `ないなら` and `ないな` through them. The Phase 1b-i
+    // label fixture had recorded this as a "table finding" and left it.
+    ("だ", "特殊・タ", "連用タ接続"),
     ("て", "不変化型", "連用タ接続"),
     ("て", "不変化型", "連用形"),
     ("で", "不変化型", "連用タ接続"),
+    // **Below the て/で rows on purpose, and the ordering is load-bearing**
+    // in exactly the way the たい row above records. 一段's 未然形 and 連用形
+    // have empty suffixes, so てる's own surfaces include a bare `て` --
+    // the same surface as the Te-form auxiliary, at the same trie node, at
+    // the same depth. `lex::dedup_shallowest` keeps whichever `Table::new`
+    // inserted first, and inserted first these labelled every plain te-form
+    // "Progressive": 走って, 遅れて, 開けて, 遊んで, して, 待って, all of
+    // them, caught by `parse_sentences.txt`'s snapshot. Below, `て` wins the
+    // bare node and `てる` keeps every node `て` does not reach.
+    ("てる", "一段", "連用タ接続"),
+    ("てる", "一段", "連用形"),
+    ("でる", "一段", "連用タ接続"),
+    ("ている", "一段", "連用タ接続"),
+    ("ている", "一段", "連用形"),
+    ("でいる", "一段", "連用タ接続"),
+    // 歩いて | いく, 落ちて | いった, 沈みこんで | いく -- the directional
+    // auxiliary, split off in **both** hint states where `ている` is now kept
+    // whole. Measured over three visual-novel corpora, 75,767 sentences:
+    // 1,189 lines carry one (renai 80, kf2 491, riruka 618), a rate of 9.6 to
+    // 17.3 per *thousand* in every one of them.
+    //
+    // It is not the only 〜て auxiliary still split, only the most frequent
+    // one measured: 〜てくる, 〜ておく and 〜てみる all still read as two
+    // segments (`歩いて` | `くる`, `買って` | `おく`, `歩いて` | `みる`), and
+    // `持ってくる` merges only because JMdict carries it as a headword.
+    //
+    // 五段・カ行促音便, which is 行く's own class and gives the whole
+    // paradigm: ていく, ていっ(た/て), ていか(ない), ていき(ます), ていけ(ば),
+    // ていこ(う). `でいく` mirrors `でいる` and takes 連用タ接続 only, for the
+    // same reason -- it follows an onbin stem (遊ん, 沈みこん) and nothing else.
+    //
+    // **`ていく` needs both attachment sites and `でいく` needs one**, which is
+    // the rule this module's `ATTACHES_TO` doc already states for た/て:
+    // IPADIC names 連用タ接続 only where a class distinguishes it from plain
+    // 連用形, so 五段's onbin stems arrive at one site and 一段, サ変・スル and
+    // 特殊・デス at the other. Shipped with 連用タ接続 alone, `ていく` reached
+    // 歩いていった and 引きずっていく and left every 一段 verb behind --
+    // 食べていく, 落ちていった, 溶けていく, 見ていく all still split.
+    //
+    // **No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows follow these.** The two
+    // tables answer different questions and each was asked separately.
+    //
+    // `CHAIN_BLOCK` exists because 一段's 未然形 and 連用形 have *empty*
+    // suffixes, so `てる` carries a bare `て` on which a one-kana auxiliary
+    // stacks and lands on a sentence-final particle -- `してね`, `待ってな`.
+    // 五段・カ行促音便 has no empty form, so every attachment site `ていく`
+    // offers already carries two kana of its own: 未然形 `ていか` (ない, ぬ),
+    // 連用形 `ていき` (ます, たい, た), 連用タ接続 `ていっ` (た, て, ちゃう,
+    // てる, ている) and 基本形 `ていく` (です). What an auxiliary reaches
+    // through them is `ていかね`, `ていかな`, `ていきたい`, `ていった` --
+    // ordinary Japanese, none of it a particle's surface. The `〜ていきな`
+    // soft imperative is safe for a reason worth naming: `ない` at ガル接続
+    // demands 未然形, which is `ていか`, not 連用形's `ていき`.
+    //
+    // `AUX_FORM_BLOCK`'s reason is **not** emptiness -- 一段 gives 命令ｙｏ and
+    // 未然ウ接続 the *non-empty* suffix `よ`, so `てる` carries the surface
+    // `てよ`, and that collides because `待って` is a standalone word and `よ`
+    // is a particle. The transferable test is therefore "does any of this
+    // auxiliary's own surfaces decompose as [standalone word] + [particle]?".
+    // Run against `ていく`'s seven surfaces -- ていか, ていき, ていきゃ, ていく,
+    // ていけ, ていこ, ていっ -- none does: いか, いき, いく, いけ, いこ, いっ
+    // and いきゃ are not particles. Checked on the corpus binary:
+    // `遊んでいきな`, `持っていきな`, `帰っていくね`, `歩いていくよ` and
+    // `遊んでいってね` all keep the particle as its own span.
+    ("ていく", "五段・カ行促音便", "連用タ接続"),
+    ("ていく", "五段・カ行促音便", "連用形"),
+    ("でいく", "五段・カ行促音便", "連用タ接続"),
+    // 〜てくる, 〜ておく and 〜てみる, the three the note above named as still
+    // split. Measured over four further corpora, 75,782 sentences, hints on:
+    // the engine cut 2,368 of the 3,232 〜てくる windows (73.3%), 223 of 241
+    // 〜ておく (92.5%) and 422 of 425 〜てみる (99.3%) -- `寄せて` | `くる`,
+    // `して` | `おく`, `探して` | `みる`. 〜てくる is twice the rate 〜ていく
+    // was fixed at, and the same measurement puts 〜ていく's residue at 2.6%,
+    // so the rows above hold on corpora they were not written against.
+    //
+    // Classes are the auxiliary verbs' own: カ変・クル for くる,
+    // 五段・カ行イ音便 for おく (置いた, not 置った) and 一段 for みる. Both
+    // attachment sites for the て-forms and 連用タ接続 alone for the で-forms,
+    // for the reason the `ていく` note above gives.
+    //
+    // **Three of `てくる`'s own forms are blocked** -- see `AUX_FORM_BLOCK`,
+    // which carries the ledger. カ変 gives 仮定形 `くれ`, 体言接続特殊 `くん`
+    // and 体言接続特殊２ `く`, and in running text those three surfaces belong
+    // to something else entirely: くれる and ください, not 来る.
+    //
+    // `てみる` is 一段 and so has the empty 未然形 and 連用形 that
+    // `CHAIN_BLOCK` exists for, but it is **not** blocked there. The two
+    // auxiliaries that table refuses on `てる` produce a single kana that is
+    // commoner as a particle -- `ぬ` at 仮定形 is `ね`, `ない` at ガル接続 is
+    // `な` -- and on `てみ` those give `てみね` and `てみな`, which are not
+    // particle absorptions: `待ってみ` is not a standalone word the way
+    // `待って` is, so `してね`'s argument does not transfer. 14 occurrences of
+    // `てみな` and 0 of `てみね` over the four corpora, against the 34
+    // `してね`/`待ってな` the existing rows were measured on.
+    //
+    // What `てみ` does reach is `せる`: `やってみせる` (100 occurrences) can
+    // read Tentative Causative where the word is 見せる. It was left unblocked
+    // rather than guessed at -- `CHAIN_BLOCK` is keyed per outer form and
+    // would want a row for each of せる's nine, which is a bigger change than
+    // the defect -- and measured after these rows landed instead.
+    ("てくる", "カ変・クル", "連用タ接続"),
+    ("てくる", "カ変・クル", "連用形"),
+    ("でくる", "カ変・クル", "連用タ接続"),
+    ("ておく", "五段・カ行イ音便", "連用タ接続"),
+    ("ておく", "五段・カ行イ音便", "連用形"),
+    ("でおく", "五段・カ行イ音便", "連用タ接続"),
+    ("てみる", "一段", "連用タ接続"),
+    ("てみる", "一段", "連用形"),
+    ("でみる", "一段", "連用タ接続"),
     ("です", "特殊・デス", "基本形"),
-    ("じゃ", "特殊・ジャ", "基本形"),
-    ("や", "特殊・ヤ", "基本形"),
+    // The godan potential: 読め|る, 読め|た, 書け|ない, 会え|なかった. IPADIC
+    // files 可能動詞 as 一段 lexemes of their own (読める, 書ける), so nothing
+    // in the table reached the godan lemma, and `読めた` parsed 読め
+    // "Conditional" + た glossed たい. JMdict carries some of those lexemes
+    // and not others -- 読める is there and lost anyway, 会える is not. Over
+    // twelve visual-novel corpora (151,225 sentences, hints on) the split
+    // shape stood 3,403 times; with this row, `lex`'s two refusals and
+    // `assemble::order`'s potential clause it stands 752 times, and what is
+    // left is mostly not a potential (おれ|たち, イ|かせ) or a potential stem
+    // before そう, which the zero-width step cannot end a chain to reach.
+    //
+    // The lemma is a bare `る` in 一段 because the e-row kana is already the
+    // godan's own 仮定形 (読め), so what the potential adds on top conjugates
+    // exactly like 一段 over an empty stem: `る`, `れ`, `りゃ`, and **an empty
+    // 未然形 and 連用形**. Those two are the ones that matter -- 読め + ∅ + た,
+    // 読め + ∅ + ない -- and they are why this cannot be an ordinary row: an
+    // empty surface is a step that consumes nothing. `Table::new` inserts it
+    // at the trie's root as a zero-width hit and `search` takes one only under
+    // an auxiliary that asked for it, never at a chain's end and never twice
+    // in a row; see `search`.
+    //
+    // **Godan only**, which `potential_attaches` enforces and `ATTACHES_TO`
+    // cannot, since it names an attachment site by form alone: カ変's 仮定形 is
+    // `くれ`, so an unrestricted row reads every くれる as 来る Potential, and
+    // any auxiliary's own 仮定形 (書かせれ, 書かれれ) would take it too.
+    //
+    // Why a table row and not a fallback in `lex` from a 一段 key ending in
+    // e-row + る to the godan lemma: the chain is what `label.rs` reads, what
+    // `cost` exempts an inflection-internal cut by, and what the fixture walk
+    // below enumerates. A fallback in `lex` would produce a godan entry under
+    // 一段 steps -- a candidate `allows_chain` refuses by construction -- and
+    // every downstream reader would need a special case for it.
+    ("る", "一段", "仮定形"),
+];
+
+/// Forms an [`ATTACHES_TO`] lemma does **not** generate, by `(lemma, form)`.
+///
+/// Two lemmas' worth of exception -- `てる` and `でる`, and **not** the
+/// uncontracted `ている`/`でいる` -- and the difference between them is the
+/// whole argument. 一段 gives both 命令ｙｏ and 未然ウ接続 the suffix `よ`, so
+/// `てる` and `でる` carry the surfaces `てよ` and `でよ`. Real 一段 verbs have
+/// that imperative (見ろ/見よ); the colloquial contraction does not -- its
+/// imperative is `待ってろ`, never `待ってよ` -- and what the surface collides
+/// with is the sentence-final particle よ, because `待って` is a word and `よ`
+/// is a particle.
+///
+/// **`ていよ` cannot decompose that way**, because `待ってい` is not a standalone
+/// anything, so the collision argument does not transfer and the
+/// uncontracted pair is deliberately not blocked. Blocking it by analogy was
+/// tried and cost `待っていよう` and `遊んでいよう`, which are ordinary
+/// Japanese; measured over 8,334 lines, unblocking changes 2 sentences, both
+/// gains, and absorbs no particle.
+///
+/// **Measured over 8,334 lines of dialogue**: ungated, 22 occurrences absorb a
+/// final よ into the verb -- `待ってよ`, `返してよ`, `答えてよ`, `呼んでよ` --
+/// which is the class `spurious_merges.txt` exists to refuse. Five of the 22
+/// are far worse than an absorbed particle: `なく` is 五段・カ行イ音便, so
+/// `な` + `い` is a 連用タ接続 site, and `忘れないでよね` parsed as
+/// `忘れ` + `ないでよ` + `ね` -- the negation destroyed and the span glossed
+/// `なく` "to cry; to shed tears". A wrong headword stated confidently, which
+/// is worse than a missed merge.
+///
+/// Blocking both よ-forms costs the one corpus occurrence of `てよう`
+/// (未然ウ接続 + う, "let's be waiting"), which is the trade.
+/// Auxiliary pairs that may not stack, by `(outer lemma, outer form, inner
+/// lemma)`.
+///
+/// 一段's 未然形 and 連用形 have empty suffixes, so `てる`'s own surfaces
+/// include a bare `て` and every auxiliary that takes a 未然形 can stack on it.
+/// That is what reaches `思ってない`, `思ってた` and `思ってます`, and it is why
+/// the rows exist. Two of those auxiliaries produce a single kana that is far
+/// commoner as a sentence-final particle:
+///
+/// - `ぬ` at 仮定形 is `ね`, so `してね` ("please do it") read `する`
+///   Progressive Negative **Conditional** -- 25 occurrences over 8,334 lines.
+/// - `ない` at ガル接続 is `な`, so `待ってな` read `待つ` Progressive Negative
+///   -- 9 more.
+///
+/// **Neither auxiliary can lose the form**, which is why this is keyed on the
+/// pair and not on `AUX_FORM_BLOCK`'s `(lemma, form)`. `行かねば` is `ぬ` at
+/// 仮定形 and `食べな` is `ない` at ガル接続, both committed fixture rows;
+/// blocking the forms outright deletes them, and measured over the corpus it
+/// changes 167 sentences against this rule's 34 while still leaving 9 of the
+/// defects standing.
+///
+/// **`ねえ` is untouched and that is the point.** `してねえ` and `知らねえ` are
+/// `ない` at 音便基本形, a different form from either blocked one: 150 spans
+/// ending `ねえ` are byte-identical before and after.
+///
+/// Ledger over 8,334 lines, hints on: 34 sentences change, 30 release a
+/// particle correctly, 1 is neutral, and **3 regress** -- the `〜てなさそう`
+/// shape (`わかってなさそうな顔`), where the `な` really is the negative and the
+/// disambiguator is the `さ` in the *next* span, which a chain search
+/// structurally cannot see. No tighter key avoids them.
+///
+/// Two rows per contraction lemma, so a new one added to [`ATTACHES_TO`]
+/// wants two here.
+const CHAIN_BLOCK: &[(&str, &str, &str)] = &[
+    ("ぬ", "仮定形", "てる"),
+    ("ぬ", "仮定形", "でる"),
+    ("ぬ", "仮定形", "ている"),
+    ("ぬ", "仮定形", "でいる"),
+    ("ない", "ガル接続", "てる"),
+    ("ない", "ガル接続", "でる"),
+    ("ない", "ガル接続", "ている"),
+    ("ない", "ガル接続", "でいる"),
+    // `てみる`/`でみる` are 一段 too, so the same two auxiliaries reach the
+    // same empty-suffix stem: `やってみな` read やる Tentative **Negative**
+    // where the な is the shortened なさい, 14 occurrences over four corpora,
+    // and `てみね` 0 -- the ぬ row is the pair the doc above asks for rather
+    // than a measured defect of its own.
+    ("ぬ", "仮定形", "てみる"),
+    ("ぬ", "仮定形", "でみる"),
+    ("ない", "ガル接続", "てみる"),
+    ("ない", "ガル接続", "でみる"),
+    // **`せる` may not stack on `てみ` in any form**, which is what the `*`
+    // is for. The collision is not a particle this time: 一段's empty 未然形
+    // gives the surface `てみ`, `せる` attaches to a 未然形, and the result
+    // swallows 見せる -- `揉んでみせる` read 揉む Tentative Causative,
+    // `やってみせる` read やる Tentative Causative, 99 occurrences over the
+    // four corpora and every one of them 〜て + 見せる. Every せる form
+    // produces it (てみせる, てみせて, てみせた, てみせろ), so keying the
+    // nine rows individually would leave the block one IPADIC revision away
+    // from leaking. What it costs is `〜てみさせる`, which has 0 occurrences
+    // and is barely Japanese.
+    ("せる", "*", "てみる"),
+    ("せる", "*", "でみる"),
+    // The godan potential's empty 未然形 and 連用形 (`ATTACHES_TO`'s `る` row)
+    // are the same shape as `てる`'s, so the same two particle collisions
+    // follow: `待てね` is 待て + ね, and `これなら` would read 凝る Potential
+    // Negative + ら. A potential verb takes no causative, passive or want-to
+    // either -- `読めさせる`, `読められる`, `読めたい` are not Japanese -- so
+    // those are refused outright rather than left for the corpus to find.
+    ("ぬ", "仮定形", POTENTIAL),
+    ("ない", "ガル接続", POTENTIAL),
+    ("せる", "*", POTENTIAL),
+    ("させる", "*", POTENTIAL),
+    ("れる", "*", POTENTIAL),
+    ("られる", "*", POTENTIAL),
+    ("たい", "*", POTENTIAL),
+];
+
+/// [`ATTACHES_TO`]'s godan-potential lemma.
+const POTENTIAL: &str = "る";
+
+/// The classes whose 仮定形 the potential attaches to: every 五段 class
+/// `JMDICT_POS_CLASS` maps except two. 五段・ラ行アル is ある alone, whose
+/// `あれ` + た is 荒れた, never "could be"; 五段・ラ行特殊 is なさる, くださる,
+/// いらっしゃる, おっしゃる and ござる, and `なされた` is なさる + the honorific
+/// れる, not a potential.
+const GODAN_POTENTIAL: &[&str] = &[
+    "五段・カ行イ音便",
+    "五段・カ行促音便",
+    "五段・ガ行",
+    "五段・サ行",
+    "五段・タ行",
+    "五段・ナ行",
+    "五段・バ行",
+    "五段・マ行",
+    "五段・ラ行",
+    "五段・ワ行促音便",
+    "五段・ワ行ウ音便",
+];
+
+/// Whether `steps` reach their headword through the godan potential -- the
+/// `る` step sits directly on the headword's own 仮定形.
+pub fn is_godan_potential(steps: &[ConjStep]) -> bool {
+    steps.get(1).is_some_and(|s| s.aux == Some(POTENTIAL))
+}
+
+/// The potential's zero-width 連用形 on `inner`, the step [`Table::search`]
+/// pushes under an auxiliary, or `None` where the potential cannot attach:
+/// `inner` must be a headword's own godan 仮定形.
+///
+/// `search` never ends a chain on a zero-width step, so `帰れ|そう` reaches
+/// 帰る only as its bare 仮定形, "Conditional"; the text after the span is
+/// what says the e-row kana is the potential's stem, and only
+/// `assemble::to_segment` has it. See `assemble::attaches_to_a_masu_stem`.
+pub fn potential_stem_on(inner: &ConjStep) -> Option<ConjStep> {
+    if CLASSES[inner.class as usize].forms[inner.form as usize].name != "仮定形"
+        || !potential_attaches(POTENTIAL, inner)
+    {
+        return None;
+    }
+    let (class, form) = CLASSES.iter().enumerate().find_map(|(c, class)| {
+        (class.name == "一段")
+            .then(|| class.forms.iter().position(|f| f.name == "連用形"))
+            .flatten()
+            .map(|f| (c as ClassId, f as FormId))
+    })?;
+    Some(ConjStep {
+        class,
+        form,
+        range: inner.range.end..inner.range.end,
+        aux: Some(POTENTIAL),
+    })
+}
+
+/// Whether `lemma` may attach to `inner`: anything but the potential may, and
+/// the potential only to a headword's own godan 仮定形 -- never カ変's `くれ`,
+/// never an auxiliary's 仮定形.
+fn potential_attaches(lemma: &str, inner: &ConjStep) -> bool {
+    lemma != POTENTIAL
+        || (inner.aux.is_none() && GODAN_POTENTIAL.contains(&CLASSES[inner.class as usize].name))
+}
+
+/// Whether [`CHAIN_BLOCK`] refuses this pair. `*` in a row's form matches
+/// every form of that outer auxiliary.
+fn chain_blocked(lemma: &str, outer_form: &str, inner: &str) -> bool {
+    CHAIN_BLOCK
+        .iter()
+        .any(|&(l, f, i)| l == lemma && (f == "*" || f == outer_form) && i == inner)
+}
+
+/// The classes whose 連用タ接続 onbin voices the auxiliary after it: 泳いだ,
+/// 死んで, 遊んだ, 読んで. Every other class with a 連用タ接続 takes it
+/// unvoiced -- 書いた, 行った, 待って, 買った, 問うた, 高かった, なかった.
+///
+/// `ATTACHES_TO` names the attachment site by form alone, so until 2026-09-23
+/// `で` and `だ` attached to *any* 連用タ接続, and 五段・カ行イ音便's is a bare
+/// `い`. `ない` is な + い, and な + く is JMdict's 泣く/鳴く/無く, so
+/// `しないでください` read `ないで` as 泣く **Te-form** and `わけないだろう` read
+/// `ないだろ` as 泣く **Past** -- a confident wrong verb on two of the commonest
+/// phrases in dialogue. Twelve visual-novel corpora, 151,225 sentences,
+/// hints on: 645 such spans in 641 sentences, 317 `ないで` and 226 `ないだろ`,
+/// then `せいだ` as せく "to hurry" (26) and `おいで` as 置く (23). The unvoiced
+/// half is the same rule read the other way: `ないた` is not 凪ぐ's past.
+const VOICED_ONBIN: &[&str] = &["五段・ガ行", "五段・ナ行", "五段・バ行", "五段・マ行"];
+
+/// Whether an auxiliary attaching at 連用タ接続 agrees in voicing with the
+/// class it attaches to. Keyed on the auxiliary's first kana, which is where
+/// the voicing is written: だ, で, でる, でいる, じゃう, じまう and the other
+/// `で`-auxiliaries against た, て, てる, ている, ちゃう, ちまう and theirs. Any
+/// other attachment site, or any lemma starting elsewhere, is unconstrained.
+fn onbin_voicing_agrees(lemma: &str, requires: &str, inner_class: ClassId) -> bool {
+    if requires != "連用タ接続" {
+        return true;
+    }
+    let voiced = match lemma.chars().next() {
+        Some('だ' | 'で' | 'じ') => true,
+        Some('た' | 'て' | 'ち') => false,
+        _ => return true,
+    };
+    voiced == VOICED_ONBIN.contains(&CLASSES[inner_class as usize].name)
+}
+
+const AUX_FORM_BLOCK: &[(&str, &str)] = &[
+    // `です`'s 未然形 でしょ, and not a collision this time but a dead end:
+    // IPADIC's volitional `う` attaches to 特殊・デス's 未然形 (でしょ|う), which
+    // no ATTACHES_TO row can follow, so every [verb/adjective]でしょう parsed
+    // `行くでしょ` | `う` with the lone `う` glossed 卯 "the Rabbit (zodiac)":
+    // 311 spans over twelve corpora, 151,225 sentences, hints on. Blocked, the
+    // span stops at the verb and `でしょう` is JMdict's own headword, glossed
+    // the way `だろう` after a verb already is.
+    //
+    // **Letting `う` follow instead was built and refused (2026-09-23).** It
+    // reaches 行くでしょう as one span, but a seven-character chain earns
+    // `LEN_GAIN` enough that `大変だったでしょう` became `だる` (the
+    // 〜てやる contraction) Past Polite Volitional, where the split had been
+    // right, and `わけないでしょう` became 分ける; extending it to 特殊・ダ and
+    // 特殊・タ as IPADIC does read `ないだろう` as 凪ぐ 100 times.
+    ("です", "未然形"),
+    ("てる", "命令ｙｏ"),
+    ("てる", "未然ウ接続"),
+    ("でる", "命令ｙｏ"),
+    ("でる", "未然ウ接続"),
+    // `てくる`/`でくる`, and a different collision from the てる rows above:
+    // not a particle, but another auxiliary this table does not carry. カ変's
+    // three surfaces here all belong to it in running text, counted over four
+    // visual-novel corpora, 75,782 sentences.
+    //
+    // - 仮定形 is `くれ`, so the surface is `てくれ` -- which is くれる, the
+    //   giving auxiliary, in almost every occurrence: **2,455 `てくれ` against
+    //   7 `てくれば`**. Unblocked, `教えてくれ` reads 教える Approaching
+    //   Conditional, a confident wrong word on a very common request form.
+    // - 体言接続特殊 is `くん`, and `〜てくん` is that same くれる contracted
+    //   (`やってくんない`). 6 occurrences, every one of them くれる.
+    // - 体言接続特殊２ is a bare `く`, and **919 of the bare `〜てく` are
+    //   `〜てください`** (806 plus 113 voiced). Unblocked, `行ってください`
+    //   can read `行ってく` + `ださい`, and ださい is a JMdict headword, so
+    //   the split would be confidently glossed "uncool". What is left of
+    //   `〜てく` is the 〜ていく contraction, which is the *other* direction
+    //   and would be mislabelled too.
+    //
+    // The cost is the 8 `てくれば`/`でくれば` in those corpora, which stay
+    // split. `おく` and `みる` need nothing here: 五段・カ行イ音便 and 一段
+    // give `ておけ`, `ておい`, `てみろ`, `てみよ` and the rest, and none of
+    // those decomposes as [standalone word] + [particle] or collides with an
+    // auxiliary. The one shape that comes close is `待っておいで` (5
+    // occurrences), which can merge as `ておい` + `で`; too rare to buy a row.
+    ("てくる", "仮定形"),
+    ("てくる", "体言接続特殊"),
+    ("てくる", "体言接続特殊２"),
+    ("でくる", "仮定形"),
+    ("でくる", "体言接続特殊"),
+    ("でくる", "体言接続特殊２"),
+    // The godan potential's four forms that are not Japanese or not its own.
+    // 命令ｙｏ and 未然ウ接続 are both `よ`, and `待てよ`, `言えよ`, `書けよ` are
+    // an imperative and the particle よ -- the collision the `てる` rows above
+    // were blocked for, far commoner here because every godan imperative is
+    // the same e-row kana as the potential. 命令ｒｏ `ろ` is the potential's
+    // own imperative, which the language does not have. 体言接続特殊 `ん` is
+    // `読めるんだ` contracted, and left in it would tie with `読めん` through
+    // the negative `ん` and win on depth, labelling "can't read" as "can".
+    (POTENTIAL, "命令ｒｏ"),
+    (POTENTIAL, "命令ｙｏ"),
+    (POTENTIAL, "未然ウ接続"),
+    (POTENTIAL, "体言接続特殊"),
 ];
 
 /// A hit recorded at one node of [`Table`]'s reverse trie.
@@ -306,8 +816,12 @@ enum TrieHit {
     /// Some class's form ends here. The characters before it are the stem
     /// of a headword in that class — this can end a chain, because the
     /// innermost step is the main word's own inflection and it can be any
-    /// class.
-    Terminal { class: ClassId, form: FormId },
+    /// class. Unless `bound`: see [`BOUND_FORMS`].
+    Terminal {
+        class: ClassId,
+        form: FormId,
+        bound: bool,
+    },
     /// One specific auxiliary's own conjugated surface ends here (built
     /// from an `ATTACHES_TO` row, not from `CLASSES` directly). The chain
     /// can continue only if the text immediately before it ends in
@@ -343,6 +857,40 @@ fn insert(nodes: &mut Vec<Node>, suffix: &str, hit: TrieHit) {
         };
     }
     nodes[node].hits.push(hit);
+}
+
+/// The katakana small `ッ` read as the hiragana `っ` the conjugation table is
+/// written in; every other character unchanged.
+///
+/// The table's suffixes come from IPADIC and are hiragana, and `search`
+/// compared raw characters against them until 2026-09-22, so `イッた`,
+/// `行ッた` and `ワラッた` found no child one character into the tail and
+/// the whole word went unmatched, while `イった` with the hiragana one parsed.
+/// 1,860 occurrences of the shape in the ten-corpus probe pool.
+///
+/// Only the sokuon, and deliberately not [`crate::engine::kana::fold`]: the
+/// gemination mark takes the script of the character it geminates rather than
+/// of the suffix it belongs to, which is why it is the one character that
+/// leaks across the boundary -- `イッちゃう` writes the sokuon in katakana and
+/// leaves `ちゃう` in hiragana. Folding the whole trie was built and measured
+/// against the same ten corpora on the same day: over this one it changes
+/// another 1,076 sentences, and the 1,149 spans it gains there come out
+/// roughly one good to one bad. It reads `イケナイ` 130, `キツク` 107,
+/// `イカせて` 102 and `シて` 29 correctly -- and it also hands every katakana
+/// name and loanword a verb gloss it folded its way into: `タツヤ` as 立つ 104
+/// times, `ズン` as ずる 48, `トコ` as とく 31, `コレ` as 来る 28, `ネロ` as
+/// 寝る 11, `ユリナスです` severed into `ユリ` + `ナスです` 14. A confident
+/// wrong gloss on a character's name is worse than no gloss, and the spans
+/// below were already whole and merely unmatched. That is the exact trade
+/// Phase 1a's `katakana_conjugation_is_not_deinflected_yet` refused on 8
+/// sentences and could not price; it is priced now, and refused again on
+/// 131,847.
+fn hiragana_sokuon(c: char) -> char {
+    if c == 'ッ' {
+        'っ'
+    } else {
+        c
+    }
 }
 
 fn form_named(required: Option<&str>, class: ClassId, form: FormId) -> bool {
@@ -396,6 +944,7 @@ impl Table {
                     TrieHit::Terminal {
                         class: class_id as ClassId,
                         form: form_id as FormId,
+                        bound: BOUND_FORMS.contains(&form.name),
                     },
                 );
             }
@@ -415,18 +964,13 @@ impl Table {
             // is "せ", られる's is "られ", even though both are 一段).
             let stem = lemma.strip_suffix(class.remove).unwrap_or(lemma);
             for (form_id, form) in class.forms.iter().enumerate() {
-                let surface = format!("{stem}{}", form.suffix);
-                if surface.is_empty() {
-                    // No current row produces this — every ATTACHES_TO
-                    // lemma leaves at least one character after its
-                    // class's `remove` is stripped, or supplies a
-                    // non-empty form suffix to make up for it — but an
-                    // empty surface would let `search` consume zero
-                    // characters and recurse at the same position forever.
-                    // Refuse it outright rather than trust that a future
-                    // row can't introduce one.
+                if AUX_FORM_BLOCK.contains(&(lemma, form.name)) {
                     continue;
                 }
+                // An empty surface -- only the potential's 未然形 and 連用形
+                // produce one -- lands at the root as a zero-width hit.
+                // `search` is what keeps it from recursing forever.
+                let surface = format!("{stem}{}", form.suffix);
                 insert(
                     &mut nodes,
                     &surface,
@@ -458,7 +1002,7 @@ impl Table {
             steps: Vec::new(),
             stem_class: None,
         }];
-        hits.extend(self.search(chars, end, max_consumed, None));
+        hits.extend(self.search(chars, end, max_consumed, None, true));
         hits
     }
 
@@ -473,12 +1017,24 @@ impl Table {
     /// Walks one character at a time so every suffix length in between is
     /// tried, not just the longest match — 高かった's "かっ" and a bare
     /// "っ" terminate at different classes, and both are valid candidates.
+    ///
+    /// Each input character goes through [`hiragana_sokuon`] first; see that
+    /// function for why the sokuon alone, and not [`crate::engine::kana::fold`].
+    ///
+    /// A zero-width continuation (the potential's empty 未然形 and 連用形, at
+    /// the root) consumes nothing, so it is taken only when `required` is set
+    /// -- an auxiliary asked for it, so it is never a chain's outermost step --
+    /// and only when `zero_width` allows it, which the recursion it starts
+    /// passes as false. Every level therefore either consumes a character or
+    /// is one zero-width hop that cannot be followed by another, and the walk
+    /// terminates whatever rows are added.
     fn search(
         &self,
         chars: &[char],
         end: usize,
         budget: usize,
         required: Option<&str>,
+        zero_width: bool,
     ) -> Vec<ChainHit> {
         let mut out = Vec::new();
         let mut node = 0;
@@ -486,8 +1042,11 @@ impl Table {
         loop {
             for hit in &self.nodes[node].hits {
                 match *hit {
-                    TrieHit::Terminal { class, form } => {
-                        if form_named(required, class, form) {
+                    TrieHit::Terminal { class, form, bound } => {
+                        // A bound form is only a word when something is
+                        // attached to its right: `required` is `Some` exactly
+                        // when an auxiliary asked for it.
+                        if (required.is_some() || !bound) && form_named(required, class, form) {
                             out.push(ChainHit {
                                 consumed: len,
                                 steps: vec![ConjStep {
@@ -506,15 +1065,37 @@ impl Table {
                         requires,
                         lemma,
                     } => {
-                        // len == 0 is the loop-prevention guard: a
-                        // zero-length auxiliary match would recurse at this
-                        // same `end` forever (see `Table::new`'s comment —
-                        // no current row can produce one, but this is the
-                        // check that keeps it true regardless).
-                        if len == 0 || !form_named(required, class, form) {
+                        // The loop-prevention guard; see this function's doc.
+                        if (len == 0 && (required.is_none() || !zero_width))
+                            || !form_named(required, class, form)
+                        {
                             continue;
                         }
-                        for mut sub in self.search(chars, end - len, budget - len, Some(requires)) {
+                        let outer_form = CLASSES[class as usize].forms[form as usize].name;
+                        let subs =
+                            self.search(chars, end - len, budget - len, Some(requires), len > 0);
+                        for mut sub in subs {
+                            // `steps` is innermost-first and each recursion
+                            // level pushes at the end, so `last()` is the step
+                            // immediately inside this one. `aux` is `None`
+                            // there exactly when it is the headword's own
+                            // inflection, which CHAIN_BLOCK never refuses --
+                            // that is what keeps `食べな` and `行かねば` alive.
+                            if let Some(inner) = sub.steps.last().and_then(|s| s.aux) {
+                                if chain_blocked(lemma, outer_form, inner) {
+                                    continue;
+                                }
+                            }
+                            // Every sub-chain carries at least the step that
+                            // satisfied `requires`, whether a headword's own
+                            // form or another auxiliary's.
+                            if let Some(inner) = sub.steps.last() {
+                                if !onbin_voicing_agrees(lemma, requires, inner.class)
+                                    || !potential_attaches(lemma, inner)
+                                {
+                                    continue;
+                                }
+                            }
                             sub.consumed += len;
                             sub.steps.push(ConjStep {
                                 class,
@@ -530,7 +1111,10 @@ impl Table {
             if len >= budget || len >= end {
                 break;
             }
-            let Some(&next) = self.nodes[node].children.get(&chars[end - len - 1]) else {
+            let Some(&next) = self.nodes[node]
+                .children
+                .get(&hiragana_sokuon(chars[end - len - 1]))
+            else {
                 break;
             };
             node = next;
@@ -676,7 +1260,17 @@ mod tests {
     fn every_tokushu_class_has_an_attaches_to_row() {
         // A future regeneration that adds a 特殊・ class silently can't
         // chain through it -- this is the check that would fail instead.
-        for class in CLASSES.iter().filter(|c| c.name.starts_with("特殊・")) {
+        //
+        // The three copulas are the exception -- 特殊・ダ and its dialect
+        // variants 特殊・ジャ and 特殊・ヤ. Nothing that conjugates precedes a
+        // copula (it follows a noun or a な-adjective stem); the voiced past
+        // 特殊・ダ used to stand in for is 特殊・タ in IPADIC, and the じゃ/や
+        // placeholder rows fired on real text -- see ATTACHES_TO's doc.
+        const COPULAS: &[&str] = &["特殊・ダ", "特殊・ジャ", "特殊・ヤ"];
+        for class in CLASSES
+            .iter()
+            .filter(|c| c.name.starts_with("特殊・") && !COPULAS.contains(&c.name))
+        {
             assert!(
                 ATTACHES_TO.iter().any(|(_, name, _)| *name == class.name),
                 "{} has no ATTACHES_TO row and can never chain",
@@ -729,16 +1323,18 @@ mod tests {
     }
 
     /// The auxiliary's conjugated surfaces, the way `Table::new` builds them:
-    /// its lemma minus its class's `remove`, plus each form's suffix, empty
-    /// surfaces skipped.
+    /// its lemma minus its class's `remove`, plus each form's suffix. An
+    /// empty surface is kept -- the table emits it as a zero-width hit.
     fn aux_forms(lemma: &str, class_name: &str) -> Vec<(FormId, String)> {
         let c = class(class_name);
         let stem = lemma.strip_suffix(c.remove).unwrap_or(lemma);
         c.forms
             .iter()
             .enumerate()
+            // The exclusion `Table::new` applies, so the coverage walk asks
+            // for a fixture row only where the table really emits a surface.
+            .filter(|(_, f)| !AUX_FORM_BLOCK.contains(&(lemma, f.name)))
             .map(|(id, f)| (id as FormId, format!("{stem}{}", f.suffix)))
-            .filter(|(_, surface)| !surface.is_empty())
             .collect()
     }
 
@@ -803,19 +1399,32 @@ mod tests {
                 chains += 1;
                 depth0_chains += 1;
                 check_fmt(std::slice::from_ref(&s0));
-                if !depth0.contains(&(c.is_adjective, form0.name.to_string())) {
+                // A BOUND_FORMS form is never a chain on its own, so the
+                // fixture has no row for it to have: `search` only ever emits
+                // it under the auxiliary that required it, which is a depth-1
+                // row. The walk still counts it and still runs `check_fmt` on
+                // it — `fmt` is called with whatever chain `search` returns,
+                // and the inner step of every one of those is this step.
+                if !BOUND_FORMS.contains(&form0.name)
+                    && !depth0.contains(&(c.is_adjective, form0.name.to_string()))
+                {
                     missing.push(format!("depth 0: {class_name}:{}", form0.name));
                 }
                 for &(lemma1, ac1, _req1) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form0.name)
                 {
                     let c1 = class_id_of(ac1);
-                    for (f1, _) in aux_forms(lemma1, ac1) {
+                    for (f1, surface1) in aux_forms(lemma1, ac1) {
                         let form1 = CLASSES[c1 as usize].forms[f1 as usize].name;
                         let s1 = step(c1, f1, Some(lemma1));
                         chains += 1;
                         depth1_chains += 1;
                         check_fmt(&[s0.clone(), s1.clone()]);
-                        if !depth1.contains(&(lemma1.to_string(), form1.to_string())) {
+                        // A zero-width step is bound the way a BOUND_FORMS
+                        // form is: `search` takes it only under an auxiliary,
+                        // so it never ends a chain and has no row to have.
+                        if !surface1.is_empty()
+                            && !depth1.contains(&(lemma1.to_string(), form1.to_string()))
+                        {
                             missing.push(format!("depth 1: {lemma1}:{form1}"));
                         }
                         for &(lemma2, ac2, _) in ATTACHES_TO.iter().filter(|(_, _, r)| *r == form1)
@@ -838,14 +1447,60 @@ mod tests {
             "reachable tuples with no fixture row:\n{}",
             missing.join("\n")
         );
+        // 22,783 before the ちゃう family joined ATTACHES_TO. Those four lemmas
+        // attach at both 連用タ接続 and 連用形, and their own seven
+        // 五段・ワ行促音便 forms become attachment sites in turn, which is where
+        // the depth-2 term more than doubles. 50,419 -> 60,926 on 2026-09-18
+        // for てる/でる, the ている contraction, and 60,926 -> 72,049 the same
+        // day for the uncontracted ている/でいる. Six rows between them, whose
+        // own 一段 forms include the empty-suffix 未然形 and 連用形 that every
+        // later auxiliary attaches to, less the eight AUX_FORM_BLOCK rows.
+        // 72,049 -> 73,731 when ている/でいる's two よ-forms were unblocked, and
+        // 73,731 -> 82,573 when ていく/でいく joined: two rows of 五段・カ行促音便,
+        // whose eight forms include the 連用タ接続 stem `ていっ` that every later
+        // auxiliary attaches to in turn. 82,573 -> 90,359 when `ていく` gained
+        // its second attachment site, 連用形 -- the row this comment's own
+        // ATTACHES_TO doc predicts for た/て, because IPADIC names 連用タ接続
+        // only where it differs from 連用形, so either row alone leaves half
+        // the classes unreachable. 90,359 -> 140,947 on 2026-09-21 for the
+        // other three 〜て auxiliaries, nine rows: てくる/でくる (カ変・クル,
+        // ten forms less the three blocked below), ておく/でおく
+        // (五段・カ行イ音便, eight) and てみる/でみる (一段, nine, including
+        // the two empty-suffix forms every later auxiliary attaches to).
+        // Depth-2 carries the growth, as it did for every row before these --
+        // each new auxiliary's own forms become attachment sites in turn.
+        // 140,947 -> 145,482 on 2026-09-21, and this one is not an auxiliary:
+        // `v1-s` gained a row in JMDICT_POS_CLASS, so 一段・クレル is a 22nd
+        // *class* in the mapped set. Its ten forms are the +10 in depth-0
+        // (180 -> 190); none of them has an empty suffix, the stem being く,
+        // so it grows depth-2 by less than an auxiliary row of the same size.
+        // 145,482 -> 141,334 on 2026-09-23, and a shrink: the voiced past `だ`
+        // moved from the copula's class 特殊・ダ (seven forms) to 特殊・タ
+        // (three: だら, だ, だろ), so it offers four fewer surfaces at every
+        // 連用タ接続 this walk reaches -- five lost (なら, な, なれ, だっ, で),
+        // one gained (だら) -- and the five were attachment sites for a second
+        // auxiliary in turn. `onbin_voicing_agrees` prunes nothing here: like CHAIN_BLOCK it
+        // lives in `search`, and this walk is class-agnostic by construction.
+        // 141,334 -> 139,260 the same day when `です`'s 未然形 でしょ joined
+        // AUX_FORM_BLOCK: -22 depth-1, one per mapped class (every one has the
+        // 基本形 the row attaches to), and -2,052 depth-2 that stood on でしょ.
+        // 139,260 -> 127,432 the same day for the じゃ/や placeholder rows:
+        // -132 depth-1, their six surfaces at each of 22 classes' 基本形, and
+        // -11,696 depth-2 behind them.
+        // 127,432 -> 133,802 for the godan potential's `る` row, which attaches
+        // at 仮定形: +105 depth-1, its five surfaces (the two zero-width forms,
+        // る, れ, りゃ) at each of the 21 mapped classes that have a 仮定形, and
+        // +6,265 depth-2 behind them. The walk counts all 21 because it is
+        // class-agnostic by construction; `potential_attaches` restricts the
+        // row to 五段 in `search`, the way CHAIN_BLOCK and the voicing rule do.
         assert_eq!(
-            chains, 22_783,
-            "the walk reached {chains} chains, not 22,783 -- the conjugation table's \
+            chains, 133_802,
+            "the walk reached {chains} chains, not 133,802 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 22,783 is {depth0_chains} depth-0 chains plus {depth1_chains} \
-             depth-1 plus {depth2_chains} depth-2, over the 21 classes JMDICT_POS_CLASS \
-             maps (カ変・来ル added, per Phase 1b-ii). Re-derive it and update this \
-             constant, rather than loosening the assertion"
+             deliberate: 133,802 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             depth-1 plus {depth2_chains} depth-2, over the 22 classes JMDICT_POS_CLASS \
+             maps (カ変・来ル per Phase 1b-ii, 一段・クレル with the v1-s row). \
+             Re-derive it and update this constant, rather than loosening the assertion"
         );
     }
 
@@ -893,6 +1548,172 @@ mod tests {
         let c = chars("書いた");
         let hits = table().chains_ending_at(&c, 3, 8);
         assert!(hits.iter().any(|h| key(&c, h) == "書く"), "書いた -> 書く");
+    }
+
+    #[test]
+    fn an_onbin_takes_the_auxiliary_voicing_its_class_demands() {
+        let reaches = |surface: &str, lemma: &str| {
+            let c = chars(surface);
+            table()
+                .chains_ending_at(&c, c.len(), 8)
+                .iter()
+                .any(|h| key(&c, h) == lemma)
+        };
+        // The defect: な + い is 泣く's 連用タ接続, which takes た and て, so
+        // neither of these is 泣く.
+        assert!(
+            !reaches("ないで", "なく"),
+            "しないでください is not 泣く Te-form"
+        );
+        assert!(
+            !reaches("ないだろ", "なく"),
+            "わけないだろう is not 泣く Past"
+        );
+        // The other direction: an unvoiced auxiliary on a voiced onbin.
+        assert!(!reaches("泳いた", "泳ぐ"), "泳ぐ's past is 泳いだ");
+        assert!(!reaches("読んた", "読む"), "読む's past is 読んだ");
+        // The voiced past is 特殊・タ, so its conditional is reachable.
+        assert!(reaches("読んだら", "読む"), "読んだら -> 読む");
+        assert!(reaches("泳いだら", "泳ぐ"), "泳いだら -> 泳ぐ");
+        // Controls: every pairing the language does have still deinflects.
+        for (surface, lemma) in [
+            ("泳いで", "泳ぐ"),
+            ("読んだ", "読む"),
+            ("遊んでる", "遊ぶ"),
+            ("死んじゃう", "死ぬ"),
+            ("書いて", "書く"),
+            ("泣いた", "泣く"),
+            ("行っちゃった", "行く"),
+            ("高かった", "高い"),
+        ] {
+            assert!(reaches(surface, lemma), "{surface} -> {lemma}");
+        }
+    }
+
+    #[test]
+    fn a_verb_stops_before_deshou() {
+        let reaches = |surface: &str, lemma: &str| {
+            let c = chars(surface);
+            table()
+                .chains_ending_at(&c, c.len(), 8)
+                .iter()
+                .any(|h| key(&c, h) == lemma)
+        };
+        // でしょ is blocked on the `です` row, so the verb's chain ends before
+        // it and でしょう is left to its own headword.
+        assert!(
+            !reaches("行くでしょ", "行く"),
+            "行く | でしょう, not 行くでしょ | う"
+        );
+        assert!(!reaches("楽しいでしょ", "楽しい"));
+        // The rest of the row is untouched.
+        assert!(reaches("楽しいです", "楽しい"));
+        assert!(reaches("楽しかったです", "楽しい"));
+        assert!(reaches("食べませんでした", "食べる"));
+    }
+
+    /// Whether some chain over the whole of `surface` reaches `lemma` through
+    /// the godan potential.
+    fn reaches_potential(surface: &str, lemma: &str) -> bool {
+        let c = chars(surface);
+        table()
+            .chains_ending_at(&c, c.len(), 12)
+            .iter()
+            .any(|h| is_godan_potential(&h.steps) && key(&c, h) == lemma)
+    }
+
+    /// Whether any chain over the whole of `surface` puts the potential on
+    /// something other than a 五段 headword's own 仮定形.
+    fn potential_misattached(surface: &str) -> bool {
+        let c = chars(surface);
+        table().chains_ending_at(&c, c.len(), 12).iter().any(|h| {
+            h.steps.windows(2).any(|w| {
+                w[1].aux == Some(POTENTIAL)
+                    && (w[0].aux.is_some()
+                        || !GODAN_POTENTIAL.contains(&CLASSES[w[0].class as usize].name)
+                        || CLASSES[w[0].class as usize].forms[w[0].form as usize].name != "仮定形")
+            })
+        })
+    }
+
+    #[test]
+    fn the_godan_potential_reaches_the_godan_lemma() {
+        for (surface, lemma) in [
+            ("読める", "読む"),
+            ("読めた", "読む"),
+            ("書けない", "書く"),
+            ("会えなかった", "会う"),
+            ("行けます", "行く"),
+            ("待てず", "待つ"),
+            ("帰れて", "帰る"),
+            ("死ねれ", "死ぬ"),
+            ("泳げちゃう", "泳ぐ"),
+            ("話せてる", "話す"),
+        ] {
+            assert!(reaches_potential(surface, lemma), "{surface} -> {lemma}");
+        }
+        // The zero-width step sits between the 仮定形 and the auxiliary and
+        // consumes nothing.
+        let c = chars("読めた");
+        let hit = table()
+            .chains_ending_at(&c, 3, 12)
+            .into_iter()
+            .find(|h| is_godan_potential(&h.steps) && key(&c, h) == "読む")
+            .expect("読めた has a potential chain to 読む");
+        let ranges: Vec<_> = hit.steps.iter().map(|s| s.range.clone()).collect();
+        assert_eq!(ranges, [1..2, 2..2, 2..3]);
+    }
+
+    /// The table knows no dictionary, so `くれた` legitimately reaches 繰る
+    /// (五段・ラ行) Potential and `lex` decides whether that entry exists. What
+    /// the table must never do is put the potential on カ変's `くれ` -- every
+    /// くれる would read 来る Potential -- or on 一段's or an auxiliary's own
+    /// 仮定形.
+    #[test]
+    fn the_potential_attaches_to_a_godan_headword_and_nothing_else() {
+        for surface in [
+            "くれた",
+            "くれない",
+            "くれる",
+            "食べれた",
+            "書かせれる",
+            "書かれれない",
+            "書けれた",
+        ] {
+            assert!(!potential_misattached(surface), "{surface}");
+        }
+        // Nor does the zero-width step ever end a chain: 読め on its own is
+        // the 仮定形 or the imperative, never a bare potential stem.
+        assert!(!reaches_potential("読め", "読む"));
+    }
+
+    #[test]
+    fn the_potential_leaves_particles_and_impossible_stacks_alone() {
+        // 待てよ and 言えよ are an imperative and the particle よ; 待てね the
+        // same with ね; これな is これ + な, not 凝る Potential Negative.
+        for (surface, lemma) in [
+            ("待てよ", "待つ"),
+            ("言えよ", "言う"),
+            ("待てね", "待つ"),
+            ("これな", "こる"),
+        ] {
+            assert!(!reaches_potential(surface, lemma), "{surface}");
+        }
+        // No imperative, causative, passive or want-to of a potential.
+        for surface in ["読めろ", "読めさせる", "読められる", "読めれる", "読めたい"]
+        {
+            assert!(!reaches_potential(surface, "読む"), "{surface}");
+        }
+        // 読めん is the negative ん, not the contracted 読めるん -- which would
+        // win on depth and read "can't" as "can".
+        let c = chars("読めん");
+        let potential: Vec<_> = table()
+            .chains_ending_at(&c, 3, 12)
+            .iter()
+            .filter(|h| is_godan_potential(&h.steps) && key(&c, h) == "読む")
+            .map(|h| h.steps.iter().map(|s| s.aux).collect::<Vec<_>>())
+            .collect();
+        assert_eq!(potential, [vec![None, Some("る"), Some("ん")]]);
     }
 
     #[test]

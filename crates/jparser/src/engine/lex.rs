@@ -20,14 +20,18 @@
 //! every `(start, end)` pair and built a key per pair, which was superlinear
 //! in input length.
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 use crate::engine::flags::WordFlags;
 use crate::engine::kana;
-use crate::engine::table::{classes_for_pos, ChainHit, Table, CLASSES};
+use crate::engine::table::{
+    classes_for_pos, is_godan_potential, is_kuru_kanji_headword, ChainHit, Table, CLASSES,
+    KURU_KANJI_CLASS,
+};
 use crate::engine::{ClassId, ConjStep};
 use crate::index::load::Index;
-use crate::index::{EntryData, IndexError, StoredRecord};
+use crate::index::{EntryData, IndexError, SenseData, StoredRecord};
 
 /// Longest deinflection chain `chains_ending_at` is asked to search, in
 /// characters consumed from a span's tail. Set from the corpus's deepest
@@ -73,6 +77,22 @@ pub struct Candidate {
     /// before folding -- the FST matched only because kana was unified, not
     /// because the two strings actually agree.
     pub exact: bool,
+    /// Every character of the span is katakana.
+    ///
+    /// Set here rather than recomputed in `cost`, which never receives
+    /// `chars` -- the same reason `digit_counter` lives on this struct. Read
+    /// by `cost::cost` to decide whether a tokenizer boundary *inside* the
+    /// span is evidence of anything; see `KATAKANA_MIN_PIECE`.
+    pub all_katakana: bool,
+    /// Every character of the span is katakana **and** a longer katakana run
+    /// encloses it — the span is a proper piece of that run, on at least one
+    /// side.
+    ///
+    /// Geometry only: how short a piece has to be before it is charged is
+    /// `cost::KATAKANA_MIN_PIECE`'s business, so the threshold lives there
+    /// with the constant it shares. `ユリナス` tiles into two such pieces and
+    /// reads "lily eggplant"; `ソロ|ホームラン` tiles into one and is right.
+    pub inside_katakana_run: bool,
     /// Whether this span also partitions into two or more candidates that
     /// each carry both `COMMON` and `PARTICLE` -- `には` as `に` + `は`.
     ///
@@ -81,7 +101,49 @@ pub struct Candidate {
     /// headword is a function stack at one position and not at another. Set
     /// by a second pass in [`candidates`], read by `cost::cost`.
     pub function_stack: bool,
+    /// Whether the span is a grammatical stack in the wider sense
+    /// [`is_grammatical_stack`] defines. Read only by `cost::cost`, to
+    /// withhold the length gain. Set by the same second pass.
+    pub grammatical_stack: bool,
+    /// JMdict says the entry is usually written in kana: some sense that is
+    /// not `aux-v` is tagged `uk`, the test [`EntryFacts`] applies to the
+    /// potential as well. Filled only for a deinflected match through a kana
+    /// reading (`PRONOUNCE`), where [`allows_chain`] has already read the
+    /// entry's facts; false everywhere else. Read by `cost::cost`, for the cut
+    /// at an empty stem, and only under that flag.
+    pub usually_kana: bool,
+    /// Every sense of the entry is an adverb (`adv`, `adv-to`). Filled only for
+    /// an uninflected function stack, the one place `cost::cost` asks --
+    /// `FUNCTION_STACK`'s exemption, which has to tell `もし` from `かに` --
+    /// because it costs an entry read; false everywhere else.
+    pub adverb: bool,
     pub headword: String,
+}
+
+/// The maximal katakana run containing each character, or `None` where the
+/// character is not katakana.
+///
+/// Computed once per sentence so the per-candidate test in [`candidates`] is
+/// O(1) rather than O(len): `jparser-cli bench`'s scaling cell is what a
+/// per-candidate scan would show up in, and Phase 2c exists because an
+/// earlier version of this module was superlinear in input length.
+fn katakana_runs(chars: &[char]) -> Vec<Option<(usize, usize)>> {
+    let mut runs = vec![None; chars.len()];
+    let mut i = 0;
+    while i < chars.len() {
+        if !kana::is_katakana(chars[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < chars.len() && kana::is_katakana(chars[i]) {
+            i += 1;
+        }
+        for slot in &mut runs[start..i] {
+            *slot = Some((start, i));
+        }
+    }
+    runs
 }
 
 /// Every candidate covering some span of `chars`, indexed by start position.
@@ -145,7 +207,9 @@ pub fn candidates(
         }
     }
 
-    let mut class_cache: HashMap<u32, Vec<ClassId>> = HashMap::new();
+    let mut class_cache: HashMap<u32, EntryFacts> = HashMap::new();
+
+    let runs = katakana_runs(chars);
 
     for start in 0..len {
         // Collected as the walk finds them -- stem-end ascending -- and
@@ -187,9 +251,14 @@ pub fn candidates(
                     .chain(remove.chars())
                     .collect();
                 for record in &records {
-                    if !allows_chain(index, &mut class_cache, record, hit.stem_class)? {
+                    if !allows_chain(index, &mut class_cache, record, hit)? {
                         continue;
                     }
+                    // Only `cost`'s PRONOUNCE charge reads it, so a kanji
+                    // headword never pays the look-up.
+                    let usually_kana = hit.stem_class.is_some()
+                        && WordFlags(record.flags).contains(WordFlags::PRONOUNCE)
+                        && facts(index, &mut class_cache, record.entry_id)?.usually_kana;
                     found.push((
                         end,
                         chain_index,
@@ -200,6 +269,17 @@ pub fn candidates(
                             flags: WordFlags(record.flags),
                             steps: hit.steps.clone(),
                             exact: record.surface == key,
+                            all_katakana: chars[start..end].iter().all(|&c| kana::is_katakana(c)),
+                            inside_katakana_run: match runs[start] {
+                                // `end <= run_end` puts the whole span in the
+                                // same run: runs are maximal and contiguous,
+                                // so a span that starts in one and ends
+                                // within its end never leaves it.
+                                Some((run_start, run_end)) if end <= run_end => {
+                                    run_start < start || run_end > end
+                                }
+                                _ => false,
+                            },
                             // Filled from `chars` below, where the span is
                             // known; the walk here has only the record.
                             digit_counter: false,
@@ -208,6 +288,9 @@ pub fn candidates(
                             // every position's candidates, which do not
                             // exist yet.
                             function_stack: false,
+                            grammatical_stack: false,
+                            usually_kana,
+                            adverb: false,
                             headword: record.surface.clone(),
                         },
                     ));
@@ -239,25 +322,41 @@ pub fn candidates(
     // A read-only copy for the reading comparison below, which asks about the
     // *parts* of a span while the originals are being written through.
     let out_ro = out.clone();
-    let stacks: Vec<Vec<bool>> = (0..len)
+    let stacks: Vec<Vec<(bool, bool)>> = (0..len)
         .map(|start| {
             out[start]
                 .iter()
-                .map(|cand| is_function_stack(&out, start, start + cand.len))
+                .map(|cand| {
+                    (
+                        is_function_stack(&out, start, start + cand.len),
+                        is_grammatical_stack(&out, start, start + cand.len),
+                    )
+                })
                 .collect()
         })
         .collect();
     for (start, flags) in stacks.into_iter().enumerate() {
-        for (cand, stack) in out[start].iter_mut().zip(flags) {
+        for (cand, (stack, grammatical)) in out[start].iter_mut().zip(flags) {
             cand.function_stack = stack;
+            cand.grammatical_stack = grammatical;
             cand.digit_counter = opens_with_a_number(chars, cand.start, cand.len)
                 && reading_is_not_its_parts(index, &out_ro, chars, cand);
             cand.after_digit_noncounter = !cand.flags.contains(WordFlags::COUNTER)
                 && loses_to_a_counted_number(chars, &out_ro, cand);
+            cand.adverb = stack && cand.steps.is_empty() && is_adverb(index, cand.entry_id)?;
         }
     }
 
     Ok(out)
+}
+
+/// Whether every sense of the entry is an adverb. See [`Candidate::adverb`].
+fn is_adverb(index: &Index, entry_id: u32) -> Result<bool, IndexError> {
+    Ok(index.entry(entry_id)?.is_some_and(|e| {
+        e.senses
+            .iter()
+            .all(|s| s.pos.iter().any(|p| p == "adv" || p == "adv-to"))
+    }))
 }
 
 /// Whether `[start, end)` partitions into two or more candidates that each
@@ -413,6 +512,51 @@ fn is_function_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> b
     reachable[width]
 }
 
+/// Whether `[start, start + len)` is a *grammatical* stack rather than a word:
+/// tileable entirely by COMMON pieces of at most two characters, where a
+/// one-character piece must itself be a PARTICLE and at least one piece is.
+///
+/// Wider than [`is_function_stack`], and used for one thing only -- deciding
+/// whether `cost`'s length gain applies. The two are separate predicates on
+/// purpose: `FUNCTION_STACK`'s own penalty keeps the narrower test it was
+/// measured with, so nothing moves in a hint state the gain does not reach.
+///
+/// The two-character cap is what keeps a content word out. `ことになっている`
+/// tiles as `こと|に|なっ|て|いる`, every piece short; `物思いにふける` needs
+/// `ふける` at three and so is a word. The particle requirement on
+/// one-character pieces is what keeps `唐揚げ` out: single COMMON kana and
+/// kanji are everywhere, and without it `物思いにふける` tiles as
+/// `物|思|い|に|ふ|け|る` and every word is a stack.
+fn is_grammatical_stack(by_start: &[Vec<Candidate>], start: usize, end: usize) -> bool {
+    const MAX_PIECE: usize = 2;
+    let width = end - start;
+    if width < 2 {
+        return false;
+    }
+    // `[p][saw_particle]`: a tiling of `[start, start + p)` into qualifying
+    // pieces, `saw_particle` recording whether any of them was a PARTICLE.
+    let mut reachable = vec![[false; 2]; width + 1];
+    reachable[0][0] = true;
+    for p in 0..width {
+        for seen in 0..2 {
+            if !reachable[p][seen] {
+                continue;
+            }
+            for cand in &by_start[start + p] {
+                if cand.len >= width || p + cand.len > width || cand.len > MAX_PIECE {
+                    continue;
+                }
+                let particle = cand.flags.contains(WordFlags::PARTICLE);
+                if !cand.flags.contains(WordFlags::COMMON) || (cand.len < 2 && !particle) {
+                    continue;
+                }
+                reachable[p + cand.len][usize::from(seen == 1 || particle)] = true;
+            }
+        }
+    }
+    reachable[width][1]
+}
+
 /// Collapse `bucket` (one `start`'s worth of candidates) so no two entries
 /// share both `len` and `entry_id`, keeping whichever chain has fewer
 /// `steps` -- an uninflected or shallower reading of the same span is the
@@ -467,26 +611,178 @@ fn dedup_shallowest(bucket: Vec<Candidate>) -> Vec<Candidate> {
 /// recurs across many spans.
 fn allows_chain(
     index: &Index,
-    cache: &mut HashMap<u32, Vec<ClassId>>,
+    cache: &mut HashMap<u32, EntryFacts>,
     record: &StoredRecord,
-    stem_class: Option<ClassId>,
+    hit: &ChainHit,
 ) -> Result<bool, IndexError> {
-    let Some(class) = stem_class else {
+    let Some(class) = hit.stem_class else {
         return Ok(true);
     };
-    if let Some(classes) = cache.get(&record.entry_id) {
-        return Ok(classes.contains(&class));
+    // The copula conjugates in no class its POS names (`cop` maps to none, see
+    // `table::POS_WITHOUT_A_CLASS`), so this is settled by the lemma instead.
+    if CLASSES[class as usize].name == COPULA_DESU_CLASS {
+        return Ok(record.surface == "です"
+            && is_desu_past(&hit.steps)
+            && index
+                .entry(record.entry_id)?
+                .is_some_and(|e| e.senses.iter().any(|s| s.pos.iter().any(|p| p == "cop"))));
     }
-    let classes = match index.entry(record.entry_id)? {
-        Some(entry) => entry_classes(&entry),
-        // A record whose entry is missing has no classes to check against;
-        // treated as disqualifying rather than trusted, since a well-formed
-        // index never produces this.
-        None => Vec::new(),
-    };
-    let allowed = classes.contains(&class);
-    cache.insert(record.entry_id, classes);
-    Ok(allowed)
+    // Before the entry's own POS is consulted, because this one is settled by
+    // the headword alone: カ変・来ル removes る, so a kana `vk` headword
+    // satisfies it by accident and deinflects over 取ってく rather than
+    // 取ってこ. See `table::is_kuru_kanji_headword`.
+    if CLASSES[class as usize].name == KURU_KANJI_CLASS && !is_kuru_kanji_headword(&record.surface)
+    {
+        return Ok(false);
+    }
+    let facts = facts(index, cache, record.entry_id)?;
+    if is_godan_potential(&hit.steps) && !facts.takes_a_potential(WordFlags(record.flags)) {
+        return Ok(false);
+    }
+    Ok(facts.classes.contains(&class))
+}
+
+/// `entry_id`'s [`EntryFacts`], read through `index` once and memoized.
+fn facts<'a>(
+    index: &Index,
+    cache: &'a mut HashMap<u32, EntryFacts>,
+    entry_id: u32,
+) -> Result<&'a EntryFacts, IndexError> {
+    Ok(match cache.entry(entry_id) {
+        Entry::Occupied(known) => known.into_mut(),
+        Entry::Vacant(slot) => slot.insert(match index.entry(entry_id)? {
+            Some(entry) => EntryFacts::of(&entry),
+            // A record whose entry is missing has no classes to check against;
+            // treated as disqualifying rather than trusted, since a well-formed
+            // index never produces this.
+            None => EntryFacts::default(),
+        }),
+    })
+}
+
+/// What [`allows_chain`] and `Candidate::usually_kana` need from an entry,
+/// memoized per `entry_id`.
+#[derive(Default)]
+struct EntryFacts {
+    classes: Vec<ClassId>,
+    /// Some sense that is not `aux-v` is tagged `uk`, "usually written using
+    /// kana alone" -- the plain JMdict tag, not `WordFlags::UK`, which drops
+    /// every entry with an `aux-v` sense and so would drop 貰う, 行く and 成る.
+    /// An `aux-v` sense does not count: 腐る's only `uk` sense is the 〜くさる
+    /// suffix, whose potential nobody writes, and counting it read hints-off
+    /// `良くされる` as 良 + 腐る Potential (about 40 sentences). What it costs
+    /// is 置く, whose `uk` senses are all 〜ておく: `放っておけない` goes back
+    /// to the split it had, 4 sentences hints on.
+    usually_kana: bool,
+    /// Some sense is `exp`: a multi-word expression.
+    expression: bool,
+    /// Every sense is a suffix: がる (1631750, `suf` and `v5r` and nothing
+    /// else), which only ever follows a stem.
+    suffix: bool,
+}
+
+impl EntryFacts {
+    fn of(entry: &EntryData) -> EntryFacts {
+        EntryFacts {
+            classes: entry_classes(entry),
+            ..EntryFacts::of_senses(&entry.senses)
+        }
+    }
+
+    /// Everything but `classes`, which nothing that holds only the senses asks.
+    fn of_senses(senses: &[SenseData]) -> EntryFacts {
+        EntryFacts {
+            classes: Vec::new(),
+            usually_kana: senses
+                .iter()
+                .any(|s| s.misc.iter().any(|m| m == "uk") && !s.pos.iter().any(|p| p == "aux-v")),
+            expression: senses.iter().any(|s| s.pos.iter().any(|p| p == "exp")),
+            suffix: !senses.is_empty() && senses.iter().all(|s| s.pos.iter().any(|p| p == "suf")),
+        }
+    }
+
+    /// Whether the godan potential may reach this entry through a record
+    /// carrying `flags` (`table::is_godan_potential`). Three refusals, each
+    /// measured over twelve visual-novel corpora (151,225 sentences) against
+    /// the same build without it. The first two are the shape `LEN_GAIN` and
+    /// `cost`'s inflection-internal exemption reward: a long span that crosses
+    /// IPADIC's cut between the e-row kana and the auxiliary for nothing.
+    ///
+    /// **Not an expression.** `口を開けて` is 口 + を + 開けて, "open one's
+    /// mouth", and 口を開く's potential only happens to spell it; so do
+    /// `腰を浮かせて` (31 spans hints on), `口を開け-` (22), `目を開け-` (10)
+    /// and `頭を悩ませる` (4), each a 一段 verb that an expression's godan
+    /// swallows whole under a "Potential" label. What it costs is the handful
+    /// that really are potentials -- `目を離せない`, `好きになれる`,
+    /// `一緒になれて`, `役に立てる` -- which go back to the split they had.
+    ///
+    /// **Not the kana reading of a word JMdict says is written in kanji.** A
+    /// potential nobody spelled, of a verb matched only through its reading,
+    /// is two inferences deep, and that is where the false chains were:
+    /// `わけない` read as 湧く Potential Negative where it is 訳 + ない (122
+    /// hints on, where the split had been right), `していただけませんか` cut
+    /// `いた|だけません` and read as 抱く (19), `イ|かせて` as 貸す (91); and
+    /// hints off `ありません` as 増す (317), `眉をひそめる` as 潜む,
+    /// `あるけれども` as 歩く, `抱きすくめた` as 汲む. The kana verbs whose
+    /// potential is common in running text -- 貰う, 行く, 成る, 頂く, 遣る --
+    /// are the ones JMdict tags `uk`, and keep it. The plain tag is read, not
+    /// `WordFlags::UK`, because that flag also drops every entry with an
+    /// `aux-v` sense, and those five are exactly such entries.
+    ///
+    /// **Not a suffix.** がる (1631750) is `suf` and `v5r` and nothing else, so
+    /// its potential only ever lands on a stem the tokenizer did not keep:
+    /// hints off, `焦がれる`, `削がれる` and `恋い焦がれる` read 焦 + がる
+    /// Potential (8 spans over twelve corpora). An entry with any sense that
+    /// is not a suffix -- 入る, whose suffix senses sit beside its own --
+    /// keeps the potential.
+    ///
+    /// What this refusal gives back is not only false chains. Without it, the
+    /// potential of 止む crossed `やめ|て` for free and so kept the 一段 verb
+    /// やめる whole -- about 400 spans of kana 一段 verbs (`やめて`, `ふるえて`,
+    /// `つづけて`) that `PRONOUNCE_CROSS` splits at the stem, repaired by a
+    /// candidate nobody displays. They go back to the split they had at the
+    /// tip; the defect is `cost`'s, and is recorded in the phase's handoff
+    /// rather than patched here through a side door.
+    fn takes_a_potential(&self, flags: WordFlags) -> bool {
+        !self.expression
+            && !self.suffix
+            && (self.usually_kana || !flags.contains(WordFlags::PRONOUNCE))
+    }
+}
+
+/// [`EntryFacts::takes_a_potential`] for a caller holding an entry's senses
+/// rather than the index: `assemble::to_segment`, which reads the potential's
+/// stem off the text after a span and must refuse it wherever `lex` would.
+pub fn potential_allowed(senses: &[SenseData], flags: WordFlags) -> bool {
+    EntryFacts::of_senses(senses).takes_a_potential(flags)
+}
+
+/// The copula's own class. A noun has no conjugation, so `雨でした` has no
+/// chain to reach through the `です` auxiliary row (which follows a 基本形);
+/// until 2026-09-23 it read 雨 | でし | た, glossed "pupil; disciple" and "want
+/// to do" -- 231 spans over twelve visual-novel corpora, hints on.
+const COPULA_DESU_CLASS: &str = "特殊・デス";
+
+/// Whether `steps` is the copula's 連用形 with the past `た` on it and nothing
+/// else -- でした, でしたら, でしたろ. Every other auxiliary on でし is refused,
+/// because `で` + `し` is far more often the particle and する: IPADIC itself
+/// tokenizes `みんなでしたい` as the copula, and the want-to form of です is
+/// not Japanese. `でして` is refused for the same reason on the corpus, where
+/// `口でして` and `奥底でしている` are the particle in half the IPADIC-copula
+/// readings.
+fn is_desu_past(steps: &[ConjStep]) -> bool {
+    matches!(steps, [own, past]
+        if CLASSES[own.class as usize].forms[own.form as usize].name == "連用形"
+            && past.aux == Some("た"))
+}
+
+/// Whether `cand` is the copula conjugating as its own headword -- the one
+/// chain [`allows_chain`] admits through [`COPULA_DESU_CLASS`]. `cost` gates
+/// it on the tokenizer: see `cost::is_allowed`.
+pub fn is_copula_desu_chain(cand: &Candidate) -> bool {
+    cand.steps
+        .first()
+        .is_some_and(|s| CLASSES[s.class as usize].name == COPULA_DESU_CLASS)
 }
 
 /// Every conjugation class any sense of `entry` maps to, deduplicated. Mirrors
@@ -527,9 +823,14 @@ mod tests {
             flags,
             steps: Vec::new(),
             exact: true,
+            all_katakana: false,
+            inside_katakana_run: false,
             digit_counter: false,
             after_digit_noncounter: false,
             function_stack: false,
+            grammatical_stack: false,
+            usually_kana: false,
+            adverb: false,
             headword: String::new(),
         };
 
@@ -586,11 +887,113 @@ mod tests {
                 steps
             ],
             exact,
+            all_katakana: false,
+            inside_katakana_run: false,
             function_stack: false,
+            grammatical_stack: false,
+            usually_kana: false,
+            adverb: false,
             digit_counter: false,
             after_digit_noncounter: false,
             headword: headword.to_string(),
         }
+    }
+
+    /// The copula conjugates as its own headword only as でし + た; the rest
+    /// of what IPADIC would let follow でし is far more often `で` + する.
+    #[test]
+    fn only_the_copulas_past_reaches_desu() {
+        let class =
+            |name: &str| CLASSES.iter().position(|c| c.name == name).expect("class") as ClassId;
+        let form = |c: ClassId, name: &str| {
+            CLASSES[c as usize]
+                .forms
+                .iter()
+                .position(|f| f.name == name)
+                .expect("form") as crate::engine::FormId
+        };
+        let desu = class("特殊・デス");
+        let step = |class: ClassId, form_name: &str, aux: Option<&'static str>| ConjStep {
+            class,
+            form: form(class, form_name),
+            range: 0..0,
+            aux,
+        };
+        let deshi = step(desu, "連用形", None);
+        let ta = step(class("特殊・タ"), "基本形", Some("た"));
+        let te = step(class("不変化型"), "基本形", Some("て"));
+        let tai = step(class("特殊・タイ"), "基本形", Some("たい"));
+        assert!(is_desu_past(&[deshi.clone(), ta.clone()]), "でした");
+        assert!(
+            !is_desu_past(&[deshi.clone(), te]),
+            "口でして is the particle"
+        );
+        assert!(
+            !is_desu_past(&[deshi.clone(), tai]),
+            "みんなでしたい is the particle"
+        );
+        assert!(!is_desu_past(std::slice::from_ref(&deshi)), "a bare でし");
+        assert!(
+            !is_desu_past(&[step(desu, "未然形", None), ta]),
+            "でしょ + た"
+        );
+    }
+
+    /// Which entries the godan potential may reach through a kana reading:
+    /// `uk` on a lexical sense (貰う), never on an `aux-v` sense alone (腐る's
+    /// 〜くさる), never an expression, and a kanji spelling always.
+    #[test]
+    fn a_potential_reaches_a_kana_reading_only_where_jmdict_writes_it_in_kana() {
+        let sense = |pos: &[&str], uk: bool| crate::index::SenseData {
+            pos: pos.iter().map(|p| p.to_string()).collect(),
+            glosses: Vec::new(),
+            xrefs: Vec::new(),
+            misc: if uk {
+                vec!["uk".to_string()]
+            } else {
+                Vec::new()
+            },
+            info: Vec::new(),
+        };
+        let facts = |senses: Vec<crate::index::SenseData>| {
+            EntryFacts::of(&EntryData {
+                id: 1,
+                readings: Vec::new(),
+                senses,
+            })
+        };
+        let kana = WordFlags::PRONOUNCE;
+        let kanji = WordFlags::PRIMARY;
+        let morau = facts(vec![sense(&["v5u"], true), sense(&["aux-v", "v5u"], true)]);
+        assert!(morau.takes_a_potential(kana), "もらえる is 貰う Potential");
+        let kusaru = facts(vec![sense(&["v5r"], false), sense(&["aux-v", "v5r"], true)]);
+        assert!(
+            !kusaru.takes_a_potential(kana),
+            "くされる is not 腐る Potential"
+        );
+        assert!(kusaru.takes_a_potential(kanji), "腐れる in kanji still is");
+        let waku = facts(vec![sense(&["v5k"], false)]);
+        assert!(
+            !waku.takes_a_potential(kana),
+            "わけない is not 湧く Potential"
+        );
+        let kuchi = facts(vec![sense(&["exp", "v5k"], false)]);
+        assert!(
+            !kuchi.takes_a_potential(kanji),
+            "口を開けて is not 口を開く Potential"
+        );
+        // がる is a suffix and nothing else, so 焦がれる is not 焦 + がる
+        // Potential; 入る has suffix senses beside its own and keeps it.
+        let garu = facts(vec![sense(&["suf", "v5r"], false)]);
+        assert!(
+            !garu.takes_a_potential(kanji),
+            "焦がれる is not がる Potential"
+        );
+        let hairu = facts(vec![sense(&["v5r"], false), sense(&["suf", "v5r"], false)]);
+        assert!(
+            hairu.takes_a_potential(kanji),
+            "入れる is still 入る Potential"
+        );
     }
 
     /// One entry, two kana headwords, one span: `イチャイチャ` and
@@ -628,5 +1031,22 @@ mod tests {
         ]);
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].steps.len(), 0, "the shallow one survives");
+    }
+
+    #[test]
+    fn a_katakana_run_is_the_maximal_span_around_each_of_its_characters() {
+        let chars: Vec<char> = "をユリナスが".chars().collect();
+        let runs = super::katakana_runs(&chars);
+        assert_eq!(runs[0], None, "を is not katakana");
+        assert_eq!(runs[1], Some((1, 5)), "ユ opens the run");
+        assert_eq!(runs[4], Some((1, 5)), "ス closes it");
+        assert_eq!(runs[5], None, "が is not katakana");
+    }
+
+    #[test]
+    fn the_prolonged_sound_mark_stays_inside_the_run() {
+        let chars: Vec<char> = "コーヒー".chars().collect();
+        let runs = super::katakana_runs(&chars);
+        assert_eq!(runs[1], Some((0, 4)), "ー does not break the run");
     }
 }

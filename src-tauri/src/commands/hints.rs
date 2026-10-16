@@ -172,6 +172,37 @@ pub fn hints_warning(warning: State<'_, HintsWarning>) -> Option<String> {
     }
 }
 
+/// Whether a Vibrato dictionary is already published, so hints could be
+/// switched on without touching the network.
+///
+/// Exists for one caller and one question: the first-run download screen asks
+/// it before deciding whether its download should acquire hints too. **The
+/// distinction it stands in for is "has the user ever had the chance to choose
+/// hints", which `mecab_hints` cannot express** — it is a plain `bool`, so
+/// `false` covers both "never chosen" and "chosen off", and the download screen
+/// is not the first-run screen it looks like: `state::is_missing_dictionary`
+/// deliberately routes `ConjugationMismatch` and `VersionMismatch` there too,
+/// which are the expected states after an application upgrade. Without this,
+/// an established user who had switched hints off would have them switched
+/// silently back on by the rebuild they had no choice but to run.
+///
+/// A published dictionary means hints were acquired at some point, so whatever
+/// `mecab_hints` says now is a decision rather than a default. No dictionary
+/// means the question has never been put.
+///
+/// **`TA_HINTS_DICT` is deliberately not consulted**, so a developer who has
+/// pointed the app at their own dictionary is still offered the download on a
+/// first run. Reading it here would be more accurate but costs more than it is
+/// worth: `state`'s own test module notes that `load_state` is the only code in
+/// this crate that reads that variable and guards it with a private `ENV_LOCK`,
+/// because mutating process env is a whole-process hazard. A second reader
+/// would falsify that comment and need the lock promoted to a shared helper,
+/// for a debug-only variable and one redundant download.
+#[tauri::command]
+pub fn hints_available(paths: State<'_, DictionaryPaths>) -> bool {
+    vibrato_source::published(&paths.hints_dir).is_some()
+}
+
 /// Where to drop a hand-placed dictionary archive.
 ///
 /// The settings note names this path literally, so the manual route is
@@ -602,6 +633,42 @@ mod tests {
             std::fs::read(current.join(vibrato_source::SYSTEM_DIC)).expect("read after"),
             before,
             "the published slot must be untouched by the offline short-circuit"
+        );
+    }
+
+    /// Both answers from one directory, because the *transition* is what the
+    /// first-run download screen gates on and either answer alone would pass
+    /// against a constant.
+    ///
+    /// What it stands for is worth restating where it is asserted: a published
+    /// dictionary means hints were acquired at some point, so `mecab_hints`
+    /// now holds a decision rather than a default. An empty hints directory
+    /// means the question has never been put. `set_mecab_hints` is not called
+    /// here — this is only the probe the screen asks before deciding whether
+    /// its own download should acquire hints at all.
+    #[test]
+    fn hints_available_reports_whether_a_dictionary_is_published() {
+        let hints_dir = hints_scratch("available");
+        let app = tauri::test::mock_app();
+        app.manage(DictionaryPaths {
+            root: hints_dir.join("dict"),
+            source_dir: hints_dir.join("source"),
+            hints_dir: hints_dir.clone(),
+        });
+
+        assert!(
+            !hints_available(app.state::<DictionaryPaths>()),
+            "an empty hints directory means hints have never been acquired"
+        );
+
+        let current = hints_dir.join(vibrato_source::DICT_DIR);
+        std::fs::create_dir_all(&current).expect("current dir");
+        jparser::hints::write_test_dictionary(&current.join(vibrato_source::SYSTEM_DIC))
+            .expect("fixture dictionary");
+
+        assert!(
+            hints_available(app.state::<DictionaryPaths>()),
+            "a published dictionary means the question was already put to the user"
         );
     }
 }

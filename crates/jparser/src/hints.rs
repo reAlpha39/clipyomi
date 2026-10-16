@@ -229,11 +229,65 @@ mod tests {
     /// in regions where none of its entries appear. If this fails, re-run the
     /// gates in `docs/superpowers/2026-09-16-user-lexicon-spike.md` rather
     /// than raising the number.
+    ///
+    /// 83 -> 87 on 2026-09-16 for `なのに`, `へへ`, `あたし達` and `唐揚げ`, all
+    /// the same shape as `ある日`/`その日`. Gates re-run at each step, every cell
+    /// in both hint states identical to the digit.
+    ///
+    /// **87 -> 85 on 2026-09-18, and the direction is the point.** That
+    /// comment used to end "the number will keep climbing until something
+    /// structural closes it"; `cost.rs`'s `CONTENT_MATCH` closed half of it.
+    /// `あたし達` and `唐揚げ` are the one-character-peel shape that term
+    /// exists for and both now merge unaided -- measured by deleting the rows
+    /// and re-running, every gold cell identical to the digit in both hint
+    /// states. `なのに` and `へへ` stay, because both tile into COMMON
+    /// *particles* and that is exactly the tiling the surcharge is withheld
+    /// from. A dead row is not free: the cap below exists because Vibrato's
+    /// Viterbi is global.
+    ///
+    /// **85 -> 88 on 2026-09-22** for `もしかして`, `もしかしたら` and
+    /// `もしかすると`, the residue the `uk` cover exposed. Gates re-run: every
+    /// gold cell in both hint states identical to the digit, and the ten-corpus
+    /// A/B reads 153 occurrences recovered against 3 lost, all three a name
+    /// beside the new token. The globality this cap exists for is what those
+    /// three are.
+    ///
+    /// **88 -> 93 the same day** for `いない`, `できない`, `できなかった`,
+    /// `できず` and `よさそう` -- the first inflected forms here, and the first
+    /// rows to move a gold cell rather than hold it: hints-on strict 1694 ->
+    /// 1696 and tolerant 1948 -> 1950, hints-off identical, snapshot identical.
+    /// The ten-corpus A/B reads 832 occurrences recovered against about a dozen
+    /// lost.
+    ///
+    /// **93 -> 94** for the protective `もったいない`, which `いない` shatters
+    /// into `もった|いないでしょ`. Put through the same A/B rather than waved
+    /// in: 8 of 131,847 sentences change, three the repair and five a polite
+    /// span merging back the way it did before, gold and snapshot identical.
+    /// The cap is a measured number, not a budget -- a row that repairs
+    /// another row is still a row, and still costs an A/B.
+    ///
+    /// **94 -> 111** on 2026-09-22, from the re-run against the ta-old port
+    /// over the same ten corpora: thirteen rows for the defect and four
+    /// protective. 545 of 131,847 sentences change (0.41%), 591 occurrences
+    /// recovered against 8 lost, gold identical to the digit in both hint
+    /// states and the snapshot with it. The CSV's own comment block carries
+    /// the per-row counts and names the 8.
+    ///
+    /// **111 -> 115** on 2026-09-23, from a general sweep over twelve corpora
+    /// (every JMdict content entry the ta-old port keeps whole, not only
+    /// `uk`): `きもち`, `兄様`, `姉上`, `兄上`, each a false gloss. 181 of
+    /// 151,225 sentences change, 203 occurrences recovered against 3 lost, gold
+    /// identical in both hint states. A fifth, `よさ`, was measured and refused;
+    /// the CSV says why.
+    ///
+    /// **115 -> 117** on 2026-09-30 for `もし良かったら` and `もしよかったら`,
+    /// from a reported line IPADIC read as `それでも|し`. 3 of 151,225 sentences
+    /// change besides it, gold identical in both hint states.
     #[test]
     fn the_user_lexicon_stays_within_its_measured_cap() {
         assert!(
-            user_lexicon_body().lines().count() <= 83,
-            "83 is the largest list measured to leave every gold cell alone"
+            user_lexicon_body().lines().count() <= 117,
+            "117 is the largest list measured against every gold cell"
         );
     }
 
