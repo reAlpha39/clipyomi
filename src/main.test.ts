@@ -671,6 +671,11 @@ describe('the first-run download screen', () => {
       }
       if (cmd === 'needs_dictionary') return Promise.resolve(true);
       if (cmd === 'download_dictionary') return Promise.resolve(undefined);
+      // The fresh-install answer, stated rather than left to the `null`
+      // default: no Vibrato dictionary is published, so hints have never been
+      // acquired and the question has never been put to this user. The
+      // upgrade-rebuild case, where one *is* published, has its own test.
+      if (cmd === 'hints_available') return Promise.resolve(false);
       return Promise.resolve(null);
     });
     vi.resetModules();
@@ -766,6 +771,198 @@ describe('the first-run download screen', () => {
     await Promise.resolve();
 
     expect(downloadCalls).toBe(2);
+  });
+
+  /**
+   * The `{ enabled }` argument of every `set_mecab_hints` the app invoked,
+   * in order. An empty array is the "hints were never touched" assertion —
+   * `toHaveBeenCalledWith` can only prove the positive.
+   */
+  function hintsCalls(): unknown[] {
+    return invoke.mock.calls
+      .filter(([cmd]: unknown[]) => cmd === 'set_mecab_hints')
+      .map(([, args]: unknown[]) => args);
+  }
+
+  /** The Download (or Retry) button, or a failure naming what was missing. */
+  function downloadButton(): HTMLButtonElement {
+    const button = document.querySelector<HTMLButtonElement>('#download');
+    if (button === null) throw new Error('#download missing');
+    return button;
+  }
+
+  // `mecab_hints` defaults to false and that is not a preference — it records
+  // whether the 7.7 MB Vibrato dictionary was ever fetched, and `load_hints`
+  // never fetches it. So before this, every fresh install ran the weaker
+  // engine forever unless the user happened to find the settings toggle.
+  // This is the whole point of `acquireHintsOnReady`: the one download the
+  // first-run screen does start acquires hints too.
+  test('a download started here acquires hints once the index is ready', () => {
+    downloadButton().click();
+    emit('dictionary-status', 'ready');
+
+    expect(invoke).toHaveBeenCalledWith('set_mecab_hints', { enabled: true });
+  });
+
+  // The backend's real sequence is downloading → building → ready, and only
+  // the last of those may consume the flag. An implementation that cleared it
+  // on any status event — or inside `renderDictionary` — would pass the
+  // straight-to-ready test above and still ship hints off to every user.
+  test('hints are acquired across the real downloading and building phases', () => {
+    downloadButton().click();
+    emit('dictionary-status', 'downloading');
+    emit('dictionary-status', 'building');
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([{ enabled: true }]);
+  });
+
+  // The listener is global and outlives this screen, so every `ready` for the
+  // window's whole life reaches it — including one from an index rebuilt long
+  // after first run. Acting on those would switch hints back on for someone
+  // who had deliberately switched them off, which is the app overruling a
+  // choice the user made.
+  test('a ready this screen did not ask for does not acquire hints', () => {
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([]);
+  });
+
+  // `download_dictionary` resolves `Ok` as soon as the work is *started*;
+  // failure arrives here instead, as a `dictionary-status` carrying the
+  // backend's own message (`with_fallback`'s wording, reproduced). Hanging
+  // the hints fetch off the invoke promise would therefore have fetched a
+  // 7.7 MB hint dictionary for an index that never landed.
+  test('a download that fails does not acquire hints', () => {
+    downloadButton().click();
+    emit(
+      'dictionary-status',
+      'could not download JMdict_e.gz: connection timed out. Retry, or place ' +
+        'JMdict_e.gz and kanjidic2.xml.gz in /home/u/.local/share/clipyomi/sources ' +
+        'and retry.',
+    );
+
+    expect(hintsCalls()).toEqual([]);
+    // And the failure path still owes the user a Retry, unchanged.
+    expect(downloadButton().textContent).toBe('Retry');
+  });
+
+  // The flag is cleared by the `ready` that consumes it, so one click cannot
+  // buy two 7.7 MB fetches — and every later `ready` falls back to being one
+  // this screen did not ask for.
+  test('two ready events after one download acquire hints exactly once', () => {
+    downloadButton().click();
+    emit('dictionary-status', 'ready');
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([{ enabled: true }]);
+  });
+
+  // The realistic recovery: the first attempt fails, the user reconnects and
+  // presses Retry. The failure re-rendered the button, so the arming lives on
+  // a brand-new node and a brand-new handler — and the eventual `ready` must
+  // still be recognised as this screen's own, still exactly once.
+  test('a retry after a failure acquires hints exactly once when the index lands', () => {
+    downloadButton().click();
+    emit('dictionary-status', 'could not reach the server');
+    downloadButton().click();
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([{ enabled: true }]);
+  });
+
+  // Failure degrades to exactly the old behaviour — `set_mecab_hints` persists
+  // the setting only on success, so hints stay off and the settings toggle is
+  // still there for a second try. What the bare `.catch(() => {})` buys is
+  // that it cannot surface as an unhandled rejection (which fails this test on
+  // its own), nor disturb the screen the user was just told is ready.
+  test('a rejected hints fetch is swallowed and leaves the ready screen alone', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'set_mecab_hints') return Promise.reject(new Error('could not reach the server'));
+      return Promise.resolve(null);
+    });
+
+    downloadButton().click();
+    emit('dictionary-status', 'ready');
+    // Flush the rejection and the `.catch` that must absorb it.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(invoke).toHaveBeenCalledWith('set_mecab_hints', { enabled: true });
+    expect(document.querySelector('#dictionary')?.childElementCount).toBe(0);
+  });
+
+  // The download screen is NOT the first-run screen it looks like.
+  // `state::is_missing_dictionary` routes `ConjugationMismatch` and
+  // `VersionMismatch` to it as well, which are the expected states after an
+  // application upgrade — so this exact sequence is an established user who
+  // had deliberately switched hints off, being made to rebuild a stale index.
+  // A published dictionary is what says the question was already put to them,
+  // and their answer must survive a rebuild they had no choice but to run.
+  test('a rebuild on a machine that already has hints does not switch them back on', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true });
+      }
+      if (cmd === 'needs_dictionary') return Promise.resolve(true);
+      if (cmd === 'download_dictionary') return Promise.resolve(undefined);
+      if (cmd === 'hints_available') return Promise.resolve(true);
+      return Promise.resolve(null);
+    });
+    vi.resetModules();
+    await import('./main');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    downloadButton().click();
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([]);
+  });
+
+  // An index download and build take a while and the settings window is
+  // reachable throughout, so the user can settle the hints question after
+  // clicking Download and before `ready`. Any `hints-status` event means they
+  // did — an acquisition, a refusal, or an explicit `off`. The payload is not
+  // inspected on purpose: `off` is the case that must not be overridden, and
+  // the others mean an acquisition already happened, so every one of them
+  // makes this screen's answer stale.
+  test('a hints decision made while the index builds is not overridden', () => {
+    downloadButton().click();
+    emit('hints-status', 'off');
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([]);
+  });
+
+  // `emit_hints_status` is only ever called from `set_mecab_hints`, so an event
+  // on that channel means the user has engaged the toggle. From then on this
+  // screen has no business answering for them, on this download or a later one
+  // — so the disarm has to outlive the click it interrupted.
+  test('a hints event settles the question for later downloads too', () => {
+    emit('hints-status', 'off');
+    downloadButton().click();
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([]);
+  });
+
+  // Final review, Finding 1. The disarm used to clear only the armed flag and
+  // leave `hintsNeverAcquired` set, so this exact sequence handed the user's
+  // own answer straight back: hints switched on and off mid-download, the
+  // download fails, Retry re-arms from the stale flag, and `ready` switches
+  // them back on — the precise harm condition 2 exists to prevent, reached
+  // through condition 3's blind spot.
+  test('a hints decision survives a failed download and a retry', () => {
+    downloadButton().click();
+    emit('hints-status', 'ready');
+    emit('hints-status', 'off');
+    emit('dictionary-status', 'could not reach the server');
+
+    downloadButton().click();
+    emit('dictionary-status', 'ready');
+
+    expect(hintsCalls()).toEqual([]);
   });
 });
 
@@ -1016,6 +1213,39 @@ describe('the titlebar band', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // Leaving `header` mid-peek has to reach the backend, not just the classes.
+  // The reveal is a *backend* state on both platforms — the region on Windows,
+  // the frame height on macOS — and the mode change is the last chance to undo
+  // it: the `pointerleave` that follows reads the flag this drops and returns
+  // early, so nothing else ever would. Dropping it locally alone left the
+  // reserved 28px row inside the Windows region with `content` hiding every
+  // control that paints it: a dead strip above the sentence, permanently.
+  test('leaving header while peeked hides the chrome in the backend too', async () => {
+    await load('header');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    shell().dispatchEvent(new Event('pointerenter'));
+    expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: true, height: 28 });
+
+    emit('settings-changed', { chrome_mode: 'content' });
+
+    expect(invoke).toHaveBeenCalledWith('peek_titlebar', { visible: false, height: 28 });
+  });
+
+  // The other half of the gate: a mode change with no peek up must stay silent,
+  // for the reason a repeated `pointerenter` does — only transitions talk to the
+  // backend, and boot applies a mode before any pointer has been near the band.
+  test('leaving header with no peek up says nothing to the backend', async () => {
+    await load('header');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    emit('settings-changed', { chrome_mode: 'content' });
+
+    expect(invoke).not.toHaveBeenCalledWith('peek_titlebar', expect.anything());
   });
 
   // The colour the Windows frame growth erases newly exposed pixels with. A

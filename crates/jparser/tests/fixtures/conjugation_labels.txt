@@ -29,7 +29,7 @@
 # recorded in the 1b-i handoff, not fixed here.
 #
 # A surface can appear twice with different chains (書け is both 仮定形 and
-# 命令ｅ; 読んで reaches で through two rows). Each chain is its own row.
+# 命令ｅ). Each chain is its own row.
 
 # --- Part A: depth 0. One row per (adjective?, form) reachable from a class
 # --- JMDICT_POS_CLASS maps. Only Conditional, Imperative and Adverbial name a
@@ -41,8 +41,6 @@
 書か	五段・カ行イ音便:未然形	-
 書こ	五段・カ行イ音便:未然ウ接続	-
 書き	五段・カ行イ音便:連用形	-
-書い	五段・カ行イ音便:連用タ接続	-
-行っ	五段・カ行促音便:連用タ接続	-
 取ん	五段・ラ行:未然特殊	-
 食べれ	一段:仮定形	Conditional
 食べりゃ	一段:仮定縮約１	Conditional
@@ -90,7 +88,6 @@
 高かろ	形容詞・アウオ段:未然ウ接続	-
 高から	形容詞・アウオ段:未然ヌ接続	-
 高う	形容詞・アウオ段:連用ゴザイ接続	-
-高かっ	形容詞・アウオ段:連用タ接続	-
 いい	形容詞・イイ:基本形	-
 いいっ	形容詞・イイ:基本形-促音便	-
 
@@ -182,32 +179,31 @@
 書いたら	五段・カ行イ音便:連用タ接続 た:仮定形	Conditional
 書いた	五段・カ行イ音便:連用タ接続 た:基本形	Past
 書いたろ	五段・カ行イ音便:連用タ接続 た:未然形	Past
-# table finding: ATTACHES_TO points the voiced past だ at the copula class
-# 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/だっ/で, so 読んだら is
-# unreachable. Of the rows below, 読んなら, 読んな, 読んなれ and 読んだっ are
-# spurious; 読んだ, 読んだろ and 読んで are real. All labelled by rule.
-読んなら	五段・マ行:連用タ接続 だ:仮定形	Conditional
-読んな	五段・マ行:連用タ接続 だ:体言接続	Past
-読んなれ	五段・マ行:連用タ接続 だ:命令ｅ	Past Imperative
+# The voiced past だ is 特殊・タ, the class of た, which is what IPADIC tags
+# 読ん|だ and 読ん|だら as. Until 2026-09-23 ATTACHES_TO pointed it at the
+# copula class 特殊・ダ, whose forms are なら/な/なれ/だ/だろ/だっ/で, and this
+# block recorded that as a table finding: 読んだら was unreachable, and the
+# rows 読んなら, 読んな, 読んなれ, 読んだっ and a second 読んで were spurious.
+# Those five were removed with the fix, not quietly; 読んだら replaces the
+# first.
+読んだら	五段・マ行:連用タ接続 だ:仮定形	Conditional
 読んだ	五段・マ行:連用タ接続 だ:基本形	Past
 読んだろ	五段・マ行:連用タ接続 だ:未然形	Past
-読んだっ	五段・マ行:連用タ接続 だ:連用タ接続	Past
-読んで	五段・マ行:連用タ接続 だ:連用形	Te-form
 書いて	五段・カ行イ音便:連用タ接続 て:基本形	Te-form
 読んで	五段・マ行:連用タ接続 で:基本形	Te-form
-# です/じゃ/や attach to 基本形, so their depth-1 surfaces read as nonstandard
-# Japanese (食べるです, 食べるじゃ). They are the chains the table generates for
-# these lemmas; table.rs's ATTACHES_TO doc records that the じゃ/や rows never
-# fire on real text at all.
+# です attaches to 基本形, so its depth-1 surfaces read as nonstandard
+# Japanese on an ichidan verb (食べるです). They are the chains the table
+# generates for the lemma.
+# 食べるでしょ (です:未然形) was a row here until 2026-09-23, when table.rs
+# blocked that form: nothing could follow it, so it only ever left a lone う
+# behind 〜でしょう. Removed with the block, not quietly.
 食べるです	一段:基本形 です:基本形	Polite
-食べるでしょ	一段:基本形 です:未然形	Polite
 食べるでし	一段:基本形 です:連用形	Polite
-食べるじゃ	一段:基本形 じゃ:基本形	Copula
-食べるじゃろ	一段:基本形 じゃ:未然形	Copula
-食べるじゃっ	一段:基本形 じゃ:連用形	Copula
-食べるや	一段:基本形 や:基本形	Copula
-食べるやろ	一段:基本形 や:未然形	Copula
-食べるやっ	一段:基本形 や:連用形	Copula
+# The six じゃ/や rows that followed (食べるじゃ, 食べるじゃろ, 食べるじゃっ,
+# 食べるや, 食べるやろ, 食べるやっ) went with those ATTACHES_TO rows on
+# 2026-09-23: they fired on real text after every 基本形, the te-form's て
+# included (そうやって as 沿う Copula Te-form), so they were removed, not
+# quietly.
 
 # --- Part C: curated, depth 2-6. Every override and the Polite dedup, the
 # --- corpus's deepest chain, and one row per remaining mapped class. An
@@ -281,3 +277,283 @@
 書かせさせる	五段・カ行イ音便:未然形 せる:未然形 させる:基本形	Causative
 書かれられる	五段・カ行イ音便:未然形 れる:未然形 られる:基本形	Passive/Potential
 食べたです	一段:連用形 た:基本形 です:基本形	Past Polite
+
+# 書い, 行っ and 高かっ — the three bare 連用タ接続 stems — had a row each
+# here until table.rs's BOUND_FORMS stopped the table generating them as
+# whole words. They are still generated under た/て/だ/で/ちゃう, which is the
+# only place they occur: 書いた and 高かった below still have their rows.
+#
+# ちゃう/じゃう and the ちまう/じまう they contract from are the てしまう
+# auxiliary: the action is carried through, often with regret. "Completive" is
+# the one word below that the Wikipedia terminology list above does not carry
+# — that article names the construction but not a one-word English gloss for
+# it. The word is the standard grammatical term for the aspect (Wikipedia,
+# "Grammatical aspect", read 2026-09), chosen over "Regrettably" because the
+# regret reading is the secondary one and the parser cannot tell them apart,
+# the same reason れる/られる are labelled "Passive/Potential".
+# 未然ウ接続 and 未然形 rows are stems, not free words, listed for the same
+# reason 書いたろ is: the walk reaches them and every reachable tuple needs a
+# row.
+# 待ってよ and 遊んでよ had a row each here for てる/でる's 命令ｙｏ and
+# 未然ウ接続 until table.rs's AUX_FORM_BLOCK stopped the table generating
+# the よ surface at all. The contraction's imperative is 待ってろ, never
+# 待ってよ, and the surface collided with the sentence-final particle よ --
+# 22 absorbed particles over 8,334 lines of dialogue, five of them the
+# 忘れないでよ shape that destroyed the negation outright. Named here
+# rather than quietly dropped, the way the three 連用タ接続 stems above
+# are.
+#
+# ている/でいる are the uncontracted form of the same auxiliary, added
+# 2026-09-18 so that 待っていた stops reading 待って | い | た with い glossed
+# "the Boar (twelfth sign of the Chinese zodiac)" -- 218 corpus sentences,
+# the largest single count the disagreement probe found. Same 一段 class and
+# 一段 class. **The two よ-forms are NOT blocked here**, unlike てる below:
+# てる's てよ collides with the sentence-final particle because 待って is a
+# word and よ is a particle, but ていよ cannot decompose that way -- 待ってい
+# is not a standalone anything. Blocking them by analogy cost 待っていよう and
+# 遊んでいよう, which are ordinary Japanese; measured over 8,334 lines,
+# unblocking them changes 2 sentences, both gains, and absorbs no particle.
+# The stem てい is what reaches た and ます: 待っていた, 待っています.
+待っていれ	五段・タ行:連用タ接続 ている:仮定形	Progressive Conditional
+待っていよ	五段・タ行:連用タ接続 ている:命令ｙｏ	Progressive Imperative
+待っていよ	五段・タ行:連用タ接続 ている:未然ウ接続	Progressive
+遊んでいよ	五段・バ行:連用タ接続 でいる:命令ｙｏ	Progressive Imperative
+遊んでいよ	五段・バ行:連用タ接続 でいる:未然ウ接続	Progressive
+待っていりゃ	五段・タ行:連用タ接続 ている:仮定縮約１	Progressive Conditional
+待っていん	五段・タ行:連用タ接続 ている:体言接続特殊	Progressive
+待っていろ	五段・タ行:連用タ接続 ている:命令ｒｏ	Progressive Imperative
+待っている	五段・タ行:連用タ接続 ている:基本形	Progressive
+待ってい	五段・タ行:連用タ接続 ている:未然形	Progressive
+待ってい	五段・タ行:連用タ接続 ている:連用形	Progressive
+遊んでいれ	五段・バ行:連用タ接続 でいる:仮定形	Progressive Conditional
+遊んでいりゃ	五段・バ行:連用タ接続 でいる:仮定縮約１	Progressive Conditional
+遊んでいん	五段・バ行:連用タ接続 でいる:体言接続特殊	Progressive
+遊んでいろ	五段・バ行:連用タ接続 でいる:命令ｒｏ	Progressive Imperative
+遊んでいる	五段・バ行:連用タ接続 でいる:基本形	Progressive
+遊んでい	五段・バ行:連用タ接続 でいる:未然形	Progressive
+遊んでい	五段・バ行:連用タ接続 でいる:連用形	Progressive
+#
+# ていく/でいく are the directional auxiliary, added 2026-09-18 so that
+# 引きずっていった stops reading 引きずって | いった and 歩いていく stops
+# reading 歩いて | いく. Measured over three visual-novel corpora, 75,767
+# sentences, 1,189 lines carry one -- 9.6 to 17.3 per *thousand* in each of
+# the three, so it is a rate rather than one writer's habit. It is the most
+# frequent 〜て auxiliary still split, not the only one: 〜てくる, 〜ておく and
+# 〜てみる have no rows either.
+#
+# 五段・カ行促音便 is 行く's own class and gives the whole paradigm from one
+# row per voicing: ていく, ていっ(た), ていか(ない), ていき(ます), ていけ(ば),
+# ていこ(う). でいく mirrors でいる and follows an onbin stem only.
+#
+# "Directional" is the THIRD word in this file the header's Wikipedia
+# terminology list does not carry. That article has no one-word gloss for
+# 〜ていく, and JMdict has no ていく headword either, so neither of the two
+# precedents above applies: Completive took the standard aspect term and
+# Progressive took the aspect term with JMdict's own gloss agreeing. This one
+# takes the learner-standard name instead -- 〜ていく and 〜てくる are taught as
+# the directional pair, motion away from and toward the speaker. It is
+# unqualified for the Completive reason: the two readings, spatial (歩いていく)
+# and temporal (増えていく), are not balanced enough to warrant a slash the way
+# Passive/Potential is. It cannot be confused with a form name here, which
+# "Continuative" would be -- Wikipedia uses that only as an alias for 連用形.
+# **One thing to settle before 〜てくる gets rows**, which it will: it is the
+# same concept in the opposite direction and would want the same word, and
+# label.rs's "each word appears at most once" rule would then silently drop
+# one of them from a chain carrying both. Whoever adds てくる needs two words,
+# not one.
+#
+# 未然形 and 連用形 are listed for the same reason 買っちゃわ is: the walk
+# reaches them and every reachable tuple needs a row.
+待っていけ	五段・タ行:連用タ接続 ていく:仮定形	Directional Conditional
+待っていけ	五段・タ行:連用タ接続 ていく:命令ｅ	Directional Imperative
+待っていきゃ	五段・タ行:連用タ接続 ていく:仮定縮約１	Directional Conditional
+待っていく	五段・タ行:連用タ接続 ていく:基本形	Directional
+待っていこ	五段・タ行:連用タ接続 ていく:未然ウ接続	Directional
+待っていか	五段・タ行:連用タ接続 ていく:未然形	Directional
+待っていっ	五段・タ行:連用タ接続 ていく:連用タ接続	Directional
+待っていき	五段・タ行:連用タ接続 ていく:連用形	Directional
+遊んでいけ	五段・バ行:連用タ接続 でいく:仮定形	Directional Conditional
+遊んでいけ	五段・バ行:連用タ接続 でいく:命令ｅ	Directional Imperative
+遊んでいきゃ	五段・バ行:連用タ接続 でいく:仮定縮約１	Directional Conditional
+遊んでいく	五段・バ行:連用タ接続 でいく:基本形	Directional
+遊んでいこ	五段・バ行:連用タ接続 でいく:未然ウ接続	Directional
+遊んでいか	五段・バ行:連用タ接続 でいく:未然形	Directional
+遊んでいっ	五段・バ行:連用タ接続 でいく:連用タ接続	Directional
+遊んでいき	五段・バ行:連用タ接続 でいく:連用形	Directional
+#
+# てくる/でくる, ておく/でおく and てみる/でみる are the three 〜て auxiliaries
+# the ていく note above names as still split, added 2026-09-21. Measured over
+# four further visual-novel corpora, 75,782 sentences: of the literal windows
+# in the text, the engine cut 2,368 of 3,232 〜てくる (73.3%), 223 of 241
+# 〜ておく (92.5%) and 422 of 425 〜てみる (99.3%), hints on. 〜てくる alone is
+# twice the rate 〜ていく was fixed at.
+#
+# カ変・クル is 来る's own class, 五段・カ行イ音便 is 置く's and 一段 is 見る's,
+# so each pair needs one row per voicing plus the second attachment site the
+# ていく note explains. でくる/でおく/でみる follow an onbin stem only.
+#
+# "Approaching", "Preparatory" and "Tentative" are the FOURTH, FIFTH and SIXTH
+# words in this file the header's Wikipedia terminology list does not carry.
+# Preparatory and Tentative are the standard grammatical terms for those two
+# aspects and need no more defence than Completive did. Approaching is the one
+# that was chosen rather than found: the note above reserved a second word for
+# 〜てくる precisely because it is the same directional concept as 〜ていく in
+# the opposite direction and label.rs would drop a repeat, so it cannot also be
+# "Directional". It is plain English in this file's learner register rather
+# than the linguists' "venitive", and the cost is that the pair no longer reads
+# as a pair.
+#
+# **Three forms of てくる/でくる are blocked in AUX_FORM_BLOCK and so have no
+# rows here**, which is why this block is shorter than the class's form list.
+# カ変's 仮定形 is くれ, its 体言接続特殊 くん and its 体言接続特殊２ く, and in
+# real text all three of those surfaces belong to something else: 〜てくれ is
+# くれる, the giving auxiliary (2,455 occurrences against 7 of 〜てくれば),
+# 〜てくん is its contraction, and 919 of the bare 〜てく are 〜てください. See
+# table.rs for the ledger.
+#
+# 待っておいで (5 occurrences) can still merge as ておい + で and is left
+# standing: too rare to buy a block of its own, and the shape is named here so
+# that whoever meets it knows it was seen.
+待ってくりゃ	五段・タ行:連用タ接続 てくる:仮定縮約１	Approaching Conditional
+待ってこい	五段・タ行:連用タ接続 てくる:命令ｉ	Approaching Imperative
+待ってこよ	五段・タ行:連用タ接続 てくる:命令ｙｏ	Approaching Imperative
+待ってくる	五段・タ行:連用タ接続 てくる:基本形	Approaching
+待ってこよ	五段・タ行:連用タ接続 てくる:未然ウ接続	Approaching
+待ってこ	五段・タ行:連用タ接続 てくる:未然形	Approaching
+待ってき	五段・タ行:連用タ接続 てくる:連用形	Approaching
+遊んでくりゃ	五段・バ行:連用タ接続 でくる:仮定縮約１	Approaching Conditional
+遊んでこい	五段・バ行:連用タ接続 でくる:命令ｉ	Approaching Imperative
+遊んでこよ	五段・バ行:連用タ接続 でくる:命令ｙｏ	Approaching Imperative
+遊んでくる	五段・バ行:連用タ接続 でくる:基本形	Approaching
+遊んでこよ	五段・バ行:連用タ接続 でくる:未然ウ接続	Approaching
+遊んでこ	五段・バ行:連用タ接続 でくる:未然形	Approaching
+遊んでき	五段・バ行:連用タ接続 でくる:連用形	Approaching
+待っておけ	五段・タ行:連用タ接続 ておく:仮定形	Preparatory Conditional
+待っておきゃ	五段・タ行:連用タ接続 ておく:仮定縮約１	Preparatory Conditional
+待っておけ	五段・タ行:連用タ接続 ておく:命令ｅ	Preparatory Imperative
+待っておく	五段・タ行:連用タ接続 ておく:基本形	Preparatory
+待っておこ	五段・タ行:連用タ接続 ておく:未然ウ接続	Preparatory
+待っておか	五段・タ行:連用タ接続 ておく:未然形	Preparatory
+待っておい	五段・タ行:連用タ接続 ておく:連用タ接続	Preparatory
+待っておき	五段・タ行:連用タ接続 ておく:連用形	Preparatory
+遊んでおけ	五段・バ行:連用タ接続 でおく:仮定形	Preparatory Conditional
+遊んでおきゃ	五段・バ行:連用タ接続 でおく:仮定縮約１	Preparatory Conditional
+遊んでおけ	五段・バ行:連用タ接続 でおく:命令ｅ	Preparatory Imperative
+遊んでおく	五段・バ行:連用タ接続 でおく:基本形	Preparatory
+遊んでおこ	五段・バ行:連用タ接続 でおく:未然ウ接続	Preparatory
+遊んでおか	五段・バ行:連用タ接続 でおく:未然形	Preparatory
+遊んでおい	五段・バ行:連用タ接続 でおく:連用タ接続	Preparatory
+遊んでおき	五段・バ行:連用タ接続 でおく:連用形	Preparatory
+待ってみれ	五段・タ行:連用タ接続 てみる:仮定形	Tentative Conditional
+待ってみりゃ	五段・タ行:連用タ接続 てみる:仮定縮約１	Tentative Conditional
+待ってみん	五段・タ行:連用タ接続 てみる:体言接続特殊	Tentative
+待ってみろ	五段・タ行:連用タ接続 てみる:命令ｒｏ	Tentative Imperative
+待ってみよ	五段・タ行:連用タ接続 てみる:命令ｙｏ	Tentative Imperative
+待ってみる	五段・タ行:連用タ接続 てみる:基本形	Tentative
+待ってみよ	五段・タ行:連用タ接続 てみる:未然ウ接続	Tentative
+待ってみ	五段・タ行:連用タ接続 てみる:未然形	Tentative
+待ってみ	五段・タ行:連用タ接続 てみる:連用形	Tentative
+遊んでみれ	五段・バ行:連用タ接続 でみる:仮定形	Tentative Conditional
+遊んでみりゃ	五段・バ行:連用タ接続 でみる:仮定縮約１	Tentative Conditional
+遊んでみん	五段・バ行:連用タ接続 でみる:体言接続特殊	Tentative
+遊んでみろ	五段・バ行:連用タ接続 でみる:命令ｒｏ	Tentative Imperative
+遊んでみよ	五段・バ行:連用タ接続 でみる:命令ｙｏ	Tentative Imperative
+遊んでみる	五段・バ行:連用タ接続 でみる:基本形	Tentative
+遊んでみよ	五段・バ行:連用タ接続 でみる:未然ウ接続	Tentative
+遊んでみ	五段・バ行:連用タ接続 でみる:未然形	Tentative
+遊んでみ	五段・バ行:連用タ接続 でみる:連用形	Tentative
+#
+# てる/でる are the ている/でいる contraction, the colloquial progressive:
+# 思ってる, 遊んでる, 食べてる. table.rs gives them their own ATTACHES_TO
+# rows for the same reason ちゃう has them -- IPADIC tokenizes the
+# contraction as its own token, and although JMdict does carry てる and
+# でる as headwords, reaching that entry needs a separate span and the only
+# span that could precede one is refused by the tokenizer constraint. See
+# table.rs.
+#
+# "Progressive" is the SECOND word in this file that the Wikipedia
+# terminology list in the header does not carry -- that article discusses
+# ている under its gerund and infinitive sections and gives no one-word
+# English gloss, and it uses "continuative" only as an alias for 連用形.
+# Like Completive above, the word is the standard grammatical term for the
+# aspect (Wikipedia, "Grammatical aspect", read 2026-09). The aspect is
+# genuinely ambiguous -- progressive for 走ってる, resultative for
+# 知ってる and 結婚してる -- but unlike れる/られる the two readings are not
+# balanced, so the primary one is used unqualified, which is the Completive
+# precedent rather than the Passive/Potential one. JMdict's own gloss for
+# the entry is "to be ...-ing" and agrees.
+#
+# 未然形 and 連用形 are the empty-suffix stems, listed for the same reason
+# 買っちゃわ is: the walk reaches them and every reachable tuple needs a row.
+待ってれ	五段・タ行:連用タ接続 てる:仮定形	Progressive Conditional
+待ってりゃ	五段・タ行:連用タ接続 てる:仮定縮約１	Progressive Conditional
+待ってん	五段・タ行:連用タ接続 てる:体言接続特殊	Progressive
+待ってろ	五段・タ行:連用タ接続 てる:命令ｒｏ	Progressive Imperative
+待ってる	五段・タ行:連用タ接続 てる:基本形	Progressive
+待って	五段・タ行:連用タ接続 てる:未然形	Progressive
+待って	五段・タ行:連用タ接続 てる:連用形	Progressive
+遊んでれ	五段・バ行:連用タ接続 でる:仮定形	Progressive Conditional
+遊んでりゃ	五段・バ行:連用タ接続 でる:仮定縮約１	Progressive Conditional
+遊んでん	五段・バ行:連用タ接続 でる:体言接続特殊	Progressive
+遊んでろ	五段・バ行:連用タ接続 でる:命令ｒｏ	Progressive Imperative
+遊んでる	五段・バ行:連用タ接続 でる:基本形	Progressive
+遊んで	五段・バ行:連用タ接続 でる:未然形	Progressive
+遊んで	五段・バ行:連用タ接続 でる:連用形	Progressive
+買っちゃえ	五段・ワ行促音便:連用タ接続 ちゃう:仮定形	Completive Conditional
+買っちゃえ	五段・ワ行促音便:連用タ接続 ちゃう:命令ｅ	Completive Imperative
+買っちゃう	五段・ワ行促音便:連用タ接続 ちゃう:基本形	Completive
+買っちゃお	五段・ワ行促音便:連用タ接続 ちゃう:未然ウ接続	Completive
+買っちゃわ	五段・ワ行促音便:連用タ接続 ちゃう:未然形	Completive
+買っちゃっ	五段・ワ行促音便:連用タ接続 ちゃう:連用タ接続	Completive
+買っちゃい	五段・ワ行促音便:連用タ接続 ちゃう:連用形	Completive
+読んじゃえ	五段・マ行:連用タ接続 じゃう:仮定形	Completive Conditional
+読んじゃえ	五段・マ行:連用タ接続 じゃう:命令ｅ	Completive Imperative
+読んじゃう	五段・マ行:連用タ接続 じゃう:基本形	Completive
+読んじゃお	五段・マ行:連用タ接続 じゃう:未然ウ接続	Completive
+読んじゃわ	五段・マ行:連用タ接続 じゃう:未然形	Completive
+読んじゃっ	五段・マ行:連用タ接続 じゃう:連用タ接続	Completive
+読んじゃい	五段・マ行:連用タ接続 じゃう:連用形	Completive
+買っちまえ	五段・ワ行促音便:連用タ接続 ちまう:仮定形	Completive Conditional
+買っちまえ	五段・ワ行促音便:連用タ接続 ちまう:命令ｅ	Completive Imperative
+買っちまう	五段・ワ行促音便:連用タ接続 ちまう:基本形	Completive
+買っちまお	五段・ワ行促音便:連用タ接続 ちまう:未然ウ接続	Completive
+買っちまわ	五段・ワ行促音便:連用タ接続 ちまう:未然形	Completive
+買っちまっ	五段・ワ行促音便:連用タ接続 ちまう:連用タ接続	Completive
+買っちまい	五段・ワ行促音便:連用タ接続 ちまう:連用形	Completive
+読んじまえ	五段・マ行:連用タ接続 じまう:仮定形	Completive Conditional
+読んじまえ	五段・マ行:連用タ接続 じまう:命令ｅ	Completive Imperative
+読んじまう	五段・マ行:連用タ接続 じまう:基本形	Completive
+読んじまお	五段・マ行:連用タ接続 じまう:未然ウ接続	Completive
+読んじまわ	五段・マ行:連用タ接続 じまう:未然形	Completive
+読んじまっ	五段・マ行:連用タ接続 じまう:連用タ接続	Completive
+読んじまい	五段・マ行:連用タ接続 じまう:連用形	Completive
+#
+# The godan potential, added 2026-09-23 as table.rs's `る` row: 書け + る.
+# IPADIC files 可能動詞 as 一段 lexemes of their own, so until then the table
+# never reached the godan lemma and 書けた read 書け "Conditional" + た. The
+# lemma is a bare る conjugating as 一段 over the godan's own 仮定形. Its
+# 未然形 and 連用形 are empty, so they are zero-width steps the table takes
+# only under a following auxiliary, and they have no depth-1 row for the
+# reason a BOUND_FORMS form has no depth-0 row: neither is ever a word on its
+# own. The rows after the first three are the chains that go through them.
+#
+# "Potential" is the SEVENTH word in this file that the header's Wikipedia
+# list does not carry as written -- it carries "Passive/Potential", which is
+# right for れる/られる and wrong here: 書ける cannot be a passive, so the
+# slash would assert an ambiguity this form does not have.
+#
+# **Four of the potential's forms are blocked in AUX_FORM_BLOCK and so have no
+# rows**: 命令ｙｏ and 未然ウ接続, both よ, because 待てよ is an imperative and
+# the particle よ; 命令ｒｏ ろ, because the potential has no imperative; and
+# 体言接続特殊 ん, which would tie with the negative 書けん below and win on
+# depth, reading "can't write" as "can".
+書ける	五段・カ行イ音便:仮定形 る:基本形	Potential
+書けれ	五段・カ行イ音便:仮定形 る:仮定形	Potential Conditional
+書けりゃ	五段・カ行イ音便:仮定形 る:仮定縮約１	Potential Conditional
+書けた	五段・カ行イ音便:仮定形 る:連用形 た:基本形	Potential Past
+書けない	五段・カ行イ音便:仮定形 る:未然形 ない:基本形	Potential Negative
+書けなかった	五段・カ行イ音便:仮定形 る:未然形 ない:連用タ接続 た:基本形	Potential Negative Past
+書けます	五段・カ行イ音便:仮定形 る:連用形 ます:基本形	Potential Polite
+書けて	五段・カ行イ音便:仮定形 る:連用形 て:基本形	Potential Te-form
+書けず	五段・カ行イ音便:仮定形 る:未然形 ぬ:連用ニ接続	Potential Negative
+書けん	五段・カ行イ音便:仮定形 る:未然形 ん:基本形	Potential Negative

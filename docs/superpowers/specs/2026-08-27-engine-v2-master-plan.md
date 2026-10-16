@@ -65,20 +65,30 @@ The plan succeeds when all four hold:
 2. **Span accuracy** and **entry top-1** (§5.2) on the Phase 0 gold corpus are
    each no lower than the current engine's, measured by the same harness.
 
+   **That corpus contains no visual-novel dialogue** — 69 pastiche, 41 Aozora
+   pre-war literary, 32 Wikinews/Wikipedia, 8 noise, and tier C2 excluded by
+   design. This criterion is therefore a floor on literary and news prose, not
+   on the register README's first paragraph names as the target. It is still a
+   floor and it still binds; §5.2's "what register these numbers speak for"
+   block says how to weigh it against corpus evidence when the two disagree.
+
    **Met 2026-09-16, and it was not met before that day.** Span accuracy had
    cleared the v1 baseline since Phase 1b; **entry top-1 had been sitting
    below it in both hint states for eight phases and no document said so.**
    Against v1 (Phase 1a handoff §2), same corpus, same 2,163 spans, same
    harness:
 
-   | | v1 | v2 before | v2 now |
+   | | v1 | v2 before | v2 now (2026-09-30, `a7a9f24`) |
    | --- | --- | --- | --- |
-   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7393 (1599) |
-   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.8428 (1823) |
-   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9374** ✓ |
-   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9347** ✓ |
+   | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7351 (1590) |
+   | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7859 (1700) |
+   | entry top-1, hints off | 0.9159 | **0.9093** ✗ | **0.9610** ✓ |
+   | entry top-1, hints on | 0.9155 | **0.9125** ✗ | **0.9617** ✓ |
 
-   Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**,
+   Span accuracy hints-on rose again the same day, 0.8285 → **0.8437 (1825)**
+   — a 2026-09-16 reading; later changes have moved it repeatedly and the
+   table three lines above carries the current figure, which is the only one
+   to quote —
    when `PRONOUNCE_CROSS` stopped charging for a boundary the tokenizer put
    *inside* an inflection. That change on its own pushed entry top-1 back
    under the floor — 30 newly-placed spans are harder and 15 resolved wrong —
@@ -94,8 +104,8 @@ The plan succeeds when all four hold:
    is the measurement, and `order` runs after the DP, so nothing else moved.
 
    **Read "span accuracy" as §5.2 defines it — strict.** `span tolerant` is a
-   later diagnostic and *is* below v1 (0.8465 → 0.7924 hints off), because v1
-   earned it with 167 dictionary merges against v2's 62 and tolerant credits
+   later diagnostic and *is* below v1 (0.8465 → 0.8206 hints off), because v1
+   earned it with 167 dictionary merges against v2's 70 and tolerant credits
    exactly the particle-absorbing merges criterion 3's fixture exists to kill.
    §5.2 already records that metric as over-forgiving by about 1.3 points for
    this reason. It is not this criterion's metric and is not a regression.
@@ -665,17 +675,346 @@ authoritative current figure and those are history. Gold index rebuilt from
 
 | | strict | tolerant | entry top-1 | compounds | coarsening |
 | --- | --- | --- | --- | --- | --- |
-| hints off | 0.7393 (1599) | 0.8003 (1731) | 0.9374 | 0.6129 (114 / 186) | 132 spans in 65 merges |
-| hints on | **0.8428 (1823)** | **0.8826 (1909)** | **0.9347** | **0.6344 (118 / 186)** | 86 spans in 43 merges |
+| hints off | 0.7351 (1590) | 0.8262 (1787) | 0.9610 (1184 / 1232) | 0.6344 (118 / 186) | 197 spans in 96 merges |
+| hints on | **0.7859 (1700)** | **0.9034 (1954)** | **0.9617 (1205 / 1253)** | **0.8172 (152 / 186)** | 254 spans in 118 merges |
 
-Compounds by class, hints on: `lexical` 46 / 112, `false-match` 30 / 32,
-`transparent` 42 / 42, 8 `ambiguous` excluded. Latency at the app's ceiling
-(`jparser-cli bench`, gold index, k = 3): scaling 1.05x hints on, 1.01x off.
+Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
+`transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 56 / 112,
+`false-match` 23 / 32, `transparent` 39 / 42.
 
-**Set 2026-09-16, last by the inflection-interior gate on `PRONOUNCE_CROSS`
-and `order`'s sense-count tiebreak.** Both hint states' entry top-1 and the
-hints-on span metrics moved that day; the compound metric and hints-off span
-accuracy have not moved since Phase 3.
+**Refreshed 2026-09-23 at `5194b8a`; the block had stood unchanged since
+2026-09-18** while the cells moved under it — it read 1698 / 1948 / 0.9528
+hints on and 1593 / 1786 / 0.9506 hints off. Each move is recorded in the
+handoff of the session that made it, dated 2026-09-18 to 2026-09-23 in
+`docs/superpowers/`; the last three are the twelve-corpora table fixes
+(1696 / 1950 / 0.9528 -> 1698 / 1952 / 0.9584 hints on, 1588 / 1785 /
+0.9504 -> 1589 / 1786 / 0.9569 off), the godan potential (+1 strict,
+tolerant and entry hit hints on) and the empty-stem exemption on
+`PRONOUNCE_CROSS` (+1 again, hints on only;
+[`2026-09-23-empty-stem-and-potential-stem-handoff.md`](../2026-09-23-empty-stem-and-potential-stem-handoff.md)).
+None of the three moves a compound class line.
+
+**Refreshed again 2026-09-26 at `58a8a80`**, for one move: `FUNCTION_STACK`
+no longer charges a `uk` word of three kana or more hints off, and gold gains
+`やがて` (1589 / 1786 / 0.9569 -> 1590 / 1787 / 0.9570 off; hints on
+unchanged, by construction). The display clause before ます committed with it
+moves no cell. See
+[`2026-09-26-reported-sentence-handoff.md`](../2026-09-26-reported-sentence-handoff.md).
+
+**Refreshed again 2026-09-30 at `a7a9f24`**, for entry top-1 alone: 1201 ->
+1205 hints on and 1179 -> 1184 hints off, all from counting a noun's `uk`
+only on its first sense (`9bd5d33`). The two other order clauses committed
+with it -- a verb left on an unfinished form, and サ変's し under れる --
+move no cell, and no span moves in either state. See
+[`2026-09-30-first-gloss-order-handoff.md`](../2026-09-30-first-gloss-order-handoff.md).
+
+Latency at the app's ceiling (`jparser-cli bench`, gold index, k = 3, hints
+on, 10,040 characters), interleaved A/B across the three changes of
+2026-09-23: 644 / 687 / 624 ms before against 619 / 672 / 579 after the first,
+565 / 544 / 540 / 573 / 551 against 571 / 562 / 564 / 577 / 561 for the
+second, 579 / 562 / 568 against 563 / 549 / 547 for the third; scaling
+0.91-1.07x throughout. Two builds that differ by one suffix check read 3 %
+apart, which is this machine's layout noise; every figure is a reading from
+the moment it was taken.
+
+**WHAT REGISTER THESE NUMBERS SPEAK FOR, added 2026-09-18 because nothing said
+it and a refusal was argued on it.** The 150 sentences behind every cell above
+are, by `source` tier: **69 hand-written pastiche (C1), 41 Aozora Bunko pre-war
+literary prose (A), 32 ja.Wikinews / ja.Wikipedia (B), 8 derived noise (D)**.
+Visual-novel dialogue is **0 of 150, by design** —
+`tests/fixtures/gold_sources.md` records that tier C2, real `vn_data` lines, "is
+never committed and has no rows here", because the text is copyrighted and the
+committed corpus is the reproducible contract.
+
+That exclusion is a licensing decision and it is the right one. Naming its
+*measurement* consequence is what was missing: README's first paragraph says
+this program is "for visual novels, games, and immersion reading", so **every
+gate in this section is measured on text the product does not primarily
+target**, and the corpora the disagreement probe runs on are visual-novel
+dialogue and nothing else. Neither side is "the truth". The rule, when they
+disagree, is to **say which register each number speaks for** rather than
+quoting whichever agrees with the change under test — and in particular a
+`strict` fall on literary and news prose is weaker evidence against a change
+than the same fall would be on the target register. This is a weighting, not
+a licence to skip a gate; criterion 3's fixture and the compound class lines
+stay absolute.
+
+Worked example, [`2026-09-18-three-corpus-adjudication-handoff.md`](../2026-09-18-three-corpus-adjudication-handoff.md)
+§8: ungating `LEN_GAIN` hints-off reads `compounds` 118 → 158 with `lexical`
+56 → 94 and no split class regressing, against `strict` 1604 → 1525. It was
+refused on independent VN-corpus evidence — the spans it invents sever
+morphology, `話しかける` → `話しかけ` + `る` — and that refusal stands. But the
+strict fall was quoted beside it as though the two carried equal weight, and
+they do not.
+
+**The fix for this is `tests/fixtures/gold_local.jsonl`**, which `.gitignore`
+already reserves: "the local gold corpus over `vn_data` lines, scored by the
+same `jparser-cli score` as the committed corpus but never committed (Phase 0
+design §3.2)". Phase 0 built the mechanism and nothing has used it. A few
+hundred hand-adjudicated VN-register spans would make a VN-class change
+*approvable* rather than only detectable, which is the constraint that decided
+the largest available change of 2026-09-18. It is hand adjudication, so it is
+a phase of its own.
+
+**Moved 2026-09-18 by `table.rs`'s `ていく`/`でいく` rows** (a dated record, like the tables below; the block above is current), the
+directional auxiliary — the most frequent member of the 〜て family still
+split in *both* hint states after the `ている` work. `歩いて` | `いく` and
+`引きずって` | `いった` now read as one segment, `歩く` Directional and
+`引きずる` Directional Past. Found by running the disagreement probe over two
+corpora it had never seen: 1,189 lines of 75,767 carry one, a rate of 9.6 to
+17.3 per **thousand** in each of the three separately, so it is a rate rather
+than one writer's habit.
+
+**It is not the last of them.** 〜てくる, 〜ておく and 〜てみる have no rows
+either and still read as two segments — `歩いて` | `くる`, `買って` | `おく`,
+`歩いて` | `みる` — and `持ってくる` merges only because JMdict carries it as a
+headword. 〜てくる is the same directional concept in the opposite direction
+and wants a label word of its own, not this one; `conjugation_labels.txt`
+records why.
+
+**Shipped in two commits, and the second is the one to read.** The first gave
+`ていく` a single attachment site, 連用タ接続, which reaches 五段 onbin stems and
+**leaves every 一段, サ変・スル and 特殊・デス verb behind** — `食べていく`,
+`落ちていった`, `溶けていく`, `見ていく` all still split. That is the rule
+`ATTACHES_TO`'s own doc already states for た/て: IPADIC names 連用タ接続 only
+where a class distinguishes it from plain 連用形, so either row alone leaves
+half the classes unreachable. `でいく` keeps one row, because で follows an
+onbin stem and nothing else.
+
+Hints on: `strict` 1714 → **1698**, `tolerant` **1948** unmoved, `entry top-1`
+0.9534 → 0.9528, `compounds` 152 with all three class lines identical,
+coarsening 234 spans in 108 merges → 250 in 116. Hints off: `strict` 1610 →
+1593, `tolerant` 1791 → 1786, `entry top-1` 0.9513 → 0.9506, `compounds` 118
+with all three class lines identical, coarsening 181 in 88 → 193 in 94.
+
+**The strict fall is decomposed, not assumed.** Hints on, 8 gold spans are
+lost and 0 gained, and **all 8 have both endpoints on gold boundaries** — they
+are four intended merges and nothing else, `折れて`+`いった`, `溶けて`+`いく`
+among them. Zero damage. Hints off, 11 are lost and 0 gained: 8 are the same
+coarsening and **3 are real damage**, all in one sentence — `出ていったようだ`
+reads `出ていっ` | `たよう` | `だ`, where `たよう` is 態様 "condition; manner"
+and the auxiliary's own onbin stem has been taken for a word.
+
+**That last one has a named cause and a priced fix, and the fix is refused
+here.** `BOUND_FORMS` exists so that a chain *ending* at 連用タ接続 is not a
+word — `優しいっ` must not read `優し` + `いっ` — but it is consulted only for a
+headword's own inflection, never for an auxiliary's. Extending it to
+auxiliaries was built and does fix it: `出ていったようだ` comes back whole,
+hints-off `strict` 1593 → 1594, `tolerant` 1786 → **1789**, `compounds`
+118 → **119** with `lexical` 56 → 57, and hints on is identical to the digit.
+It is refused because it deletes **nine committed rows** from
+`conjugation_labels.txt` — `食べなかっ`, `食べたかっ`, `読んだっ`, `買っちゃっ`,
+`読んじゃっ`, `買っちまっ`, `読んじまっ` and this change's own two — and that
+fixture declares itself authoritative over the code. Seven of the nine predate
+this work, so the change is a fixture revision needing its own adjudication,
+not a row to slip in beside a table addition. `BOUND_FORMS`'s own comment set
+that precedent: each bound form "deletes candidates of its own and wants its
+own score run".
+
+**No `CHAIN_BLOCK` or `AUX_FORM_BLOCK` rows accompany these**, and that is a
+statement about the class rather than a measurement. Both tables exist because
+一段's 未然形 and 連用形 have *empty* suffixes, so `てる` carries a bare `て` on
+which a one-kana auxiliary stacks and collides with a sentence-final particle.
+五段・カ行促音便 has no empty form: its 未然形 is `ていか`, so the surfaces an
+auxiliary could reach are `ていかね` and `ていかな`, which are `持っていかねば`
+and `持っていかなきゃ`. The chain count is 73,731 → **82,573**.
+
+Latency unmoved, interleaved A/B over three rounds each way: hints on, 10,040
+characters read 567 / 543 / 544 ms before against 542 / 545 / 537 after, and
+hints off 618 / 618 / 619 against 620 / 599 / 606. The scaling cell reads
+0.99–1.02x before against 1.05–1.06x after in the hints-on state, and that
+rise is the 1,005-character *denominator* getting faster (57 / 54 / 53 ms
+against 51 / 51 / 51), not the paste getting slower.
+
+**Moved 2026-09-18 by `table.rs`'s `ている`/`でいる` rows**, the
+uncontracted form of the same auxiliary, and it is the largest granularity
+change this engine has made. `待っていた` read `待って` | `い` | `た` with `い`
+glossed "the Boar (twelfth sign of the Chinese zodiac)" — 218 corpus regions,
+the largest single count the disagreement probe found — and now reads as one
+segment, `待つ` Progressive Past. So do `思っている`, `食べている`,
+`している`, `遊んでいる`, `来ていない` and `遅れています`.
+
+**〜ている is an auxiliary and every other auxiliary this engine knows already
+merges** — 〜た, 〜ない, 〜ます, 〜たい, 〜ちゃう, and as of the rows below
+〜てる. Splitting it was not a policy; it was a missing row, and keeping it
+split while the contraction merged would have made the same construction two
+granularities apart by which spelling the speaker chose.
+
+Hints on: `strict` 1746 → 1714 and `tolerant` 1935 → **1948**, `entry top-1`
+0.9507 → **0.9534**, `compounds` 152 with all three class lines identical.
+Hints off: `strict` 1634 → 1610, `tolerant` 1778 → **1791**, `entry top-1`
+0.9506 → **0.9513**, `compounds` 113 → **118** with `lexical` 52 → 56.
+Coarsening 189 spans in 86 merges → 234 in 108.
+
+**The strict fall is decomposed, not assumed.** Of the 25 new spans on the
+gold corpus hints on, **23 have both endpoints on gold boundaries** — the
+coarsening this section prices at about 16.5 points — and 2 do not:
+`当惑|していた` where gold cuts `当惑して|いた`, and `行き|あっていました` where gold
+cuts `行きあって|いました`. In both the offending left cut is **pre-existing** —
+the engine already read `当惑|して|い|た` and `行き|あって|い|ました` — so the
+merge coarsens the auxiliary tail of an already-misplaced boundary rather
+than inventing a word across a good one. `tolerant` rising in **both** hint
+states is the same finding from the other side.
+
+**Over 8,334 lines of dialogue**: 652 sentences change, 754 new spans, **336
+stray `い` segments and 239 stray `た` segments disappear**, and **zero** new
+spans end in a sentence-final particle — the failure mode the `てる` rows
+below had to be gated against does not arise here.
+
+**The one gate row that moved, and why it was re-pointed rather than
+weakened.** `spurious_merges.txt`'s `してい` row asserts a cut inside that
+surface in `b:wn25517-3`; with `ている` the sentence reads `予定` | `に` |
+`している`, so there is none. The row exists to stop 1308000 (指定) or the
+kana-unified 子弟/師弟 taking that span, and neither does: the `に` is its own
+segment, nothing is absorbed, and the covering entry is `する` Progressive.
+Verified before touching it — across eight readings of that sentence 指定 never
+takes the span, and `してい` parsed alone now leads with `する` Progressive where
+it used to lead with 子弟 "children; sons". The test now accepts a **strictly
+longer** matched word covering the surface **only when its top entry is not
+the row's own `ent_seq`** — which is what the row was always about — and a
+segment sitting exactly on the surface still fails whatever it matched.
+Column 2 of that fixture was read by nothing until now.
+
+**Three later changes on 2026-09-18 moved no cell at all and are recorded in
+the handoff's §9 and §10**: the gate acceptance above tightened from
+`s.start <= at` to `s.start == at`, which is what restores the `uk`-flag
+refusal to a running check; `table.rs`'s `CHAIN_BLOCK`, which stops `ぬ` at
+仮定形 and `ない` at ガル接続 stacking on the `てる` family so `してね` is a
+request again rather than `する` Progressive Negative Conditional; and
+`cost.rs`'s `KATAKANA_MIN_PIECE`, the mirror of `relax::MIN_PIECE`, which
+stops `PRONOUNCE_CROSS` charging for a tokenizer cut inside a katakana run
+that leaves a piece shorter than three — `センパイ` read `セン` "line" +
+`パイ` "pie" in 70 corpus lines and correctly in 5, and the only thing that
+varied was whether IPADIC called it one token.
+
+**Set earlier the same day by `table.rs`'s `てる`/`でる` rows**, the ている /
+でいる contraction: `思ってる` read `思` | `っ` | `てる` with `てる` glossed
+照る "to shine", in 122 region surfaces and 300 corpus sentences, and now
+reads as one segment labelled `思う` Progressive. The rows are the same shape
+as the ちゃう family's — a contraction IPADIC tokenizes on its own. JMdict
+does carry `てる`/`でる` as headwords, but reaching that entry needs a separate
+span and the only span that could precede one is the one `is_allowed` refuses,
+so the row is what puts the contraction inside a span rather than beside it.
+They sit **below** the `て`/`で` rows because 一段's
+empty-suffix 未然形 and 連用形 make `てる`'s own surfaces include a bare `て`;
+inserted first they relabelled every plain te-form "Progressive", which
+`parse_sentences.txt`'s snapshot caught.
+
+**The rows also needed `AUX_FORM_BLOCK`, and that is where the real risk
+was.** 一段 gives both 命令ｙｏ and 未然ウ接続 the suffix よ, so `てる` and
+`でる` carried the surfaces `てよ`/`でよ` — which is the sentence-final
+particle. Ungated, 22 occurrences over 8,334 lines absorbed it (`待ってよ`,
+`返してよ`, `呼んでよ`), and five were far worse: `なく` is 五段・カ行イ音便,
+so `な`+`い` is a 連用タ接続 site and `忘れないでよね` parsed as `忘れ` +
+`ないでよ` + `ね`, the negation destroyed and the span glossed `なく` "to
+cry". The contraction's imperative is `待ってろ`, never `待ってよ`, so the two
+よ-forms are blocked; the cost is the corpus's single `てよう`.
+
+Cells at the time: `strict` 1745 → 1746 hints on and 1633 → 1634 off,
+`tolerant` 1932 → 1935 and 1775 → 1778, `compounds` and every class line
+identical in both states. The reachable-chain count went 50,419 → 60,926 here
+and then 72,049 for the `ている` rows above; `bench` says the runtime cost is
+nothing, as it did for ちゃう — 1.04x hints on and 0.98x off after both, with
+interleaved spreads overlapping on a loaded machine.
+
+**What it still costs, measured before and after over the same 8,334
+lines**: 1,225 sentences change and 1,358 new spans appear, of which **34
+absorb a sentence-final ね or な** — `してね` reads `する` Progressive Negative
+where the text is a request, because 特殊・ナイ's 体言接続特殊２ *is* `ね` and
+`してねえ` really is that contraction — and **3 eat a kanji adverb**
+(`決してない` as `決す` Progressive Negative, hints-on only). 37 against
+~1,320 correct contractions. The fix for the first is a chain-level block
+(`ない` may not attach to `てる` at 体言接続特殊２), which the current
+`(lemma, form)` shape cannot express; it is named, not built.
+
+**Entry top-1's two cells were set by one clause in
+`assemble::order`**: the `PRONOUNCE` demotion no longer applies to an entry
+JMdict tags `uk`. A kana spelling of a kanji word is a fallback and deserves
+the demotion; a `uk` entry — 9,580 of JMdict's 218,449 — is one whose kana
+*is* the normal spelling, and demoting it is simply wrong. `待っていた` is
+where it was found: `いる` is `uk`, and its `いた` lost to `い`, "the Boar
+(twelfth sign of the Chinese zodiac)". **0.9400 → 0.9500 hints on and 0.9358 →
+0.9507 hints off, +13 and +19 hits on unchanged denominators, and every other
+cell in this table was identical to the digit at the time** — `order` runs
+after the DP, so no boundary can move; the `てる` rows above have since moved
+`tolerant` and one hints-off span. The snapshot moved in nine places and every one is a
+gloss list reordering, `時間がない` now leading with 無い "nonexistent" rather
+than the negative auxiliary.
+
+**It is deliberately not a `WordFlags` bit.** That was built and measured, and
+it carries `uk` into `cost::PRONOUNCE_CROSS` as well: entry top-1 rises about
+as far, `lexical` goes 82 → 87 and `strict` 1745 → 1737, but `ことになって`
+swallows its `に` and the 26-row `spurious_merges.txt` gate goes to 25, because
+`なる` is `uk` too. Criterion 3 refuses it. The same refusal covers widening
+`PRONOUNCE_CROSS`'s chain exemption to the chain's *start*, which fixes
+`待っていた`'s span as well as its gloss and breaks `はこう` — criterion 3's own
+named sentence — for `false-match` 30 → 26 and `transparent` 40 → 37.
+
+**The span half of that defect was still open when this paragraph was
+written and is closed by the `ている` rows above**, later the same day.
+`待っていた` is one segment. `いた` standing outside the auxiliary is not:
+「猫がいた」 still reads `猫`|`が`|`い`|`た`.
+
+**The span cells were set by `cost.rs`'s `CONTENT_MATCH`** — a `MATCH`
+surcharge withheld from particles. It exists because `LEN_GAIN`'s square
+cancels exactly when a tiling peels a *single* character off either end of a
+headword: a non-COMMON entry of any length split into a COMMON piece of
+`n-1` and a COMMON piece of `1` loses by the same one point at `n = 2` as at
+`n = 5`, which is `呼び|方`, `発売|所`, `副|大統領`, `月|平均`, `一歩|先`,
+`総|売り上げ` and `年|ぶり`. Raising `MATCH` to 3 closes that gap and also
+merges `彼の`, `名の`, `煙が`, `今も` and `側から` — because a per-span
+constant cannot see that the peeled character is a particle in one set and a
+bound morpheme in the other. Withholding the surcharge from `PARTICLE` is
+that distinction, and it costs neither split class anything.
+
+**It was found by corpus, not by screenshot.**
+`examples/corpus_disagree.rs` ranks the places this engine and the ta-old
+port cut differently over 8,334 lines of visual-novel dialogue, by how many
+of the engine's own signals agree. This class was the whole head of that
+ranking: 77 regions at three signals and 238 at two, hints on. After the
+term, 7 and 36 — **and that figure is a split-detector reporting on a
+merge-increasing change**, so read it as confirmation that the intended class
+closed, never as evidence that nothing else opened. Three of the four signals
+can only see over-splitting; the probe's own module doc names the blind spot.
+The merge direction was counted separately and is flat: regions where this
+engine has fewer segments than v1 go 525 to 529 and 1,228 sentences to 1,232.
+**The corpus is copyrighted game script and is not in the repository**, so
+this figure cannot be re-checked in-tree — the same standing as §4's "gate 6
+was not run". What is re-checkable is every gold cell above and the arithmetic
+contract `a_one_character_peel_ties_unless_the_peeled_piece_is_a_particle`
+pins.
+
+Hints on: `compounds` 142 -> **152** with `lexical` 72 -> 82 and **both
+split classes unmoved** — `false-match` 30 / 32 and `transparent` 40 / 42.
+`strict` falls 1754 -> 1745 while coarsening rises 165 spans in 74 merges to
+187 in 85, which is this section's own 16.5-point measurement again: ten more
+compounds kept whole cost their own short-unit gold spans. `tolerant` rises
+1919 -> 1932 and `entry top-1` 0.9374 -> 0.9400.
+
+**Hints off moves for once, and upward**: `strict` 1611 -> 1633, `tolerant`
+1749 -> 1775, `entry top-1` 0.9347 -> 0.9358. That matters more than the
+hints-on half: `mecab_hints` is `#[serde(default)]` on a `bool`, so a fresh
+install runs hints **off**.
+
+**It is not the class above that moves there, and the term's own arithmetic
+says so.** `LEN_GAIN` is gated on `bounds`, so hints off the squares are not
+present to cancel and the one-character-peel gap is `2n − MATCH −
+CONTENT_MATCH`, which *grows* with `n` — 1 point at `n = 2`, 3 at `n = 3`, 7
+at `n = 5`. What moves is the term's second mode: it favours a merge by
+(content pieces in the tiling − 1), so a three-piece all-content shatter gains
+two. Verified — `罪|悪|感` and `解|像|度` become whole hints off, `林|間|学校`
+does not. This term is ungated where `LEN_GAIN` is gated because its magnitude
+is bounded at one point per span-count difference, so its worst case is one
+boundary; `LEN_GAIN`'s reward grows as `n²` and ungated it buys arbitrarily
+long spurious spans. "A constant cannot invent a span" would have been the
+wrong reason: `LEN_GAIN` only repriced spans that already existed too.
+
+The one cost is one hints-off `false-match` window, `はいた` in
+`d:a:003521-6` (23 / 32 to 22 / 32), the §9.5 shape in the state where
+`PRONOUNCE_CROSS` is bounds-gated and cannot reach it. The spurious-merge
+gate holds at 26 of 26. The snapshot moved once and it is a correction:
+`日本語を話せますか。` read `話` + `せま`("narrow") + `すか`("disappointment")
+and now reads `話せ` + `ます` + `か`.
 
 **This block was stale for two phases and the staleness had a cost.** It read
 `0.8174 / 0.8525 / 0.9092` hints on and `0.9093` entry top-1 hints off until

@@ -100,6 +100,32 @@ pub struct Settings {
     /// `set_mecab_hints` is the only writer. The alternative — a snapshot
     /// written by an unrelated font-box change clobbering an in-flight toggle —
     /// is silent when it happens.
+    ///
+    /// **Why it defaults to `false`, since hints-off is measurably the worse
+    /// parse.** On the gold corpus hints-off reads strict 1593 against 1698,
+    /// tolerant 1786 against 1948 and 118 compound windows against 152, so a
+    /// fresh install runs the weaker engine. The default is nonetheless not a
+    /// quality preference — it records **whether the 7.7 MB Vibrato dictionary
+    /// has been acquired**. `state::load_hints` never downloads; it only opens
+    /// an already-published `hints/current/system.dic`, and
+    /// `commands::hints::set_mecab_hints` is the only code path that fetches
+    /// one. So flipping this to `true` on its own makes a fresh install boot
+    /// with `hints_off_warning("no dictionary in …")` and hints still off —
+    /// strictly worse than today, not better.
+    ///
+    /// Turning hints on for a first run therefore needs an *acquisition* on
+    /// the first-run path, and the flip is a consequence of that, never a
+    /// substitute for it. That acquisition now exists: the download screen in
+    /// `src/main.ts` arms `acquireHintsOnReady` when its button is clicked **on
+    /// a machine with no published dictionary** — `commands::hints::
+    /// hints_available` — and calls `set_mecab_hints(true)` on the `ready`
+    /// event, so a fresh install that downloads a dictionary gets hints with it
+    /// and this field is persisted `true` by the same writer as always. The
+    /// published-dictionary condition is not a detail: the same screen is shown
+    /// for a post-upgrade rebuild, and without it an established user who had
+    /// switched hints off would have them switched back on by that rebuild. **The default stays
+    /// `false` and must**: it is still the honest value before an acquisition
+    /// has happened, and it is what a failed fetch correctly leaves behind.
     #[serde(default)]
     pub mecab_hints: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

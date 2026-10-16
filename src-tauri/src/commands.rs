@@ -926,7 +926,12 @@ pub(crate) fn apply_chrome(window: &tauri::Window, mode: ChromeMode) -> Result<(
     // Windows alone reads nothing from `mode`: the reserved row is identical
     // in `header` and `content`.
     let _ = mode;
-    Ok(())
+    // Chrome first, then the peek: a reveal in flight belongs to the mode the
+    // user just left, and every one of its effects outlives the mode change
+    // unless something drops them here. The order mirrors `peek_titlebar`'s
+    // hide half, and `layout::restore`'s reason for it — on macOS a title bar
+    // appearing after the size is fixed leaves the content a title bar short.
+    clear_peek(window)
 }
 
 #[tauri::command]
@@ -954,9 +959,72 @@ static PEEKED: AtomicBool = AtomicBool::new(false);
 /// Whether a peek is showing right now.
 ///
 /// Read by `layout::bind`, which has to correct a box captured mid-peek. The
-/// flag stays private so `peek_titlebar` remains its only writer.
+/// flag stays private so `peek_titlebar` and `clear_peek` remain its only
+/// writers.
 pub(crate) fn is_peeked() -> bool {
     PEEKED.load(Ordering::SeqCst)
+}
+
+/// Drop a peek that is still up, leaving the chrome alone.
+///
+/// The hide half of `peek_titlebar` minus `set_titlebar_chrome`, for the one
+/// caller that is *changing mode*: `apply_chrome` has just set the chrome the
+/// new mode wants, and on the way to `native` the chrome the peek was
+/// borrowing has become the mode's own — hiding it here would take it straight
+/// back off. That exclusion is what the frontend cannot work around, and why
+/// this half lives in the backend (`main.ts`'s own un-peek covers `content`,
+/// where hiding the chrome is right; the `swap` below makes whichever arrives
+/// second a no-op).
+///
+/// What must go either way is the state the reveal actually lives in: the
+/// flag, the Windows region, and on macOS the band the frame grew upward.
+/// Left standing, the flag makes the next peek a silent no-op (`swap` sees no
+/// transition), makes `layout::bind` subtract a band from a box that no longer
+/// carries one, and on macOS leaves the window a band taller and a band higher
+/// than the geometry the user set, for good.
+pub(crate) fn clear_peek(window: &tauri::Window) -> Result<(), String> {
+    // Only a real transition touches the window, matching `peek_titlebar`.
+    if !PEEKED.swap(false, Ordering::SeqCst) {
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    win32_frameless::set_strip_shown(window, false);
+    #[cfg(target_os = "macos")]
+    {
+        // Read outer and write outer: those are the two numbers `peek_titlebar`
+        // grew, and `unpeek` is the arithmetic that inverts them — the same
+        // correction `layout::bind` applies to a box captured mid-peek.
+        let scale = window.scale_factor().map_err(|e| e.to_string())?;
+        let size = window
+            .outer_size()
+            .map_err(|e| e.to_string())?
+            .to_logical::<f64>(scale);
+        let pos = window
+            .outer_position()
+            .map_err(|e| e.to_string())?
+            .to_logical::<f64>(scale);
+        let box_ = crate::layout::unpeek(
+            crate::layout::LogicalBox {
+                x: pos.x.round() as i32,
+                y: pos.y.round() as i32,
+                width: size.width.round() as u32,
+                height: size.height.round() as u32,
+            },
+            true,
+            true,
+        );
+        window
+            .set_size(tauri::LogicalSize::new(box_.width, box_.height))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(tauri::LogicalPosition::new(box_.x, box_.y))
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        let _ = window;
+    }
+    Ok(())
 }
 
 #[tauri::command]

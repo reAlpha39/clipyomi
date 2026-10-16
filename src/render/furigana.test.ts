@@ -54,6 +54,18 @@ describe('toRomaji', () => {
     expect(toRomaji('いった')).toBe('itta');
     expect(toRomaji('やっぱり')).toBe('yappari');
     expect(toRomaji('がっこう')).toBe('gakkou');
+    expect(toRomaji('いっち')).toBe('itchi');
+  });
+
+  test('drops a sokuon with no consonant after it to double', () => {
+    // A sentence-final っ is ordinary in dialogue and used to romanise as a
+    // mora of its own (`eetsu`). These are `crates/jparser`'s outputs.
+    expect(toRomaji('ええっ')).toBe('ee');
+    expect(toRomaji('っ')).toBe('');
+    expect(toRomaji('っあ')).toBe('a');
+    expect(toRomaji('っん')).toBe('n');
+    expect(toRomaji('っっき')).toBe('kki');
+    expect(toRomaji('っー')).toBe('');
   });
 
   test('handles syllabic n with apostrophe before vowels and ya-row', () => {
