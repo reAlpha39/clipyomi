@@ -73,25 +73,25 @@ async function follow(page: Page): Promise<typeof BASE> {
 }
 
 /**
- * The page's vertical geometry: the gap between the window's bottom edge and
- * the last line of text (its text, not its line box) less the padding, the
- * lines on show, and whether the pane can scroll.
+ * The page's vertical geometry: the gap between the window's bottom edge,
+ * less the padding, and the text (not the line box) of line SHOWN, the
+ * sentence's last line by default; and whether the pane can scroll. The
+ * fixtures here are one unmatched run, so its line rects are the lines.
  */
-function measure(page: Page) {
-  return page.evaluate(() => {
+function measure(page: Page, shown?: number) {
+  return page.evaluate((n) => {
     const panes = document.querySelector<HTMLElement>('.panes')!;
     const sentence = document.querySelector<HTMLElement>('.sentence')!;
     const padBottom = Number.parseFloat(getComputedStyle(panes).paddingBottom);
-    const line = Number.parseFloat(getComputedStyle(sentence).lineHeight);
     const range = document.createRange();
     range.selectNodeContents(sentence.lastElementChild!.firstChild!);
+    const lines = range.getClientRects();
     return {
-      gapUnderText: window.innerHeight - padBottom - range.getBoundingClientRect().bottom,
-      linesShown: (panes.clientHeight - 2 * padBottom) / line,
+      gapUnderText: window.innerHeight - padBottom - lines[(n ?? lines.length) - 1].bottom,
       scrolls:
         getComputedStyle(panes).overflowY !== 'hidden' && panes.scrollHeight > panes.clientHeight,
     };
-  });
+  }, shown);
 }
 
 test('a long sentence fits the window to the line cap, holding the bottom edge', async ({ page }) => {
@@ -99,8 +99,10 @@ test('a long sentence fits the window to the line cap, holding the bottom edge',
   await show(page, LONG);
   const box = await follow(page);
   expect(box.y + box.height).toBe(BASE.y + BASE.height);
-  const m = await measure(page);
-  expect(m.linesShown).toBeCloseTo(2, 1);
+  // Two lines on show: the second's text sits on the padding, and the rest scrolls.
+  const m = await measure(page, 2);
+  expect(m.gapUnderText).toBeGreaterThanOrEqual(0);
+  expect(m.gapUnderText).toBeLessThan(1.5);
   expect(m.scrolls).toBe(true);
 });
 
@@ -132,4 +134,29 @@ test('no padding leaves no gap under the text and no scroll', async ({ page }) =
   expect(m.scrolls).toBe(false);
   expect(m.gapUnderText).toBeGreaterThanOrEqual(0);
   expect(m.gapUnderText).toBeLessThan(1.5);
+});
+
+// Capped short of the sentence, the window ends at the last line on show's
+// text, as it does at the sentence's end: N line boxes would leave that
+// line's leading, and the next line's ruby, as a gap padding 0 cannot close.
+test('capped at one line, the window ends at that line of text', async ({ page }) => {
+  await open(page, { pane_padding: 0, grow_lines: 1 });
+  await show(page, TWO_LINES);
+  await follow(page);
+  const m = await page.evaluate(() => {
+    const sentence = document.querySelector<HTMLElement>('.sentence')!;
+    const range = document.createRange();
+    range.selectNodeContents(sentence.firstElementChild!.firstChild!);
+    const lines = range.getClientRects();
+    const panes = document.querySelector<HTMLElement>('.panes')!;
+    return {
+      lines: lines.length,
+      gapUnderFirstLine: window.innerHeight - lines[0].bottom,
+      scrolls: getComputedStyle(panes).overflowY !== 'hidden' && panes.scrollHeight > panes.clientHeight,
+    };
+  });
+  expect(m.lines).toBe(2);
+  expect(m.gapUnderFirstLine).toBeGreaterThanOrEqual(0);
+  expect(m.gapUnderFirstLine).toBeLessThan(1.5);
+  expect(m.scrolls).toBe(true);
 });

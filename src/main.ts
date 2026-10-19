@@ -1592,13 +1592,19 @@ function refit(): void {
   const padBottom = Number.parseFloat(paneStyle.paddingBottom || '0');
   // From inside the top padding to the last line's text: the sentence, and a
   // status line above it if any.
-  const text = textBottom() - paneTop + panes.scrollTop - padTop;
+  const lastText = textBottom();
+  const text = lastText - paneTop + panes.scrollTop - padTop;
+  // The leading under a line's text, read off the last line: every line has
+  // the same, and a capped fit ends at its last line's text, not its box.
+  const trailing = Math.max(0, output.getBoundingClientRect().bottom - lastText);
   const pitch = sentenceLinePitch();
-  const fitted = paneTop + padTop + fitText(text, pitch, growLines) + padBottom;
+  const fitted = paneTop + padTop + fitText(text, pitch, growLines, trailing) + padBottom;
   // Fitted to its text, the last line box's leading hangs past the window's
   // edge; it is empty, and must not scroll the pane by a few px. Over the cap
-  // the pane scrolls as ever.
-  const whole = growDirection !== 'off' && (pitch <= 0 || text <= growLines * pitch);
+  // the pane scrolls as ever. Half a px of slack for the equality case, a
+  // sentence exactly as long as the cap.
+  const whole =
+    growDirection !== 'off' && (pitch <= 0 || text <= growLines * pitch - trailing + 0.5);
   panes.classList.toggle('fitted', whole);
   if (whole) panes.scrollTop = 0;
   const own = window.innerHeight - offset;

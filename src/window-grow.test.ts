@@ -71,6 +71,14 @@ describe('fitText', () => {
     expect(fitText(300, 41, 3)).toBe(123);
   });
 
+  // Capped, the window ends at the last line on show's text, not its line
+  // box: TRAILING is the leading between the two, measured off the sentence's
+  // last line, and it comes off the cap just as it is absent from the text.
+  test('ends a capped fit at the last shown line of text, less its leading', () => {
+    expect(fitText(2 * 41 - 7, 41, 1, 7)).toBe(34);
+    expect(fitText(2 * 41 - 7, 41, 2, 7)).toBe(75);
+  });
+
   // The text is measured to the bottom of its last line of text, which sits
   // above that line box's bottom by the leading. One line of it is shorter
   // than a line box, and the fit must not round it back up to one: that
