@@ -73,6 +73,21 @@ The workspace is organized into modular Rust crates and a modern web frontend:
 
 ---
 
+### Portable Windows Build
+
+Releases ship as a zip: `ClipYomi/clipyomi.exe` next to a `data` folder. When a `data` folder sits beside the executable, ClipYomi keeps its settings, dictionary and boundary hints there instead of `%APPDATA%\dev.jparser.clipyomi`, so the whole folder can be moved or copied. Without that folder it uses `%APPDATA%` as before. A portable copy starts fresh and never reads an existing `%APPDATA%` install; to carry one over, copy the contents of `%APPDATA%\dev.jparser.clipyomi` into `data`. The app needs the WebView2 runtime, which Windows 11 includes.
+
+To build the zip locally:
+
+```bash
+npx tauri build
+python tools/package_portable.py   # writes target/portable/ClipYomi-<version>-windows-x64-portable.zip
+```
+
+To publish a release, push a tag matching the version in `src-tauri/tauri.conf.json` (for example `git tag v0.1.0 && git push origin v0.1.0`). The `Release` workflow builds the zip on Windows and attaches it to a GitHub Release.
+
+---
+
 ## Testing
 
 Run frontend unit and E2E tests:

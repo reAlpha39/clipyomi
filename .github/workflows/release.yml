@@ -1,0 +1,56 @@
+name: Release
+
+# Builds the portable Windows zip and attaches it to a GitHub Release.
+#
+# Release by pushing a tag that matches the version in
+# src-tauri/tauri.conf.json, e.g. `git tag v0.1.0 && git push origin v0.1.0`;
+# `package_portable.py --tag` fails the run on a mismatch. Running the
+# workflow by hand builds the same zip as a workflow artifact without
+# publishing a release.
+#
+# The zip is unsigned, so Windows SmartScreen warns on first launch.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-portable:
+    name: Windows portable zip
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+      - run: npx tauri build
+
+      - name: Package
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            python tools/package_portable.py --tag "$GITHUB_REF_NAME"
+          else
+            python tools/package_portable.py
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clipyomi-windows-portable
+          path: target/portable/*.zip
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" target/portable/*.zip --title "ClipYomi $GITHUB_REF_NAME" --generate-notes
