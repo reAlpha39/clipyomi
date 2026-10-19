@@ -80,12 +80,21 @@ export function linePitch(bottoms: readonly number[], height: number, threshold:
 }
 
 /**
- * How far to grow: everything HIDDEN below the base, up to LINES lines of
- * PITCH. Past the cap the pane scrolls, as it always has.
+ * How far to grow: everything HIDDEN below the base, until the window shows
+ * LINES lines of PITCH more than the base does. Past the cap the pane
+ * scrolls, as it always has.
+ *
+ * BASE_TEXT is the height the base leaves for text, inside the padding. The
+ * lines it shows are rounded to whole ones, so a window sized to one line but
+ * a few px short of its padding counts as one line, and LINES more show in
+ * full — counted in px alone, those few px came out of the cap, and a
+ * sentence exactly LINES longer stopped a padding's worth short and scrolled.
  */
-export function growTarget(hidden: number, pitch: number, lines: number): number {
+export function growTarget(hidden: number, pitch: number, lines: number, baseText: number): number {
   if (hidden <= 0 || pitch <= 0) return 0;
-  return Math.ceil(Math.min(hidden, lines * pitch));
+  const baseLines = Math.max(0, Math.round(baseText / pitch));
+  const cap = (baseLines + lines) * pitch - baseText;
+  return Math.ceil(Math.min(hidden, cap));
 }
 
 /** BASE grown by EXTRA from SIDE. */

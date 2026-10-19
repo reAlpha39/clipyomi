@@ -1558,18 +1558,21 @@ function refit(): void {
   const grownBy =
     pinned === null ? grower.applied() / scale : window.innerHeight - pinned.height / scale;
   const paneTop = panes.getBoundingClientRect().top;
-  const contentBottom =
-    output.getBoundingClientRect().bottom -
-    paneTop +
-    panes.scrollTop +
-    Number.parseFloat(getComputedStyle(panes).paddingBottom || '0');
-  // The room the window gives the pane, not `panes.clientHeight`: on Windows
-  // the band leaves the grid flow, `.panes` lands in an `auto` row, and a short
-  // sentence's pane is only as tall as the sentence — so the pane's own height
-  // read the window as full and a grown window never shrank back.
-  const room = window.innerHeight - paneTop;
-  const hidden = contentBottom - (room - grownBy);
-  const target = growDirection === 'off' ? 0 : growTarget(hidden, sentenceLinePitch(), growLines);
+  const paneStyle = getComputedStyle(panes);
+  const padTop = Number.parseFloat(paneStyle.paddingTop || '0');
+  const padBottom = Number.parseFloat(paneStyle.paddingBottom || '0');
+  const contentBottom = output.getBoundingClientRect().bottom - paneTop + panes.scrollTop + padBottom;
+  // The room the user's own size gives the pane, from the window rather than
+  // `panes.clientHeight`: on Windows the band leaves the grid flow, `.panes`
+  // lands in an `auto` row, and a short sentence's pane is only as tall as the
+  // sentence — so the pane's own height read the window as full and a grown
+  // window never shrank back.
+  const baseRoom = window.innerHeight - paneTop - grownBy;
+  const hidden = contentBottom - baseRoom;
+  const target =
+    growDirection === 'off'
+      ? 0
+      : growTarget(hidden, sentenceLinePitch(), growLines, baseRoom - padTop - padBottom);
   const side = growDirection === 'off' ? grower.side() : growDirection;
   grower.want(target * scale, side, growAnimate);
 }

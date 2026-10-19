@@ -61,21 +61,35 @@ describe('linePitch', () => {
 });
 
 describe('growTarget', () => {
+  // A base showing exactly one 40px line of text.
   test('is zero when nothing is hidden', () => {
-    expect(growTarget(0, 40, 2)).toBe(0);
-    expect(growTarget(-120, 40, 2)).toBe(0);
+    expect(growTarget(0, 40, 2, 40)).toBe(0);
+    expect(growTarget(-120, 40, 2, 40)).toBe(0);
   });
 
   test('shows everything hidden while it fits under the cap', () => {
-    expect(growTarget(55.2, 40, 2)).toBe(56);
+    expect(growTarget(55.2, 40, 2, 40)).toBe(56);
   });
 
   test('stops at the cap and leaves the rest to the scrollbar', () => {
-    expect(growTarget(300, 40, 2)).toBe(80);
+    expect(growTarget(300, 40, 2, 40)).toBe(80);
   });
 
   test('is zero without a measured line', () => {
-    expect(growTarget(300, 0, 2)).toBe(0);
+    expect(growTarget(300, 0, 2, 40)).toBe(0);
+  });
+
+  // A window sized to one line, a few px short of its bottom padding: a
+  // two-line sentence is one line plus those few px hidden. One extra line
+  // has to show all of it, not stop a padding's worth short and scroll.
+  test('counts the lines the base shows, so a base cut short still gets whole lines', () => {
+    expect(growTarget(2 * 41 - 35, 41, 1, 35)).toBe(47);
+  });
+
+  // The cap is lines on screen, not px: a base showing 1.4 lines rounds to
+  // one, and one extra line tops the window out at two.
+  test('caps at the base lines plus N, rounded to whole lines', () => {
+    expect(growTarget(300, 41, 1, 57.4)).toBe(25);
   });
 });
 
