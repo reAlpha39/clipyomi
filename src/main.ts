@@ -1557,12 +1557,18 @@ function refit(): void {
   const pinned = grower.base();
   const grownBy =
     pinned === null ? grower.applied() / scale : window.innerHeight - pinned.height / scale;
+  const paneTop = panes.getBoundingClientRect().top;
   const contentBottom =
     output.getBoundingClientRect().bottom -
-    panes.getBoundingClientRect().top +
+    paneTop +
     panes.scrollTop +
     Number.parseFloat(getComputedStyle(panes).paddingBottom || '0');
-  const hidden = contentBottom - (panes.clientHeight - grownBy);
+  // The room the window gives the pane, not `panes.clientHeight`: on Windows
+  // the band leaves the grid flow, `.panes` lands in an `auto` row, and a short
+  // sentence's pane is only as tall as the sentence — so the pane's own height
+  // read the window as full and a grown window never shrank back.
+  const room = window.innerHeight - paneTop;
+  const hidden = contentBottom - (room - grownBy);
   const target = growDirection === 'off' ? 0 : growTarget(hidden, sentenceLinePitch(), growLines);
   const side = growDirection === 'off' ? grower.side() : growDirection;
   grower.want(target * scale, side, growAnimate);
