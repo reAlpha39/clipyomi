@@ -61,9 +61,11 @@
   border-radius: 4px;
 }
 
+/* The number rows' unit width too, or these boxes sit right of that column. */
 .settings-checkbox-row .unit {
   color: var(--color-muted);
   font-size: var(--text-tag, 11px);
+  min-width: 76px;
 }
 
 .settings-checkbox-row input[type='checkbox'] {
