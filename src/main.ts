@@ -24,11 +24,19 @@ import { clampFamily, familyVars } from './text-fonts';
 import { createHistory } from './history';
 import { openContextMenu, type MenuEntry } from './context-menu';
 import { createKanjiLookup } from './kanji-lookup';
+import {
+  clampGrowDirection,
+  clampGrowLines,
+  createGrower,
+  growTarget,
+  linePitch,
+} from './window-grow';
 import type {
   ChromeMode,
   Entry,
   FuriganaMode,
   GlossFilters,
+  GrowDirection,
   KanjiInfo,
   ParseResult,
   Segment,
@@ -359,6 +367,47 @@ const currentFilters: GlossFilters = {
 
 /** The popover's kanji block, asked once per character for the page's life. */
 const lookupKanji = createKanjiLookup((chars) => invoke('kanji_info', { chars }));
+
+// The grow-to-fit settings, owned by the settings window like the furigana
+// mode. Off until `get_settings` says otherwise.
+let growDirection: GrowDirection = 'off';
+let growLines = clampGrowLines(undefined);
+let growAnimate = true;
+
+/** Grows and shrinks this window around the user's own box (`window-grow.ts`). */
+const grower = createGrower({
+  readBox: async () => {
+    const win = getCurrentWindow();
+    const [pos, size, minimized, maximized] = await Promise.all([
+      win.outerPosition(),
+      win.innerSize(),
+      win.isMinimized(),
+      win.isMaximized(),
+    ]);
+    // A minimized window reads as 0×0 at (-32000, -32000) on Windows, and a
+    // maximized one is the OS's size, not the user's. Neither is a base to
+    // grow from; the rejection leaves the window alone until the next sentence.
+    if (minimized || maximized || size.width === 0 || size.height === 0) {
+      throw new Error('no box of the user’s own to grow from');
+    }
+    return { x: pos.x, y: pos.y, width: size.width, height: size.height };
+  },
+  setBox: (box) => {
+    void invoke('set_window_box', { ...box }).catch(() => {});
+  },
+  frame: (cb) => {
+    window.requestAnimationFrame(cb);
+  },
+  now: () => performance.now(),
+});
+
+function applyGrowSettings(settings: Partial<Settings>): void {
+  if (settings.grow_direction !== undefined) {
+    growDirection = clampGrowDirection(settings.grow_direction);
+  }
+  if (settings.grow_lines !== undefined) growLines = clampGrowLines(settings.grow_lines);
+  if (settings.grow_animate !== undefined) growAnimate = settings.grow_animate;
+}
 
 const settingsToggle = app.querySelector<HTMLButtonElement>('#settings-toggle');
 const windowMinimize = app.querySelector<HTMLButtonElement>('#window-minimize');
@@ -765,6 +814,7 @@ async function applySettings(): Promise<void> {
   }
   applyFontSizes(settings);
   applyAppearance(settings, true);
+  applyGrowSettings(settings);
   // Unconditional: a settings file with no `chrome_mode` never reaches
   // `applyChromeMode`, and the token still has to be written.
   applySurfaceAlpha();
@@ -806,6 +856,10 @@ void listen<Partial<Settings>>('settings-changed', (e) => {
     // is already a no-op, so no `lastResult !== null` guard is needed here.
     display(lastResult);
   }
+  applyGrowSettings(settings);
+  // A size, a font or the grow settings themselves can each change what fits.
+  // Unconditional, because asking for the growth already applied is free.
+  refit();
 });
 
 /** Milliseconds the cursor must rest on a chip before its popover opens. */
@@ -1345,18 +1399,22 @@ function scheduleGeometrySave(): void {
   if (peeking) return;
   if (geometrySaveTimer !== null) window.clearTimeout(geometrySaveTimer);
   geometrySaveTimer = window.setTimeout(async () => {
+    // Mid-grow the window is part way between two sizes, and the user's own
+    // box has not moved; the resize that ends it saves.
+    if (grower.base() !== null) return;
     try {
       const win = getCurrentWindow();
       const size = await win.innerSize();
       const pos = await win.outerPosition();
       const factor = await win.scaleFactor();
-      const logicalSize = size.toLogical(factor);
-      const logicalPos = pos.toLogical(factor);
+      // The user's own box, with any growth taken back off: a restart opens
+      // at the size they set, not at whatever the last sentence needed.
+      const own = grower.baseOf({ x: pos.x, y: pos.y, width: size.width, height: size.height });
       void invoke('save_window_geometry', {
-        width: Math.round(logicalSize.width),
-        height: Math.round(logicalSize.height),
-        x: Math.round(logicalPos.x),
-        y: Math.round(logicalPos.y),
+        width: Math.round(own.width / factor),
+        height: Math.round(own.height / factor),
+        x: Math.round(own.x / factor),
+        y: Math.round(own.y / factor),
       });
     } catch {}
   }, 300);
@@ -1459,6 +1517,55 @@ function display(result: ParseResult | null): void {
     (chip ?? output).focus();
   }
   syncHistoryButtons();
+  refit();
+}
+
+/**
+ * The sentence's average line height in CSS px, ruby included, or 0 before
+ * anything is rendered.
+ */
+function sentenceLinePitch(): number {
+  const sentence = output.querySelector<HTMLElement>('.sentence');
+  if (sentence === null) return 0;
+  // Per line fragment, not per element: an unmatched run is inline and can
+  // wrap across several lines, which one bounding box would count as one.
+  const bottoms = Array.from(sentence.children).flatMap((el) =>
+    Array.from(el.getClientRects(), (rect) => rect.bottom),
+  );
+  // Half a character: well past a chip's padding, well short of a line.
+  const threshold = Number.parseFloat(getComputedStyle(sentence).fontSize) / 2;
+  return linePitch(bottoms, sentence.getBoundingClientRect().height, threshold);
+}
+
+/**
+ * Grow the window to show what of the sentence is hidden below the user's own
+ * size, up to the line cap, or shrink it back when it all fits.
+ *
+ * Measured in CSS px and handed to the grower in physical px, the unit it
+ * moves the window in. The page is laid out at the grown size, so the growth
+ * already on screen is added back to find what the user's own size would
+ * hide. While a change is in flight that growth is read off the viewport
+ * rather than off what was last sent: the webview catches up with a resize a
+ * frame late, and a sentence arriving mid-animation would otherwise be
+ * measured against a size it has not reached.
+ */
+function refit(): void {
+  // Hidden or minimized, there is no layout to measure; the next sentence
+  // after it comes back measures again.
+  if (document.hidden) return;
+  const scale = window.devicePixelRatio || 1;
+  const pinned = grower.base();
+  const grownBy =
+    pinned === null ? grower.applied() / scale : window.innerHeight - pinned.height / scale;
+  const contentBottom =
+    output.getBoundingClientRect().bottom -
+    panes.getBoundingClientRect().top +
+    panes.scrollTop +
+    Number.parseFloat(getComputedStyle(panes).paddingBottom || '0');
+  const hidden = contentBottom - (panes.clientHeight - grownBy);
+  const target = growDirection === 'off' ? 0 : growTarget(hidden, sentenceLinePitch(), growLines);
+  const side = growDirection === 'off' ? grower.side() : growDirection;
+  grower.want(target * scale, side, growAnimate);
 }
 
 /**

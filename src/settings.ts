@@ -10,7 +10,8 @@ import {
   OUTLINE_ROW,
   initAppearanceControls,
 } from './settings-appearance';
-import type { ChromeMode, FuriganaMode, Settings } from './types';
+import { GROW_LINE_LIMITS, clampGrowDirection, clampGrowLines } from './window-grow';
+import type { ChromeMode, FuriganaMode, GrowDirection, Settings } from './types';
 import './styles/global.css';
 import './styles/settings.css';
 
@@ -108,6 +109,25 @@ export function initSettingsApp(container: HTMLElement) {
       </section>
 
       <section class="settings-group">
+        <h2 class="settings-group-title">Grow to Fit Text</h2>
+        <div class="segmented-control" role="radiogroup" aria-label="Grow to fit text">
+          <button type="button" role="radio" data-grow-direction="off" aria-checked="true" title="Keep the size you set">Off</button>
+          <button type="button" role="radio" data-grow-direction="up" aria-checked="false" title="Grow upward: the bottom edge stays put">Up</button>
+          <button type="button" role="radio" data-grow-direction="down" aria-checked="false" title="Grow downward: the top edge stays put">Down</button>
+        </div>
+        <label class="settings-number-row">
+          <span class="label-text">Up to</span>
+          <input type="number" id="setting-grow-lines" value="${clampGrowLines(undefined)}"
+                 min="${GROW_LINE_LIMITS.min}" max="${GROW_LINE_LIMITS.max}" step="1" />
+          <span class="unit">extra lines</span>
+        </label>
+        <label class="settings-checkbox-row">
+          <input type="checkbox" id="setting-grow-animate" checked />
+          <span class="label-text">Animate resize</span>
+        </label>
+      </section>
+
+      <section class="settings-group">
         <h2 class="settings-group-title">Window Chrome</h2>
         <div class="segmented-control" role="radiogroup" aria-label="Window chrome">
           <button type="button" role="radio" data-chrome-mode="native" aria-checked="true" title="Native frame: the OS draws the title bar">Native</button>
@@ -165,8 +185,31 @@ export function initSettingsApp(container: HTMLElement) {
   const mecabHints = container.querySelector<HTMLInputElement>('#setting-mecab-hints')!;
   const mecabNote = container.querySelector<HTMLElement>('#setting-mecab-hints-note')!;
   const mecabStatus = container.querySelector<HTMLElement>('#setting-mecab-hints-status')!;
+  const growButtons = container.querySelectorAll<HTMLButtonElement>('[data-grow-direction]');
+  const growLines = container.querySelector<HTMLInputElement>('#setting-grow-lines')!;
+  const growAnimate = container.querySelector<HTMLInputElement>('#setting-grow-animate')!;
 
   let currentMode: FuriganaMode = 'none';
+  let currentGrow: GrowDirection = 'off';
+
+  function updateGrowButtons(direction: GrowDirection) {
+    currentGrow = direction;
+    growButtons.forEach((btn) => {
+      btn.setAttribute('aria-checked', String(btn.dataset.growDirection === direction));
+    });
+    // Off, the cap and the animation govern nothing.
+    growLines.disabled = direction === 'off';
+    growAnimate.disabled = direction === 'off';
+  }
+
+  updateGrowButtons('off');
+
+  /** The line cap, pinned into range and written back, for the reason `sizeOf` gives. */
+  function growLinesOf(): number {
+    const lines = clampGrowLines(growLines.valueAsNumber);
+    growLines.value = String(lines);
+    return lines;
+  }
 
   // Wired before the handlers below are declared, which is fine: both hooks
   // are function declarations in this scope, hoisted, and only ever called
@@ -327,6 +370,9 @@ export function initSettingsApp(container: HTMLElement) {
       text_outline_width: sizeOf(outlineWidth, 'outline'),
       text_shadow_size: sizeOf(shadowSize, 'shadow'),
       surface_alpha: clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max,
+      grow_direction: currentGrow,
+      grow_lines: growLinesOf(),
+      grow_animate: growAnimate.checked,
       ...appearance.snapshot(),
     };
   }
@@ -351,6 +397,9 @@ export function initSettingsApp(container: HTMLElement) {
     if (s.mecab_hints !== undefined) mecabHints.checked = s.mecab_hints;
     if (s.chrome_mode !== undefined) updateChromeButtons(s.chrome_mode);
     if (s.furigana_mode !== undefined) updateFuriganaButtons(s.furigana_mode);
+    if (s.grow_direction !== undefined) updateGrowButtons(clampGrowDirection(s.grow_direction));
+    if (s.grow_lines !== undefined) growLines.value = String(clampGrowLines(s.grow_lines));
+    if (s.grow_animate !== undefined) growAnimate.checked = s.grow_animate;
     // Full snapshots own the boxes outright, including emptying them: an
     // absent size in a full payload means the user cleared that box, or a
     // restored layout slot recorded it as unset. A partial payload —
@@ -421,6 +470,15 @@ export function initSettingsApp(container: HTMLElement) {
       if (p === 'windows') container.querySelector('[data-chrome-mode="native"]')?.remove();
     })
     .catch(() => {});
+
+  growButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      updateGrowButtons(clampGrowDirection(btn.dataset.growDirection));
+      saveAndBroadcast();
+    });
+  });
+  growLines.addEventListener('change', saveAndBroadcast);
+  growAnimate.addEventListener('change', saveAndBroadcast);
 
   furiganaButtons.forEach((btn) => {
     btn.addEventListener('click', () => {

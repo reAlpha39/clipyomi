@@ -290,6 +290,7 @@ fn main() {
             commands::toggle_maximize_window,
             commands::close_window,
             commands::save_window_geometry,
+            commands::set_window_box,
             commands::save_settings,
             commands::get_settings,
             commands::open_settings_window,
