@@ -326,6 +326,15 @@ const ATTACHES_TO: &[(&str, &str, &str)] = &[
     ("られる", "一段", "未然形"),
     ("ない", "特殊・ナイ", "未然形"),
     ("ぬ", "特殊・ヌ", "未然形"),
+    // サ変's ぬ/ず site is its `せ`, not 未然形: 気にせず, 気にせぬ, 愛せず.
+    // IPADIC names that `せ` 未然ヌ接続 for vs-i (サ変・スル) and 未然レル接続
+    // for vs-s (サ変・−スル), so it takes a row each. Without them no する-verb
+    // that is not a headword of its own reached the classical negative:
+    // `気にせず` read 気 | に | せず and `愛せず` read 愛す Potential Negative.
+    // **サ変 only, and not at 仮定形** -- `se_stem_attaches` enforces what these
+    // rows cannot; see it for why.
+    ("ぬ", "特殊・ヌ", "未然ヌ接続"),
+    ("ぬ", "特殊・ヌ", "未然レル接続"),
     ("ん", "不変化型", "未然形"),
     ("う", "不変化型", "未然ウ接続"),
     ("よう", "不変化型", "未然ウ接続"),
@@ -704,6 +713,29 @@ pub fn potential_stem_on(inner: &ConjStep) -> Option<ConjStep> {
 fn potential_attaches(lemma: &str, inner: &ConjStep) -> bool {
     lemma != POTENTIAL
         || (inner.aux.is_none() && GODAN_POTENTIAL.contains(&CLASSES[inner.class as usize].name))
+}
+
+/// Whether `lemma` may attach to `inner` at `requires`: every attachment may
+/// except `ぬ` at the two `せ` sites, which only a サ変 headword's own `せ`
+/// takes -- vs-i's 未然ヌ接続, vs-s's 未然レル接続 -- and not as ぬ's 仮定形 `ね`.
+///
+/// The rows are for 気にせず and 愛せず, but `ATTACHES_TO` names the site by
+/// form alone. Adjectives, たい and ない have a 未然ヌ接続 too, `から`, and
+/// unrestricted over 193,550 visual-novel sentences hints on, 19 `〜たからね`
+/// read Want-to Negative Conditional (`練習したからね`), `そこからね` read
+/// 濃い, and 遠からず, よからぬ and らしからぬ lost their own entries to the
+/// adjective. 未然レル接続 is vs-i's `さ` as well, and `さず` is not する. サ変's
+/// `ね` split JMdict's `せねば` and `せねばならない` 10 times.
+fn se_stem_attaches(lemma: &str, requires: &str, outer_form: &str, inner: &ConjStep) -> bool {
+    let se_class = match requires {
+        "未然ヌ接続" => "サ変・スル",
+        "未然レル接続" => "サ変・−スル",
+        _ => return true,
+    };
+    lemma != "ぬ"
+        || (outer_form != "仮定形"
+            && inner.aux.is_none()
+            && CLASSES[inner.class as usize].name == se_class)
 }
 
 /// Whether [`CHAIN_BLOCK`] refuses this pair. `*` in a row's form matches
@@ -1092,6 +1124,7 @@ impl Table {
                             if let Some(inner) = sub.steps.last() {
                                 if !onbin_voicing_agrees(lemma, requires, inner.class)
                                     || !potential_attaches(lemma, inner)
+                                    || !se_stem_attaches(lemma, requires, outer_form, inner)
                                 {
                                     continue;
                                 }
@@ -1493,11 +1526,20 @@ mod tests {
         // +6,265 depth-2 behind them. The walk counts all 21 because it is
         // class-agnostic by construction; `potential_attaches` restricts the
         // row to 五段 in `search`, the way CHAIN_BLOCK and the voicing rule do.
+        // 133,802 -> 134,262 for `ぬ` at 未然ヌ接続: +12 depth-1, its six
+        // surfaces on the two mapped classes that have the form (サ変・スル's
+        // `せ`, 形容詞・アウオ段's `から`), and +448 depth-2 -- ぬ on たい's and
+        // ない's own 未然ヌ接続, and later auxiliaries on ぬ's new forms.
+        // 134,262 -> 134,488 for `ぬ` at 未然レル接続, the vs-s `せ`: +12 depth-1,
+        // six surfaces on each サ変 class (サ変・スル's is `さ`), and +214
+        // depth-2. The walk counts every one of these; `se_stem_attaches`
+        // restricts both rows to their own サ変 class in `search`, as
+        // `potential_attaches` does the `る` row.
         assert_eq!(
-            chains, 133_802,
-            "the walk reached {chains} chains, not 133,802 -- the conjugation table's \
+            chains, 134_488,
+            "the walk reached {chains} chains, not 134,488 -- the conjugation table's \
              shape changed. That is not automatically wrong, but it has to be \
-             deliberate: 133,802 is {depth0_chains} depth-0 chains plus {depth1_chains} \
+             deliberate: 134,488 is {depth0_chains} depth-0 chains plus {depth1_chains} \
              depth-1 plus {depth2_chains} depth-2, over the 22 classes JMDICT_POS_CLASS \
              maps (カ変・来ル per Phase 1b-ii, 一段・クレル with the v1-s row). \
              Re-derive it and update this constant, rather than loosening the assertion"
@@ -1857,6 +1899,57 @@ mod tests {
                 "{surface} -> する"
             );
         }
+    }
+
+    /// Whether some chain over the whole of `surface` reaches `lemma` with
+    /// `class` as its headword's own class -- `lex` looks the key up only in
+    /// the classes the entry's POS maps to, so the class is part of the reach.
+    fn reaches_in(surface: &str, lemma: &str, class: &str) -> bool {
+        let c = chars(surface);
+        table()
+            .chains_ending_at(&c, c.len(), 8)
+            .iter()
+            .any(|h| key(&c, h) == lemma && h.stem_class == Some(class_id_of(class)))
+    }
+
+    #[test]
+    fn suru_takes_the_classical_negative_on_its_se_stem() {
+        // ぬ/ず attach to the `せ` of both サ変 classes, not to 未然形, so until
+        // these rows existed 気にせず read 気 | に | せず, 気にせぬ read 気にせ
+        // (a bare stem) | ぬ glossed ぬる "to paint", and 愛せず read 愛す
+        // Potential Negative, "cannot love". vs-i's `せ` is 未然ヌ接続, vs-s's is
+        // 未然レル接続.
+        for (surface, lemma, class) in [
+            ("気にせず", "気にする", "サ変・スル"),
+            ("気にせぬ", "気にする", "サ変・スル"),
+            ("気にせざる", "気にする", "サ変・スル"),
+            ("せず", "する", "サ変・スル"),
+            ("愛せず", "愛する", "サ変・−スル"),
+            ("関せぬ", "関する", "サ変・−スル"),
+        ] {
+            assert!(
+                reaches_in(surface, lemma, class),
+                "{surface} -> {lemma} in {class}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_se_stem_negative_leaves_other_classes_and_the_conditional_alone() {
+        // たい's 未然ヌ接続 is `たから`, so ぬ read 練習したからね as 練習する
+        // Want-to Negative Conditional, and ず would do the same to たからず.
+        assert!(!reaches_in("したからね", "する", "サ変・スル"));
+        assert!(!reaches_in("したからず", "する", "サ変・スル"));
+        // An adjective's is `から`: そこからね read 濃い, and 遠からず lost its
+        // own entry to 遠い Negative.
+        assert!(!reaches_in("こからね", "こい", "形容詞・アウオ段"));
+        assert!(!reaches_in("遠からず", "遠い", "形容詞・アウオ段"));
+        // サ変・スル's 未然レル接続 is `さ`, which takes no ぬ: さず is not する.
+        assert!(!reaches_in("さず", "する", "サ変・スル"));
+        // ぬ's 仮定形 ね: JMdict carries せねば whole, and the chain split it
+        // せね | ば.
+        assert!(!reaches_in("気にせね", "気にする", "サ変・スル"));
+        assert!(!reaches_in("愛せね", "愛する", "サ変・−スル"));
     }
 
     #[test]
