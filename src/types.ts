@@ -91,6 +91,9 @@ export interface GlossFilters {
 /** Which of the three window chrome shapes the main window wears (spec §7.4). */
 export type ChromeMode = 'native' | 'header' | 'content';
 
+/** Whether the main window grows to fit a long sentence, and from which edge. */
+export type GrowDirection = 'off' | 'up' | 'down';
+
 export interface Settings {
   always_on_top: boolean;
   clipboard_monitoring: boolean;
@@ -141,6 +144,12 @@ export interface Settings {
   text_shadow?: boolean;
   /** Shadow offset and blur in px, bound to `--text-shadow-size`. */
   text_shadow_size?: number;
+  /** Grow the main window to fit an overflowing sentence, and from which edge. */
+  grow_direction?: GrowDirection;
+  /** The most lines that growth may add. */
+  grow_lines?: number;
+  /** Whether growing and shrinking animate. Absent reads as on. */
+  grow_animate?: boolean;
   window_width?: number;
   window_height?: number;
   window_x?: number;

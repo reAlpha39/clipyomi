@@ -298,6 +298,7 @@ pub mod win32_frameless {
     const SWP_NOMOVE: u32 = 0x0002;
     const SWP_NOSIZE: u32 = 0x0001;
     const SWP_NOZORDER: u32 = 0x0004;
+    const SWP_NOACTIVATE: u32 = 0x0010;
     const SWP_FRAMECHANGED: u32 = 0x0020;
 
     #[allow(non_snake_case)]
@@ -787,6 +788,33 @@ pub mod win32_frameless {
         }
     }
 
+    /// Moves and resizes the window in one `SetWindowPos`.
+    ///
+    /// Growing from the top edge changes the top and the height together; as
+    /// two calls, the bottom edge would drop for a frame and come back, on
+    /// every frame of the animation. Takes the outer position and the inner
+    /// size — the pair `layout::live_box` reads — and adds the frame back on
+    /// for the outer size `SetWindowPos` wants.
+    pub fn set_box(window: &Window, x: i32, y: i32, width: u32, height: u32) {
+        let Ok(hwnd) = window.hwnd() else { return };
+        let (Ok(outer), Ok(inner)) = (window.outer_size(), window.inner_size()) else {
+            return;
+        };
+        let frame_w = outer.width as i32 - inner.width as i32;
+        let frame_h = outer.height as i32 - inner.height as i32;
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd.0,
+                std::ptr::null_mut(),
+                x,
+                y,
+                width as i32 + frame_w,
+                height as i32 + frame_h,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+    }
+
     pub fn init_window(window: &Window) {
         // A theme read that fails leaves the dark default: this app forces the
         // dark immersive title bar below, so dark is the safer guess. Either
@@ -1172,6 +1200,34 @@ pub fn save_window_geometry(
         .map_err(|e| e.to_string())
 }
 
+/// Moves and resizes the main window in one step: outer position and inner
+/// size, physical px — the box `window-grow.ts` grows and shrinks.
+///
+/// One step on Windows, a single `SetWindowPos`. Elsewhere it is the two calls
+/// `peek_titlebar` makes, which can show the moved edge a frame early.
+#[tauri::command]
+pub fn set_window_box(
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let window = chrome_target(&app)?;
+    #[cfg(target_os = "windows")]
+    win32_frameless::set_box(&window, x, y, width, height);
+    #[cfg(not(target_os = "windows"))]
+    {
+        window
+            .set_size(tauri::PhysicalSize::new(width, height))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(tauri::PhysicalPosition::new(x, y))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// The height to give the window when nothing has been saved yet.
 ///
 /// The reserved row is part of the window's real box and is persisted that way —
@@ -1230,6 +1286,17 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     }
     if incoming.text_shadow.is_some() {
         current.text_shadow = incoming.text_shadow;
+    }
+    // A mode, a stepper the settings window always fills and a checkbox, so
+    // merged like `furigana_mode` and the toggles above.
+    if incoming.grow_direction.is_some() {
+        current.grow_direction = incoming.grow_direction;
+    }
+    if incoming.grow_lines.is_some() {
+        current.grow_lines = incoming.grow_lines;
+    }
+    if incoming.grow_animate.is_some() {
+        current.grow_animate = incoming.grow_animate;
     }
     // Assigned, like the sizes below: a colour's Reset and a font select's
     // Default both reach here as the key gone, and only an assign can carry
@@ -1861,5 +1928,35 @@ mod tests {
             s.text_shadow_size, None,
             "the toggles' sizes are sizes: omission clears them"
         );
+    }
+
+    /// The grow keys are a mode, a stepper and a checkbox the settings window
+    /// always sends, so they merge like `furigana_mode` and `hide_*`: a
+    /// partial payload never wipes them.
+    #[test]
+    fn merge_saved_merges_the_grow_keys() {
+        let mut current = Settings {
+            grow_direction: Some("up".into()),
+            grow_lines: Some(3),
+            grow_animate: Some(false),
+            ..Default::default()
+        };
+        merge_saved(&mut current, Settings::default());
+        assert_eq!(current.grow_direction, Some("up".into()));
+        assert_eq!(current.grow_lines, Some(3));
+        assert_eq!(current.grow_animate, Some(false));
+
+        merge_saved(
+            &mut current,
+            Settings {
+                grow_direction: Some("down".into()),
+                grow_lines: Some(1),
+                grow_animate: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(current.grow_direction, Some("down".into()));
+        assert_eq!(current.grow_lines, Some(1));
+        assert_eq!(current.grow_animate, Some(true));
     }
 }

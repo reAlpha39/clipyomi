@@ -833,3 +833,94 @@ describe('Settings Window', () => {
     expect(Object.keys(save![1].settings)).not.toContain('mecab_hints');
   });
 });
+
+describe('the grow-to-fit controls', () => {
+  let container: HTMLElement;
+
+  async function settled(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  function lastSave(): Settings {
+    const call = [...invoke.mock.calls].reverse().find(([cmd]) => cmd === 'save_settings');
+    if (call === undefined) throw new Error('save_settings was not invoked');
+    return (call[1] as { settings: Settings }).settings;
+  }
+
+  function mount(stored: Partial<Settings>): void {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ always_on_top: false, clipboard_monitoring: true, ...stored });
+      }
+      return Promise.resolve(null);
+    });
+    initSettingsApp(container);
+  }
+
+  const lines = () => container.querySelector<HTMLInputElement>('#setting-grow-lines')!;
+  const animate = () => container.querySelector<HTMLInputElement>('#setting-grow-animate')!;
+  const direction = (d: string) =>
+    container.querySelector<HTMLButtonElement>(`[data-grow-direction="${d}"]`)!;
+
+  beforeEach(() => {
+    container = document.createElement('main');
+    document.body.appendChild(container);
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+  });
+
+  afterEach(() => {
+    container.remove();
+  });
+
+  test('a fresh install shows off, the default cap and animation on, with the two disabled', async () => {
+    mount({});
+    await settled();
+    expect(direction('off').getAttribute('aria-checked')).toBe('true');
+    expect(lines().value).toBe('2');
+    expect(animate().checked).toBe(true);
+    expect(lines().disabled).toBe(true);
+    expect(animate().disabled).toBe(true);
+  });
+
+  test('reflects what was persisted', async () => {
+    mount({ grow_direction: 'up', grow_lines: 3, grow_animate: false });
+    await settled();
+    expect(direction('up').getAttribute('aria-checked')).toBe('true');
+    expect(lines().value).toBe('3');
+    expect(animate().checked).toBe(false);
+    expect(lines().disabled).toBe(false);
+  });
+
+  test('picking a direction saves and broadcasts it with the other two', async () => {
+    mount({});
+    await settled();
+    direction('down').click();
+    expect(lastSave()).toMatchObject({ grow_direction: 'down', grow_lines: 2, grow_animate: true });
+    expect(emitted).toContainEqual([
+      'settings-changed',
+      expect.objectContaining({ grow_direction: 'down' }),
+    ]);
+    expect(lines().disabled).toBe(false);
+  });
+
+  // A typed value walks past `max`; what is saved is what the main window
+  // will actually use.
+  test('the line cap saves pinned into range', async () => {
+    mount({ grow_direction: 'up' });
+    await settled();
+    lines().value = '40';
+    lines().dispatchEvent(new Event('change'));
+    expect(lastSave().grow_lines).toBe(10);
+    expect(lines().value).toBe('10');
+  });
+
+  test('the animation toggle saves', async () => {
+    mount({ grow_direction: 'up' });
+    await settled();
+    animate().checked = false;
+    animate().dispatchEvent(new Event('change'));
+    expect(lastSave().grow_animate).toBe(false);
+  });
+});

@@ -209,6 +209,17 @@ pub struct Settings {
     /// from. A size like `text_outline_width`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_shadow_size: Option<u32>,
+    /// Grow the main window to fit an overflowing sentence: `off`, `up` (the
+    /// bottom edge holds) or `down` (the top holds). A mode like
+    /// `furigana_mode`, validated by `clampGrowDirection` at apply time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grow_direction: Option<String>,
+    /// The most lines that growth may add. Pinned by `clampGrowLines`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grow_lines: Option<u32>,
+    /// Whether growing and shrinking animate. `None` reads as on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grow_animate: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_width: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -264,6 +275,9 @@ impl Default for Settings {
             text_outline_width: None,
             text_shadow: None,
             text_shadow_size: None,
+            grow_direction: None,
+            grow_lines: None,
+            grow_animate: None,
             window_width: None,
             window_height: None,
             window_x: None,
