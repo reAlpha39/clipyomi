@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 /**
- * Growing the main window to fit a sentence that does not fit it.
+ * Fitting the main window's height to the sentence it shows.
  *
- * The user's own box — whatever they dragged the window to — is the base. A
- * sentence that overflows it grows the window by what is hidden, capped at a
- * number of lines; one that fits shrinks it back. `up` holds the bottom edge
- * (a window lined up over a VN textbox), `down` holds the top.
+ * The window hugs the text: as tall as the sentence plus its padding, from
+ * one line up to a number of lines, past which the pane scrolls. Width and
+ * position stay the user's; `up` holds the bottom edge (a window lined up
+ * over a VN textbox), `down` holds the top.
+ *
+ * The user's own box — whatever they dragged the window to — is the base the
+ * fit is an offset from, above or below it. It is what the geometry save
+ * persists and what turning the fit off returns to.
  *
  * The arithmetic is pure and the controller takes its window, clock and frame
  * scheduler as parameters, so all of it runs under the test suite without a
@@ -32,7 +36,16 @@ export interface Box {
  */
 export const GROW_LINE_LIMITS = { min: 1, max: 10 } as const;
 
-export const DEFAULT_GROW_LINES = 2;
+/** The most lines the window shows before the pane scrolls. */
+export const DEFAULT_GROW_LINES = 3;
+
+/**
+ * The shortest the window may be fitted to, in logical px: `tauri.conf.json`'s
+ * `minHeight`, mirrored by `layout::geometry::MIN_LOGICAL_HEIGHT`. The OS
+ * refuses anything shorter, and a box it refused would leave the grower's
+ * idea of the window, and an `up` fit's bottom edge, off by the difference.
+ */
+export const MIN_WINDOW_HEIGHT = 40;
 
 /** How long one grow or shrink takes when animated. */
 export const GROW_DURATION_MS = 150;
@@ -80,21 +93,12 @@ export function linePitch(bottoms: readonly number[], height: number, threshold:
 }
 
 /**
- * How far to grow: everything HIDDEN below the base, until the window shows
- * LINES lines of PITCH more than the base does. Past the cap the pane
- * scrolls, as it always has.
- *
- * BASE_TEXT is the height the base leaves for text, inside the padding. The
- * lines it shows are rounded to whole ones, so a window sized to one line but
- * a few px short of its padding counts as one line, and LINES more show in
- * full — counted in px alone, those few px came out of the cap, and a
- * sentence exactly LINES longer stopped a padding's worth short and scrolled.
+ * How much of TEXT's height the window shows: all of it, but at least one
+ * line of PITCH and at most LINES of them. Without a measured line, all of it.
  */
-export function growTarget(hidden: number, pitch: number, lines: number, baseText: number): number {
-  if (hidden <= 0 || pitch <= 0) return 0;
-  const baseLines = Math.max(0, Math.round(baseText / pitch));
-  const cap = (baseLines + lines) * pitch - baseText;
-  return Math.ceil(Math.min(hidden, cap));
+export function fitText(text: number, pitch: number, lines: number): number {
+  if (pitch <= 0) return Math.ceil(text);
+  return Math.ceil(Math.min(Math.max(text, pitch), lines * pitch));
 }
 
 /** BASE grown by EXTRA from SIDE. */
@@ -128,9 +132,9 @@ export interface GrowDeps {
 }
 
 export interface Grower {
-  /** Head for TARGET px of growth from SIDE. */
+  /** Head for TARGET px off the base from SIDE; negative is shorter than it. */
   want(target: number, side: GrowSide, animate: boolean): void;
-  /** The growth last applied, in px. */
+  /** The offset off the base last applied, in px, signed. */
   applied(): number;
   /** The side that growth is on. */
   side(): GrowSide;
@@ -225,7 +229,8 @@ export function createGrower(deps: GrowDeps): Grower {
 
   return {
     want(target, nextSide, animate) {
-      const wanted = Math.max(0, Math.round(target));
+      // Signed: a short sentence fits the window below the base.
+      const wanted = Math.round(target);
       // Every sentence that fits asks for zero; while idle at the size asked
       // for, that costs nothing — not even a window read.
       if (base === null && !reading && wanted === applied && (applied === 0 || nextSide === side)) {

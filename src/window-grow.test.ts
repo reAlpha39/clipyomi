@@ -8,8 +8,8 @@ import {
   clampGrowDirection,
   clampGrowLines,
   createGrower,
+  fitText,
   grownBox,
-  growTarget,
   linePitch,
   type Box,
 } from './window-grow';
@@ -60,36 +60,25 @@ describe('linePitch', () => {
   });
 });
 
-describe('growTarget', () => {
-  // A base showing exactly one 40px line of text.
-  test('is zero when nothing is hidden', () => {
-    expect(growTarget(0, 40, 2, 40)).toBe(0);
-    expect(growTarget(-120, 40, 2, 40)).toBe(0);
-  });
-
-  test('shows everything hidden while it fits under the cap', () => {
-    expect(growTarget(55.2, 40, 2, 40)).toBe(56);
+describe('fitText', () => {
+  // The window hugs the text: as tall as it is, whatever the user's own size.
+  test('is the text height while it is within the cap', () => {
+    expect(fitText(82, 41, 3)).toBe(82);
+    expect(fitText(81.6, 40.8, 3)).toBe(82);
   });
 
   test('stops at the cap and leaves the rest to the scrollbar', () => {
-    expect(growTarget(300, 40, 2, 40)).toBe(80);
+    expect(fitText(300, 41, 3)).toBe(123);
   });
 
-  test('is zero without a measured line', () => {
-    expect(growTarget(300, 0, 2, 40)).toBe(0);
+  // Never shorter than one line, so a window between sentences, or showing
+  // a one-character one, keeps a line's room.
+  test('keeps at least one line', () => {
+    expect(fitText(10, 41, 3)).toBe(41);
   });
 
-  // A window sized to one line, a few px short of its bottom padding: a
-  // two-line sentence is one line plus those few px hidden. One extra line
-  // has to show all of it, not stop a padding's worth short and scroll.
-  test('counts the lines the base shows, so a base cut short still gets whole lines', () => {
-    expect(growTarget(2 * 41 - 35, 41, 1, 35)).toBe(47);
-  });
-
-  // The cap is lines on screen, not px: a base showing 1.4 lines rounds to
-  // one, and one extra line tops the window out at two.
-  test('caps at the base lines plus N, rounded to whole lines', () => {
-    expect(growTarget(300, 41, 1, 57.4)).toBe(25);
+  test('takes the text as it is without a measured line', () => {
+    expect(fitText(57.5, 0, 3)).toBe(58);
   });
 });
 
@@ -158,6 +147,21 @@ function harness(start: Box) {
 
 describe('createGrower', () => {
   const base: Box = { x: 10, y: 500, width: 600, height: 200 };
+
+  // Hugging a short sentence takes the window below the user's own size; up
+  // still holds the bottom edge, and the base is still the box to return to.
+  test('shrinks below the base for a negative target, holding the bottom edge going up', async () => {
+    const h = harness(base);
+    h.grower.want(-80, 'up', false);
+    await h.settle();
+    expect(h.live()).toEqual({ x: 10, y: 580, width: 600, height: 120 });
+    expect(h.grower.baseOf(h.live())).toEqual(base);
+    h.step();
+    h.grower.want(0, 'up', true);
+    await h.settle();
+    h.step();
+    expect(h.live()).toEqual(base);
+  });
 
   test('snaps to the target in one call with animation off', async () => {
     const h = harness(base);
