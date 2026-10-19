@@ -119,6 +119,22 @@ pub fn resolve_dict_root(app_config_dir: &Path) -> PathBuf {
     app_config_dir.join("dict")
 }
 
+/// The folder that makes a copy portable. The release zip ships it beside
+/// `clipyomi.exe`; an installed or developer copy has none.
+pub const PORTABLE_DIR: &str = "data";
+
+/// Where a portable copy keeps what would otherwise go in the per-user config
+/// directory: settings, the dictionary and the boundary hints.
+///
+/// `None` unless a `data` folder sits beside the executable, so a copy without
+/// one keeps using `%APPDATA%` exactly as before. A folder rather than always
+/// writing beside the exe, because an installed copy's folder is not writable
+/// and a macOS `.app` must not be written into.
+pub fn portable_data_dir(exe: &Path) -> Option<PathBuf> {
+    let dir = exe.parent()?.join(PORTABLE_DIR);
+    dir.is_dir().then_some(dir)
+}
+
 /// Open the newest published generation and build the app's read-only state.
 pub fn load_state(root: &Path) -> Result<AppState, StartupError> {
     let generation = generations::latest(root)?.ok_or_else(|| StartupError::NoIndex {
@@ -346,6 +362,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch dir");
         dir
+    }
+
+    /// The release zip ships `clipyomi.exe` beside an empty `data` folder;
+    /// that folder alone is what keeps settings and the dictionary out of
+    /// `%APPDATA%`.
+    #[test]
+    fn a_data_folder_beside_the_exe_makes_the_copy_portable() {
+        let dir = scratch("portable");
+        std::fs::create_dir_all(dir.join(PORTABLE_DIR)).expect("mkdir");
+        assert_eq!(
+            portable_data_dir(&dir.join("clipyomi.exe")),
+            Some(dir.join(PORTABLE_DIR))
+        );
+    }
+
+    /// No folder means an installed or developer copy: the caller falls back
+    /// to the per-user config directory, as every build before this one did.
+    #[test]
+    fn without_a_data_folder_the_copy_is_not_portable() {
+        let dir = scratch("not-portable");
+        assert_eq!(portable_data_dir(&dir.join("clipyomi.exe")), None);
+    }
+
+    /// A stray file named `data` must not count: settings and the dictionary
+    /// would then be written beneath a file and every save would fail.
+    #[test]
+    fn a_file_named_data_does_not_make_the_copy_portable() {
+        let dir = scratch("portable-file");
+        std::fs::write(dir.join(PORTABLE_DIR), b"").expect("write");
+        assert_eq!(portable_data_dir(&dir.join("clipyomi.exe")), None);
     }
 
     /// The expected first-run condition, not an error: 2E adds the download.

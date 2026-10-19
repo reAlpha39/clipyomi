@@ -83,7 +83,13 @@ fn main() {
                 );
             });
 
-            let config_dir = app.path().app_config_dir()?;
+            let portable = std::env::current_exe()
+                .ok()
+                .and_then(|exe| state::portable_data_dir(&exe));
+            let config_dir = match portable {
+                Some(dir) => dir,
+                None => app.path().app_config_dir()?,
+            };
             let root = state::resolve_dict_root(&config_dir);
 
             // Settings first: the poll needs the monitoring flag before it starts.
