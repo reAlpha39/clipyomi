@@ -504,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "clipyomi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "font-enumeration",
  "jmdict-source",
