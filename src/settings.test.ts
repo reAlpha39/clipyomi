@@ -834,6 +834,45 @@ describe('Settings Window', () => {
   });
 });
 
+describe('the text padding box', () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement('main');
+    document.body.appendChild(container);
+    listeners.clear();
+    emitted.length = 0;
+    invoke.mockReset();
+  });
+
+  afterEach(() => {
+    container.remove();
+  });
+
+  test('saves the padding pinned into range, and an empty box as unset', async () => {
+    invoke.mockImplementation((cmd: string) =>
+      Promise.resolve(
+        cmd === 'get_settings' ? { always_on_top: false, clipboard_monitoring: true, pane_padding: 6 } : null,
+      ),
+    );
+    initSettingsApp(container);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const padding = container.querySelector<HTMLInputElement>('#setting-pane-padding')!;
+    expect(padding.value).toBe('6');
+
+    padding.value = '99';
+    padding.dispatchEvent(new Event('change'));
+    expect(invoke).toHaveBeenLastCalledWith('save_settings', {
+      settings: expect.objectContaining({ pane_padding: 48 }),
+    });
+
+    padding.value = '';
+    padding.dispatchEvent(new Event('change'));
+    const saved = invoke.mock.calls.filter(([cmd]) => cmd === 'save_settings').at(-1)![1];
+    expect(saved.settings.pane_padding).toBeUndefined();
+  });
+});
+
 describe('the grow-to-fit controls', () => {
   let container: HTMLElement;
 

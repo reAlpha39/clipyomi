@@ -144,6 +144,8 @@ export interface Settings {
   text_shadow?: boolean;
   /** Shadow offset and blur in px, bound to `--text-shadow-size`. */
   text_shadow_size?: number;
+  /** The inset between the main window's edge and its text in px, bound to `--space-pane`. */
+  pane_padding?: number;
   /** Grow the main window to fit an overflowing sentence, and from which edge. */
   grow_direction?: GrowDirection;
   /** The most lines that growth may add. */
