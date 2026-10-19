@@ -85,7 +85,7 @@ export function initSettingsApp(container: HTMLElement) {
           <span class="label-text">Text padding</span>
           <input type="number" id="setting-pane-padding"
                  min="${FONT_LIMITS.padding.min}" max="${FONT_LIMITS.padding.max}" step="1" />
-          <span class="unit">px from the edge</span>
+          <span class="unit">px</span>
         </label>
       </section>
       ${APPEARANCE_SECTIONS}
