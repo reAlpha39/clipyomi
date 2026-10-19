@@ -71,9 +71,9 @@ export function initSettingsApp(container: HTMLElement) {
         </label>
         <label class="settings-number-row">
           <span class="label-text">Furigana</span>
-          <input type="number" id="setting-furigana-scale"
+          <input type="number" id="setting-furigana-scale" title="Percent of the sentence size"
                  min="${FONT_LIMITS.furigana.min}" max="${FONT_LIMITS.furigana.max}" step="1" />
-          <span class="unit">% of sentence</span>
+          <span class="unit">%</span>
         </label>
         <label class="settings-number-row">
           <span class="label-text">Furigana gap</span>
