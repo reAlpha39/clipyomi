@@ -5,7 +5,7 @@
 **Phase 1a design:** [`2026-09-01-engine-v2-phase1a-design.md`](2026-09-01-engine-v2-phase1a-design.md) §6.1, §7, §7.5
 **Phase 1a handoff:** [`../2026-09-01-engine-v2-phase1a-handoff.md`](../2026-09-01-engine-v2-phase1a-handoff.md) §5
 **Phase 1b-i handoff:** [`../2026-09-02-engine-v2-phase1b-i-handoff.md`](../2026-09-02-engine-v2-phase1b-i-handoff.md) §2
-**Branch:** `feat/engine-v2`, from `8bc54e2`
+**Branch:** `feat/engine-v2`, from `a8ac745`
 **Status:** Design, approved in session, not implemented
 
 ---

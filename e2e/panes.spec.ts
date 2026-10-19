@@ -51,7 +51,7 @@ for (const size of SIZES) {
       // is possible and simply has not been done. This comment used to say
       // there was "no git remote here" to run such a job; there is one, and
       // `.github/workflows/ci.yml`'s header carries the correction — this was
-      // the fifth site of that premise and commit 5273ca1 missed it.
+      // the fifth site of that premise and commit 346eb28 missed it.
       if (!process.env.CI) {
         await expect(page).toHaveScreenshot(`panes-${size.name}-${theme}.png`);
       }

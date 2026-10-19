@@ -5,7 +5,7 @@
 **Measured in:**
 [`2026-09-21-six-corpora-handoff.md`](../2026-09-21-six-corpora-handoff.md),
 whose §8 postscript closed the previous defect in this area and whose katakana
-figures below were taken after it shipped (`4bc74b4`).
+figures below were taken after it shipped (`f750bd1`).
 
 ## 1. What it does, and what it deliberately does not
 
@@ -155,7 +155,7 @@ were refused.
 
 ## 5. Gates
 
-Baseline, at `4bc74b4`:
+Baseline, at `f750bd1`:
 
 | | hints-on | hints-off |
 | --- | --- | --- |
@@ -389,7 +389,7 @@ revert.
 three gold cells it costs and reverted the charge rather than shipping it.
 The implementation this section describes — `KATAKANA_FRAGMENT`, its `if` in
 `cost()`, its unit test, and the four parse tests in `engine_v2.rs` — is
-recoverable from `4007a45`, the commit that added it, and the sweep and
+recoverable from `eac09f1`, the commit that added it, and the sweep and
 measurement it failed are unchanged above. Task 1's geometry (`kana.rs`'s
 `is_katakana`, `lex.rs`'s `katakana_runs` and the `inside_katakana_run` field
 and its assignment) was not part of the revert and remains in the tree, so a

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-26
 **Spec:** [`docs/superpowers/specs/2026-08-26-jparser-phase4d-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-26-jparser-phase4d-design.md)
-**Commits:** `a98d732..b05a4d1` on `develop` (sixteen commits, unpushed), plus
+**Commits:** `a6df5c5..f98fb45` on `develop` (sixteen commits, unpushed), plus
 the final-review fix wave in §8 (unpushed)
 
 This is the last sub-phase of Phase 4. Phase 4 (window behaviour) is
@@ -12,7 +12,7 @@ complete as of this close.
 
 ## 1. What Shipped
 
-1. **The dependency** (`c98095c`). `tauri-plugin-global-shortcut`, pinned to
+1. **The dependency** (`a9a860b`). `tauri-plugin-global-shortcut`, pinned to
    the exact resolved `2.3.2`, matching the `tauri-plugin-clipboard-manager`
    precedent. MIT OR Apache-2.0, taken under **MIT** — Apache-2.0 alone is
    incompatible with this project's GPL-2.0-only. Task 0 verified the
@@ -22,40 +22,40 @@ complete as of this close.
    permission for this backend — could not be confirmed from source and is
    carried into §4 below.
 
-2. **`LayoutSlot` and `Settings.layout_slots`** (`2f9b97c`). A `BTreeMap<String,
+2. **`LayoutSlot` and `Settings.layout_slots`** (`1601821`). A `BTreeMap<String,
    LayoutSlot>` in `settings.rs`, persisted only when non-empty. The same
    commit extracts `merge_saved` out of `save_settings` so the
    `layout_slots`-must-stay-untouched contract (§3.3 design) has one place to
    live and one test pinning it.
 
-3. **`layout.rs` and the pure geometry clamp** (`3d3a5c6`, `462779c`,
-   `ffa336e`). `fit(slot, monitors, primary, scale_hint) -> PhysRect` keeps a
+3. **`layout.rs` and the pure geometry clamp** (`a6bc872`, `238c597`,
+   `a1f0233`). `fit(slot, monitors, primary, scale_hint) -> PhysRect` keeps a
    restored window on a monitor that still exists: probes the slot's
    physical box, targets whichever monitor's work area overlaps it most (or
    falls back to primary), re-derives size at the target's own scale, then
    clamps into the work area at the configured 160×80 floor.
 
-4. **`unpeek` and `commands::is_peeked`** (`c8fe56c`). Corrects a bind
+4. **`unpeek` and `commands::is_peeked`** (`9eca3b9`). Corrects a bind
    captured mid-peek (macOS only) so the stored box doesn't carry the extra
    band height and the shifted `y` the peek grew the frame by.
 
-5. **`apply_slot`** (`8177a4a`). The assignment merge: a restored slot
+5. **`apply_slot`** (`b437e45`). The assignment merge: a restored slot
    overwrites `SettingsState`'s geometry, chrome mode, always-on-top, alpha,
    font sizes and furigana mode outright — never merges — because a slot
    that recorded "fonts unset" has to clear them, which a merge can't
    express.
 
-6. **`slot_key`, `slot_from`, `live_box`, `bind`** (`d1fc64c`). Bind reads
+6. **`slot_key`, `slot_from`, `live_box`, `bind`** (`9a62736`). Bind reads
    geometry from the live window (`inner_size` + `outer_position` +
    `scale_factor`, corrected for an in-flight peek) and everything else from
    `SettingsState` — never from the frontend's live CSS token, per 4B
    handoff §3's warning about the clamped alpha.
 
-7. **`apply_chrome`** (`ea5e014`), extracted from `set_chrome_mode` so
+7. **`apply_chrome`** (`2d7c887`), extracted from `set_chrome_mode` so
    restore and the settings-window chrome switch share one per-platform
    body rather than duplicating it.
 
-8. **`slot_to_restore`, `monitors`, `restore`** (`1fffa94`, corrected in
+8. **`slot_to_restore`, `monitors`, `restore`** (`80b58c5`, corrected in
    §8). An absent slot is a silent no-op. Otherwise: resolve the mode
    through `supported()`, compute the fitted box, assign it and the slot
    into `SettingsState`, apply chrome, geometry and always-on-top in Rust,
@@ -63,7 +63,7 @@ complete as of this close.
    the token-level half.
 
 9. **The plugin, the twenty registrations, `ShortcutWarning`,
-   `showShortcutWarning`** (`f352c03`). `Alt+Digit1..9` restores,
+   `showShortcutWarning`** (`cf701b2`). `Alt+Digit1..9` restores,
    `Shift+Alt+Digit1..9` binds, `Alt+BracketLeft`/`Alt+BracketRight` step
    history. The handler gates on `ShortcutState::Pressed` (the release event
    is otherwise a second, harmless call) and does not debounce auto-repeat
@@ -73,14 +73,14 @@ complete as of this close.
    `ShortcutWarning(String)`, exposed by a `shortcut_warning` command and
    rendered the same way `showSettingsWarning` renders `SettingsWarning`.
 
-10. **`history-step`** (`b537080`). `Alt+[`/`Alt+]` emit `-1`/`1` to the main
+10. **`history-step`** (`ae457b6`). `Alt+[`/`Alt+]` emit `-1`/`1` to the main
     window; the listener is the same one-liner the header chevrons already
     use, so `display(history.back())`/`display(history.forward())` fires
     with no new guard — `display(null)` is already a no-op at either end of
     the timeline.
 
 11. **The settings-window font-box gap and the one-emit restore pin**
-    (`84c909c`, `4a5a8c8`, `170aaec`). `settings.ts`'s `applySettings` now
+    (`d192aa7`, `0cc1445`, `968f67a`). `settings.ts`'s `applySettings` now
     clears its font boxes on a full snapshot whose font keys are absent,
     rather than leaving a stale number showing after a restore-to-unset —
     the second surface of 4B ruling 1's bug class. A `main.test.ts` test
@@ -88,7 +88,7 @@ complete as of this close.
     furigana mode and the chrome mode together, with a real rendered-furigana
     assertion (not just a token-clearing check — see §2 below).
 
-12. **The `e2e/stub.ts` gap that failed the gate, closed** (`b05a4d1`). See
+12. **The `e2e/stub.ts` gap that failed the gate, closed** (`f98fb45`). See
     §2's execution finding.
 
 ---
@@ -177,7 +177,7 @@ that a future reader of this phase needs, carried into my own words.
    which is what pointed at layout rather than content. **Production was
    never at risk**: the real `shortcut_warning` command returns
    `Option<String>`, so a live app gets `null`, not `undefined`, and the
-   guard short-circuits correctly. Fixed in `b05a4d1` — one line in
+   guard short-circuits correctly. Fixed in `f98fb45` — one line in
    `e2e/stub.ts` answering `shortcut_warning` with `null`, mirroring the
    `settings_warning` line already above it — with no baseline
    regenerated. The lesson: `e2e/stub.ts`'s standing contract is that it
@@ -194,7 +194,7 @@ that a future reader of this phase needs, carried into my own words.
 
 ## 3. The Verification Gate
 
-Run and personally re-verified at commit `b05a4d1` (tip of `develop`):
+Run and personally re-verified at commit `f98fb45` (tip of `develop`):
 
 - **Vitest:** 252 passed (up from 244 at phase start). `Test Files 13
   passed (13)`.
@@ -202,7 +202,7 @@ Run and personally re-verified at commit `b05a4d1` (tip of `develop`):
   completes (`✓ built in 77ms`).
 - **Playwright:** **45 passed**, up from 41 at 4B's close. This is 45, not
   the design spec's expected 44 — the extra test predates this phase
-  (`26ac516`, a 4B fix-round commit, added one test to `chrome.spec.ts`
+  (`a123f2f`, a 4B fix-round commit, added one test to `chrome.spec.ts`
   before Task 0 of 4D ever ran), so 44 was already a stale expectation
   going into this phase, and the difference is not something 4D caused.
   Re-ran twice; both times all 45 pass and `git status --short` shows no
@@ -215,7 +215,7 @@ Run and personally re-verified at commit `b05a4d1` (tip of `develop`):
   `WINDOWPOS` — the same four that predate this phase. 4D added no new
   clippy debt.
 
-**Re-run after the §8 fix wave**, at `12826a7`: Vitest **252 passed** (13
+**Re-run after the §8 fix wave**, at `af07d73`: Vitest **252 passed** (13
 files) — unchanged, no frontend behaviour changed; `npm run build` clean;
 Playwright **45 passed** with `git status --short` again showing no
 screenshot baseline touched; `cargo test` **125 passed**; `cargo clippy
@@ -224,11 +224,11 @@ warnings. `cargo fmt --all -- --check` reports 34 diffs, none of them in
 this phase's Rust.
 
 **Note on how this gate was reached.** The first pass through this gate, at
-`170aaec`, showed the same four Playwright screenshot mismatches described
+`968f67a`, showed the same four Playwright screenshot mismatches described
 in §2 finding 7. That run was reported rather than worked around — no code
 was changed on that pass, and no handoff was written claiming a passing
 gate that hadn't passed. The stub fix landed as a separate commit
-(`b05a4d1`) after diagnosis, and the gate above is the re-run after that
+(`f98fb45`) after diagnosis, and the gate above is the re-run after that
 fix, verified again with my own commands rather than taken on trust.
 
 ---
@@ -311,7 +311,7 @@ Deferred minors recorded in this phase's own ledger, none acted on:
   measurement that could not have shown the truth, because the earlier
   tasks were already committed by then, so `layout.rs` stayed in the tree
   and could never have appeared as a diff. The real numbers, same rustfmt
-  1.9.0: **base `a98d732` 35, head `b05a4d1` 52**, and 16 of the 17 new
+  1.9.0: **base `a6df5c5` 35, head `f98fb45` 52**, and 16 of the 17 new
   diffs were in `layout.rs` with 2 more in `settings.rs`'s slot tests (the
   phase also happened to remove one pre-existing `commands.rs` diff).
   Fixed in §8: this phase's own Rust is formatted, the 35 pre-existing
@@ -385,9 +385,9 @@ again, for the reason recorded there.
 
 Twelve tasks each passed their own review; the whole-branch review at the
 close found what task-scoped review could not. Four commits, on `develop`
-after `4d4bc37`:
+after `97a7804`:
 
-1. **`dc6d748` — restore persisted a geometry it deliberately did not
+1. **`60ac6b1` — restore persisted a geometry it deliberately did not
    apply, and startup had no clamp at all.** `apply_slot` wrote the *raw*
    slot box into `window_*` while `restore` applied the *fitted* one, so
    binding a slot on a second monitor, unplugging it and pressing `Alt+N`
@@ -414,7 +414,7 @@ after `4d4bc37`:
    is a box the window actually occupied, in the units the frontend's own
    geometry save writes.
 
-2. **`d6e35a0` — `SettingsState::update`'s write race became genuinely
+2. **`3043703` — `SettingsState::update`'s write race became genuinely
    cross-thread, and its recorded justification was false.** The doc
    comment named the only callers as one webview's clicks, "one at a time",
    and released the lock before `save`. This phase's hotkey handler runs on
@@ -429,7 +429,7 @@ after `4d4bc37`:
    threads; it is a regression pin, not a proof — under the old code it
    would have failed only when the timing happened to hit.
 
-3. **`3084345` — four small findings.** `overlap` did its intersection
+3. **`e2bd828` — four small findings.** `overlap` did its intersection
    arithmetic in `i32`, so `box_.x + box_.width` overflowed for a
    hand-edited `window_x` near `i32::MAX` (a debug-build panic, on a
    keystroke); it is `i64` throughout now. Two untested `fit` branches
@@ -441,7 +441,7 @@ after `4d4bc37`:
    its own `always_on_top !== undefined` discriminator has always assumed
    and what `settings.ts` already did.
 
-4. **`12826a7` — `cargo fmt` on this phase's own Rust**, with the
+4. **`af07d73` — `cargo fmt` on this phase's own Rust**, with the
    corrected measurement recorded in §5.
 
 **What the fix wave deliberately did not do.** The 35 pre-existing `cargo

@@ -146,7 +146,7 @@ codebase's own (§2.1), and two arbitrary constants (§2.6, §2.7). One site
 (§2.3) additionally states something about upstream's internal ordering.
 
 The `colourLine` implementation those tests specify was already rewritten
-clean-room at `c827ef2` — the implementer worked only from
+clean-room at `be29e46` — the implementer worked only from
 `tooltip-colour.test.ts`, was forbidden from reading the previous
 implementation or any upstream source, and confirmed that constraint held.
 
@@ -206,7 +206,7 @@ Ordered by what they assume about (a).
    checked against upstream — so it is only honest if (a) really is clean.
    If it is not, this is laundering, and doing it is worse than leaving the
    citations alone.
-3. **If any site is judged not clean: clean-room that site**, the `c827ef2`
+3. **If any site is judged not clean: clean-room that site**, the `be29e46`
    method, but with the specification written from observed behaviour rather
    than from upstream line numbers — which is the flaw in the chain §3
    describes. §2.4 and §2.5 (`placePopover`'s fallback) are the only
@@ -247,7 +247,7 @@ for the answer rather than pre-empting it.
 | File | Why held |
 | --- | --- |
 | `src/render/tooltip-colour.test.ts` | carries §2.1, §2.2, §2.3 |
-| `src/render/tooltip-colour.ts` | the implementation those citations specify; rewritten clean-room at `c827ef2` *from* that test file — the chain §3 describes |
+| `src/render/tooltip-colour.ts` | the implementation those citations specify; rewritten clean-room at `be29e46` *from* that test file — the chain §3 describes |
 | `src/render/tooltip-text.test.ts` | carries §2.6 |
 | `src/render/tooltip-text.ts` | writes the `\u0001` marker §2.6 cites |
 | `src/render/popover.ts` | carries §2.4 — production code |
@@ -275,7 +275,7 @@ input the decision rests on, not the decision itself.
 That determination resolved the fork §6 described. §2.4/§2.5
 (`placePopover`'s neither-side-fits fallback), the one production-code site,
 had already been handled ahead of and independent of this decision: it was
-reauthored clean-room from a behavioural specification at `b8035a3`, and its
+reauthored clean-room from a behavioural specification at `5bd699f`, and its
 citation is gone. The remaining six — all in tests and one stylesheet —
 followed option 2: each is restated as behaviour, crediting "the original
 tooltip" generically where credit was worth keeping, with the file-and-line

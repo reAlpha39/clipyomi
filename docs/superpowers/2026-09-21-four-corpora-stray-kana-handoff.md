@@ -1,7 +1,7 @@
 # Four more corpora, and the class the probe could not rank — handoff
 
 **Date:** 2026-09-21
-**Branch:** `feat/corpus-disagree`, tip `a0f4ac6`
+**Branch:** `feat/corpus-disagree`, tip `6846607`
 **Predecessor:** [`2026-09-18-three-corpus-adjudication-handoff.md`](2026-09-18-three-corpus-adjudication-handoff.md)
 
 The previous session adjudicated three corpora side by side and left a list of
@@ -13,7 +13,7 @@ cannot show.
 
 §1 to §8 are the measurement, written before anything was changed: no code, no
 gate, and every artifact throwaway. §9 is the one change the measurement
-justified, shipped the same day — `640074c`, the 〜てくる / 〜ておく / 〜てみる
+justified, shipped the same day — `a07afb4`, the 〜てくる / 〜ておく / 〜てみる
 rows §4 priced.
 
 ## 1. The corpora, and how to rebuild the run
@@ -40,7 +40,7 @@ Copyrighted game script: local probe input only, and nothing derived from it is
 in this repository.
 
 The v1 side is produced out of tree as before. The detached worktree at
-`D:\Code\oss\clipyomi-v1` survived at `361a77f` with its untracked
+`D:\Code\oss\clipyomi-v1` survived at `b9386ba` with its untracked
 `examples/v1_dump.rs`. **No v1 index was on disk** — `dict/gen-2` is format 5 and
 `gen-3` format 6, both v2 — so it was rebuilt from a scratch copy of
 `%APPDATA%\dev.jparser.clipyomi\source\JMdict_e.gz` with
@@ -261,7 +261,7 @@ a class can be real and still be rare in the text a given reader is parsing.
 
 ## 9. Postscript: the three rows, shipped
 
-`640074c`, the same day, because §4 had already priced it and §7 of the
+`a07afb4`, the same day, because §4 had already priced it and §7 of the
 predecessor had already written the method down.
 
 Nine `ATTACHES_TO` rows — `てくる`/`でくる` as カ変・クル, `ておく`/`でおく` as
@@ -340,7 +340,7 @@ commits**, and that the corpus evidence has quietly been doing the gate's job �
 which is exactly the position §3's stray-kana class is in, arrived at from the
 other direction.
 
-**Built, in `420725b`.** `tests/fixtures/auxiliary_merges.txt` is the mirror of
+**Built, in `7645aad`.** `tests/fixtures/auxiliary_merges.txt` is the mirror of
 `spurious_merges.txt` — that file refuses merges the engine must not make, this
 one requires the merges it must — with 32 rows over the gold sentences that
 carry them. Each row asserts that gold still splits the surface (so no row can
@@ -363,7 +363,7 @@ a finding in its own right — see §5a.
 ## 11. The hints-off premise, audited
 
 The `LEN_GAIN` refusal and the largest open class in §4 of the predecessor both
-lean on hints-off being the state users are in. `fdbbb61` changed that on
+lean on hints-off being the state users are in. `a921938` changed that on
 2026-09-21 and the audit is worth writing down, because the answer is not the
 simple one.
 
@@ -398,7 +398,7 @@ its framing:
 
 **What changes is priority, and two documents now read wrong.** The three-corpus
 handoff's §8 says "the broken state is the one a fresh install runs in"; that
-sentence is stale and should be read against `fdbbb61`. And the hints-off-only
+sentence is stale and should be read against `a921938`. And the hints-off-only
 half of §5 above — `のも` 472 and `のかな` 148 — plus the ~1,640-per-10k
 atomisation class describe a shrinking audience rather than the default one.
 They are still real defects for the three groups named above; they are no

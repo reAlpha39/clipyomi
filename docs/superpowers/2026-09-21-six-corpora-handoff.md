@@ -1,7 +1,7 @@
 # The last six corpora, a control for the ratio, and three new classes — handoff
 
 **Date:** 2026-09-21
-**Branch:** `feat/corpus-disagree`, tip `43fa8dc`
+**Branch:** `feat/corpus-disagree`, tip `2bc7c93`
 **Predecessor:** [`2026-09-21-four-corpora-stray-kana-handoff.md`](2026-09-21-four-corpora-stray-kana-handoff.md)
 
 The predecessor ran four corpora and left six in `vn-text` deliberately unrun.
@@ -9,13 +9,13 @@ This session ran all six — 56,065 sentences, none of them seen before — and
 `vn-text` is now exhausted. Three things came out of it that the predecessor
 could not have had: a **control** that says the merge-direction ratio moved
 because the engine moved rather than because the writers changed, a **held-out
-replication** of `640074c` against a pre-fix binary, and **three defect classes
+replication** of `a07afb4` against a pre-fix binary, and **three defect classes
 that no previous session named**.
 
 §1 to §7 are the measurement, written before anything was changed: no code, no
 gate, and every artifact throwaway — the v1 index, the dumps and the pre-fix
 worktree are gone with the session scratchpad. §8 is the one change the
-measurement justified, shipped the same day — `4bc74b4`, §4a's class, which
+measurement justified, shipped the same day — `f750bd1`, §4a's class, which
 turned out to be a class assignment rather than the gloss it looked like.
 
 ## 1. The corpora, and how to rebuild the run
@@ -44,7 +44,7 @@ Copyrighted game script: local probe input only, and nothing derived from it is
 in this repository.
 
 The v1 side is produced out of tree as before, from the detached worktree at
-`D:\Code\oss\clipyomi-v1` (`361a77f`, with its untracked `examples/v1_dump.rs`).
+`D:\Code\oss\clipyomi-v1` (`b9386ba`, with its untracked `examples/v1_dump.rs`).
 No v1 index survives on disk, so it was rebuilt from a scratch copy of
 `%APPDATA%\dev.jparser.clipyomi\source\JMdict_e.gz` with
 `build-index --engine v1`: **486,553 keys, 619,717 records, 121,048 exact stems,
@@ -83,11 +83,11 @@ state, same v1 dump recipe:
 
 | kf3FHD, hints-on | we merge, v1 splits | we split, v1 merges | ratio |
 | --- | --- | --- | --- |
-| predecessor §2, before `640074c` | 1,837 | 4,194 | 2.28× |
+| predecessor §2, before `a07afb4` | 1,837 | 4,194 | 2.28× |
 | this session, after it | **2,178** | **4,148** | **1.90×** |
 
 +341 merge regions and −46 split regions on text that did not change. The whole
-shift is `640074c` turning `〜てくる` / `〜ておく` / `〜てみる` splits into merges,
+shift is `a07afb4` turning `〜てくる` / `〜ておく` / `〜てみる` splits into merges,
 and 1.90× sits inside this session's own 1.43–2.22 band. **Anyone comparing a
 ratio across sessions has to re-run one old corpus first**, or they are reading
 two changes as one.
@@ -99,11 +99,11 @@ changed.
 totals are not comparable with the predecessor's 556 and 370, which were taken
 over four corpora.
 
-## 3. `640074c` replicated, held out, against a pre-fix binary
+## 3. `a07afb4` replicated, held out, against a pre-fix binary
 
 The predecessor's §9 measured its own change on the corpora it was written
 against. This session built the **pre-fix engine** — a throwaway worktree at
-`eff06b6`, `span_dump` only, removed afterwards — and ran both binaries over
+`b42cf89`, `span_dump` only, removed afterwards — and ran both binaries over
 the six unseen corpora:
 
 | class | windows | cut before | cut now, on | cut now, off |
@@ -126,7 +126,7 @@ auxiliary rather than the window's noise.
 
 ### 4a. `〜てくれる` read as `〜てくる`
 
-**Fixed in `4bc74b4`, and the cause was not what this section guessed — see
+**Fixed in `f750bd1`, and the cause was not what this section guessed — see
 §8.** What follows is the measurement as it was taken.
 
 `舐め取ってくれる` is emitted as one span glossed **`取ってくる`**, "to fetch".
@@ -140,7 +140,7 @@ literal `てくれ` occurrences, so ~1.7% of the family. Hints-on, by surface:
 `持ってくれている`, `出てくれる`, `持ってくれたら`, `行ってくれなかった`,
 `帰ってくれる`.
 
-**It is not `640074c`'s.** The pre-fix binary's hints-on list is byte-identical
+**It is not `a07afb4`'s.** The pre-fix binary's hints-on list is byte-identical
 to the current one — same twelve surfaces, same counts — which is the
 predecessor §9's "byte-identical" claim confirmed on text it never saw. The
 deinflector reaches `くる` from `くれる` as a passive/potential, and that path
@@ -239,7 +239,7 @@ carries the name.
 - **The other two new rows.** `達した` is the cheaper — one lexeme,
   deterministic, 66 occurrences — though gold contains no `達` at all, so
   neither of them has a cell that can move.
-- **The pre-fix binary was run hints-on only**, so §4a's "not `640074c`'s" claim
+- **The pre-fix binary was run hints-on only**, so §4a's "not `a07afb4`'s" claim
   is a hints-on claim. The hints-off column was never compared against it.
 - **The stray-kana class still has no gate**, which the predecessor's §8 already
   said and this session did nothing about. It remains the largest thing measured
@@ -254,7 +254,7 @@ carries the name.
 
 ## 8. Postscript: §4a fixed, and what it was covering
 
-`4bc74b4`, the same day. §4a named a wrong gloss; the cause under it was a
+`f750bd1`, the same day. §4a named a wrong gloss; the cause under it was a
 class assignment, and closing it exposed a missing one.
 
 **The class.** `カ変・来ル` is 来る written with its kanji — stem 来, and every
@@ -334,7 +334,7 @@ hints-off in total.
 
 ## 9. Postscript: the katakana run charge, measured and refused
 
-`76edf85` and `4007a45`, the same day. The katakana-run-integrity phase
+`1efb090` and `eac09f1`, the same day. The katakana-run-integrity phase
 (`docs/superpowers/specs/2026-09-21-katakana-run-integrity-design.md`) added
 one field and one cost term and changed nothing else:
 `lex::Candidate.inside_katakana_run` is pure geometry, set at construction
@@ -350,7 +350,7 @@ carries the full table and the per-value reasoning and is not duplicated
 here. The constant was left at 60, "the least damaged of the six," recorded
 in `cost.rs`'s own doc comment as an unvalidated placeholder rather than a
 shipped magnitude. This section re-runs every gate against that decision on
-the tip that carries it (`585f8a9`), across all six corpora rather than the
+the tip that carries it (`970f94d`), across all six corpora rather than the
 two Task 3 used for its corpus rows.
 
 ### 9.1 Gates
@@ -387,9 +387,9 @@ reopening it.
 
 | hint state | build | runs ≥3 whole | split-with-short-piece | split-into-word-sized |
 | --- | --- | --- | --- | --- |
-| on | baseline (charge-free, `76edf85`) | 23328 | 2017 | 303 |
+| on | baseline (charge-free, `1efb090`) | 23328 | 2017 | 303 |
 | on | this tip (charge 60) | 25111 | 210 | 327 |
-| off | baseline (charge-free, `76edf85`) | 17598 | 7573 | 477 |
+| off | baseline (charge-free, `1efb090`) | 17598 | 7573 | 477 |
 | off | this tip (charge 60) | 22434 | 2646 | 568 |
 
 Every row sums to 25,648 — the total count of katakana runs of three or more
@@ -470,7 +470,7 @@ word the dictionary does not have, not a gloss.
 `jparser-cli bench` was run against `gen-3` on
 `crates/jparser/tests/fixtures/gold.jsonl`, hints-on, four interleaved
 rounds — baseline, candidate, baseline, candidate, ... — alternating
-`$SCR/baseline/jparser-cli.exe` (built from `76edf85`, before the cost term
+`$SCR/baseline/jparser-cli.exe` (built from `1efb090`, before the cost term
 existed) with a release build of this tip, to cancel the roughly 10% drift a
 single machine shows across a session. At the short paste (1,005 chars) the
 candidate/baseline ratio across the four rounds was 0.944, 0.963, 1.000,
@@ -491,7 +491,7 @@ open decision for the human partner, not settled by this task.
 **Reverted 2026-09-22.** The human partner decided against the trade and the
 charge was reverted: `KATAKANA_FRAGMENT`, its `if` in `cost()`, its unit
 test, and the four parse tests in `engine_v2.rs` are gone from the tree. The
-implementation is recoverable from `4007a45`, the commit that introduced it,
+implementation is recoverable from `eac09f1`, the commit that introduced it,
 and every measurement in this postscript and in design §8 still describes
 that commit accurately. Task 1's geometry — `kana::is_katakana`, `lex.rs`'s
 `katakana_runs` run table, and the `Candidate.inside_katakana_run` field and

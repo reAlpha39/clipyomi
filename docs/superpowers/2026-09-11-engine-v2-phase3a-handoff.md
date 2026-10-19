@@ -7,56 +7,56 @@
 
 ## 1. What landed
 
-Seventeen commits stand between the plan (`29131dc`) and this branch's final
+Seventeen commits stand between the plan (`ec7f567`) and this branch's final
 Phase 3a commit — up to and including this one, rather than stopping at the
 first docs commit as this section's original version did. Of those
-seventeen: eight carry the layer and one (`e23dc03`) is a rustfmt chore on
+seventeen: eight carry the layer and one (`2437253`) is a rustfmt chore on
 `examples/derivation_probe.rs`, whose drift predates this plan and was
 cleared early so the `cargo fmt --all --check` gate was real from Task 2 on;
-one is this handoff's own first version (`727f354`); two are the win32
-first-run baseline refresh and the note recording it (`9c24099`, `94af376`);
+one is this handoff's own first version (`20822cb`); two are the win32
+first-run baseline refresh and the note recording it (`6901fa0`, `530e9a8`);
 and five are the whole-branch review's fix commits, this one among them.
 
-`7cd025d` adds `crates/jparser/src/kanjidic.rs`, a streaming KANJIDIC2 reader
+`7a709ff` adds `crates/jparser/src/kanjidic.rs`, a streaming KANJIDIC2 reader
 built on the same `quick-xml` pattern as `jmdict.rs`. It yields `KanjiData
 { literal, on, kun, meanings }` — `ja_on` and `ja_kun` readings kept,
 everything else dropped, English meanings only (`m_lang`-tagged ones
 discarded) and capped at `MAX_MEANINGS = 4`, `<nanori>` ignored. A
 four-character fixture, `tests/fixtures/kanjidic_mini.xml`, comes with it.
 
-`a59b871` makes `kanji.bin` the sixth index file: a bincode `Vec<KanjiData>`
+`35b8e70` makes `kanji.bin` the sixth index file: a bincode `Vec<KanjiData>`
 sorted by codepoint that `Index::open` reads whole and `Index::kanji(ch)`
 binary-searches. `INDEX_FORMAT_VERSION` goes 4 → 5. `build_from_reader` keeps
 its signature as a wrapper over the new `build_from_readers`, so every
 existing fixture, test, snapshot and probe builds unchanged.
 
-`b640983` generalises `jmdict-source` over a `Source` descriptor — `JMDICT`
+`3d6049c` generalises `jmdict-source` over a `Source` descriptor — `JMDICT`
 and `KANJIDIC` — so `open_local`, `resolve_from`, `fetch_from` and
 `fetch_with_retry` all take the source as a first argument and the prolog
 sniff, the size cap and the three error variants carry the file they are
 talking about.
 
-`b48042e` threads the source pair through every build: `build_from_readers`,
+`2cabec2` threads the source pair through every build: `build_from_readers`,
 `build_new(root, jmdict, kanjidic)`, `ensure_dictionary`'s lazy closure
 returning both archives, and the CLI's `--kanjidic` on `build-index` and
 `ensure-dictionary`, with `fetch-source` now fetching both.
 
-`3f290e9` adds `lookup_kanji` and the `kanji_info` Tauri command, and pins
+`59d1e54` adds `lookup_kanji` and the `kanji_info` Tauri command, and pins
 `KanjiData`'s field names in the `engine_v2` wire test.
 
-`b574a8b` renders the block: `assembleTooltipText` and `renderTooltip` take a
+`ac02ac6` renders the block: `assembleTooltipText` and `renderTooltip` take a
 `kanji` array and append one flat line per character at the foot of the
 popover, after a blank line, so `colourLine` colours it as it colours
 everything else.
 
-`3ccf096` has the main webview collect the distinct kanji of the hovered
+`757901e` has the main webview collect the distinct kanji of the hovered
 surface, ask `kanji_info` for the ones a page-lifetime cache has not seen, and
 send the answer beside the entries in the same `popover-content` payload. The
 new `src/kanji-lookup.ts` holds the extraction and the cache. `kanji` is
 omitted when empty, so a kana-only hover emits the payload it emitted before.
 The first-run message names both files.
 
-`9bf74ef` adds `hide_kanji` as the fourth gloss filter — settings checkbox,
+`98d99ed` adds `hide_kanji` as the fourth gloss filter — settings checkbox,
 TypeScript key, Rust field, `merge_saved` — and the settings window's
 attribution footer, the app's first persistent attribution surface.
 
@@ -175,7 +175,7 @@ prints nothing — no `*.snap.new`, so `parse_sentences.txt` is byte-identical.
 
 ### Gate 4 — the suites
 
-| suite | at `29131dc` | at `9bf74ef` |
+| suite | at `ec7f567` | at `98d99ed` |
 | --- | --- | --- |
 | `cargo test -p jparser --features mecab` | 346 | 366 |
 | `cargo test -p jparser --features hints-source` | — | 367 |
@@ -240,7 +240,7 @@ Expected: e2e\panes.spec.ts-snapshots\panes-download-offer-dark-win32.png
 **These are stale baselines, and this plan is what made them stale — they are
 not an environment artifact.** The baselines compared against are the `-win32`
 ones, captured on this platform, so the usual macOS/Windows pixel caveat does
-not apply. The failing screen is the first-run download offer, and `3ccf096`
+not apply. The failing screen is the first-run download offer, and `757901e`
 deliberately rewrote its one sentence:
 
 ```
@@ -408,7 +408,7 @@ Carried from design §7:
 - **Attribution sits in the settings footer** because it is the only persistent
   surface the app has. If an About surface ever exists, it moves there.
 - **Existing installs pay one rebuild**, now with a second download. The
-  design asked that the first-run screen name what it is fetching; `3ccf096`
+  design asked that the first-run screen name what it is fetching; `757901e`
   did that, and §4 measured the rebuild at 3.9 seconds. What that copy change
   left behind is four stale screenshot baselines; the `-win32` pair is
   refreshed, the `-darwin` pair is below.

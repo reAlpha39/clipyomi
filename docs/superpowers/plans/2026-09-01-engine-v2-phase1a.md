@@ -47,7 +47,7 @@ cargo clippy -p jparser --all-targets --features mecab -- -D warnings
 cargo check -p jparser --no-default-features
 ```
 
-Baseline at `b9c35be`: **324** tests default, **357** with `--features mecab`, all clippy gates clean.
+Baseline at `770452e`: **324** tests default, **357** with `--features mecab`, all clippy gates clean.
 
 ---
 

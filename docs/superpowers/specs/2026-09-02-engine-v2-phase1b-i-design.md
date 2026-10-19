@@ -4,7 +4,7 @@
 **Master plan:** [`2026-08-27-engine-v2-master-plan.md`](2026-08-27-engine-v2-master-plan.md) §3.5, §7 Phase 1b, §7.3
 **Phase 1a design:** [`2026-09-01-engine-v2-phase1a-design.md`](2026-09-01-engine-v2-phase1a-design.md) §2.1, §2.2, §8, §9
 **Phase 1a handoff:** [`../2026-09-01-engine-v2-phase1a-handoff.md`](../2026-09-01-engine-v2-phase1a-handoff.md) §8, §9
-**Branch:** `feat/engine-v2`, from `03334f0`
+**Branch:** `feat/engine-v2`, from `e028b6e`
 **Status:** Design, approved in session, not implemented
 
 ---

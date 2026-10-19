@@ -1,7 +1,7 @@
 # The sentence-final っ — handoff
 
 **Date:** 2026-09-16
-**Branch:** `feat/sokuon-tail`, off `develop` tip `0eadc7f`
+**Branch:** `feat/sokuon-tail`, off `develop` tip `4007fc8`
 **Predecessor:** [`2026-09-16-post-merge-handoff.md`](2026-09-16-post-merge-handoff.md)
 
 One screenshot pair, ClipYomi against Translation Aggregator, on
@@ -11,13 +11,13 @@ One screenshot pair, ClipYomi against Translation Aggregator, on
 
 | commit | what it fixed |
 | --- | --- |
-| `0a0c104` | a sokuon with nothing to double no longer romanizes as `tsu` — `ええっ` was `eetsu`, and `っあ`/`っん` doubled the vowel and the `n` |
-| `3dc632d` | `連用タ接続` is not a word on its own — `優しいっ` was `優し` + `いっ`, a bare 五段 onbin stem beating `優しい` plus an emphatic `っ` |
-| `a286fd3` | `なのに` joins the user lexicon — second screenshot, `見た目はギャルなのになー`, where the right cover ranked second |
-| `a9a6898` | `へへ` and `あたし達` join it — third screenshot; `へへ` was also romanizing as `e e` |
-| `94eceeb` | `唐揚げ` joins it — fourth screenshot; the split read `とう` + `あげ`, not `からあげ` |
+| `c6abf5a` | a sokuon with nothing to double no longer romanizes as `tsu` — `ええっ` was `eetsu`, and `っあ`/`っん` doubled the vowel and the `n` |
+| `552b1a8` | `連用タ接続` is not a word on its own — `優しいっ` was `優し` + `いっ`, a bare 五段 onbin stem beating `優しい` plus an emphatic `っ` |
+| `c2045f3` | `なのに` joins the user lexicon — second screenshot, `見た目はギャルなのになー`, where the right cover ranked second |
+| `df8ce2d` | `へへ` and `あたし達` join it — third screenshot; `へへ` was also romanizing as `e e` |
+| `8cffb79` | `唐揚げ` joins it — fourth screenshot; the split read `とう` + `あげ`, not `からあげ` |
 
-The romaji half is the same class of defect as `d29360d`: the frontend
+The romaji half is the same class of defect as `ebfa26a`: the frontend
 keeps its own kana table and it had drifted from `crates/jparser`'s
 romanizer. Every new expectation in `furigana.test.ts` was read off
 `jparser-cli romaji` first. The one place the two still disagree is `いっち`
@@ -306,7 +306,7 @@ constant can prefer a seven-character idiom while refusing a two-character
 commonness bonus from `prt` entirely (`dict.lisp:842-846`, `:903`), measured
 here as roughly neutral alone (strict 1821).
 
-**Shipped as `fe9dfcd`**: `total -= LEN_GAIN * (len-1)²`, `LEN_GAIN = 1`.
+**Shipped as `b5cca84`**: `total -= LEN_GAIN * (len-1)²`, `LEN_GAIN = 1`.
 The first version of it was not shippable and the decomposition is why.
 
 Its hints-off `tolerant` read 1716 against 1749, which §5.2's own rule says
@@ -355,8 +355,8 @@ at all — it evaluates without bounds, where this term does not apply.
 `nf01`–`nf48` — the DTD's frequency-of-use rank in bands of 500 — is dropped
 at parse time. 30,263 of 41,169 COMMON forms carry a band, spread evenly. It
 looked like the missing graded signal. Built and swept on **`feat/nf-band`**
-(`dda0a53` plumbing at index format 7, every cell identical and all gates
-green; `6e1011f` the best curve), nine curves, both hint states:
+(`7d481df` plumbing at index format 7, every cell identical and all gates
+green; `38aac68` the best curve), nine curves, both hint states:
 
 | curve | strict on/off | compounds on/off | classes, on |
 | --- | --- | --- | --- |

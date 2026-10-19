@@ -38,7 +38,7 @@ cargo check -p jparser --no-default-features
 cargo test -p clipyomi
 ```
 
-The sixth is new this phase: `src-tauri` is edited in Tasks 1 and 5, so its tests are a gate from Task 1 on. Baseline at `e08abfb`: `jparser` **433 passed / 0 ignored** default, **468 passed / 1 ignored** with `mecab` (the ignored one is `the_particle_absorbing_merges_are_gone`, Phase 1a's open item; it stays ignored). Measure and record `clipyomi`'s count at the start of Task 1.
+The sixth is new this phase: `src-tauri` is edited in Tasks 1 and 5, so its tests are a gate from Task 1 on. Baseline at `3a6a5a2`: `jparser` **433 passed / 0 ignored** default, **468 passed / 1 ignored** with `mecab` (the ignored one is `the_particle_absorbing_merges_are_gone`, Phase 1a's open item; it stays ignored). Measure and record `clipyomi`'s count at the start of Task 1.
 
 **Metrics (spec §9, §10).** `jparser-cli score`, both hint states, over `tests/fixtures/gold.jsonl` against an index built from `tests/fixtures/gold_jmdict_subset.xml`, must reproduce Phase 1b-i's eight cells exactly, or the difference is a finding to report before committing, not a number to record:
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-27
 **Spec:** [`docs/superpowers/specs/2026-08-27-jparser-phase5b-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-27-jparser-phase5b-design.md)
-**Commits:** `6685b61..772856a` on `develop` (eight commits across five tasks, unpushed), plus this task's own doc commit closing the phase, plus the post-close fix in §10.
+**Commits:** `ed9f30a..41a6e7c` on `develop` (eight commits across five tasks, unpushed), plus this task's own doc commit closing the phase, plus the post-close fix in §10.
 
 This is Phase 5B of Phase 5 (MeCab). 5A shipped acquisition only — download,
 verify, unpack, publish, headless — as a library and a CLI driver. 5B is the
@@ -15,14 +15,14 @@ dictionary into a warning instead of 2C's fatal. Phase 5 is now complete.
 
 ## 1. What Shipped
 
-1. **One version-blind slot and a hand-placed archive route** (`6685b61`,
-   fixed by `4db1c0b`). `crates/vibrato-source`: `DICT_DIR` becomes `current`
+1. **One version-blind slot and a hand-placed archive route** (`ed9f30a`,
+   fixed by `3f380ab`). `crates/vibrato-source`: `DICT_DIR` becomes `current`
    (row 19); `hand_placed(hints_dir) -> Option<PathBuf>` finds the newest
    `.tar.xz` directly in the hints directory, ignoring dotfiles and staging
    names; `publish_replacing` swaps a new dictionary in behind a rename-based
    backup, restoring it on a failed second rename; `resolve_from` gained the
    two-step hand-placed branch ahead of its existing publish-then-fetch
-   fallback, deliberately unhashed (row 20). `4db1c0b` fixed a review-round
+   fallback, deliberately unhashed (row 20). `3f380ab` fixed a review-round
    Critical: `crates/jparser/tests/cli_hints.rs` hardcoded the old
    `ipadic-mecab-2_7_0` slot name, which after the `DICT_DIR` rename would
    have fallen through to a real 7.7 MB download on every CI run of the
@@ -30,7 +30,7 @@ dictionary into a warning instead of 2C's fatal. Phase 5 is now complete.
    `vibrato-source`'s own suite: **5 unit + 17 extract + 13 download = 35
    tests**, real counts corrected from the plan's stale prediction (§5 below).
 
-2. **`write_test_dictionary` exposed for downstream tests** (`f746f6c`).
+2. **`write_test_dictionary` exposed for downstream tests** (`370728b`).
    `crates/jparser/src/hints.rs` lifts the two-entry in-memory IPADIC fixture
    its own tests already built via `vibrato::SystemDictionaryBuilder` into a
    `#[doc(hidden)] pub fn write_test_dictionary(path) -> Result<(),
@@ -39,8 +39,8 @@ dictionary into a warning instead of 2C's fatal. Phase 5 is now complete.
    network call. One new test, `the_written_test_dictionary_loads_and_tokenizes`
    (jparser lib: 236 → 237).
 
-3. **Hints carried on their own `watch` channel** (`7214b0e`, relocated by
-   `b8478d8`). `src-tauri`: `Settings::mecab_hints` (serde, defaults off);
+3. **Hints carried on their own `watch` channel** (`3d85740`, relocated by
+   `97dd74b`). `src-tauri`: `Settings::mecab_hints` (serde, defaults off);
    `HintsSender(watch::Sender<Option<Arc<VibratoTokenizer>>>)`; `HintsWarning`
    as the shared string both windows read; `state::load_hints`'s five
    branches (`TA_HINTS_DICT` fatal, setting off, no published dictionary,
@@ -48,14 +48,14 @@ dictionary into a warning instead of 2C's fatal. Phase 5 is now complete.
    `run_worker` takes the hints receiver as its third `watch` alongside the
    index and settings channels it already had; `current_hints` reads it the
    same way `current_index` reads the index channel.
-   `b8478d8` relocated `settings.rs`'s `#[cfg(test)] mod tests` into
+   `97dd74b` relocated `settings.rs`'s `#[cfg(test)] mod tests` into
    `src-tauri/src/settings/tests.rs` — a pure move, same test count — after a
    review round found `settings.rs` had crossed the phase's 800-line ceiling
    on this task's own addition (settings.rs 265, settings/tests.rs 554).
    clipyomi: **134 tests**, clippy warning count 6 (baseline).
 
-4. **`set_mecab_hints` acquires and publishes the tokenizer** (`ea4dcd8`,
-   reworded by `c1543ee`). The command: off is synchronous (`hints_tx.send
+4. **`set_mecab_hints` acquires and publishes the tokenizer** (`68bbcdc`,
+   reworded by `f386496`). The command: off is synchronous (`hints_tx.send
    (None)`, persist `false`, reparse, emit `off`); on claims `HintsInFlight`,
    picks the status label (`unpacking` if `hand_placed` finds an archive,
    else `downloading`) with one `read_dir` before calling `resolve` (the
@@ -64,12 +64,12 @@ dictionary into a warning instead of 2C's fatal. Phase 5 is now complete.
    and on success sends the tokenizer, persists `true` (only on success —
    never claims hints it does not have), reparses what is on screen, and
    emits `ready`. `hints_warning` and `hints_dir` commands added, both reading
-   state the two windows need. `c1543ee` remapped `claim_download`'s shared
+   state the two windows need. `f386496` remapped `claim_download`'s shared
    "a dictionary download is already running" text to a hints-specific
    message at the call site, since the helper's wording was written for the
    JMdict slot it also guards. clipyomi: **138 tests**, clippy 6.
 
-5. **The MeCab boundary hints toggle and its warning** (`772856a`). Frontend:
+5. **The MeCab boundary hints toggle and its warning** (`41a6e7c`). Frontend:
    the settings-window checkbox and its status line (`#setting-mecab-hints-
    status`); `HINTS_PHASES`/`applyHintsStatus` mapping the four `hints-status`
    event payloads (`downloading`/`unpacking`/`ready`/`off`) to copy, with any
@@ -304,7 +304,7 @@ Copied from the design spec's §12, unchanged by implementation:
   1. `crates/jparser/tests/cli_hints.rs` hardcoded the old published-slot
      name `ipadic-mecab-2_7_0`. After `DICT_DIR` became `current`, a CI run
      of that test would have fallen through to a real 7.7 MB GitHub
-     download. Fixed in Task 1 (`4db1c0b`) by pointing the test at
+     download. Fixed in Task 1 (`3f380ab`) by pointing the test at
      `vibrato_source::DICT_DIR`/`SYSTEM_DIC`.
   2. The brief's literal `let mut settings = Settings::default(); settings.
      mecab_hints = true;` in the settings round-trip test trips
@@ -351,14 +351,14 @@ Copied from the design spec's §12, unchanged by implementation:
 
 ## 6. The Verification Gate
 
-Run and personally verified at commit `772856a` (tip of `develop` before this
+Run and personally verified at commit `41a6e7c` (tip of `develop` before this
 task's own doc commit), on Windows, `rustc 1.97.1`, tree clean before and
 after every command:
 
 | Command | Result | Baseline | |
 | --- | --- | --- | --- |
 | `cargo test --workspace` | **487 passed, 0 failed, 1 ignored** | 464 / 0 / 1 | at/above baseline |
-| `cargo test -p jparser --features hints-source` | **278 passed, 0 failed** (237 lib + 0 bin + 13 + 1 + 2 + 2 + 15 + 4 + 4) | 277, per 5A's own final gate at the same starting commit `450bc8d` | at/above |
+| `cargo test -p jparser --features hints-source` | **278 passed, 0 failed** (237 lib + 0 bin + 13 + 1 + 2 + 2 + 15 + 4 + 4) | 277, per 5A's own final gate at the same starting commit `483b043` | at/above |
 | `cargo check -p jparser --no-default-features --all-targets` | clean | clean | matches |
 | `cargo clippy --workspace --all-targets --exclude clipyomi -- -D warnings` | clean | clean | matches |
 | `cargo clippy -p clipyomi --all-targets \| grep -c "^warning"` | **6** | 6 | exactly equal |
@@ -367,7 +367,7 @@ after every command:
 | `cargo tree --workspace \| grep -E "openssl v\|openssl-sys\|native-tls\|\bring v\|aws-lc"` | clean | clean | matches |
 | `cargo tree --workspace --target x86_64-unknown-linux-gnu \| grep -E "..."` | clean | clean | matches |
 
-These numbers are as of `772856a` and stand. The post-close fix in §10 moves
+These numbers are as of `41a6e7c` and stand. The post-close fix in §10 moves
 `npx vitest run` to **265 passed, 13 files**; nothing else in this table
 changed with it, because that fix touches no Rust.
 
@@ -479,7 +479,7 @@ decided and why:
    design spec's "verbatim reuse" instruction is about the mechanism
    (one shared in-flight flag), not the exact wording shown to the user.
    Decided: keep the shared helper unchanged and map the error to a
-   hints-specific message at the hints call site only (`c1543ee`). Cost if
+   hints-specific message at the hints call site only (`f386496`). Cost if
    wrong: one line, trivially revertible; `download_dictionary`'s own
    message is untouched.
 
@@ -602,7 +602,7 @@ re-displayed `history.current()`: the stale parse. `すもも/もも/もも/も�
 `すもも/も/もも/も/もも` both join to `すもももももももものうち`, so the
 result was provably discarded rather than merely suspected.
 
-**Fix** (`c330288`): a same-surface parse now **replaces** the newest history
+**Fix** (`ab17c2d`): a same-surface parse now **replaces** the newest history
 entry instead of being discarded. Still one entry per copied text, and the
 cursor is left alone exactly as skipping did, so a user reading an older parse
 is not yanked forward. All sixteen pre-existing `history.test.ts` tests pass

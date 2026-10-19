@@ -1,7 +1,7 @@
 # The re-run against the ta-old port, and the class no lexicon row reaches — handoff
 
 **Date:** 2026-09-22
-**Branch:** `feat/corpus-disagree`, tip `cfe1220`
+**Branch:** `feat/corpus-disagree`, tip `9686dcd`
 **Predecessor:** [`2026-09-22-residue-adjudication-handoff.md`](2026-09-22-residue-adjudication-handoff.md)
 
 The predecessor shipped nine user-lexicon rows and then measured nothing
@@ -24,7 +24,7 @@ afford a full v1 rebuild. Everything below was checked against a number an
 earlier document had already written down.
 
 - **The v1 index.** Rebuilt from the same `JMdict_e.xml` in the detached
-  worktree at `D:\Code\oss\clipyomi-v1` (`361a77f`, untracked
+  worktree at `D:\Code\oss\clipyomi-v1` (`b9386ba`, untracked
   `examples/v1_dump.rs`) with `build-index --engine v1`: **486,553 keys,
   619,717 records, 121,048 exact stems, 398 v5-fallback, 5 empty** — identical
   to the six-corpora handoff's rebuild, the third time that figure reproduces.

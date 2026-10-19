@@ -1,10 +1,10 @@
 # After the merge — handoff
 
 **Date:** 2026-09-16
-**Branch:** `develop`, tip `5d82dcd`, **27 commits ahead of `origin/develop`**
+**Branch:** `develop`, tip `e80cf2c`, **27 commits ahead of `origin/develop`**
 **Predecessor:** [`2026-09-16-engine-v2-phase4-handoff.md`](2026-09-16-engine-v2-phase4-handoff.md)
 
-Engine v2 merged into `develop` as `cb7b994` with all four master-plan criteria
+Engine v2 merged into `develop` as `0ef1ef9` with all four master-plan criteria
 met. Everything below happened *after* that, driven by screenshots of the app
 compared against Translation Aggregator.
 
@@ -47,16 +47,16 @@ keeping all four of `ある日`, `起きたら`, `第一` and `なって` whole
 
 | commit | what it fixed |
 | --- | --- |
-| `41645d4` | `PRONOUNCE_CROSS` no longer charges for a boundary inside an inflection — `なった`, `あった`, 19 instances in the corpus. The chain's range as a whole, not each step's: `なった` is two steps and IPADIC cuts the junction between them |
-| `41645d4` | `assemble::order` breaks entry ties on JMdict's sense count, placed last where `entry_id` decided arbitrarily (炒る "to roast" beat 行く "to go" on a smaller number) |
-| `0c42e7b` | a hiragana-free token opens if it tiles into pieces of ≥3 chars — `ロイヤル`+`ネイビー`+`ガール` yes, `ニュルンベルク` no |
-| `de055e6` | `dedup_shallowest` keeps the **exact** record when two kana headwords collapse to one key; a hiragana input was being charged `INEXACT` for a headword spelled identically |
-| `a8890c8` | 81-entry Vibrato user lexicon for words JMdict has and IPADIC cuts |
-| `9883d03` | `ある日`, `その日` added to it — a deliberate exception to the `exp` filter |
-| `0256799` | **`MATCH = 2`**, reopening what §4.3 closed. Also fixes `ミスった` |
-| `447cadd` / `9a7136b` | `DIGIT_COUNTER = -3`, gated on the merged reading differing from its parts — `1週間` → `いっしゅうかん` |
-| `e4353d1` | `DIGIT_NONCOUNTER = 3` — `N人目` → `N人` + `目`, because `人目` is `ひとめ`, "public gaze" |
-| `d29360d` | frontend romaji handles `ー`; it was copying the mark out verbatim while the engine romanized it correctly |
+| `7e51dde` | `PRONOUNCE_CROSS` no longer charges for a boundary inside an inflection — `なった`, `あった`, 19 instances in the corpus. The chain's range as a whole, not each step's: `なった` is two steps and IPADIC cuts the junction between them |
+| `7e51dde` | `assemble::order` breaks entry ties on JMdict's sense count, placed last where `entry_id` decided arbitrarily (炒る "to roast" beat 行く "to go" on a smaller number) |
+| `f36c7e1` | a hiragana-free token opens if it tiles into pieces of ≥3 chars — `ロイヤル`+`ネイビー`+`ガール` yes, `ニュルンベルク` no |
+| `1661396` | `dedup_shallowest` keeps the **exact** record when two kana headwords collapse to one key; a hiragana input was being charged `INEXACT` for a headword spelled identically |
+| `6701cd4` | 81-entry Vibrato user lexicon for words JMdict has and IPADIC cuts |
+| `2d121c0` | `ある日`, `その日` added to it — a deliberate exception to the `exp` filter |
+| `311ccdd` | **`MATCH = 2`**, reopening what §4.3 closed. Also fixes `ミスった` |
+| `9edb454` / `15942d8` | `DIGIT_COUNTER = -3`, gated on the merged reading differing from its parts — `1週間` → `いっしゅうかん` |
+| `36baa3e` | `DIGIT_NONCOUNTER = 3` — `N人目` → `N人` + `目`, because `人目` is `ひとめ`, "public gaze" |
+| `ebfa26a` | frontend romaji handles `ー`; it was copying the mark out verbatim while the engine romanized it correctly |
 
 ## 3. Measured and refused — do not re-litigate without new evidence
 
@@ -87,7 +87,7 @@ keeping all four of `ある日`, `起きたら`, `第一` and `なって` whole
 
 ## 5. Also outstanding
 
-- **27 commits unpushed.** `origin/develop` is still at `cb7b994`.
+- **27 commits unpushed.** `origin/develop` is still at `0ef1ef9`.
 - **The claims audit's §4**, roughly seventy findings across `src-tauri`,
   `src/`, the example probes and the three source crates
   ([`2026-09-16-claims-audit.md`](2026-09-16-claims-audit.md)). Leads to

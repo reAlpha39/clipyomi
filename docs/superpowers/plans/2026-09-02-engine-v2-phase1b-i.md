@@ -41,7 +41,7 @@ cargo clippy -p jparser --all-targets --features mecab -- -D warnings
 cargo check -p jparser --no-default-features
 ```
 
-Baseline at `dd0c647`: **418** passed / 0 ignored default, **453** passed / 1 ignored with `--features mecab`, all clippy gates clean. (`the_particle_absorbing_merges_are_gone` is the one ignored mecab test; it stays ignored — Phase 1a's open item, not this phase's.)
+Baseline at `a12196b`: **418** passed / 0 ignored default, **453** passed / 1 ignored with `--features mecab`, all clippy gates clean. (`the_particle_absorbing_merges_are_gone` is the one ignored mecab test; it stays ignored — Phase 1a's open item, not this phase's.)
 
 **Commit messages:** `<type>(engine-v2): <description>`, body in normal prose, as the branch's existing commits do.
 

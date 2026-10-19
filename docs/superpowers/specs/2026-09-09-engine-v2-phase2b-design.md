@@ -39,7 +39,7 @@ it.
 ## 2. What the spike settled, and what it left
 
 [`crates/jparser/examples/reading_identity.rs`](../../../crates/jparser/examples/reading_identity.rs)
-(`6145497`, refinement arm `ad73d2d`) measured this outside the engine: it
+(`ff5957f`, refinement arm `5db621a`) measured this outside the engine: it
 asks `parse` for a deeper reading list, filters that, keeps three, and prints
 `oracle@3` over the engine's own unfiltered first three beside it as a
 control. The control reproduces Phase 2's recorded gate exactly at every

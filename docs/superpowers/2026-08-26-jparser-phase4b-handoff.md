@@ -2,14 +2,14 @@
 
 **Date:** 2026-08-26
 **Spec:** [`docs/superpowers/specs/2026-08-26-jparser-phase4b-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-26-jparser-phase4b-design.md)
-**Commits:** `8543d9b..77a91f7` on `develop` (eight commits, unpushed)
+**Commits:** `1f20bf5..f87cddb` on `develop` (eight commits, unpushed)
 
 ---
 
 ## 1. What Was Completed in Phase 4B
 
-1. **A see-through main window with per-pixel alpha** (`861fb1a`, `119fa25`,
-   `2e8fbe4`, `91a0db2`). `"transparent": true` is set once on the only
+1. **A see-through main window with per-pixel alpha** (`987b3c3`, `af34359`,
+   `45524c4`, `86a27d0`). `"transparent": true` is set once on the only
    `WebviewWindowBuilder` for `index.html` and stays there unconditionally.
    At 100 % alpha the CSS layer renders identically to before — Playwright's
    screenshot baselines pass unchanged, which is what proves the token being
@@ -35,8 +35,8 @@
    `.context-menu` rule and everything in `settings.css` stay on the opaque
    `--color-bg` — see item 2.
 
-2. **`surface_alpha` persisted, clamped, and applied** (`0f0bb2e`, `2e8fbe4`,
-   `f813fdc`). `Settings.surface_alpha: Option<u32>` follows the font-size
+2. **`surface_alpha` persisted, clamped, and applied** (`3cb3358`, `45524c4`,
+   `4d73697`). `Settings.surface_alpha: Option<u32>` follows the font-size
    precedent exactly: absent means "stylesheet owns it", no Rust-side clamp,
    out-of-range values clamp at apply time. `src/surface-alpha.ts` is a new,
    deliberately separate module — not a fourth `FontKind` — exporting
@@ -48,7 +48,7 @@
    three paths call `reportBackground()` afterward so the Windows erase gate
    (item 3) learns the effective alpha in the same beat.
 
-3. **The Windows `WM_ERASEBKGND` fill gated on opacity** (`8dc1e3e`).
+3. **The Windows `WM_ERASEBKGND` fill gated on opacity** (`3cd418a`).
    `set_window_background` grows a fourth argument, `opaque: bool`; the erase
    arm falls through to `DefSubclassProc` instead of filling when it is
    false. The value sent is the *effective* alpha from `surfaceAlphaVar`,
@@ -57,7 +57,7 @@
    see-through body would be a rendering artifact. The backend never
    receives the alpha number itself, only permission to fill.
 
-4. **The opacity slider** (`f813fdc`). A new "Background" settings group
+4. **The opacity slider** (`4d73697`). A new "Background" settings group
    directly under Window Chrome. `input` broadcasts a partial
    `{ surface_alpha }` payload without saving (so a drag doesn't run the
    gloss-filter merge or a full sentence re-render sixty times a second);
@@ -65,11 +65,11 @@
    given a visible explanatory note (not a `title`) whenever chrome is
    `native` — see Ruling 2 below.
 
-5. **macOS's `macos-private-api` feature** (`91a0db2`), added to
+5. **macOS's `macos-private-api` feature** (`86a27d0`), added to
    `src-tauri/Cargo.toml` and `"macOSPrivateApi": true` in
    `tauri.conf.json`. Mechanical; not exercised, see §5.
 
-6. **Coverage** (`77a91f7`): `src/surface-alpha.test.ts` (new), extensions to
+6. **Coverage** (`f87cddb`): `src/surface-alpha.test.ts` (new), extensions to
    `src/settings.test.ts`, `src/main.test.ts`, `e2e/chrome.spec.ts`, and
    `src-tauri/src/settings.rs` / `commands.rs`.
 
@@ -139,7 +139,7 @@ was added, and none was needed.
 
 > **Partly superseded — read §5.1 first.** After this handoff was written, the
 > phase was run by hand on Windows for the first time. That session found a
-> real bug (fixed in `378ed8e`), answered the spike's question, and moved a
+> real bug (fixed in `f8b8de5`), answered the spike's question, and moved a
 > few items in the list below from unrun to observed. The list is left intact
 > rather than rewritten, so what was and was not known at each point stays
 > legible; §5.1 records what changed.
@@ -227,11 +227,11 @@ top of the window, which is exactly the reserved band row.
 so it has been painting since the frameless window existed. GDI writes those
 pixels through a `COLORREF` whose alpha byte is zero — invalid premultiplied
 data — which an opaque webview covered completely. Per-pixel alpha exposed
-it; it did not cause it. It also explains why `1671a77` appeared to fix it:
+it; it did not cause it. It also explains why `5254b98` appeared to fix it:
 that commit changed the strip from frame growth to region clipping, which
 changed *when* the caption was exposed without stopping it being painted.
 
-Fixed in `378ed8e` by claiming `WM_NCPAINT` (draw nothing) and passing `-1`
+Fixed in `f8b8de5` by claiming `WM_NCPAINT` (draw nothing) and passing `-1`
 to `WM_NCACTIVATE` (keep the activation bookkeeping, skip the repaint that
 paints the same caption by a second route).
 
@@ -264,7 +264,7 @@ Against §5's list of six:
   0 % and the window rendered see-through. Whether the sentence and furigana
   stay crisp was not separately confirmed.
 - **Drag, the resize edges, and maximise/restore** — checked by hand after
-  `378ed8e` and unaffected. Not one of the six, but it is the obvious risk of
+  `f8b8de5` and unaffected. Not one of the six, but it is the obvious risk of
   claiming non-client messages, so it was checked.
 - **Checks 1, 2, 3, 5 and 6 remain NOT RUN**, exactly as stated in §5. In
   particular check 3 — ten pointer entries counting desktop-coloured flashes
@@ -278,7 +278,7 @@ macOS is still entirely unrun.
 
 ## 6. Verification Gate
 
-Run at commit `77a91f7`, the phase's final tip:
+Run at commit `f87cddb`, the phase's final tip:
 
 - **Vitest:** 244 passed (up from 228 before the phase).
 - **`npm run build`:** clean.
@@ -309,7 +309,7 @@ Run at commit `77a91f7`, the phase's final tip:
    shipped 4A build silently reset the font sizes and the popover gloss
    size.** 4B's slider, which emits `{ surface_alpha }` alone on every
    `input` event, would have hit the identical path up to sixty times a
-   second during a drag. Fixed in `2e8fbe4` with a guard that runs
+   second during a drag. Fixed in `45524c4` with a guard that runs
    `applyFontSizes` only for a payload recognisable as a full snapshot,
    discriminated by the two non-optional `Settings` keys (not by "does the
    payload carry a font key?", which is wrong: clearing all three font boxes
@@ -324,7 +324,7 @@ Run at commit `77a91f7`, the phase's final tip:
    accessible name — so the tooltip would never be announced to a keyboard
    or assistive-technology user either. Replaced with a visible note
    element in the Background settings group, shown only in `native` mode
-   (`f813fdc`), following the same reasoning 4A already applied elsewhere in
+   (`4d73697`), following the same reasoning 4A already applied elsewhere in
    this codebase (`visibility: hidden` over `opacity: 0` so unreachable
    controls leave the tab order; the Windows `native` button removed
    outright rather than disabled).

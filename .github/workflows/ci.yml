@@ -27,7 +27,7 @@ name: CI
 # 8 of the 47 `engine_v2` tests fail; with `TA_HINTS_DICT` pointing at a
 # `fetch-hints` output and APPDATA still unset, 47 of 47 pass. The figures
 # this paragraph used to carry, 2 of 39 and 39 of 39, were measured on
-# 2026-09-09 at `bfa929b` and were never restated: by `dce356b`, the commit
+# 2026-09-09 at `ead8d88` and were never restated: by `69ec8a7`, the commit
 # before Phase 4 landed, the file held 46 tests of which 7 took boundaries,
 # and Phase 4 added the eighth. **Re-measure rather than trusting this
 # paragraph** after adding any test that takes boundaries — `env -u APPDATA

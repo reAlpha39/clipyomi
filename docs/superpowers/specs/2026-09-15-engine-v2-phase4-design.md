@@ -3,7 +3,7 @@
 **Date:** 2026-09-15
 **Branch:** `feat/engine-v2`
 **Answers:** the five characterization tests committed 2026-09-15
-(`4a8a24f`, `52c6513`, `4db0b2e`, `7ca8168`), all pinning today's behaviour
+(`cbf80fb`, `56056f4`, `90ba12e`, `b4b0a10`), all pinning today's behaviour
 so that a fix fails them.
 **Takes the Phase 4 slot**, which the master plan had held open for compound
 preservation until
@@ -27,13 +27,13 @@ gold corpus — the parse does not move.
 Not in scope, stated so the phase cannot quietly grow into them:
 
 - **The ranking defects.** `ミスった` splitting into `ミス` + `った`, and
-  `ミスる` losing to `ミス` + `る` without hints (`52c6513`), are cost-model
+  `ミスる` losing to `ミス` + `る` without hints (`56056f4`), are cost-model
   ordering among *allowed* spans. This phase changes which spans are allowed
   and touches no constant. Those two tests are expected to stay green, and if
   either moves, that is a finding to explain rather than a bonus.
 - **Turning the constraint into a price.** §6 records why not.
 - **The dictionary gaps.** `ていう` has no key; no segmentation change reaches
-  it (`4a8a24f`).
+  it (`cbf80fb`).
 - **Any new data, index format, wire shape, setting or stylesheet.** Nothing
   outside `crates/jparser/src/engine/` changes, and no install rebuilds.
 
@@ -202,7 +202,7 @@ become.
 - **`a_reading_the_index_lacks_is_unmatched_between_correct_boundaries`.**
   `ていう` is a missing key; if this test changes, the escape is doing
   something it was not designed to do.
-- **The two ranking tests** (`52c6513`), for the reason §1 gives.
+- **The two ranking tests** (`56056f4`), for the reason §1 gives.
 - **`kurumadehakou_parses_as_four_words`**, the master plan's success
   criterion 3 — every token there is matchable, so no position is relaxed.
 - **`v2_snapshots_every_sentence`**, which runs hints-off.
@@ -298,7 +298,7 @@ sweep.
 ## 8. Measured 2026-09-15: the first implementation, and why it does not ship
 
 The escape above was built as specified and measured the same day. It is on
-`spike/phase4-escape` (`cbd68f9`), not on this branch, because **it fails
+`spike/phase4-escape` (`2bd8be6`), not on this branch, because **it fails
 Gate 1.** What follows is the result, kept here because the design's
 reasoning is what produced the failure and both halves are worth reading
 together.

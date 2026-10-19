@@ -1,7 +1,7 @@
 # The class the probe could not see — handoff
 
 **Date:** 2026-09-22
-**Branch:** `feat/corpus-disagree`, tip `761ec0e`
+**Branch:** `feat/corpus-disagree`, tip `dd16e26`
 **Predecessor:** [`2026-09-21-six-corpora-handoff.md`](2026-09-21-six-corpora-handoff.md)
 
 The predecessor exhausted `vn-text` and left the ranked head mined out. This
@@ -10,9 +10,9 @@ confirmed the head really is exhausted, and then found a class of 918
 occurrences hints-on that **no probe run could ever have reported**, because
 `corpus_disagree`'s own cover filter refused it by construction.
 
-Three commits: `60d60b3` and `6ca4d77` teach the probe to see the class,
-`761ec0e` fixes it in the engine at index format 7. The three commits below
-them on this branch (`a2757c0`, `f65a2ee`, `5c79b2b`) are window and UI work
+Three commits: `b550b7f` and `586dc6d` teach the probe to see the class,
+`dd16e26` fixes it in the engine at index format 7. The three commits below
+them on this branch (`c2d2df6`, `419b3f7`, `f1a2fda`) are window and UI work
 from another session and are unrelated.
 
 ## 1. The re-run, and the control
@@ -28,7 +28,7 @@ unchanged; nothing derived from them is in this repository.
 | off | all ten | 6,623 | 24,173 | 3.65× |
 
 The predecessor's six re-measure at 8,257 / 14,651 against its 8,260 / 14,651,
-so **`4bc74b4` did not move the ratio** — the control its §2 asks for, paid
+so **`f750bd1` did not move the ratio** — the control its §2 asks for, paid
 this time at no extra cost because the re-run was happening anyway. Twelve
 corpora and the sign has still never changed.
 
@@ -52,7 +52,7 @@ PRONOUNCE-only by construction, so it could never be a cover: every one of
 them printed `-` in the cover column and read as v1 noise. `おねだり` sat at
 rank 131 of pxc2's ranking, nine occurrences, cover `-`.
 
-`60d60b3` exempts `uk` from the PRIMARY clause, and takes the stack partition
+`b550b7f` exempts `uk` from the PRIMARY clause, and takes the stack partition
 with it. `lex::is_grammatical_stack` asks whether a span tiles into short
 COMMON pieces, which is the only question an engine with no part of speech can
 ask, and every kana adverb answers yes: `もしかして` tiles `もし|か|し|て`.
@@ -107,7 +107,7 @@ what the term is for.
 
 ## 4. Four conditions, three of them refusals
 
-`761ec0e` exempts a candidate from `PRONOUNCE_CROSS` when it carries
+`dd16e26` exempts a candidate from `PRONOUNCE_CROSS` when it carries
 `WordFlags::UK`, is `exact`, has an empty chain, is not a `grammatical_stack`
 and is at least `UK_MIN_LEN` = 3 characters. Every condition was measured.
 

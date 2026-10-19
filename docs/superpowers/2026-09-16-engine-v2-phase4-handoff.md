@@ -4,15 +4,15 @@
 **Design:** [`specs/2026-09-15-engine-v2-phase4-design.md`](specs/2026-09-15-engine-v2-phase4-design.md),
 with §9 written by this session.
 **Branch:** `feat/engine-v2`
-**Abandoned:** `spike/phase4-escape` (`cbd68f9`), the unconditional escape
+**Abandoned:** `spike/phase4-escape` (`2bd8be6`), the unconditional escape
 that failed Gate 1. Kept for its measurement; nothing on it is merged.
 
 ## 1. What landed
 
-Three commits stand between `dce356b`, where the design's §8 recorded the
-failure, and this handoff: `14970cb`, `77cb1c1`, `bc3e607`.
+Three commits stand between `69ec8a7`, where the design's §8 recorded the
+failure, and this handoff: `9d0cbd5`, `10a6c08`, `5c2afa7`.
 
-`14970cb` adds `crates/jparser/examples/span_dump.rs`, and it comes first
+`9d0cbd5` adds `crates/jparser/examples/span_dump.rs`, and it comes first
 because the rest of this phase is unreadable without it. `score`'s `strict`
 counter credits a segment sitting exactly on a gold span **whether or not it
 matched anything**, so a change that turns an unmatched-but-exact hit into a
@@ -22,7 +22,7 @@ per input line as JSONL — segments, tokenizer boundaries, and the positions
 the escape reopened — so two builds are compared span by span and token by
 token. Every number below came out of it.
 
-`77cb1c1` is the phase. `engine::relax::Relaxed` reopens the interior of a
+`10a6c08` is the phase. `engine::relax::Relaxed` reopens the interior of a
 hint token that no candidate can cover **and that carries at least one
 hiragana character**; `Boundaries` gains a defaulted `is_usable_endpoint` that
 `cost::is_allowed` asks instead of `is_boundary`; `engine::parse` wires the
@@ -32,7 +32,7 @@ changes — `crates/jparser/tests/engine_v2.rs` does, by 234 lines, which is
 §2's Gate 7 and §1's own next paragraph — no index format moves, and no
 install rebuilds.
 
-`bc3e607` is design §9 — the narrowing, the three §8.4 candidates measured
+`5c2afa7` is design §9 — the narrowing, the three §8.4 candidates measured
 against it, and what it costs.
 
 The design's §2 rule is implemented as written. The hiragana condition is the
@@ -191,7 +191,7 @@ Matched characters, hints on against hints off, against the real index:
 | | characters | hints on | hints off |
 | --- | --- | --- | --- |
 | before Phase 4 | 630 | 426 | 487 |
-| unconditional escape (`cbd68f9`) | 630 | 486 | 487 |
+| unconditional escape (`2bd8be6`) | 630 | 486 | 487 |
 | **this phase** | 630 | **475** | 487 |
 
 Sixteen of the eighteen are now character-for-character identical to their

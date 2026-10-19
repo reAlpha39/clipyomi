@@ -7,13 +7,13 @@
 
 ## 1. What landed
 
-Five commits stand between the plan (`deb2994`) and this phase's last
-implementation commit (`e37a408`). Four carry the work, one per task; the
-fifth, `1257a2d`, is a controller bookkeeping commit that corrected a test
+Five commits stand between the plan (`76397c8`) and this phase's last
+implementation commit (`23ae2fc`). Four carry the work, one per task; the
+fifth, `e8bc5da`, is a controller bookkeeping commit that corrected a test
 count in the plan's own prose after Task 2 reported the miscount rather than
 quietly adjusting to it.
 
-`0ddb7c7` gives `KanjiData` the four `Option` fields — `grade: Option<u8>`,
+`914938a` gives `KanjiData` the four `Option` fields — `grade: Option<u8>`,
 `strokes: Option<u8>`, `freq: Option<u16>`, `jlpt: Option<u8>` — which changes
 `kanji.bin`'s record layout, so `INDEX_FORMAT_VERSION` goes 5 → 6. The header
 keeps its 24-byte layout, which is what lets a v6 loader read a v5 file's
@@ -22,7 +22,7 @@ rebuilds on; `a_v5_header_is_refused_with_a_version_mismatch` hand-encodes that
 header and pins the refusal, beside the v4 test Phase 3a left. The parser left
 the fields `None` until the next commit.
 
-`9de5bf3` fills them. The streaming reader in `kanjidic.rs` takes `<grade>`,
+`94e7bb9` fills them. The streaming reader in `kanjidic.rs` takes `<grade>`,
 the first `<stroke_count>` (later ones are the DTD's recorded common
 miscounts), `<freq>` and `<jlpt>`. A number that does not parse into its
 field's type marks the character bad and it is skipped and counted at
@@ -33,13 +33,13 @@ shorter than it was — see §3. The fixture `kanjidic_mini.xml` gained 都's re
 block, with its two stroke counts and a variant to ignore, and a trimmed block
 for 食; `tests/fixtures/README.md` records what the fixture now carries.
 
-`24d3cbf` takes the fields across the wire. The `engine_v2` wire pin asserts
+`41a7760` takes the fields across the wire. The `engine_v2` wire pin asserts
 all four by name and asserts that an absent one is a present key holding
 `null` rather than a missing key. On the webview side `KanjiInfo` gains them
 as `number | null` optionals and the boundary validator accepts each as
 absent, `null` or numeric and rejects anything else.
 
-`e37a408` renders them. Each kanji line ends in one parenthesised aside in
+`23ae2fc` renders them. Each kanji line ends in one parenthesised aside in
 KANJIDIC2's own field order — `(grade 2, 8 strokes, freq 37, old JLPT 4)`.
 Absent fields are left out and an empty aside is dropped with the column.
 Grade codes 8, 9 and 10 are named as the DTD defines them, a single stroke is
@@ -53,7 +53,7 @@ Thirteen files in all: on the Rust side `index/mod.rs`, `kanjidic.rs`, the
 on the webview side `types.ts`, `kanji-lookup.ts` and its test,
 `render/tooltip-text.ts` and its test, and `render/tooltip-colour.test.ts`;
 plus the one-line plan correction. **396 insertions against 56 deletions**
-(`git diff --stat deb2994..e37a408`). Nothing under `crates/jparser/src/engine/`
+(`git diff --stat 76397c8..23ae2fc`). Nothing under `crates/jparser/src/engine/`
 appears in the range at all, and neither do `index/build.rs`, `index/load.rs`,
 `src-tauri/` or any stylesheet.
 
@@ -188,7 +188,7 @@ prints nothing — no `*.snap.new`, so `parse_sentences.txt` is byte-identical.
 
 ### Gate 4 — the suites
 
-| suite | before (`deb2994`) | after (`e37a408`) |
+| suite | before (`76397c8`) | after (`23ae2fc`) |
 | --- | --- | --- |
 | `cargo test -p jparser --features mecab` | 367 | 373 |
 | `cargo test -p jparser --features hints-source` | 368 | 374 |
@@ -197,13 +197,13 @@ prints nothing — no `*.snap.new`, so `parse_sentences.txt` is byte-identical.
 | `npm test` | 302 | 312 |
 | `npx playwright test` | 45 | 45 |
 
-The first four "before" figures are Task 1 Step 1's re-take at `deb2994`,
+The first four "before" figures are Task 1 Step 1's re-take at `76397c8`,
 which is why they differ from the Phase 3a handoff's: five review commits
-landed after `9bf74ef`. Task 1 re-took only the three Rust suites (workspace,
+landed after `98d99ed`. Task 1 re-took only the three Rust suites (workspace,
 `mecab`, `hints-source`) at that commit and touched no TypeScript, so **the
 `npm test` and Playwright "before" figures are the Phase 3a handoff's at
-`9bf74ef`**, not a measurement taken for this phase; the npm total at
-`deb2994` itself was never measured. Task 3 added one Vitest test
+`98d99ed`**, not a measurement taken for this phase; the npm total at
+`76397c8` itself was never measured. Task 3 added one Vitest test
 (`src/kanji-lookup.test.ts`); Task 4 added seven (six in
 `src/render/tooltip-text.test.ts`, one in `src/render/tooltip-colour.test.ts`)
 — eight in the range, reaching the recorded after-total of 312 without an
@@ -216,7 +216,7 @@ new Rust tests (five in `kanjidic.rs`, one in `index_roundtrip.rs`) is
 feature-gated, and the workspace build already pulls in `mecab` through
 `src-tauri`'s `features = ["mecab"]`, so both suites should have gained six
 from those six tests alone. `mecab` did (367 to 373); the workspace total did
-not (601 to 605, a gain of four) — the recorded `deb2994` "before" of 601 is
+not (601 to 605, a gain of four) — the recorded `76397c8` "before" of 601 is
 unreconciled by two, and the discrepancy is recorded here rather than
 explained.
 
@@ -278,7 +278,7 @@ not settle, each with its reason.
 4. **A plan defect was reported rather than absorbed.** The plan's Task 2
    Step 5 said "fourteen / nine existing" where the counts were fifteen and
    ten. The implementer reported it instead of adjusting the work to match,
-   and the controller corrected the plan's prose in `1257a2d` — bookkeeping,
+   and the controller corrected the plan's prose in `e8bc5da` — bookkeeping,
    not a code fix.
 5. **Task 3's commit subject carries no scope**, `feat: the four kanji misc
    fields cross the wire`. The repository's git-workflow rule gives the form
@@ -382,7 +382,7 @@ this one downloads nothing.
 
 **The GUI check was the user's, not the agent's, as it was for Phase 3a, and
 the user performed it on 2026-09-12** after the final review's fix wave
-(`ba5820f`): hovering 東京都 in the running app shows the three asides —
+(`51581ef`): hovering 東京都 in the running app shows the three asides —
 `(grade 2, 8 strokes, freq 37, old JLPT 4)`, `(grade 2, 8 strokes, freq 74,
 old JLPT 3)` and `(grade 3, 11 strokes, freq 123, old JLPT 3)` — and Settings'
 "Hide kanji readings & meanings" hides them. The agent's own proof of the same

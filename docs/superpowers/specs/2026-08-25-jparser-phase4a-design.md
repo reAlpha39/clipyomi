@@ -1,7 +1,7 @@
 # JParser Phase 4A — Chrome Modes Design
 
 **Date:** 2026-08-25
-**Status:** Shipped. Commits `9330ff8..eee8320` on `develop`.
+**Status:** Shipped. Commits `d40ffc6..ae0858e` on `develop`.
 **Reference:** `docs/superpowers/specs/2026-08-12-jparser-port-design.md` (§7.2, §7.4, §11)
 
 ---
@@ -199,7 +199,7 @@ rather than sit there drifting:
 | --- | --- |
 | `region_top_inset`'s `decorated` read (`GWL_STYLE` / `WS_CAPTION`) | Always false by construction. Becomes `if STRIP_SHOWN { 0 } else { strip_px(dpi) }` |
 | the `grow_top(±band)` call in the chrome command | No native boundary exists on Windows to cross |
-| `grow_top` and `top_grown` themselves, and their three tests | That call was the only caller — the peek moved to `set_strip_shown` in `1671a77`. Tests of a deleted function guard nothing; the drift they caught cannot recur once the arithmetic is gone |
+| `grow_top` and `top_grown` themselves, and their three tests | That call was the only caller — the peek moved to `set_strip_shown` in `5254b98`. Tests of a deleted function guard nothing; the drift they caught cannot recur once the arithmetic is gone |
 | `initial_height`'s mode parameter | Windows always reserves the row, macOS never does. It collapses to `saved.unwrap_or(DEFAULT_WINDOW_HEIGHT + if cfg!(windows) { BAND_HEIGHT_LOGICAL } else { 0 })` |
 
 `docs/superpowers/2026-08-18-windows-titlebar-test-plan.md` check 1 ("the gear
@@ -215,7 +215,7 @@ care, and each of the deletions above is safe for a specific reason:
 | Change | Why header mode cannot notice |
 | --- | --- |
 | `showPeek`'s gate becomes `chromeMode !== 'header'` | Logically identical to the old `titlebarShown` gate for this mode — only the *other* blocking side gains a member |
-| `grow_top` and its call deleted | Not on the peek path. `1671a77` moved the reveal to `set_strip_shown`; `grow_top`'s only caller was the native toggle |
+| `grow_top` and its call deleted | Not on the peek path. `5254b98` moved the reveal to `set_strip_shown`; `grow_top`'s only caller was the native toggle |
 | `region_top_inset`'s `decorated` read deleted | It already returns `strip_px` unconditionally on Windows, because `WS_CAPTION` is never set (§4.1). No returned value changes |
 | `initial_height` loses its mode parameter | Header mode on Windows already gets `DEFAULT_WINDOW_HEIGHT + BAND_HEIGHT_LOGICAL`; the collapsed form returns the same number |
 | `data-decorations` → `data-chrome` | `header` and `content` share every band rule, so header's computed styles are identical. A mechanical swap, verifiable with `git grep data-decorations` returning nothing |

@@ -14,7 +14,7 @@ answered. Two items stay open and neither blocks Phase 1 — see §11.4.
 
 ## 1. What exists now
 
-Thirteen commits, `0e8b1cb`..`7ed79c4` (originally `4933d91`..`765da93`, rewritten by the §10 scrub). Tests: **324** under default
+Thirteen commits, `3576dfe`..`1746e47` (originally `4933d91`..`765da93`, rewritten by the §10 scrub). Tests: **324** under default
 features, **357** under `--features mecab`, all passing. `cargo check -p jparser
 --no-default-features` clean; `cargo clippy -p jparser --all-targets -- -D warnings`
 clean with and without `--features mecab`.
@@ -56,7 +56,7 @@ what remains unchecked.
 ## 3. Two defects found late, and what they change about how you label
 
 Both were found by the whole-branch review, both corrupt the corpus rather than the
-code, and both are fixed (`6676cc2`). They matter to you because they change what to
+code, and both are fixed (`3dc64c2`). They matter to you because they change what to
 watch while adjudicating.
 
 ### 3.1 `label`'s `j` key blesses the hints-off parse
@@ -716,7 +716,7 @@ Anyone quoting the tolerant number should quote this paragraph with it.
   verified by inspection.
 - **Captured text in git history — scrubbed, and the documented range was wrong.**
   Two verbatim `vn_data` dialogue lines were committed in error and removed from the
-  tree in `ea635e4` (was `4f9cd06`). This entry used to say they remained in
+  tree in `0a990ff` (was `4f9cd06`). This entry used to say they remained in
   `b2e9534`..`cca9a22`; enumerating every occurrence before the rewrite showed that
   was understated in two ways. The taint started one commit earlier, at the design
   doc `7f2d4e0`, and it reached `crates/jparser/src/bin/jparser-cli/diff.rs` as well
@@ -732,7 +732,7 @@ Anyone quoting the tolerant number should quote this paragraph with it.
   byte-consistent with `HEAD` rather than merely clean.
 
   What this cost, and what it did not. `HEAD`'s tree hash is unchanged
-  (`f96d2784`), so no working content moved. `develop` (`a4df417`) and `main`
+  (`f96d2784`), so no working content moved. `develop` (`741257e`) and `main`
   (`eea94eb`) kept their hashes and their upstream tracking, because the earliest
   rewritten commit is not an ancestor of either — only this branch's 21 commits got
   new ids. The `origin` remote is removed by `filter-repo` as a safety measure and

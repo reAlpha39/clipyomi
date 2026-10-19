@@ -9,18 +9,18 @@
 ## 1. What landed
 
 Three commits change code or its rationale. Five stand between the plan
-(`6b0bef7`) and `HEAD`: the other two are this handoff's own commit
-(`b8c52d6`), which cannot name itself, and a follow-up documentation fix
-(`7db3c63`) that lands after it.
+(`ef960be`) and `HEAD`: the other two are this handoff's own commit
+(`e07fb82`), which cannot name itself, and a follow-up documentation fix
+(`7d2d27d`) that lands after it.
 
-`7468d6b` (`feat(engine-v2): expose the key FST's forward walk as a
+`b6821d8` (`feat(engine-v2): expose the key FST's forward walk as a
 resumable Walk`) adds `Index::walk` and the `Walk` type — a position that
 `push` advances one folded character at a time, `records` reads the key
 ending there, and `records_after` tests an extension without moving it —
 then reimplements `prefixes_of_with` on top of it, unchanged in signature
 and behaviour.
 
-`cbd7604` (`docs(engine-v2): restore the walk's root-check and fold
+`1529bbf` (`docs(engine-v2): restore the walk's root-check and fold
 rationale`) restores doc-comment rationale that the first commit's
 replacement text had dropped: why the root node's finality is checked at
 all, the v1-builder history behind the `key_chars == 0` branch, and why
@@ -28,7 +28,7 @@ all, the v1-builder history behind the `key_chars == 0` branch, and why
 pointer from `Walk::records` back to that doc, since the root-finality
 check itself moved there.
 
-`9fcab9b` (`fix(engine-v2): walk the index once per position instead of
+`2b8258e` (`fix(engine-v2): walk the index once per position instead of
 once per span`) restructures `candidates`: chains are reindexed by stem end
 rather than span end, one `index.walk()` runs per start position, each
 conjugation class's remove-suffix is tested against the standing walk, and
@@ -150,7 +150,7 @@ repetitive paste is open.
 
 ## 4. Standing gates
 
-Run at `9fcab9b`: `cargo test -p jparser` (296 passed), the same with
+Run at `2b8258e`: `cargo test -p jparser` (296 passed), the same with
 `--features mecab` (322 passed, 1 ignored), both clippy invocations clean,
 `cargo check -p jparser --no-default-features` clean, `cargo fmt -p jparser
 -- --check` clean, `npm test` (279 passed), `npx tsc --noEmit` clean,

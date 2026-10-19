@@ -36,13 +36,13 @@
 //! **The control arm, since `demote` shipped.** `plain` below takes `parse`'s
 //! first `KEEP` readings and is printed as the control that must reproduce
 //! the recorded gate -- true only while `parse` returns readings in raw cost
-//! order. Commit `b09e52d` made `lattice::k_best` demote before truncating,
+//! order. Commit `bfe3a64` made `lattice::k_best` demote before truncating,
 //! so at HEAD `parse` already returns a demoted list and `plain` is demoted
 //! too, not the pre-Phase-2b order it is labelled as. Every row of the table
 //! below changes meaning, not just `demoted`'s. §5 of the Phase 2b design
 //! declined a `--no-demote` flag on the strength of this file being the A/B
 //! instrument already; that reasoning now needs the same caveat: reproducing
-//! the original A/B needs a checkout at or before `b09e52d`, not a run of
+//! the original A/B needs a checkout at or before `bfe3a64`, not a run of
 //! this binary at HEAD.
 //!
 //! **What this does and does not answer.** It answers whether the metric

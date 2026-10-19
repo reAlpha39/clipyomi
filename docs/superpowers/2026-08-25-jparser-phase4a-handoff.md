@@ -2,13 +2,13 @@
 
 **Date:** 2026-08-26
 **Spec:** [`docs/superpowers/specs/2026-08-25-jparser-phase4a-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-25-jparser-phase4a-design.md)
-**Commits:** `9330ff8..1caf183` on `develop` (fourteen commits, unpushed)
+**Commits:** `d40ffc6..8be7a17` on `develop` (fourteen commits, unpushed)
 
 ---
 
 ## 1. What Was Completed in Phase 4A
 
-1. **`ChromeMode` replaces the `decorations` boolean** (`372c623`, `6504842`).
+1. **`ChromeMode` replaces the `decorations` boolean** (`84efe9d`, `e82a1c6`).
    Three values — `native` / `header` / `content` — persisted as
    `chrome_mode: Option<ChromeMode>` in `settings.rs`. The legacy field
    becomes `decorations: Option<bool>` with `skip_serializing_if`.
@@ -22,7 +22,7 @@
    once per install and is gone from the file after the very first save,
    with no separate migration pass or version marker needed.
 
-2. **Content-only mode** (`ee0d6bf`) needed **no new Win32 code**. It is
+2. **Content-only mode** (`f5daec2`) needed **no new Win32 code**. It is
    header mode with the hover reveal switched off — `showPeek`'s gate became
    `chromeMode !== 'header'` instead of a boolean check, and the band's
    children go `visibility: hidden` (not `opacity`, so they leave the tab
@@ -31,8 +31,8 @@
    strip, and the resize edges. Nothing in the `win32_frameless` module
    (declared inside `commands.rs`) changed for this state.
 
-3. **Three-way settings control and right-click menu** (`678c3c9`, `672bb6a`,
-   `e7742c3`, `4c7fed7`). The settings window's checkbox became a segmented
+3. **Three-way settings control and right-click menu** (`0c19013`, `d3138bf`,
+   `3bfe287`, `36ab40b`). The settings window's checkbox became a segmented
    control (reusing the furigana picker's markup/CSS/`aria-checked` pattern),
    omitting the `native` button on Windows. A new `src/context-menu.ts` adds
    a right-click / Shift+F10 menu, bound on `document` (not `#app`, since a
@@ -42,7 +42,7 @@
    the settings window in 3B — so the menu carries the mode switch, Settings,
    and Quit instead.
 
-4. **The Windows native-frame finding** (`9330ff8`, folded into `6504842`'s
+4. **The Windows native-frame finding** (`d40ffc6`, folded into `e82a1c6`'s
    resolution). This is the single most important thing this phase leaves
    behind for later work:
 
@@ -73,7 +73,7 @@
      `WS_CAPTION` in the first place. That is a correctness trade a rider on
      this phase should not make silently.
 
-5. **Migration matrix and defaults** (`672bb6a`). Every existing Windows
+5. **Migration matrix and defaults** (`d3138bf`). Every existing Windows
    install lands in `header`: `decorations: true` → `native` → resolved to
    `header`; `decorations: false` → `header` directly. The shipped default
    was corrected from §7.4's stated `header` to what `Settings::default()`
@@ -84,7 +84,7 @@
 
 ## 2. What Task 0 Deleted, and Where Its Measurements Went
 
-`9330ff8` reverted 1,281 lines across seven files (`commands.rs`, `main.rs`,
+`d40ffc6` reverted 1,281 lines across seven files (`commands.rs`, `main.rs`,
 `xtask/`, `tools/`) marked `THROWAWAY PROBE (spike, revert me)` — 439 of them
 in `commands.rs` alone: `PROBE_FLUSH`, `PROBE_PAINTS`, `PROBE_ACTIVE`,
 `probe_clip`, `probe_wait_compose`, `probe_window_rect`, `probe_qpc`,
@@ -154,7 +154,7 @@ hidden-title-bar stubs changed only their settings key, `decorations: false`
 
 ## 4. Verification Gate
 
-Run at commit `5facf44`, the phase's final tip:
+Run at commit `57b4dfe`, the phase's final tip:
 
 - **Vitest:** 221 passed across 12 files.
 - **`npm run build`:** clean.
@@ -166,7 +166,7 @@ Run at commit `5facf44`, the phase's final tip:
   `WINDOWPOS` — the same four that predate this phase; 4A added no new
   clippy debt.
 
-The Vitest count fell by one against the earlier gate at `eee8320`, which
+The Vitest count fell by one against the earlier gate at `ae0858e`, which
 reported 222. That is the fix wave in §9: two duplicate tests deleted, one
 focus-restoration test added. `cargo test` holds at 83 for the same kind of
 reason — one tautological test deleted, one real one added.
@@ -270,7 +270,7 @@ against the current text.
 ## 9. The Final Review's Fix Wave, and the One Finding Left Open
 
 A whole-branch review ran after §7's docs commits and returned no Critical
-findings, verdict "merge after these fixes". Commit `5facf44` applied nine of
+findings, verdict "merge after these fixes". Commit `57b4dfe` applied nine of
 them in one wave. Three are worth carrying forward:
 
 1. **The spec promised a test that had never shipped.** §8 of the design spec

@@ -3,7 +3,7 @@
 **Date:** 2026-09-01
 **Master plan:** [`2026-08-27-engine-v2-master-plan.md`](2026-08-27-engine-v2-master-plan.md) §3.2, §3.5, §4.1, §4.3, §7 Phase 1, §9.2, §9.3, §9.5, §9.6, §9.7, §10
 **Phase 0 handoff:** [`../2026-08-28-engine-v2-phase0-handoff.md`](../2026-08-28-engine-v2-phase0-handoff.md) §9, §11
-**Branch:** `feat/engine-v2`, from `b9c35be`
+**Branch:** `feat/engine-v2`, from `770452e`
 **Status:** Design, approved in session, not implemented
 
 ---
@@ -548,7 +548,7 @@ Written test-first, per the repository's workflow rules.
 
 ## 11. Findings that amend the master plan
 
-Five, all measured against the tree at `b9c35be` or derived from committed Phase
+Five, all measured against the tree at `770452e` or derived from committed Phase
 0 artefacts. §12 folds them into the master plan.
 
 ### 11.1 §3.2's "Clean" tier was verified against the wrong string

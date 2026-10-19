@@ -37,7 +37,7 @@ line range. They are, exactly as written:
 deliberate attribution, and the eighth site if one is counting them all.
 
 **One of these rows is gone since this table was first written.**
-`c827ef2` reimplemented `src/render/tooltip-colour.ts`'s `colourLine`
+`be29e46` reimplemented `src/render/tooltip-colour.ts`'s `colourLine`
 clean-room: the implementer worked only from
 `src/render/tooltip-colour.test.ts` as the specification, was forbidden from
 reading the previous implementation or any upstream source, and confirmed
@@ -125,7 +125,7 @@ that release ships.
 
 **A third option, beside yes and no — and this one has now been taken.** The
 question above was framed as binary — is this code clean, or isn't it — but
-there was a cheap engineering answer available too, and `c827ef2` took it.
+there was a cheap engineering answer available too, and `be29e46` took it.
 `colourLine`, the function that had carried *"Ported from `MyDrawText`"*, the
 strongest of the original nine citations, was reimplemented clean-room in
 that one commit, working only from `src/render/tooltip-colour.test.ts` as the

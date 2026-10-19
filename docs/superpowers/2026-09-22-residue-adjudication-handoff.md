@@ -1,7 +1,7 @@
 # The residue, adjudicated — handoff
 
 **Date:** 2026-09-22
-**Branch:** `feat/corpus-disagree`, tip `c3cf700`
+**Branch:** `feat/corpus-disagree`, tip `40a4ebb`
 **Predecessor:** [`2026-09-22-uk-kana-shatter-handoff.md`](2026-09-22-uk-kana-shatter-handoff.md)
 
 The predecessor shipped the `uk` exemption and left a named residue it had not
@@ -11,9 +11,9 @@ session re-ran the whole probe at the current tip, adjudicated that residue
 surface by surface, shipped the half that is fixable, and **refused** the
 hints-off half on a measurement that the gold corpus alone would have passed.
 
-Three commits, all of them user-lexicon rows: `1798a9f` adds three for the
-`もしか` family, `06e9158` five more for the family §6 had called blocked, and
-`c3cf700` one protective row that cancels a collateral of those five. §10 is
+Three commits, all of them user-lexicon rows: `214725f` adds three for the
+`もしか` family, `82688c4` five more for the family §6 had called blocked, and
+`40a4ebb` one protective row that cancels a collateral of those five. §10 is
 that correction and it is the larger change. The hints-off candidate was built,
 measured and reverted; §5 is its record.
 
@@ -85,7 +85,7 @@ the family is 334 / 59 / 17 occurrences and 153 splits.
 
 ## 4. What shipped
 
-`1798a9f` puts `もしかして`, `もしかしたら` and `もしかすると` in
+`214725f` puts `もしかして`, `もしかしたら` and `もしかすると` in
 `assets/hint_user_lexicon.csv`, cap 85 → 88.
 
 The cost model cannot reach them. All three are `adv,uk`, so `flags.rs` gives
@@ -221,7 +221,7 @@ rebuild.
 
 ## 10. Postscript: the tokenizer route, and 832 occurrences
 
-`06e9158`, the same day, after §6 had already called the class blocked.
+`82688c4`, the same day, after §6 had already called the class blocked.
 
 **The mistake §6 made was reaching for the cost model.** The class is a
 tokenizer artifact: IPADIC holds `いる` whole and splits `い|ない`, which is why
@@ -251,9 +251,9 @@ The price is about a dozen occurrences — `もったいないでしょ` → `�
 でしょ` 3, `のに` split twice beside it, `イっていない` twice, `気持ちよさそうな
 お顔` → `なお|顔` twice.
 
-**The protective row, `c3cf700`.** `もったいない` was held out of `06e9158`
+**The protective row, `40a4ebb`.** `もったいない` was held out of `82688c4`
 because it had not been through the A/B; it has now, and it ships. Ten corpora,
-hints-on, against `06e9158`: **8 sentences change (0.01%)**, gold and snapshot
+hints-on, against `82688c4`: **8 sentences change (0.01%)**, gold and snapshot
 identical in both states. Three are the repair — the shatter, and the two `のに`
 that stopped splitting beside it. Five are `もったいないです` ×4 and
 `もったいないじゃ` ×1 merging back into the polite span the engine emitted

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-27
 **Spec:** [`docs/superpowers/specs/2026-08-27-jparser-phase5a-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-27-jparser-phase5a-design.md)
-**Commits:** `8e3d9c9..0717aeb` on `develop` (five commits, unpushed)
+**Commits:** `ac3773a..54db839` on `develop` (five commits, unpushed)
 
 This is Phase 5A of Phase 5 (MeCab). 5A ships acquisition only — download,
 verify, unpack, publish — as a library and a CLI driver, exactly as 2B did for
@@ -15,7 +15,7 @@ nothing in `src-tauri` changed in this phase.
 ## 1. What Shipped
 
 1. **The crate skeleton, the pin, `SourceError`, `published`, `staging_names`**
-   (`8e3d9c9`). `crates/vibrato-source` joins the workspace. Eleven constants
+   (`ac3773a`). `crates/vibrato-source` joins the workspace. Eleven constants
    pin the v0.5.0 IPADIC release asset (`ASSET_URL`, `ASSET_SHA256`,
    `ASSET_BYTES`, `DICT_DIR`, `SYSTEM_DIC`, and the rest), each value taken
    from Task 0's direct measurement of the real asset rather than an upstream
@@ -28,7 +28,7 @@ nothing in `src-tauri` changed in this phase.
    tree carries an `AND Apache-2.0` term, which would collide with this
    project's GPL-2.0-only. 5 tests, clippy clean.
 
-2. **`extract::unpack_into` and `publish`** (`746ab90`). The archive half,
+2. **`extract::unpack_into` and `publish`** (`94a0cdb`). The archive half,
    exercised with no network at all: xz-decoded bytes in, a tar walk that
    trusts only three whitelisted basenames (`COPYING`, `NOTICE`,
    `system.dic.zst`) written into a staging directory, `system.dic.zst`
@@ -43,7 +43,7 @@ nothing in `src-tauri` changed in this phase.
    zstd content-checksum addition this commit made beyond the design spec.
 
 3. **`fetch.rs`: the graviola TLS agent, SHA-256 verification, the retry
-   policy, `resolve`** (`de1da99`). `agent()` builds a `ureq::Agent` with
+   policy, `resolve`** (`bfa7746`). `agent()` builds a `ureq::Agent` with
    `TlsProvider::Rustls`, `rustls_graviola::default_provider()` injected as
    the crypto provider, and `RootCerts::PlatformVerifier` — Task 0 had
    already confirmed this handshakes against `github.com` and its redirect
@@ -58,7 +58,7 @@ nothing in `src-tauri` changed in this phase.
    download suite against a local `TcpListener`, never the real network),
    clippy clean.
 
-4. **The `hints-source` feature and `jparser-cli fetch-hints`** (`e2117bf`).
+4. **The `hints-source` feature and `jparser-cli fetch-hints`** (`53ee313`).
    `hints-source = ["dep:vibrato-source", "mecab"]` on `crates/jparser`,
    deliberately not implied by `cli` or `mecab` alone, so `src-tauri`
    enabling `mecab` today pulls in no TLS stack. `jparser-cli fetch-hints
@@ -72,7 +72,7 @@ nothing in `src-tauri` changed in this phase.
    (plain HTTP, no TLS feature), not this phase's. 236 lib tests + 6
    integration binaries including the new `cli_hints` (1/1), clippy clean.
 
-5. **The two CI gates** (`0717aeb`). The library-purity grep gains
+5. **The two CI gates** (`54db839`). The library-purity grep gains
    `vibrato-source`, so `jparser --no-default-features` can never pull it in.
    The TLS gate widens from `openssl|native-tls` to also reject `ring` and
    `aws-lc`, with a comment naming `rustls-graviola` as the sanctioned
@@ -232,7 +232,7 @@ Three things surfaced while building this phase that are not in
 
 ## 6. The Verification Gate
 
-Run and personally verified at commit `0717aeb` (tip of `develop`), on
+Run and personally verified at commit `54db839` (tip of `develop`), on
 Windows, tree clean before and after:
 
 - **`cargo test --workspace`: 460 passed, 0 failed, 1 ignored** — up from

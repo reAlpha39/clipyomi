@@ -43,7 +43,7 @@ plainly rather than repeated as the old estimate: the excess is the coverage
 test's walk and the three extra fixture rows the review added to pin dedup
 and step-order on chains other than ます+です, both of which earned their
 place rather than being scope creep. Measured against the plan's base commit
-(`3bded19`) through the commit that finished the code (`af0628f`) — the
+(`78a187b`) through the commit that finished the code (`4db86bd`) — the
 *code range*, not the whole phase — this is **9 files changed, 956
 insertions(+), 55 deletions(-)**. The whole phase, through this handoff's own
 closing commits, is larger: **13 files changed, 1,343 insertions(+), 66
@@ -54,7 +54,7 @@ why the two figures are reported separately rather than folded into one.
 
 Both feature states of the standing test suite pass at the counts every task
 in this phase reported and this handoff reconfirmed independently at
-`af0628f` (the commit that finished Task 5, immediately before this task's
+`4db86bd` (the commit that finished Task 5, immediately before this task's
 two doc-comment corrections — see §3 of the task 6 report for the
 unchanged re-run after those edits): `cargo test -p jparser` is **433
 passed, 0 failed, 0 ignored**; `cargo test -p jparser --features mecab` is
@@ -111,7 +111,7 @@ would expect; three are the known た/たい collision (finding 5) and three are
 correctly-derived labels on implausible sibling parses (finding 6) — both
 are recorded in §4, and neither is a defect in `label.rs`.
 
-**§8.3 — met.** The five standing gates, run at `af0628f`: `cargo test -p
+**§8.3 — met.** The five standing gates, run at `4db86bd`: `cargo test -p
 jparser` (433/0/0), `cargo test -p jparser --features mecab` (468/0/1
 ignored, the pre-existing Phase 1a item), `cargo clippy -p jparser
 --all-targets -- -D warnings` (clean), the same with `--features mecab`
@@ -148,14 +148,14 @@ The fixture's English column is not evidence of an independent check on the
 formatter: `AUX_WORD`, `FORM_WORD`, `OVERRIDE` and the whole body of `fmt`
 are printed verbatim in the plan (`docs/superpowers/plans/
 2026-09-02-engine-v2-phase1b-i.md`), as is the entire fixture, and both were
-committed together in `3bded19` by one author, both derived from design §3.
+committed together in `78a187b` by one author, both derived from design §3.
 They share an ancestor, so their agreement cannot be evidence that the
 vocabulary or the rules are correct. What the phase actually earned is four
 narrower, verified claims:
 
 1. **No fixture row's `expected` value was ever edited toward observed
-   output.** The fixture is touched by exactly two commits, `3548d04` and
-   `81fd9a0`, both before the formatter commit `8e59b4b`; `81fd9a0` added
+   output.** The fixture is touched by exactly two commits, `aead911` and
+   `c37e971`, both before the formatter commit `8cfe4c0`; `c37e971` added
    three rows and corrected comments only.
 2. **Design §3's rules were complete over the whole reachable input space.**
    221 hand-applied rows and 21,760 walked chains produced **zero**
@@ -354,7 +354,7 @@ the deletions, not discover partway through.
 
 One item of this phase's own to add to that inheritance: **the crate is not
 `cargo fmt` clean.** Checked directly (`cargo fmt -p jparser --check`) both
-at this phase's own plan base (`3bded19`) and at its head (`af0628f`): the
+at this phase's own plan base (`78a187b`) and at its head (`4db86bd`): the
 crate carries **39** formatting sites at head, of which **32** are
 unchanged from before this phase started — spread across
 `src/bin/jparser-cli/{corpus,diff,label,main,score}.rs`, `src/conjugation.rs`

@@ -3,7 +3,7 @@
 **Date:** 2026-08-27
 **Supersedes (eventually):** [`2026-08-12-jparser-port-design.md`](2026-08-12-jparser-port-design.md)
 **Status:** **Implemented and merged.** Phases 0 through 4 shipped between
-2026-08-28 and 2026-09-16; `develop` carries them as `cb7b994`, "Merge Engine
+2026-08-28 and 2026-09-16; `develop` carries them as `0ef1ef9`, "Merge Engine
 v2: the JParser rewrite, all four success criteria met". This line read
 "Design draft, not approved, not implemented" until 2026-09-16, through every
 one of those phases — read §2 for the criteria's status and §5.2's current
@@ -78,7 +78,7 @@ The plan succeeds when all four hold:
    Against v1 (Phase 1a handoff §2), same corpus, same 2,163 spans, same
    harness:
 
-   | | v1 | v2 before | v2 now (2026-09-30, `a7a9f24`) |
+   | | v1 | v2 before | v2 now (2026-09-30, `a98b9ea`) |
    | --- | --- | --- | --- |
    | span accuracy, hints off | 0.6810 (1473) | 0.7342 (1588) | 0.7351 (1590) |
    | span accuracy, hints on | 0.6963 (1506) | 0.8285 (1792) | 0.7859 (1700) |
@@ -682,7 +682,7 @@ Compounds by class, hints on: `lexical` 82 / 112, `false-match` 30 / 32,
 `transparent` 40 / 42, 8 `ambiguous` excluded. Hints off: `lexical` 56 / 112,
 `false-match` 23 / 32, `transparent` 39 / 42.
 
-**Refreshed 2026-09-23 at `5194b8a`; the block had stood unchanged since
+**Refreshed 2026-09-23 at `0c49d92`; the block had stood unchanged since
 2026-09-18** while the cells moved under it — it read 1698 / 1948 / 0.9528
 hints on and 1593 / 1786 / 0.9506 hints off. Each move is recorded in the
 handoff of the session that made it, dated 2026-09-18 to 2026-09-23 in
@@ -694,16 +694,16 @@ tolerant and entry hit hints on) and the empty-stem exemption on
 [`2026-09-23-empty-stem-and-potential-stem-handoff.md`](../2026-09-23-empty-stem-and-potential-stem-handoff.md)).
 None of the three moves a compound class line.
 
-**Refreshed again 2026-09-26 at `58a8a80`**, for one move: `FUNCTION_STACK`
+**Refreshed again 2026-09-26 at `004a0c2`**, for one move: `FUNCTION_STACK`
 no longer charges a `uk` word of three kana or more hints off, and gold gains
 `やがて` (1589 / 1786 / 0.9569 -> 1590 / 1787 / 0.9570 off; hints on
 unchanged, by construction). The display clause before ます committed with it
 moves no cell. See
 [`2026-09-26-reported-sentence-handoff.md`](../2026-09-26-reported-sentence-handoff.md).
 
-**Refreshed again 2026-09-30 at `a7a9f24`**, for entry top-1 alone: 1201 ->
+**Refreshed again 2026-09-30 at `a98b9ea`**, for entry top-1 alone: 1201 ->
 1205 hints on and 1179 -> 1184 hints off, all from counting a noun's `uk`
-only on its first sense (`9bd5d33`). The two other order clauses committed
+only on its first sense (`2f591d4`). The two other order clauses committed
 with it -- a verb left on an unfinished form, and サ変's し under れる --
 move no cell, and no span moves in either state. See
 [`2026-09-30-first-gloss-order-handoff.md`](../2026-09-30-first-gloss-order-handoff.md).
@@ -1849,7 +1849,7 @@ which is what finally put §2's criterion 2 above the v1 baseline.
    There were **seven** sites, not ten —
    `docs/superpowers/2026-09-09-frontend-provenance-inventory.md` §2 enumerates
    them §2.1 to §2.7 — and its §9 records them settled as attribution rather
-   than derivation: one reauthored clean-room (`b8035a3`), six restated, 93 of
+   than derivation: one reauthored clean-room (`5bd699f`), six restated, 93 of
    93 files stamped. `grep -rn "MyToolTip\|DictionaryUtil\|MyDrawText\|Dictionary.cpp" src/`
    now returns nothing, so none of them "survive".
 3. ~~**`jmdict.rs` and `index/*` disposition (§3.2 soft tier).**~~ **ANSWERED

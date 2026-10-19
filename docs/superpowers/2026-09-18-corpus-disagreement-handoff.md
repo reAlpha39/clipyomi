@@ -1,7 +1,7 @@
 # Finding defects by counting — handoff
 
 **Date:** 2026-09-18
-**Branch:** `feat/corpus-disagree`, off `feat/sokuon-tail` tip `e3d75e2`
+**Branch:** `feat/corpus-disagree`, off `feat/sokuon-tail` tip `5ffaba7`
 **Predecessor:** [`2026-09-16-sokuon-tail-handoff.md`](2026-09-16-sokuon-tail-handoff.md)
 
 Every defect the previous session fixed came from one screenshot pair at a
@@ -13,12 +13,12 @@ the sixth would have found. This session replaced that with a corpus.
 
 | commit | what it is |
 | --- | --- |
-| `1bb166f` | `examples/corpus_disagree.rs` — ranks two engines' disagreements over a corpus by how many of the engine's own signals agree |
-| `a3279ca` | `cost.rs`'s `CONTENT_MATCH` — a `MATCH` surcharge withheld from particles, which is the probe's whole top class |
-| `bdfe9c6` | the review's findings: the term's second mode, its arithmetic test, two dead lexicon rows, and the probe's ranking |
-| `30726c4` | `assemble::order` stops demoting a kana spelling JMdict calls normal — §6 |
-| `0983fd7` | `table.rs`'s `てる`/`でる` rows, the ている contraction — §7 |
-| `79ccb71` | `table.rs`'s `ている`/`でいる` rows and the re-pointed gate row — §8 |
+| `fc6548d` | `examples/corpus_disagree.rs` — ranks two engines' disagreements over a corpus by how many of the engine's own signals agree |
+| `af0827a` | `cost.rs`'s `CONTENT_MATCH` — a `MATCH` surcharge withheld from particles, which is the probe's whole top class |
+| `95f949b` | the review's findings: the term's second mode, its arithmetic test, two dead lexicon rows, and the probe's ranking |
+| `b48f634` | `assemble::order` stops demoting a kana spelling JMdict calls normal — §6 |
+| `d285af7` | `table.rs`'s `てる`/`でる` rows, the ている contraction — §7 |
+| `91536c1` | `table.rs`'s `ている`/`でいる` rows and the re-pointed gate row — §8 |
 | this one | the gate acceptance tightened, `CHAIN_BLOCK`, `KATAKANA_MIN_PIECE` — §9, §10 |
 
 ## 2. The probe
@@ -61,13 +61,13 @@ refusal already made for this project. The probe takes a path.
 
 **The v1 side is produced out-of-tree.** `crates/jparser` must contain nothing
 derived from ta-old (criterion 1), so the old engine is built in a detached
-worktree at `fb450f6^` and dumps `text<TAB>start:len:matched,...`. Nothing in
+worktree at `1d5b0cb^` and dumps `text<TAB>start:len:matched,...`. Nothing in
 this repository links it, and the probe reads a file.
 
 To re-run the whole thing:
 
 ```text
-git worktree add <path-outside-repo> fb450f6^
+git worktree add <path-outside-repo> 1d5b0cb^
 # in that worktree, with a dumper of your own beside its examples/:
 cargo build --release -p jparser --features mecab
 jparser-cli build-index --engine v1 <JMdict_e.xml> <v1-index>   # format 3
@@ -243,7 +243,7 @@ user lexicon moves boundaries where none of its entries appear.
 
 The probe was itself audited against the corpus, and three of its four signals
 and its ordering were all weaker than they looked. **Every finding below is
-now applied**, in `1bb166f`'s follow-up.
+now applied**, in `fc6548d`'s follow-up.
 
 - **`prt` is dead.** It fires **0 times** hints-on across 4,838 ranked rows,
   and 8 times hints-off, every one of which already carries `sht`. It also

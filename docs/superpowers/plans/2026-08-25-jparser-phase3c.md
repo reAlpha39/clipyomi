@@ -137,7 +137,7 @@ number inputs; `settings.rs` and `commands.rs` persist the keys.
       older vite server, so the Rust half ran directly against it with `cargo
       run --no-default-features`. The three boxes read 24 / 14 / 58 on a profile
       with nothing persisted, confirmed by the user.
-- [x] Follow-up shipped as `e7dee55`: the boxes opened empty on a first run.
+- [x] Follow-up shipped as `9316555`: the boxes opened empty on a first run.
       `stylesheetDefault` reads the value back from the token, which needed
       `--text-furigana` stated in `tokens.css` rather than living only as the
       fallback arm of `var(--text-furigana, 0.58em)`.

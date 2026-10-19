@@ -1,7 +1,7 @@
 # The godan potential, deinflected — handoff
 
 **Date:** 2026-09-23
-**Branch:** `spike/godan-potential`, from `1800d17` (`feat/corpus-disagree`); one feature commit, `9071618`, then this document
+**Branch:** `spike/godan-potential`, from `7b9eee6` (`feat/corpus-disagree`); one feature commit, `68c3bd1`, then this document
 **Predecessor:** [`2026-09-23-twelve-corpora-table-handoff.md`](2026-09-23-twelve-corpora-table-handoff.md)
 
 The predecessor's §7 named the godan potential the largest class the probe had
@@ -24,7 +24,7 @@ occurrences to 752**, and most of the 752 are not potentials.
 
 ## 1. Controls
 
-- **The tip's dumps.** `span_dump` rebuilt at `1800d17` over all twelve
+- **The tip's dumps.** `span_dump` rebuilt at `7b9eee6` over all twelve
   corpora, both states, is byte-identical to the predecessor's `spans-v5`, all
   24 files. Every A/B below is against those dumps.
 - **Gold at the tip**, both states: 1698 / 1952 / 0.9584 (1199/1251) / 152
@@ -286,7 +286,7 @@ wrong first gloss appears.
 
 | commit | change |
 | --- | --- |
-| `9071618` | the godan potential: table row, zero-width search, `lex` refusals, `order` clause, label, tests, fixture, snapshot |
+| `68c3bd1` | the godan potential: table row, zero-width search, `lex` refusals, `order` clause, label, tests, fixture, snapshot |
 | *(this document)* | the handoff |
 
 `README.md` and `src-tauri/Cargo.toml` carry the user's own uncommitted edits

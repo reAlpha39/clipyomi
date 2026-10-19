@@ -1,7 +1,7 @@
 # The katakana sokuon, and the fold that was refused with it — handoff
 
 **Date:** 2026-09-22
-**Branch:** `feat/corpus-disagree`, tip `3fe232b`
+**Branch:** `feat/corpus-disagree`, tip `a14ea5d`
 **Predecessor:** [`2026-09-22-ta-rerun-handoff.md`](2026-09-22-ta-rerun-handoff.md)
 
 The predecessor named the largest defect class the probe has found — 1,207
@@ -20,7 +20,7 @@ the part worth carrying forward.
 ## 1. Controls
 
 - **The v1 index.** Rebuilt in the detached worktree at
-  `D:\Code\oss\clipyomi-v1` (`361a77f`, untracked `examples/v1_dump.rs`) from
+  `D:\Code\oss\clipyomi-v1` (`b9386ba`, untracked `examples/v1_dump.rs`) from
   the same `JMdict_e.xml`: **486,553 keys, 619,717 records, 121,048 exact
   stems, 398 v5-fallback, 5 empty** — the fourth time that figure reproduces.
 - **The pool.** The ten corpora re-dumped from `D:\Code\oss\vn-text`, every
@@ -64,7 +64,7 @@ times over 674 distinct surfaces**, headed by `イッちゃう` 240, `イッて`
 
 ## 3. The fix: the sokuon only
 
-`3fe232b`. `Table::search` now passes each input character through
+`a14ea5d`. `Table::search` now passes each input character through
 `hiragana_sokuon` — katakana `ッ` read as hiragana `っ`, everything else
 unchanged — before asking the trie for a child.
 
@@ -119,7 +119,7 @@ folding the trie would reach katakana inflections and "would also turn every
 katakana loanword ending in タ (データ, メーター, カルタ) into a spurious
 past-tense candidate", and Tier D's 8 sentences could not price that. It is
 priced now. The full `kana::fold` version is on
-**`spike/katakana-sokuon-deinflect`, `eac76b0`**.
+**`spike/katakana-sokuon-deinflect`, `97d5837`**.
 
 Ten corpora, hints-on, against the tip: **2,030 sentences change (1.54%)**,
 708 target spans gained, 1,593 other, 1,897 matched spans lost. Gold is

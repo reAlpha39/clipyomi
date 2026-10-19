@@ -1,11 +1,11 @@
 # A reported line against the ta-old port, and the two fixes it led to — handoff
 
 **Date:** 2026-09-26
-**Branch:** `fix/reported-sentence-glosses`, from `a395bda`: `92a9ccf` (display), `58a8a80` (cost), and this document
+**Branch:** `fix/reported-sentence-glosses`, from `54aa6a2`: `ba6cf65` (display), `004a0c2` (cost), and this document
 **Predecessor:** [`2026-09-23-empty-stem-and-potential-stem-handoff.md`](2026-09-23-empty-stem-and-potential-stem-handoff.md)
 
 A user reported one line of visual-novel dialogue and asked how the ta-old port
-(v1, the detached worktree at `361a77f`) and this engine differ on it. The line
+(v1, the detached worktree at `b9386ba`) and this engine differ on it. The line
 is tier C2 by [`gold_sources.md`](../../crates/jparser/tests/fixtures/gold_sources.md)'s
 rule, so it is **not** committed: it is the first row of the gitignored
 `crates/jparser/tests/fixtures/gold_local.jsonl`, adjudicated at short units,
@@ -40,7 +40,7 @@ on first run since `c0912bc`.
   - `しません|か` and `し|ませんか` then tie exactly, at -9 hints on and 0 off, and `lattice::beats`' longer-last-step rule picks the expression `ませんか`. The tie exists only because the particle し (1) undercuts する's 連用形 (2).
 - **`し` glossed "and; besides".** The lone し led with the conjunctive particle, because `order`'s `PARTICLE` clause puts a particle first wherever the two tie above it. That is 36 spans hints on and 27 off before `ませんか` or `ましょうか`, always the particle.
 
-## 3. Shipped: the verb first before ます (`92a9ccf`)
+## 3. Shipped: the verb first before ます (`ba6cf65`)
 
 `assemble::attaches_to_masu` recognizes the text after a span as the polite
 ます. It accepts ません, ます, ました and ましょ, and rejects ますます, 増し and
@@ -69,7 +69,7 @@ the largest repair keeps its headword: `あり` 蟻 "ant" → 在り.
 
 No span moves in either state; gold is identical in both.
 
-## 4. Shipped: `FUNCTION_STACK` spares a kana adverb, hints off (`58a8a80`)
+## 4. Shipped: `FUNCTION_STACK` spares a kana adverb, hints off (`004a0c2`)
 
 `もし` was the reported shape, but the class behind it is wider and three
 characters long. The term shattered ordinary `uk` adverbs hints off: `と|て|も`
@@ -92,8 +92,8 @@ Refused on the way:
 
 ## 5. Not fixed, and why
 
-- **`それでも|し` hints on** — **fixed 2026-09-30 in `aee7ad2`**, after this section first refused it. IPADIC's でも|し is right in all 51 of its corpus cuts (なんでもして, 見られでもしたら), so no engine rule can target the one wrong one. Two user-lexicon rows, `もし良かったら` and `もしよかったら`, make Vibrato read `それで|もし良かったら`, and the engine then keeps the JMdict expression whole, as the ta-old port does hints off. Over 151,225 sentences hints on, 3 others change (`もし|よかったら` → the expression) and gold is identical. That is the long unit rather than the short-unit reference, and the user accepted it; strict on the local row stays 5 of 9, trading `良かったら` for `それで`. The cap goes 115 → 117.
-- **`も|し` hints off** — **fixed 2026-09-30 in `99d6cb9`**. The floor kept it out because `WordFlags` cannot separate an adverb from a noun, so `lex` now reads the entry for an uninflected function stack (`Candidate::adverb`: every sense `adv`) and `cost` spares that as well, hints off, with no index format change. It also keeps `もしかしたら` whole, which sparing `もし` alone would have cut `もし|かしたら` ("lend"). Against `58a8a80`: 732 sentences change hints off, about 740 spans repaired (`もし` 326, `なぜ` 182, `もしかしたら` 62, `それなりに` 60, `やや` 34) against about 37 worse (`もし|かしなく` 11 through a tie, `バカに` read as the adverb 9, a line cut at `かもし` 6), and gold is identical. The local row hints off reads `それで|もし|良かったら` — strict 6 of 9, entry top-1 4 of 4.
+- **`それでも|し` hints on** — **fixed 2026-09-30 in `dbc4143`**, after this section first refused it. IPADIC's でも|し is right in all 51 of its corpus cuts (なんでもして, 見られでもしたら), so no engine rule can target the one wrong one. Two user-lexicon rows, `もし良かったら` and `もしよかったら`, make Vibrato read `それで|もし良かったら`, and the engine then keeps the JMdict expression whole, as the ta-old port does hints off. Over 151,225 sentences hints on, 3 others change (`もし|よかったら` → the expression) and gold is identical. That is the long unit rather than the short-unit reference, and the user accepted it; strict on the local row stays 5 of 9, trading `良かったら` for `それで`. The cap goes 115 → 117.
+- **`も|し` hints off** — **fixed 2026-09-30 in `f19a1b2`**. The floor kept it out because `WordFlags` cannot separate an adverb from a noun, so `lex` now reads the entry for an uninflected function stack (`Candidate::adverb`: every sense `adv`) and `cost` spares that as well, hints off, with no index format change. It also keeps `もしかしたら` whole, which sparing `もし` alone would have cut `もし|かしたら` ("lend"). Against `004a0c2`: 732 sentences change hints off, about 740 spans repaired (`もし` 326, `なぜ` 182, `もしかしたら` 62, `それなりに` 60, `やや` 34) against about 37 worse (`もし|かしなく` 11 through a tie, `バカに` read as the adverb 9, a line cut at `かもし` 6), and gold is identical. The local row hints off reads `それで|もし|良かったら` — strict 6 of 9, entry top-1 4 of 4.
 - **する-noun + する.** Policy, per §2.
 - **The `し|ませんか` tie.** Both segmentations are defensible and gold has no `ませんか`. With §3 the glosses are right.
 

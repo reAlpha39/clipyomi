@@ -1,7 +1,7 @@
 # Claims audit — what the repository asserts that is not true
 
 **Date:** 2026-09-16
-**Branch:** `develop` at `cb7b994`
+**Branch:** `develop` at `0ef1ef9`
 **Scope:** every document and comment that speaks in the **present tense**.
 
 ## 1. Why this was run, and the rule it produced
@@ -47,7 +47,7 @@ commit.
 
 ## 3. Fixed in this pass
 
-### Master plan and ULLE review (`98b80d5`)
+### Master plan and ULLE review (`38bab58`)
 
 | # | Claim | Truth |
 | --- | --- | --- |
@@ -102,7 +102,7 @@ commit.
 - `hints.rs` — "the one production implementor"; `engine::relax::Relaxed` is a
   second, added by Phase 4.
 - `e2e/panes.spec.ts` — **the fifth "no git remote here" site**, which commit
-  `5273ca1` claimed to have corrected and missed.
+  `346eb28` claimed to have corrected and missed.
 
 ## 4. Outstanding, by severity
 
@@ -189,7 +189,7 @@ because auditors were wrong at least once in this session.
 
 ### 4.3 Dangling or wrong references
 
-- `e2e/panes.spec.ts:169` — `tools/probe-strip.mjs` was deleted in `9330ff8`.
+- `e2e/panes.spec.ts:169` — `tools/probe-strip.mjs` was deleted in `d40ffc6`.
 - `e2e/panes.spec.ts:283` — "Ruling 11" resolves to an unrelated note.
 - `e2e/stub.ts:80-82, :70-71` — "the one test" (six cases) and "their
   baselines are the darwin ones" (half are win32).

@@ -1,7 +1,7 @@
 # The empty stem, the potential's stem, and four refusals — handoff
 
 **Date:** 2026-09-23
-**Branch:** `feat/corpus-disagree`, from `b9210af` through `5194b8a`, one commit per shipped change, each fast-forwarded from its own spike branch
+**Branch:** `feat/corpus-disagree`, from `50f07bd` through `0c49d92`, one commit per shipped change, each fast-forwarded from its own spike branch
 **Predecessor:** [`2026-09-23-godan-potential-handoff.md`](2026-09-23-godan-potential-handoff.md)
 
 The predecessor shipped the godan potential and left five follow-ups it had
@@ -20,7 +20,7 @@ katakana fold (task 5), and one change the brief did not ask for, blocking
 
 ## 1. Controls
 
-- **The tip's dumps.** `span_dump` rebuilt at `b9210af` with the label patch
+- **The tip's dumps.** `span_dump` rebuilt at `50f07bd` with the label patch
   reproduces `spans-v6` byte for byte on `onikiss`, both states. Every A/B
   below is against `spans-v6` or against the previous shipped change's dumps.
 - **Gold at the tip**, both states: 1699 / 1953 / 0.9585 (1200/1252) / 152
@@ -36,7 +36,7 @@ katakana fold (task 5), and one change the brief did not ask for, blocking
   the worktree's sources before building and fails unless `jparser`
   recompiles.
 
-## 2. Task 1: the cut at an empty stem (`754a7bf`)
+## 2. Task 1: the cut at an empty stem (`aea8f23`)
 
 `やめて` hints on read やめ | て, the lone て glossed "you said"; `できた`
 read でき | た with た glossed たい. 一段's 連用形 and 未然形 are empty, so
@@ -99,7 +99,7 @@ wrong from its first three examples, all `シゴいて`; every occurrence was re
 and 215 follow に, で or が and are repaired, 10 follow a katakana stem. Short
 spans: a lone `た` glossed たい falls 1,347 → 537, a lone `て` 5,333 → 3,904.
 
-## 3. Task 2: the potential's stem before そう (`c0c205e`)
+## 3. Task 2: the potential's stem before そう (`4f495a3`)
 
 `帰れそう` showed 帰る "Conditional". The same spans showed JMdict's 一段
 verbs after a godan homograph's bare 仮定形 — `赤らめ|ながら` as 赤らむ,
@@ -156,7 +156,7 @@ as the noun 擦れ (5), `抜け出せ` as 抜け出る (4), `引け` as the noun
 wrong is `くれ|そう`: くれる now first, labelled "Imperative" (27 hints on,
 30 off).
 
-## 4. Task 3: a grammatical stack of uninflected pieces — refused (`spike/stack-uninflected`, `2b1ac35`)
+## 4. Task 3: a grammatical stack of uninflected pieces — refused (`spike/stack-uninflected`, `6e4068f`)
 
 `なんとも言えない` splits because the COMMON expression tiles into short
 COMMON pieces, one of them the conjugated `言え`, so `grammatical_stack`
@@ -180,7 +180,7 @@ conjugated two-character piece.
 
 ## 5. Task 4: the potential's hints-off regressions
 
-**4a, the suffix-only refusal, ships (`5194b8a`).** がる (1631750) is `suf`
+**4a, the suffix-only refusal, ships (`0c49d92`).** がる (1631750) is `suf`
 and `v5r` and nothing else; `takes_a_potential` now refuses an entry every
 one of whose senses is a suffix. Hints on byte-identical; hints off 20
 sentences: `焦がれる`, `削がれる` and `恋い焦がれる` repaired (3 spans), 36
@@ -188,7 +188,7 @@ wrong for wrong (`待ち焦がれ` stays cut, がれ now "Conditional" with a lo
 glossed たい), none newly wrong. Gold identical.
 
 **4b, COMMON withheld from potentials, refused (`spike/potential-no-common`,
-`b620c4d`).** The principle is sound — the priority tag marks the base verb,
+`3184636`).** The principle is sound — the priority tag marks the base verb,
 not its potential — and it is what closes `顔をしかめる`: with the discount
 `かめる` (擤む, COMMON through its reading) costs 0 against the expression's 9,
 and し + かめる wins 5 to 9 hints off. Without it the potential's own repairs
@@ -198,7 +198,7 @@ go: 978 sentences hints on, 3,077 hints off, the potential class 752 → 1,498,
 **Left open**: `顔をしかめる` (56), `気が引ける` (27) and `差しのべる` as 忍ぶ
 (6), the COMMON arithmetic no tokenizer constrains.
 
-## 6. Task 5: the narrow katakana fold — refused (`spike/katakana-stem-fold`, `dd4a666`)
+## 6. Task 5: the narrow katakana fold — refused (`spike/katakana-stem-fold`, `ea6f217`)
 
 `search` folds katakana to hiragana only under an auxiliary, only for the
 headword's own form, never for 基本形 (`ナスです` is not 為す), and never
@@ -212,7 +212,7 @@ not ship. And **`イカせて` does not move** either way: 行く's causative be
 a candidate, but it is inexact, and `order`'s first clause puts the exact
 katakana headword イカす first.
 
-## 7. An extra spike: たい's 未然ヌ接続 — refused (`spike/tai-mizen-nu`, `b569551`)
+## 7. An extra spike: たい's 未然ヌ接続 — refused (`spike/tai-mizen-nu`, `de314a4`)
 
 Found adjudicating task 1: たい's 未然ヌ接続 is `たから`, spelled like the past
 `た` + `から`, so `くれたから` reads くれる **Want-to** — 458 spans at the tip,
@@ -246,9 +246,9 @@ headword's own form refused in `lex` as well.
 
 | commit | change | § |
 | --- | --- | --- |
-| `754a7bf` | the cut at an empty stem of a word JMdict writes in kana | 2 |
-| `c0c205e` | a godan's bare 仮定形 before そう is the potential's stem | 3 |
-| `5194b8a` | the potential refused for an entry that is only a suffix | 5 |
+| `aea8f23` | the cut at an empty stem of a word JMdict writes in kana | 2 |
+| `4f495a3` | a godan's bare 仮定形 before そう is the potential's stem | 3 |
+| `0c49d92` | the potential refused for an entry that is only a suffix | 5 |
 | *(this document)* | the handoff, and the master plan's §2 and §5.2 figures refreshed | — |
 
 Refused spikes, each with its measurement in the commit: `spike/stack-uninflected`,

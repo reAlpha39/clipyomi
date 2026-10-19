@@ -1,8 +1,8 @@
 # Three corpora, one defect class — handoff
 
 **Date:** 2026-09-18
-**Branch:** `feat/corpus-disagree`, tip `e2ed7a3`, thirteen commits off
-`feat/sokuon-tail` (`e3d75e2`)
+**Branch:** `feat/corpus-disagree`, tip `63c7dc6`, thirteen commits off
+`feat/sokuon-tail` (`5ffaba7`)
 **Predecessor:** [`2026-09-18-corpus-disagreement-handoff.md`](2026-09-18-corpus-disagreement-handoff.md)
 
 The previous session built the disagreement probe and ran it on one corpus.
@@ -15,10 +15,10 @@ three side by side.
 
 | commit | what it is |
 | --- | --- |
-| `49a5e76` | `corpus_disagree.rs` prints the merge direction the ranking structurally cannot show — §3 |
-| `7722c2c` | `table.rs`'s `ていく`/`でいく` rows, the directional auxiliary — §7 |
-| `1fca7b2` | `LEN_GAIN`'s bounds gate re-measured and refused again, with a corpus-scale number — §8 |
-| `e2ed7a3` | the second attachment site `ていく` needed, and a `BOUND_FORMS` extension refused beside it — §7 |
+| `7bc7707` | `corpus_disagree.rs` prints the merge direction the ranking structurally cannot show — §3 |
+| `7f4b146` | `table.rs`'s `ていく`/`でいく` rows, the directional auxiliary — §7 |
+| `def0730` | `LEN_GAIN`'s bounds gate re-measured and refused again, with a corpus-scale number — §8 |
+| `63c7dc6` | the second attachment site `ていく` needed, and a `BOUND_FORMS` extension refused beside it — §7 |
 
 Gates at the tip: 658 tests passed, 0 failed, 1 ignored; `cargo fmt` and
 `cargo clippy --workspace --all-targets --features mecab` clean; `npx tsc
@@ -45,7 +45,7 @@ in the repository — the same judgment the frequency-layer refusal made.
 
 The v1 side is produced out of tree, because criterion 1 is that
 `crates/jparser` contains nothing derived from ta-old. The detached worktree
-at `D:\Code\oss\clipyomi-v1` (`fb450f6^`, GPL-2.0-only) survived the previous
+at `D:\Code\oss\clipyomi-v1` (`1d5b0cb^`, GPL-2.0-only) survived the previous
 session, with its untracked `examples/v1_dump.rs`. Check `git worktree list`
 before re-adding it. Its index format is 3 and needs `build-index --engine v1`;
 the current index format is 6. Neither engine has an XML in the tree —
@@ -66,7 +66,7 @@ particle to survive as its own segment. Only `alt` is symmetric, and it scores
 1. So a change that merges more will always look better in the ranking, and
 nothing printed contradicted it.
 
-`49a5e76` prints the counter-reading over every region, not only the printed
+`7bc7707` prints the counter-reading over every region, not only the printed
 head. It comes from the covers already stored per region, so no new state.
 
 | corpus | state | we merge, v1 splits | we split, v1 merges | same count, cuts move |
@@ -199,7 +199,7 @@ no `ていく` headword at all; it takes the learner-standard name for the
 〜ていく / 〜てくる pair instead. The fixture records why, as it does for the
 other two.
 
-**It took two commits, and the second is the lesson.** `7722c2c` gave `ていく`
+**It took two commits, and the second is the lesson.** `7f4b146` gave `ていく`
 a single attachment site, 連用タ接続, which reaches 五段 onbin stems and leaves
 **every 一段, サ変・スル and 特殊・デス verb behind** — `歩いていった` merged while
 `食べていく`, `落ちていった`, `溶けていく` and `見ていく` all still split. The rule
@@ -209,7 +209,7 @@ leaves half the classes unreachable**. `でいく` correctly keeps one row, beca
 で follows an onbin stem and nothing else. If you add another 〜て auxiliary,
 give it both sites unless it is a で-form.
 
-Cells at `e2ed7a3`, hints on: strict 1714 → **1698**, tolerant **1948**
+Cells at `63c7dc6`, hints on: strict 1714 → **1698**, tolerant **1948**
 unmoved, entry top-1 0.9534 → 0.9528, compounds 152 with all three class lines
 identical, coarsening 234-in-108 → 250-in-116. Hints off: strict 1610 →
 **1593**, tolerant 1791 → 1786, entry top-1 0.9513 → 0.9506, compounds 118
@@ -263,7 +263,7 @@ so it described an engine that no longer runs. Re-measured on today's:
 
 | hints off | strict | tolerant | compounds | lexical | false-match | transparent | criterion 3 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `7722c2c` (the variants' baseline) | 1604 | 1789 | 118 | 56 / 112 | 23 / 32 | 39 / 42 | 26 / 26 |
+| `7f4b146` (the variants' baseline) | 1604 | 1789 | 118 | 56 / 112 | 23 / 32 | 39 / 42 | 26 / 26 |
 | ungated | 1525 | **1811** | **158** | **94** | 25 | 39 | **26 / 26** |
 | gain only on uninflected spans | 1576 | **1816** | 151 | 87 | 25 | 39 | 26 / 26 |
 

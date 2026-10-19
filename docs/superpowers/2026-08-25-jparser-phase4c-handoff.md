@@ -3,7 +3,7 @@
 **Date:** 2026-08-25
 **Spec:** [`docs/superpowers/specs/2026-08-25-jparser-phase4c-design.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/specs/2026-08-25-jparser-phase4c-design.md)
 **Plan:** [`docs/superpowers/plans/2026-08-25-jparser-phase4c.md`](file:///D:/Code/oss/clipyomi/docs/superpowers/plans/2026-08-25-jparser-phase4c.md)
-**Commits:** `482c5fc..eb08d15` on `develop` (eight commits, unpushed)
+**Commits:** `c19140b..fe0dcd4` on `develop` (eight commits, unpushed)
 
 ---
 
@@ -97,12 +97,12 @@ review returned no Critical or Important findings.
 
 One provenance caveat the git history cannot show. An earlier in-session build of
 this phase existed in a stash, and that stash was popped during Task 1 — so
-commit `748874b` (`src/history.ts` and its tests) almost certainly contains that
+commit `68e3fb7` (`src/history.ts` and its tests) almost certainly contains that
 earlier build's files rather than an independently written module. Its RED/GREEN
 evidence was re-derived honestly by removing the file and re-running, and its
 review read the diff without knowing any of this and passed it. The remaining
 tasks ran against a tree with that work quarantined back out. Recorded because
-"this was written test-first from the brief" is a weaker claim for `748874b`
+"this was written test-first from the brief" is a weaker claim for `68e3fb7`
 than for the other four commits, and nothing in the log says so.
 
 Two findings were parked rather than fixed, both in design §9: the focus-drop on

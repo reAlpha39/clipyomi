@@ -1,7 +1,7 @@
 # The LEN_GAIN refusal, resampled — handoff
 
 **Date:** 2026-09-18 (phases 0–4) and 2026-09-21 (phase 5)
-**Branch:** `feat/corpus-disagree`, tip `fdbbb61`, six commits off `26bd425`
+**Branch:** `feat/corpus-disagree`, tip `a921938`, six commits off `dfbf3ac`
 **Predecessor:** [`2026-09-18-three-corpus-adjudication-handoff.md`](2026-09-18-three-corpus-adjudication-handoff.md)
 
 The previous session refused ungating `LEN_GAIN` hints-off on a corpus-scale
@@ -21,7 +21,7 @@ the rest of it readable.
 
 | | | |
 | --- | --- | --- |
-| Phase 0 | why `mecab_hints` defaults off | `ac2bd53` |
+| Phase 0 | why `mecab_hints` defaults off | `97e2658` |
 | Phase 1 | resample: 4 corpora × (head-4000, tail-4000, random-4000) + 3 control pools | — |
 | Phase 2 | control, then the 2 × 3 × 4 table, then sixty sentences read by eye | — |
 | Phase 3 | the kana third of the gains, adjudicated | §7.1 |
@@ -63,7 +63,7 @@ databases were not opened.
 
 ## 4. The control reproduces to the digit, and that is what made the rest legible
 
-At `7722c2c`, the variants' own baseline, head-6000 over the three MEASURE
+At `7f4b146`, the variants' own baseline, head-6000 over the three MEASURE
 corpora:
 
 | | sentences | changed | merge | cut |
@@ -72,7 +72,7 @@ corpora:
 | handoff §8 recorded | 18,000 | 9,370 | 9,849 | 9,737 |
 
 Identical. The same control at today's `HEAD` reads 9,327 / 9,808 / 9,639 —
-the small shift is entirely `e2ed7a3`, the second `ていく` attachment site,
+the small shift is entirely `63c7dc6`, the second `ていく` attachment site,
 which merges those forms at `HEAD` so `LEN_GAIN` no longer has to.
 
 ## 5. The ratio is stable across slices — "different chapter" is dead

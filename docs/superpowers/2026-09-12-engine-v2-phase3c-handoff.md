@@ -7,13 +7,13 @@
 
 ## 1. What landed
 
-Three commits stand between the plan (`009b427`) and this phase's last
-implementation commit (`1e91ebb`), one per task. The phase closes the three
+Three commits stand between the plan (`ef1bf97`) and this phase's last
+implementation commit (`01c92cf`), one per task. The phase closes the three
 loose ends Phases 3a and 3b left around the kanji block and does nothing
 else; the three changes share no code, which is why they could be written in
 any order.
 
-`b0e1e1a` takes the affix hyphen out of kun readings at render time.
+`5988898` takes the affix hyphen out of kun readings at render time.
 KANJIDIC2 marks a reading used only as a suffix or a prefix with an ASCII
 hyphen — `-ぐ.い`, `ひと-` — and marks the okurigana boundary with a dot,
 `た.べる`. A new module-private `kunReading` in `src/render/tooltip-text.ts`
@@ -25,7 +25,7 @@ readings, which never carry the mark, are not touched. Three files,
 **64 insertions against 6 deletions** — the implementation itself is two
 lines and a doc comment, the rest is tests.
 
-`aa535f1` makes the source sniff read the root element's name. `Source`
+`d560229` makes the source sniff read the root element's name. `Source`
 loses `prologs: &'static [&'static [u8]]`, the three-prefix rule that
 accepted any file opening with an XML declaration, and gains
 `root: &'static str` — `"JMdict"` and `"kanjidic2"`. `open_local` peeks a
@@ -42,7 +42,7 @@ names the file the archive should have held and quotes the decompressed
 head. One file, **340 insertions against 64 deletions**, and the crate's lib
 tests went 27 → 37: one test replaced by two, and nine added.
 
-`1e91ebb` moves the dictionary cluster out of `src-tauri/src/commands.rs`.
+`01c92cf` moves the dictionary cluster out of `src-tauri/src/commands.rs`.
 `commands/dictionary.rs` (453 lines) now holds `DICTIONARY_STATUS_EVENT`,
 the state structs the download needs, `download_dictionary`,
 `needs_dictionary`, `lookup_kanji`, `kanji_info`, `describe_index_error`,
@@ -56,7 +56,7 @@ the hints test harness. `main.rs` names the new paths in six
 **1,087 insertions against 1,038 deletions**, nearly all of it the same lines
 arriving at a new address.
 
-One commit lands after this document's first draft. `95c7ed0` is the final
+One commit lands after this document's first draft. `b53a96b` is the final
 whole-phase review's fix wave in `crates/jmdict-source/src/lib.rs`: it
 widens `begins_xml`'s undecidable arm to accept a head the peek stopped
 three bytes into `<!--` (`<!-` is a prefix of neither the DOCTYPE nor the
@@ -65,11 +65,11 @@ element token, so the rule's own accept was being refused), loops
 asks, and adds the corrupt-gzip test §5 had deferred. One file, **54
 insertions against 9 deletions**, and the crate's lib tests go 37 → 39.
 
-Across the three tasks' code range, `git diff --stat 009b427..1e91ebb` reads
+Across the three tasks' code range, `git diff --stat ef1bf97..01c92cf` reads
 **nine files, 1,491 insertions against 1,108 deletions**, which is the figure
-to quote for the phase as planned; `95c7ed0`'s 54 and 9 sit outside it and
+to quote for the phase as planned; `b53a96b`'s 54 and 9 sit outside it and
 are counted in the paragraph above. Measured from the design commit instead
-— `git diff --stat b287236..1e91ebb` — it reads ten files and 2,556
+— `git diff --stat 2a82580..01c92cf` — it reads ten files and 2,556
 insertions, the difference being the plan document's own 1,065 lines; the
 code figure is the one above.
 
@@ -96,8 +96,8 @@ skipped kanji:       0
 
 Vibrato dictionary at `%APPDATA%\dev.jparser.clipyomi\hints\current\system.dic`.
 Release build of `jparser-cli` with `--features mecab`. Every figure below was
-printed in the gate session at `1e91ebb`, except the suite table's "after"
-column, which was re-taken at `95c7ed0` where the fix wave could move it;
+printed in the gate session at `01c92cf`, except the suite table's "after"
+column, which was re-taken at `b53a96b` where the fix wave could move it;
 none is copied forward from an implementer's report except the "before"
 column of the suite table, which is labelled where it appears.
 
@@ -202,7 +202,7 @@ prints nothing — no `*.snap.new`, so `parse_sentences.txt` is byte-identical.
 
 ### Gate 4 — the suites
 
-| suite | before (`009b427`) | after (`95c7ed0`) |
+| suite | before (`ef1bf97`) | after (`b53a96b`) |
 | --- | --- | --- |
 | `cargo test -p jparser --features mecab` | 373 | 373 |
 | `cargo test -p jparser --features hints-source` | 374 | 374 |
@@ -211,14 +211,14 @@ prints nothing — no `*.snap.new`, so `parse_sentences.txt` is byte-identical.
 | `npm test` | 312 | 316 |
 | `npx playwright test` | 45 | 45 |
 
-The "before" column is Task 1 Step 1's re-take at `009b427`, the first
+The "before" column is Task 1 Step 1's re-take at `ef1bf97`, the first
 measurement this phase owns; the "after" column was measured for this
-document at `1e91ebb` rather than carried over from any task report, and
-**re-taken after the fix wave at `95c7ed0`** — `cargo test --workspace`
+document at `01c92cf` rather than carried over from any task report, and
+**re-taken after the fix wave at `b53a96b`** — `cargo test --workspace`
 prints 617 passed and 1 ignored there, with `src-tauri` still 152 inside
 that total. The two `-p jparser` feature rows, `npm test` and Playwright
-were not re-run in the fix wave and stand at their `1e91ebb` figures:
-`95c7ed0` edits one file in `jmdict-source`, which no jparser test, no
+were not re-run in the fix wave and stand at their `01c92cf` figures:
+`b53a96b` edits one file in `jmdict-source`, which no jparser test, no
 TypeScript module and no pictured screen can reach. Every delta is accounted
 for:
 
@@ -227,7 +227,7 @@ for:
   `src/render/tooltip-colour.test.ts`.
 - **workspace +12.** All of it `jmdict-source`'s lib tests, 27 to 39. Task 2
   took them to 37 — one prolog test replaced by two opening tests, and nine
-  new ones — and the fix wave's `95c7ed0` added the last two, the cut
+  new ones — and the fix wave's `b53a96b` added the last two, the cut
   comment opener and the corrupt gzip. The workspace total is the sum over
   all 22 test binaries, and that lib is one of them.
 - **`mecab` and `hints-source` ±0.** Both are `-p jparser`, and no test in
@@ -241,7 +241,7 @@ for:
 
 The test listing across the split was re-checked here rather than taken on
 trust. Task 3 captured `cargo test -p clipyomi -- --list` before its move at
-`aa535f1`, with each line reduced to the bare test name so that a changed
+`d560229`, with each line reduced to the bare test name so that a changed
 module prefix could not hide a changed set. Diffed against the same listing
 taken at the branch tip in this session:
 
@@ -297,15 +297,15 @@ expected reading for files nothing has touched since.
 
 **`kanjidic.rs` reads 96.36% where Phase 3b recorded 96.34%, and the
 difference is real rather than a stale profile.** Phase 3b measured its table
-at `e37a408`; `d31b4ee`, a commit from that phase's own final review wave,
+at `23ae2fc`; `3a72f05`, a commit from that phase's own final review wave,
 landed afterwards and rewrote `the_first_stroke_count_is_the_accepted_one` to
 bind `find('都')` to a local and assert the four `<misc>` fields as one tuple
 instead of two loose assertions. That is one more executable line in the file
 — 247 counted here against 246 there, with the same nine missed — and
 238/247 is 96.36% where 237/246 was 96.34%. No Phase 3c commit touches
-`kanjidic.rs`: `git log e37a408..1e91ebb -- crates/jparser/src/kanjidic.rs`
-names `d31b4ee` and nothing else. The range is pinned to a commit rather
-than to `HEAD`, for the reason `5cb6802` pinned §1's: this document lives
+`kanjidic.rs`: `git log 23ae2fc..01c92cf -- crates/jparser/src/kanjidic.rs`
+names `3a72f05` and nothing else. The range is pinned to a commit rather
+than to `HEAD`, for the reason `ac48b8c` pinned §1's: this document lives
 inside the range a `HEAD`-relative citation would name, so its own reading
 would drift every time the branch moved.
 
@@ -379,7 +379,7 @@ case the plan's own code got wrong — each with its reason.
    refined it — `begins_xml` takes a third parameter, `more_follows`,
    computed in `sniffed` as `head.len() == PEEK_BYTES`, and returns *that*
    where the design said `true`: the peek ending the head accepts, the end
-   of the file ending it rejects. `aa535f1` follows the plan, and two of its
+   of the file ending it rejects. `d560229` follows the plan, and two of its
    tests pin the refinement rather than the design's sentence —
    `a_short_file_that_ends_inside_its_preamble_is_rejected` and
    `a_bare_declaration_is_rejected`, both of which a flat accept would have
@@ -395,7 +395,7 @@ case the plan's own code got wrong — each with its reason.
    sites and the two tests above are deleted — one boolean and two tests,
    with no caller, no format and no message affected.
 7. **The plan's own code refused a comment opener the peek cut short**, and
-   `95c7ed0` fixes it. `begins_xml`'s undecidable arm read
+   `b53a96b` fixes it. `begins_xml`'s undecidable arm read
    `more_follows && token.starts_with(rest)`. When the peek stops three
    bytes into `<!--`, the comment loop above cannot strip `<!-` and neither
    `<!DOCTYPE {root}` nor `<{root}` begins with it, so a file step 5 says to
@@ -415,7 +415,7 @@ assumed, since both could have gone the other way:
   audit — a multiset comparison of every line removed from `commands.rs`
   against every line added to the two new files, kept in `move-audit.txt` —
   leaves only the enumerated edits unmatched on either side. And
-  `git diff --color-moved=dimmed-zebra aa535f1..1e91ebb -- src-tauri/src`,
+  `git diff --color-moved=dimmed-zebra d560229..01c92cf -- src-tauri/src`,
   read here with the moved-block colours separated from the plain ones,
   shows **2,012 line changes coloured as moved against 113 plain ones, and
   not one plain line inside a moved block**. The two counts reconcile with
@@ -571,7 +571,7 @@ Left open by this phase's own decisions:
 Surfaced by this phase:
 
 - **`kanjidic.rs`'s coverage figure moved without this phase touching the
-  file.** §2 traces it to `d31b4ee`, a Phase 3b review commit that landed
+  file.** §2 traces it to `3a72f05`, a Phase 3b review commit that landed
   after that phase's table was measured. The lesson is narrow but worth
   writing down: a coverage figure quoted in a handoff is pinned to the commit
   it was measured at rather than to the phase, so a later phase should expect
@@ -589,7 +589,7 @@ closed by the fix wave, struck through below rather than deleted:
   hyphens. The regex handles both; no such reading exists in the real file,
   which is why the case was declined rather than written.
 - ~~Task 2 has no test for a gzip stream that fails to decode at the peek.~~
-  **Closed by `95c7ed0`.** `a_gzip_stream_that_will_not_decode_is_an_io_error`
+  **Closed by `b53a96b`.** `a_gzip_stream_that_will_not_decode_is_an_io_error`
   writes `gz(XML)` truncated to half its length, asserts `SourceError::Io`,
   and asserts the message does *not* say "does not hold" — so the refusal is
   the Io path design §4.2 describes and not `NotAnArchive`. It passed on the

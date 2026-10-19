@@ -1,7 +1,7 @@
 # Twelve corpora, the conjugation table's over-generation, and the gloss nobody measured — handoff
 
 **Date:** 2026-09-23
-**Branch:** `feat/corpus-disagree`, from `a849d7f` through `37460aa`, one commit per change
+**Branch:** `feat/corpus-disagree`, from `1e020ed` through `1322708`, one commit per change
 **Predecessor:** [`2026-09-22-katakana-sokuon-handoff.md`](2026-09-22-katakana-sokuon-handoff.md)
 
 Every handoff since 2026-09-21 ended with "`vn-text` is still exhausted". It was
@@ -27,7 +27,7 @@ potential — is measured and left for its own phase.
   (`' '.join(source.split())`), distinct non-empty rows, in rowid order. That
   reproduces six corpora byte for byte (onikiss, kf3, enkou, hitoduma2, start,
   pxc2).
-- **The tip's span dumps.** `span_dump` rebuilt at `a849d7f` over `onikiss`
+- **The tip's span dumps.** `span_dump` rebuilt at `1e020ed` over `onikiss`
   is byte-identical to the predecessor's shipped-fix dump, so its ten-corpus
   dumps are this tip's.
 - **The v1 side.** `v1_dump` re-run over `onikiss` against the predecessor's
@@ -222,13 +222,13 @@ re-gated from its own tree before it was made:
 
 | commit | change | § |
 | --- | --- | --- |
-| `88f5557` | voicing at the onbin | 4.1 |
-| `62b372f` | the voiced past in 特殊・タ | 4.2 |
-| `337f2e8` | `でしょ` blocked on the `です` row | 4.3 |
-| `39d08a9` | a bare adjective stem ranks below a real reading | 5.1 |
-| `2683679` | four user-lexicon rows | 5.2 |
-| `c929c91` | the copula conjugates as `でした` | 5.3 |
-| `37460aa` | the じゃ/や rows removed | 4.4 |
+| `0c62890` | voicing at the onbin | 4.1 |
+| `6806bf8` | the voiced past in 特殊・タ | 4.2 |
+| `acdcd2e` | `でしょ` blocked on the `です` row | 4.3 |
+| `7b0e203` | a bare adjective stem ranks below a real reading | 5.1 |
+| `acbf780` | four user-lexicon rows | 5.2 |
+| `dccdb8d` | the copula conjugates as `でした` | 5.3 |
+| `1322708` | the じゃ/や rows removed | 4.4 |
 
 `README.md` and `src-tauri/Cargo.toml` carry the user's own uncommitted edits
 and were not touched. The sweeps, the A/B tool and every build's dumps are in

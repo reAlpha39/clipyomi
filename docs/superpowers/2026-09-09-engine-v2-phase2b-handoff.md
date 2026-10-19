@@ -73,11 +73,11 @@ on-engine figure, 25 → 23, is a deeper regression than the off-engine spike's
 chosen one, offers the others as `Reading n of 3` radio rows in the
 right-click menu, steps through them with `]` and `[`, and keeps the
 sentence pane's scroll position across a reading switch and a furigana
-re-render (design §6). Commit `4cbfd50`.
+re-render (design §6). Commit `a713180`.
 
 ## 5. Standing gates at the phase's final code commit
 
-Run at `4cbfd50`: `cargo test -p jparser` (290 passed), the same with
+Run at `a713180`: `cargo test -p jparser` (290 passed), the same with
 `--features mecab` (316 passed, 1 ignored), both clippy invocations clean,
 `cargo check -p jparser --no-default-features` clean, `cargo fmt -p jparser
 -- --check` clean, `npm test` (278 passed), `npx tsc --noEmit` clean,

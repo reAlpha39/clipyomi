@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Nothing outside `crates/jparser/src/engine/` changes**, except the test file `crates/jparser/tests/engine_v2.rs` and the documentation this plan names. No index format change, no wire-shape change, no setting, no stylesheet, no frontend file.
-- **Zero gold damage in either hint state.** No cell may fall below the baseline at `4bc74b4`: hints-on strict 1694, tolerant 1948, entry top-1 0.9527, compounds 152; hints-off strict 1588, tolerant 1785, entry top-1 0.9504, compounds 118.
+- **Zero gold damage in either hint state.** No cell may fall below the baseline at `f750bd1`: hints-on strict 1694, tolerant 1948, entry top-1 0.9527, compounds 152; hints-off strict 1588, tolerant 1785, entry top-1 0.9504, compounds 118.
 - **`crates/jparser/tests/fixtures/parse_sentences.txt` stays byte-identical.** Its only katakana runs of three or more are `コーヒー` and `パソコン`, both already matched whole in both states.
 - **`spurious_merges.txt` 26 of 26 and every row of `auxiliary_merges.txt` keep passing.**
 - **On this shell, prefix any command whose output contains Japanese with `PYTHONIOENCODING=utf-8`** when it is Python; Rust binaries need no prefix. Use forward slashes in paths; the Bash tool is Git Bash.
@@ -280,7 +280,7 @@ Expected: a list of test helpers that build a `Candidate` literal — at least `
 - [ ] **Step 10: Run the full suite to verify nothing moved**
 
 Run: `cargo test --workspace --features mecab 2>&1 | grep -E "^test result" | awk -F'[ .;]+' '{p+=$4; f+=$6} END {print "passed", p, "failed", f}'`
-Expected: `passed 670 failed 0` — the 666 at `4bc74b4` plus this task's four. No existing test may change, because nothing reads the field yet.
+Expected: `passed 670 failed 0` — the 666 at `f750bd1` plus this task's four. No existing test may change, because nothing reads the field yet.
 
 - [ ] **Step 11: Commit**
 

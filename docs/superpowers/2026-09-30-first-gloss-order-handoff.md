@@ -1,7 +1,7 @@
 # The first gloss against the ta-old port, and three order fixes — handoff
 
 **Date:** 2026-09-30
-**Branch:** `fix/first-gloss-order`, from `e22f398` (the unmerged `fix/reported-sentence-glosses`): `de3b65a`, `45a3f49`, `9bd5d33`, `a7a9f24`, `cbfe1e3` (review follow-ups: docs and tests only), and this document
+**Branch:** `fix/first-gloss-order`, from `696d0f1` (the unmerged `fix/reported-sentence-glosses`): `4266b7f`, `d2fd308`, `2f591d4`, `a98b9ea`, `080cbbf` (review follow-ups: docs and tests only), and this document
 **Predecessor:** [`2026-09-26-reported-sentence-handoff.md`](2026-09-26-reported-sentence-handoff.md)
 
 Every earlier session compared the two engines' **spans**. This one compared
@@ -12,7 +12,7 @@ entry top-1 rises in both hint states.
 
 ## 1. Controls
 
-- **This engine.** The branch base `e22f398` was rebuilt, and its dumps over the twelve visual-novel corpora (151,225 sentences) are byte-identical to the last session's final candidate.
+- **This engine.** The branch base `696d0f1` was rebuilt, and its dumps over the twelve visual-novel corpora (151,225 sentences) are byte-identical to the last session's final candidate.
 - **The port.** The port is v1, run hints off, the state a user of it ran ([`2026-09-26`](2026-09-26-reported-sentence-handoff.md) §1). It now also dumps each span's first entries, through an untracked example beside the untracked `v1_dump` in the detached worktree. Its segmentation matches the 2026-09-25 hints-off dump on every one of the 151,225 lines.
 - **Gold at the base.** 1700 / 1954 / 0.9585 (1201 / 1253) / 152 hints on; 1590 / 1787 / 0.9570 (1179 / 1232) / 118 hints off.
 
@@ -29,7 +29,7 @@ Every commit builds and passes the workspace suite and both gold states on
 its own. Each was measured by **entry id**, not headword
 ([`2026-09-26`](2026-09-26-reported-sentence-handoff.md) §3 is why).
 
-### 3.1 サ変's し under れる/せる ranks last (`de3b65a`)
+### 3.1 サ変's し under れる/せる ranks last (`4266b7f`)
 
 The table's れる/せる row names its site as 未然形 by form alone, so it
 attaches to サ変's 未然形 し, and `しれない` read する "Passive/Potential
@@ -46,7 +46,7 @@ The する chain is what holds the span.
 | hints on | 978 | 945 | `しれん` → 試練 26 (one false gloss for another), truncated `しれ` → 知る 7 |
 | hints off | 115 | 104 | 知る 10, 試練 1 |
 
-### 3.2 A verb left on an unfinished form ranks last (`45a3f49`)
+### 3.2 A verb left on an unfinished form ranks last (`d2fd308`)
 
 Some forms stand only before a particular continuation. `bound_unmet` sends a
 bare chain on such a form below every other reading when the text after the
@@ -76,7 +76,7 @@ Refused on the way:
 - **五段・ラ行's empty 体言接続特殊２** read kanji stems cut from their okurigana (`居|て`, `触|った`, ~70) as bare nouns.
 - **一段's ん** read `できん」` as 出禁 "ban".
 
-### 3.3 A noun's `uk` counts only on its first sense (`9bd5d33`, `a7a9f24`)
+### 3.3 A noun's `uk` counts only on its first sense (`2f591d4`, `a98b9ea`)
 
 `order`'s PRONOUNCE clause spares a kanji entry's kana reading when JMdict
 calls the word usually kana, and `usually_kana` counted `uk` on any sense.
@@ -86,7 +86,7 @@ calls the word usually kana, and `usually_kana` counted `uk` on any sense.
 A word that does not inflect now counts only its first sense. Verbs and
 i-adjectives keep any sense. Narrowing verbs read `きた` as 北 "north",
 because 来る's tag is on "to come back", and 欲しい's is on its auxiliary
-sense. `a7a9f24` makes the POS walk lazy, since it runs inside the sort key.
+sense. `a98b9ea` makes the POS walk lazy, since it runs inside the sort key.
 
 | | changed | repaired | newly wrong |
 | --- | --- | --- | --- |
@@ -112,7 +112,7 @@ The user accepted the trade for the ~9,000 repairs.
 
 ## 5. Found, measured, not fixed
 
-- **わたし → 渡し "ferry"**, 1,544 hints on. 私 and 渡し differ only in priority grade: ichi1 / news1 / nf01 against news1 / nf21. The index keeps one COMMON bit per form. The nf bands were built at format 7 on `feat/nf-band` (`6e1011f`) and refused as a cost signal. An order-only tiebreak on them would need that index change, and it has not been measured.
+- **わたし → 渡し "ferry"**, 1,544 hints on. 私 and 渡し differ only in priority grade: ichi1 / news1 / nf01 against news1 / nf21. The index keeps one COMMON bit per form. The nf bands were built at format 7 on `feat/nf-band` (`38aac68`) and refused as a cost signal. An order-only tiebreak on them would need that index change, and it has not been measured.
 - **とる → 摂る and つく → 吐く** where 取る and 付く are meant (89 + 76 in the triage). JMdict tags 摂る and 吐く `uk` on their first sense, so the tag itself decides.
 - **とき / とこ → 解く**, 432. 解く's tag is on 梳く "to comb", and the verb any-sense rule must stay for 来る.
 - **もん → 門**, 430. The particle's もん reading carries no priority tag, and §4 is what fixing it costs.
@@ -134,5 +134,5 @@ The user accepted the trade for the ~9,000 repairs.
 - **Lint:** `cargo fmt --all --check` and `cargo clippy --workspace --features mecab --all-targets` are clean.
 - **Gold:** 1700 / 1954 / **0.9617 (1205 / 1253)** / 152 hints on, 1590 / 1787 / **0.9610 (1184 / 1232)** / 118 hints off. Every class line is unmoved.
 - **Corpus:** the tip's dumps are byte-identical to the measured combination, across all 24 files. No span moves in either state.
-- **Bench:** interleaved over five rounds, hints on: 631 ms median at `e22f398` against 638 ms, inside the ~3% layout noise.
+- **Bench:** interleaved over five rounds, hints on: 631 ms median at `696d0f1` against 638 ms, inside the ~3% layout noise.
 - **Gate 6 was not run.** Its eighteen sentences are still not in the repository.

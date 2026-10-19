@@ -87,7 +87,7 @@ Nothing. The wire field is empty and the menu is unchanged.
 
 ## 5. Standing gates at the phase's final code commit
 
-Run at `428fac4`: `cargo test -p jparser` (283 passed), the same with
+Run at `3091b47`: `cargo test -p jparser` (283 passed), the same with
 `--features mecab` (309 passed, 1 ignored), both clippy invocations clean,
 `cargo check -p jparser --no-default-features` clean, `cargo fmt -p jparser
 -- --check` clean, `npm test` (269 passed), `cargo test --manifest-path
@@ -138,7 +138,7 @@ src-tauri/Cargo.toml` (149 passed). Eight cells byte-identical at
 §6's second bullet named reading identity as the lever and did not pull it.
 It has now been measured, by
 [`crates/jparser/examples/reading_identity.rs`](../../crates/jparser/examples/reading_identity.rs)
-(committed at `6145497`, refinement arm at `ad73d2d`), which touches no shipped code: it asks `parse` for
+(committed at `ff5957f`, refinement arm at `5db621a`), which touches no shipped code: it asks `parse` for
 a deeper reading list, filters that, and keeps three. Same gold index rebuilt
 from `gold_jmdict_subset.xml`, same Vibrato dictionary, hints on, 150
 sentences, 2,163 gold spans.
