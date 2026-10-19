@@ -85,3 +85,18 @@ required-features = ["cli"]
 name = "cli_label"
 path = "tests/cli_label.rs"
 required-features = ["cli"]
+
+# These three probes call `jparser::hints`, which exists only with `mecab`;
+# without the gate `cargo check -p jparser --no-default-features --all-targets`
+# fails on them.
+[[example]]
+name = "order_sweep"
+required-features = ["mecab"]
+
+[[example]]
+name = "shatter_sweep"
+required-features = ["mecab"]
+
+[[example]]
+name = "span_dump"
+required-features = ["mecab"]

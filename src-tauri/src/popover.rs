@@ -15,6 +15,11 @@ pub const LABEL: &str = "popover";
 
 /// Build the hidden tooltip window. Called once from `main`'s `setup`.
 pub fn create(app: &App) -> tauri::Result<()> {
+    // Only the Windows owner link and the macOS level below read `window`.
+    #[cfg_attr(
+        not(any(target_os = "windows", target_os = "macos")),
+        allow(unused_variables)
+    )]
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("popover.html".into()))
         // The original tooltip's window was `WS_POPUP | WS_BORDER` with
         // `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST` — its own

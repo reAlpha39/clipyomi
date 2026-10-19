@@ -1086,6 +1086,7 @@ fn the_particle_absorbing_merges_are_gone() {
 ///
 /// The same context rule as the spurious gate, and for the same scar: the row
 /// is measured inside its gold sentence, never parsed as a bare surface.
+#[cfg(feature = "mecab")]
 #[test]
 fn the_te_auxiliaries_stay_inside_one_span() {
     const FIXTURE_AUX: &str = include_str!("fixtures/auxiliary_merges.txt");
@@ -2378,6 +2379,7 @@ fn no_candidate_has_zero_length() {
 /// `ねだり` here the merge would win for the wrong reason, which is how
 /// `a_five_character_katakana_compound_keeps_its_cut` passed against a
 /// fixture that lacked `ラストラン`.
+#[cfg(feature = "mecab")]
 const UK_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE JMdict [
 <!ENTITY n "noun (common) (futsuumeishi)">

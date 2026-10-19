@@ -24,6 +24,23 @@
 // for a test to invoke directly — the plan's named fallback for firing
 // events, used here because a real IPC round trip has nothing on the other
 // end to answer it.
+import { expect, type Page } from '@playwright/test';
+
+/**
+ * Move the pointer off the page and wait for a header-mode peek to undo.
+ *
+ * Headless Chromium on Linux (CI) delivers a `pointerenter` at (0, 0) as the
+ * page loads, which peeks the band before a test touches it; Edge on Windows
+ * does not. Moving to (-1, -1) is the cursor leaving the window, so the app's
+ * own `pointerleave` path collapses the band after its grace period
+ * (`PEEK_HIDE_MS`). Call it once the app has booted, before asserting the
+ * collapsed state.
+ */
+export async function parkPointerOutside(page: Page): Promise<void> {
+  await page.mouse.move(-1, -1);
+  await expect(page.locator('#app')).not.toHaveClass(/\bpeeked\b/);
+}
+
 export const STUB = `
   window.__TA_LISTENERS__ = {};
   window.__TA_EMIT__ = (event, payload) => {
