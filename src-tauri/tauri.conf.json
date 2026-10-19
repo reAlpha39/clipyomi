@@ -27,5 +27,5 @@
     "macOSPrivateApi": true,
     "security": { "csp": null }
   },
-  "bundle": { "active": false }
+  "bundle": { "active": false, "publisher": "reAlpha39" }
 }
