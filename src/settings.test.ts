@@ -917,7 +917,7 @@ describe('the grow-to-fit controls', () => {
     mount({});
     await settled();
     expect(direction('off').getAttribute('aria-checked')).toBe('true');
-    expect(lines().value).toBe('2');
+    expect(lines().value).toBe('3');
     expect(animate().checked).toBe(true);
     expect(lines().disabled).toBe(true);
     expect(animate().disabled).toBe(true);
@@ -936,7 +936,7 @@ describe('the grow-to-fit controls', () => {
     mount({});
     await settled();
     direction('down').click();
-    expect(lastSave()).toMatchObject({ grow_direction: 'down', grow_lines: 2, grow_animate: true });
+    expect(lastSave()).toMatchObject({ grow_direction: 'down', grow_lines: 3, grow_animate: true });
     expect(emitted).toContainEqual([
       'settings-changed',
       expect.objectContaining({ grow_direction: 'down' }),

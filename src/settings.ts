@@ -115,17 +115,17 @@ export function initSettingsApp(container: HTMLElement) {
       </section>
 
       <section class="settings-group">
-        <h2 class="settings-group-title">Grow to Fit Text</h2>
-        <div class="segmented-control" role="radiogroup" aria-label="Grow to fit text">
+        <h2 class="settings-group-title">Fit Window to Text</h2>
+        <div class="segmented-control" role="radiogroup" aria-label="Fit window to text">
           <button type="button" role="radio" data-grow-direction="off" aria-checked="true" title="Keep the size you set">Off</button>
-          <button type="button" role="radio" data-grow-direction="up" aria-checked="false" title="Grow upward: the bottom edge stays put">Up</button>
-          <button type="button" role="radio" data-grow-direction="down" aria-checked="false" title="Grow downward: the top edge stays put">Down</button>
+          <button type="button" role="radio" data-grow-direction="up" aria-checked="false" title="Fit from the top: the bottom edge stays put">Up</button>
+          <button type="button" role="radio" data-grow-direction="down" aria-checked="false" title="Fit from the bottom: the top edge stays put">Down</button>
         </div>
         <label class="settings-number-row">
-          <span class="label-text">Up to</span>
+          <span class="label-text">At most</span>
           <input type="number" id="setting-grow-lines" value="${clampGrowLines(undefined)}"
                  min="${GROW_LINE_LIMITS.min}" max="${GROW_LINE_LIMITS.max}" step="1" />
-          <span class="unit">extra lines</span>
+          <span class="unit">lines</span>
         </label>
         <label class="settings-checkbox-row">
           <input type="checkbox" id="setting-grow-animate" checked />

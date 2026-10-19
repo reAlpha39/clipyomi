@@ -42,9 +42,11 @@ pub struct PhysRect {
     pub height: u32,
 }
 
-/// `tauri.conf.json`'s `minWidth` and `minHeight`.
+/// `tauri.conf.json`'s `minWidth` and `minHeight`. The height is also
+/// `MIN_WINDOW_HEIGHT` in `window-grow.ts`: low enough for the fit to hug one
+/// line of text with no padding.
 pub const MIN_LOGICAL_WIDTH: u32 = 160;
-pub const MIN_LOGICAL_HEIGHT: u32 = 80;
+pub const MIN_LOGICAL_HEIGHT: u32 = 40;
 
 /// The area of the intersection of `box_` and `monitor`, in physical pixels.
 ///

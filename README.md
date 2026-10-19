@@ -17,7 +17,7 @@ It is a cross-platform desktop app (Rust + Tauri v2 + TypeScript) built around i
 - **Immersion HUD & Desktop Overlay:**
   - **Always on Top** pinning for overlaying games or readers.
   - **Frameless / Minimalist** title bar toggling.
-  - **Grow to fit text:** a long sentence grows the window up or down by a few lines, animated or not, and a short one shrinks it back to the size you set.
+  - **Fit window to text:** the window's height hugs the sentence, one line to a few, growing and shrinking from the top or the bottom edge, animated or not.
   - Responsive, keyboard-accessible, and dark-theme friendly UI.
 - **Cross-Platform:** Native support for macOS and Windows.
 

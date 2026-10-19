@@ -25,10 +25,11 @@ import { createHistory } from './history';
 import { openContextMenu, type MenuEntry } from './context-menu';
 import { createKanjiLookup } from './kanji-lookup';
 import {
+  MIN_WINDOW_HEIGHT,
   clampGrowDirection,
   clampGrowLines,
   createGrower,
-  growTarget,
+  fitText,
   linePitch,
 } from './window-grow';
 import type {
@@ -1538,16 +1539,23 @@ function sentenceLinePitch(): number {
 }
 
 /**
- * Grow the window to show what of the sentence is hidden below the user's own
- * size, up to the line cap, or shrink it back when it all fits.
+ * Fit the window's height to the sentence: everything above the pane, the
+ * pane's padding, and the sentence itself, from one line up to the line cap.
+ * Off, back to the user's own size.
  *
  * Measured in CSS px and handed to the grower in physical px, the unit it
- * moves the window in. The page is laid out at the grown size, so the growth
- * already on screen is added back to find what the user's own size would
- * hide. While a change is in flight that growth is read off the viewport
- * rather than off what was last sent: the webview catches up with a resize a
- * frame late, and a sentence arriving mid-animation would otherwise be
- * measured against a size it has not reached.
+ * moves the window in, as an offset off the user's own height. The page is
+ * laid out at the fitted size, so the offset already on screen is taken back
+ * off the viewport to find that height. While a change is in flight the
+ * offset is read off the viewport rather than off what was last sent: the
+ * webview catches up with a resize a frame late, and a sentence arriving
+ * mid-animation would otherwise be measured against a size it has not
+ * reached.
+ *
+ * Everything is read from the window and the content, never from
+ * `panes.clientHeight`: on Windows the band leaves the grid flow, `.panes`
+ * lands in an `auto` row, and a short sentence's pane is only as tall as the
+ * sentence, so its own height says nothing about the window.
  */
 function refit(): void {
   // Hidden or minimized, there is no layout to measure; the next sentence
@@ -1555,26 +1563,20 @@ function refit(): void {
   if (document.hidden) return;
   const scale = window.devicePixelRatio || 1;
   const pinned = grower.base();
-  const grownBy =
+  const offset =
     pinned === null ? grower.applied() / scale : window.innerHeight - pinned.height / scale;
   const paneTop = panes.getBoundingClientRect().top;
   const paneStyle = getComputedStyle(panes);
   const padTop = Number.parseFloat(paneStyle.paddingTop || '0');
   const padBottom = Number.parseFloat(paneStyle.paddingBottom || '0');
-  const contentBottom = output.getBoundingClientRect().bottom - paneTop + panes.scrollTop + padBottom;
-  // The room the user's own size gives the pane, from the window rather than
-  // `panes.clientHeight`: on Windows the band leaves the grid flow, `.panes`
-  // lands in an `auto` row, and a short sentence's pane is only as tall as the
-  // sentence — so the pane's own height read the window as full and a grown
-  // window never shrank back.
-  const baseRoom = window.innerHeight - paneTop - grownBy;
-  const hidden = contentBottom - baseRoom;
-  const target =
-    growDirection === 'off'
-      ? 0
-      : growTarget(hidden, sentenceLinePitch(), growLines, baseRoom - padTop - padBottom);
+  // Between the paddings: the sentence, and a status line above it if any.
+  const text = output.getBoundingClientRect().bottom - paneTop + panes.scrollTop - padTop;
+  const fitted = paneTop + padTop + fitText(text, sentenceLinePitch(), growLines) + padBottom;
+  const own = window.innerHeight - offset;
+  const target = growDirection === 'off' ? 0 : Math.max(MIN_WINDOW_HEIGHT, fitted) - own;
   const side = growDirection === 'off' ? grower.side() : growDirection;
-  grower.want(target * scale, side, growAnimate);
+  // Up, not to nearest: a fit half a physical px short is a 1px scroll.
+  grower.want(Math.ceil(target * scale), side, growAnimate);
 }
 
 /**
