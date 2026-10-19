@@ -6,23 +6,6 @@ It is a cross-platform desktop app (Rust + Tauri v2 + TypeScript) built around i
 
 ---
 
-## Features
-
-- **Seamless Clipboard Monitoring:** Automatically captures Japanese text from text hookers (Textractor, Agent, ITHVNR), optical character recognition (OCR), or standard clipboard copying.
-- **Built-in JMDict Integration:** Automatically downloads and compiles an optimized, memory-mapped local index of the JMDict multilingual Japanese dictionary.
-- **Interactive Floating Popovers:**
-  - Full grammatical breakdown with conjugated forms (e.g. *Past*, *Causative-Passive*, *Polite Negative*).
-  - Furigana readings, romaji support, and part-of-speech tags.
-  - Rich definitions, glosses, and cross-references.
-- **Immersion HUD & Desktop Overlay:**
-  - **Always on Top** pinning for overlaying games or readers.
-  - **Frameless / Minimalist** title bar toggling.
-  - **Fit window to text:** the window's height hugs the sentence, one line to a few, growing and shrinking from the top or the bottom edge, animated or not.
-  - Responsive, keyboard-accessible, and dark-theme friendly UI.
-- **Cross-Platform:** Native support for macOS and Windows.
-
----
-
 ## Architecture
 
 The workspace is organized into modular Rust crates and a modern web frontend:
