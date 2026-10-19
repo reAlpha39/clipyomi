@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { STUB } from './stub';
+import { parkPointerOutside, STUB } from './stub';
 
 const THEMES = ['light', 'dark'] as const;
 const MODES = ['native', 'header', 'content'] as const;
@@ -94,6 +94,7 @@ test('header mode still reveals on hover', async ({ page }) => {
   const history = page.locator('.history-controls');
   const windowControls = page.locator('.window-controls');
   await expect(page.locator('#app')).toHaveAttribute('data-chrome', 'header');
+  await parkPointerOutside(page);
   expect(await band.evaluate((el) => el.getBoundingClientRect().height)).toBe(6);
 
   await band.hover();
@@ -152,6 +153,7 @@ for (const mode of MODES) {
       await page.addInitScript(stubFor(mode, 'macos'));
       await page.goto('/');
       await expect(page.locator('#app')).toHaveAttribute('data-chrome', mode);
+      await parkPointerOutside(page);
 
       const band = page.locator('header.controls');
       const expectedHeight = mode === 'native' ? 28 : 6;

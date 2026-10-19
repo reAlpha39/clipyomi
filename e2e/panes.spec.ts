@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 // Playwright loads this file through Node's native ESM loader (not Vite), which
 // requires an explicit import attribute for JSON modules on Node 22+.
 import fixture from '../src/fixtures/tokyo.json' with { type: 'json' };
-import { STUB } from './stub';
+import { parkPointerOutside, STUB } from './stub';
 
 declare global {
   interface Window {
@@ -88,6 +88,7 @@ test('a hidden title bar leaves the gear invisible until the band is hovered', a
   await page.addInitScript(`window.__FIXTURE__ = ${JSON.stringify(fixture)}; ${HIDDEN_TITLEBAR_STUB}`);
   await page.goto('/');
   await emitFixtureResult(page);
+  await parkPointerOutside(page);
 
   const gear = page.locator('#settings-toggle');
   const history = page.locator('nav.history-controls');
@@ -126,6 +127,7 @@ test('revealing the band offsets the content by exactly the band height when the
   await page.goto('/');
   await emitFixtureResult(page);
 
+  await parkPointerOutside(page);
   const sentence = page.locator('.sentence');
   const before = await sentence.evaluate((el) => el.getBoundingClientRect().top);
   await page.locator('header.controls').hover();
@@ -213,6 +215,7 @@ test('the Windows shape reserves the band row and moves nothing on peek', async 
 test('the gear reveals itself when it takes keyboard focus', async ({ page }) => {
   await page.addInitScript(HIDDEN_TITLEBAR_STUB);
   await page.goto('/');
+  await parkPointerOutside(page);
 
   const gear = page.locator('#settings-toggle');
   await expect(gear).toHaveCSS('opacity', '0');
