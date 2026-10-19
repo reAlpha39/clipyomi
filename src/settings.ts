@@ -81,6 +81,12 @@ export function initSettingsApp(container: HTMLElement) {
                  min="${FONT_LIMITS.gap.min}" max="${FONT_LIMITS.gap.max}" step="1" />
           <span class="unit">px</span>
         </label>
+        <label class="settings-number-row">
+          <span class="label-text">Text padding</span>
+          <input type="number" id="setting-pane-padding"
+                 min="${FONT_LIMITS.padding.min}" max="${FONT_LIMITS.padding.max}" step="1" />
+          <span class="unit">px from the edge</span>
+        </label>
       </section>
       ${APPEARANCE_SECTIONS}
 
@@ -170,6 +176,7 @@ export function initSettingsApp(container: HTMLElement) {
   const fontGloss = container.querySelector<HTMLInputElement>('#setting-font-gloss')!;
   const furiganaScale = container.querySelector<HTMLInputElement>('#setting-furigana-scale')!;
   const furiganaGap = container.querySelector<HTMLInputElement>('#setting-furigana-gap')!;
+  const panePadding = container.querySelector<HTMLInputElement>('#setting-pane-padding')!;
   const outlineWidth = container.querySelector<HTMLInputElement>('#setting-text-outline-width')!;
   const shadowSize = container.querySelector<HTMLInputElement>('#setting-text-shadow-size')!;
   const furiganaButtons = container.querySelectorAll<HTMLButtonElement>(
@@ -367,6 +374,7 @@ export function initSettingsApp(container: HTMLElement) {
       font_gloss: sizeOf(fontGloss, 'gloss'),
       furigana_scale: sizeOf(furiganaScale, 'furigana'),
       furigana_gap: sizeOf(furiganaGap, 'gap'),
+      pane_padding: sizeOf(panePadding, 'padding'),
       text_outline_width: sizeOf(outlineWidth, 'outline'),
       text_shadow_size: sizeOf(shadowSize, 'shadow'),
       surface_alpha: clampAlpha(Number(surfaceAlpha.value)) ?? ALPHA_LIMITS.max,
@@ -414,6 +422,7 @@ export function initSettingsApp(container: HTMLElement) {
       fontGloss.value = s.font_gloss === undefined ? '' : String(s.font_gloss);
       furiganaScale.value = s.furigana_scale === undefined ? '' : String(s.furigana_scale);
       furiganaGap.value = s.furigana_gap === undefined ? '' : String(s.furigana_gap);
+      panePadding.value = s.pane_padding === undefined ? '' : String(s.pane_padding);
       outlineWidth.value = s.text_outline_width === undefined ? '' : String(s.text_outline_width);
       shadowSize.value = s.text_shadow_size === undefined ? '' : String(s.text_shadow_size);
     }
@@ -429,6 +438,7 @@ export function initSettingsApp(container: HTMLElement) {
   fontGloss.addEventListener('change', saveAndBroadcast);
   furiganaScale.addEventListener('change', saveAndBroadcast);
   furiganaGap.addEventListener('change', saveAndBroadcast);
+  panePadding.addEventListener('change', saveAndBroadcast);
   outlineWidth.addEventListener('change', saveAndBroadcast);
   shadowSize.addEventListener('change', saveAndBroadcast);
 
@@ -524,6 +534,7 @@ export function initSettingsApp(container: HTMLElement) {
       [fontGloss, 'gloss'],
       [furiganaScale, 'furigana'],
       [furiganaGap, 'gap'],
+      [panePadding, 'padding'],
       [outlineWidth, 'outline'],
       [shadowSize, 'shadow'],
     ];

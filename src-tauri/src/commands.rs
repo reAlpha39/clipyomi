@@ -1322,6 +1322,7 @@ pub(crate) fn merge_saved(current: &mut Settings, incoming: Settings) {
     // The two toggles' sizes are sizes, whatever the toggles beside them are.
     current.text_outline_width = incoming.text_outline_width;
     current.text_shadow_size = incoming.text_shadow_size;
+    current.pane_padding = incoming.pane_padding;
 }
 
 #[tauri::command]
@@ -1540,6 +1541,26 @@ mod tests {
         save_settings(Settings::default(), state_arg).unwrap();
 
         assert_eq!(state.snapshot().font_sentence, None);
+    }
+
+    /// The text padding is a size box like the font sizes: assigned, so a
+    /// cleared box reaches disk as unset and the stylesheet default returns.
+    #[test]
+    fn merge_saved_assigns_the_pane_padding() {
+        let mut current = Settings {
+            pane_padding: Some(4),
+            ..Default::default()
+        };
+        merge_saved(
+            &mut current,
+            Settings {
+                pane_padding: Some(0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(current.pane_padding, Some(0));
+        merge_saved(&mut current, Settings::default());
+        assert_eq!(current.pane_padding, None, "omission clears a size");
     }
 
     #[test]

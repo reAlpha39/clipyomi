@@ -15,7 +15,20 @@ describe('fontVars', () => {
       ['--furigana-gap', ''],
       ['--text-stroke-width', ''],
       ['--text-shadow-size', ''],
+      ['--space-pane', ''],
     ]);
+  });
+
+  // The inset between the window's edge and the text, on every side.
+  test('maps the text padding onto the pane token in px', () => {
+    expect(fontVars({ pane_padding: 4 })).toContainEqual(['--space-pane', '4px']);
+  });
+
+  // Zero is a real choice: text right up to the edge, for a window sized to
+  // a VN textbox. Only an empty box hands the default back.
+  test('keeps a zero padding rather than reading it as unset', () => {
+    expect(clampFont('padding', 0)).toBe(0);
+    expect(clampFont('padding', 500)).toBe(48);
   });
 
   // The gap between the furigana and the text it annotates: a size of its
@@ -65,6 +78,7 @@ describe('fontVars', () => {
         furigana_gap: 4,
         text_outline_width: 3,
         text_shadow_size: 5,
+        pane_padding: 8,
       }),
     ).toEqual([
       ['--text-sentence', '24px'],
@@ -74,6 +88,7 @@ describe('fontVars', () => {
       ['--furigana-gap', '4px'],
       ['--text-stroke-width', '3px'],
       ['--text-shadow-size', '5px'],
+      ['--space-pane', '8px'],
     ]);
   });
 
@@ -88,6 +103,7 @@ describe('fontVars', () => {
         furigana_gap: 99,
         text_outline_width: 0,
         text_shadow_size: 99,
+        pane_padding: -3,
       }),
     ).toEqual([
       ['--text-sentence', '48px'],
@@ -97,6 +113,7 @@ describe('fontVars', () => {
       ['--furigana-gap', '24px'],
       ['--text-stroke-width', '1px'],
       ['--text-shadow-size', '12px'],
+      ['--space-pane', '0px'],
     ]);
   });
 

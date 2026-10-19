@@ -209,6 +209,11 @@ pub struct Settings {
     /// from. A size like `text_outline_width`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_shadow_size: Option<u32>,
+    /// The inset between the main window's edge and its text, in px. A size
+    /// like the font sizes: assigned in `merge_saved`, so an emptied box
+    /// clears it and `tokens.css` owns the default again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_padding: Option<u32>,
     /// Grow the main window to fit an overflowing sentence: `off`, `up` (the
     /// bottom edge holds) or `down` (the top holds). A mode like
     /// `furigana_mode`, validated by `clampGrowDirection` at apply time.
@@ -275,6 +280,7 @@ impl Default for Settings {
             text_outline_width: None,
             text_shadow: None,
             text_shadow_size: None,
+            pane_padding: None,
             grow_direction: None,
             grow_lines: None,
             grow_animate: None,
