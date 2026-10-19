@@ -71,10 +71,12 @@ describe('fitText', () => {
     expect(fitText(300, 41, 3)).toBe(123);
   });
 
-  // Never shorter than one line, so a window between sentences, or showing
-  // a one-character one, keeps a line's room.
-  test('keeps at least one line', () => {
-    expect(fitText(10, 41, 3)).toBe(41);
+  // The text is measured to the bottom of its last line of text, which sits
+  // above that line box's bottom by the leading. One line of it is shorter
+  // than a line box, and the fit must not round it back up to one: that
+  // leading is what showed as padding at a padding of 0.
+  test('fits one line of text without adding the leading back', () => {
+    expect(fitText(32, 40.8, 3)).toBe(32);
   });
 
   test('takes the text as it is without a measured line', () => {

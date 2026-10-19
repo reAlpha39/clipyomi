@@ -93,12 +93,16 @@ export function linePitch(bottoms: readonly number[], height: number, threshold:
 }
 
 /**
- * How much of TEXT's height the window shows: all of it, but at least one
- * line of PITCH and at most LINES of them. Without a measured line, all of it.
+ * How much of TEXT's height the window shows: all of it, up to LINES lines of
+ * PITCH. Without a measured line, all of it.
+ *
+ * TEXT runs to the bottom of the last line's text, not its line box, so one
+ * line of it is shorter than PITCH by the leading under it. No floor of one
+ * line: that would put the leading back, and it is what read as padding.
  */
 export function fitText(text: number, pitch: number, lines: number): number {
   if (pitch <= 0) return Math.ceil(text);
-  return Math.ceil(Math.min(Math.max(text, pitch), lines * pitch));
+  return Math.ceil(Math.min(text, lines * pitch));
 }
 
 /** BASE grown by EXTRA from SIDE. */
