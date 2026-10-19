@@ -1539,9 +1539,30 @@ function sentenceLinePitch(): number {
 }
 
 /**
+ * The bottom of the sentence's last line of text, in viewport px.
+ *
+ * The text's own box, not its line box: `line-height` leaves leading under
+ * the last line and a chip pads it by 2px more, and fitting the window to the
+ * line box showed both as a gap a text padding of 0 could not close. Ruby
+ * annotations sit above their text and are skipped, so the last text node is
+ * the last line's.
+ */
+function textBottom(): number {
+  const walker = document.createTreeWalker(output, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) =>
+      node.parentElement?.closest('rt') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  const last = walker.lastChild();
+  if (last === null) return output.getBoundingClientRect().bottom;
+  const range = document.createRange();
+  range.selectNodeContents(last);
+  return range.getBoundingClientRect().bottom;
+}
+
+/**
  * Fit the window's height to the sentence: everything above the pane, the
- * pane's padding, and the sentence itself, from one line up to the line cap.
- * Off, back to the user's own size.
+ * pane's padding, and the sentence's text, up to the line cap. Off, back to
+ * the user's own size.
  *
  * Measured in CSS px and handed to the grower in physical px, the unit it
  * moves the window in, as an offset off the user's own height. The page is
@@ -1569,9 +1590,17 @@ function refit(): void {
   const paneStyle = getComputedStyle(panes);
   const padTop = Number.parseFloat(paneStyle.paddingTop || '0');
   const padBottom = Number.parseFloat(paneStyle.paddingBottom || '0');
-  // Between the paddings: the sentence, and a status line above it if any.
-  const text = output.getBoundingClientRect().bottom - paneTop + panes.scrollTop - padTop;
-  const fitted = paneTop + padTop + fitText(text, sentenceLinePitch(), growLines) + padBottom;
+  // From inside the top padding to the last line's text: the sentence, and a
+  // status line above it if any.
+  const text = textBottom() - paneTop + panes.scrollTop - padTop;
+  const pitch = sentenceLinePitch();
+  const fitted = paneTop + padTop + fitText(text, pitch, growLines) + padBottom;
+  // Fitted to its text, the last line box's leading hangs past the window's
+  // edge; it is empty, and must not scroll the pane by a few px. Over the cap
+  // the pane scrolls as ever.
+  const whole = growDirection !== 'off' && (pitch <= 0 || text <= growLines * pitch);
+  panes.classList.toggle('fitted', whole);
+  if (whole) panes.scrollTop = 0;
   const own = window.innerHeight - offset;
   const target = growDirection === 'off' ? 0 : Math.max(MIN_WINDOW_HEIGHT, fitted) - own;
   const side = growDirection === 'off' ? grower.side() : growDirection;

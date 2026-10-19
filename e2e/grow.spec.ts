@@ -72,17 +72,24 @@ async function follow(page: Page): Promise<typeof BASE> {
   return JSON.parse(last);
 }
 
-/** The page's vertical geometry: the gap under the text, its lines, any scroll. */
+/**
+ * The page's vertical geometry: the gap between the window's bottom edge and
+ * the last line of text (its text, not its line box) less the padding, the
+ * lines on show, and whether the pane can scroll.
+ */
 function measure(page: Page) {
   return page.evaluate(() => {
     const panes = document.querySelector<HTMLElement>('.panes')!;
     const sentence = document.querySelector<HTMLElement>('.sentence')!;
     const padBottom = Number.parseFloat(getComputedStyle(panes).paddingBottom);
     const line = Number.parseFloat(getComputedStyle(sentence).lineHeight);
+    const range = document.createRange();
+    range.selectNodeContents(sentence.lastElementChild!.firstChild!);
     return {
-      gapUnderText: window.innerHeight - padBottom - sentence.getBoundingClientRect().bottom,
+      gapUnderText: window.innerHeight - padBottom - range.getBoundingClientRect().bottom,
       linesShown: (panes.clientHeight - 2 * padBottom) / line,
-      overflow: panes.scrollHeight - panes.clientHeight,
+      scrolls:
+        getComputedStyle(panes).overflowY !== 'hidden' && panes.scrollHeight > panes.clientHeight,
     };
   });
 }
@@ -94,7 +101,7 @@ test('a long sentence fits the window to the line cap, holding the bottom edge',
   expect(box.y + box.height).toBe(BASE.y + BASE.height);
   const m = await measure(page);
   expect(m.linesShown).toBeCloseTo(2, 1);
-  expect(m.overflow).toBeGreaterThan(0);
+  expect(m.scrolls).toBe(true);
 });
 
 // Hugging: a one-line sentence fits a one-line window, below the size the
@@ -122,7 +129,7 @@ test('no padding leaves no gap under the text and no scroll', async ({ page }) =
   await show(page, TWO_LINES);
   await follow(page);
   const m = await measure(page);
-  expect(m.overflow).toBeLessThanOrEqual(0);
+  expect(m.scrolls).toBe(false);
   expect(m.gapUnderText).toBeGreaterThanOrEqual(0);
   expect(m.gapUnderText).toBeLessThan(1.5);
 });

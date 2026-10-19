@@ -399,6 +399,10 @@ body {
 }
 
 .panes { overflow-y: auto; padding: var(--space-pane); }
+/* Fit to text with the whole sentence on show: the window ends at the last
+   line's text, and the empty leading of that line box hangs past it. Hidden,
+   so it is clipped rather than scrolled to (`main.ts`'s `refit`). */
+.panes.fitted { overflow-y: hidden; }
 
 .chip {
   display: inline-block;
